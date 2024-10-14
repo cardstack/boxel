@@ -429,6 +429,308 @@ export class Tag extends CardDef {
   };
 }
 
+class TaskIsolated extends Component<typeof Task> {
+  <template>
+    <div class='task-card'>
+      <div class='task-header'>
+        <h2 class='task-title'>{{@model.taskName}}</h2>
+        <Pill
+          class='small-pill'
+          style={{cssVar
+            pill-font-color=@model.status.color
+            pill-border-color=@model.status.color
+          }}
+        >
+          <:default>
+            {{@model.status.label}}
+          </:default>
+        </Pill>
+      </div>
+      <div class='task-detail'>
+        {{@model.taskDetail}}
+      </div>
+      <div class='task-meta'>
+        <div class='row-1'>
+          <Avatar
+            class='avatar'
+            @userId={{@model.assignee.id}}
+            @displayName={{@model.assignee.name}}
+            @isReady={{true}}
+          />
+          {{@model.assignee.name}}
+          {{#if this.hasDateRange}}
+            <div class='task-dates'>
+              <svg
+                class='calendar-icon'
+                width='16'
+                height='16'
+                viewBox='0 0 16 16'
+                fill='none'
+                xmlns='http://www.w3.org/2000/svg'
+              >
+                <path
+                  d='M12.6667 2.66667H3.33333C2.59695 2.66667 2 3.26362 2 4V13.3333C2 14.0697 2.59695 14.6667 3.33333 14.6667H12.6667C13.403 14.6667 14 14.0697 14 13.3333V4C14 3.26362 13.403 2.66667 12.6667 2.66667Z'
+                  stroke='currentColor'
+                  stroke-width='1.33333'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                />
+                <path
+                  d='M10.6667 1.33333V4'
+                  stroke='currentColor'
+                  stroke-width='1.33333'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                />
+                <path
+                  d='M5.33333 1.33333V4'
+                  stroke='currentColor'
+                  stroke-width='1.33333'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                />
+                <path
+                  d='M2 6.66667H14'
+                  stroke='currentColor'
+                  stroke-width='1.33333'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                />
+              </svg>
+              <span class='date-range'>
+                <@fields.dateStarted />
+                -
+                <@fields.dueDate />
+              </span>
+            </div>
+          {{/if}}
+        </div>
+        <div class='row-2'>
+          {{#each this.tagNames as |tagLabel|}}
+            <Pill class='tag-pill'>
+              <:default>
+                <span class='tag-dot'></span>
+                {{tagLabel}}
+              </:default>
+            </Pill>
+          {{/each}}
+        </div>
+      </div>
+      {{#if this.hasChildren}}
+        <div class='subtasks-section'>
+          <div class='subtasks-header-container'>
+            <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
+              child tasks)</h4>
+            <div class='progress-bar-container'>
+              <ProgressBar
+                @label={{this.progressLabel}}
+                @value={{this.progress}}
+                @max={{100}}
+              />
+            </div>
+          </div>
+          <div class='subtasks-container'>
+            <div class='status-column'>
+              {{#each this.shippedArr as |isShipped|}}
+                <div class='status-indicator'>
+                  {{#if isShipped}}
+                    <div class='circle completed'>
+                      <CheckMark width='15px' height='15px' />
+                    </div>
+                  {{else}}
+                    <div class='circle incomplete'></div>
+                  {{/if}}
+                </div>
+              {{/each}}
+            </div>
+            <div class='children-column'>
+              {{#each @fields.children as |ChildTask|}}
+                <div class='subtask-item'>
+                  <ChildTask />
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        </div>
+      {{/if}}
+    </div>
+    <style scoped>
+      .task-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        padding: 0 var(--boxel-sp);
+      }
+      .task-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .task-detail {
+        min-height: var(--boxel-form-control-height);
+        margin-bottom: var(--boxel-sp-sm);
+      }
+      .task-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .avatar {
+        --profile-avatar-icon-size: var(--boxel-icon-med);
+      }
+      .row-1 {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .row-2 {
+        display: flex;
+        gap: var(--boxel-sp-xxs);
+      }
+      .progress-bar-container {
+        --boxel-progress-bar-fill-color: var(--boxel-highlight);
+        width: 35%;
+        max-width: 400px;
+      }
+      .task-dates {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        color: var(--boxel-400); /* Light grey color for the text */
+      }
+      .calendar-icon {
+        color: var(--boxel-400); /* Light grey color for the icon */
+      }
+      .date-range {
+        font-size: var(--boxel-font-size-sm);
+      }
+      .children-header {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-purple);
+        margin-bottom: var(--boxel-sp-xxs);
+      }
+      .subtasks-section {
+        border-radius: var(--boxel-border-radius);
+        min-width: 150px;
+        max-width: 600px;
+      }
+      .subtasks-header-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .subtasks-header {
+        padding: 0 var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-purple);
+      }
+      .subtasks-container {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
+      .status-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .children-column {
+        flex-grow: 1;
+      }
+      .status-indicator {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 65px; /* Increased height to match subtask-item */
+      }
+      .subtask-item {
+        height: 65px; /* Set a fixed height for subtask items */
+        width: 100%;
+        display: flex;
+        align-items: center;
+      }
+      .circle {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid var(--boxel-dark);
+      }
+      .circle.completed {
+        background-color: var(--boxel-highlight);
+      }
+      .circle.incomplete {
+        background-color: white;
+      }
+      .tag-pill {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .tag-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--boxel-purple);
+      }
+    </style>
+  </template>
+
+  get shippedArr() {
+    return (
+      this.args.model.children?.map(
+        (child) => child.status.label === 'Shipped',
+      ) ?? []
+    );
+  }
+
+  @action
+  isShipped(status: unknown): boolean {
+    if (typeof status === 'string') {
+      return status.includes('Shipped'); // checking for html content
+    }
+    return false;
+  }
+
+  get tagNames() {
+    return this.args.model.tags?.map((tag) => tag.name) ?? [];
+  }
+
+  get hasDateRange() {
+    return this.args.model.dateStarted && this.args.model.dueDate;
+  }
+
+  get progress() {
+    if (!this.hasChildren) return 0;
+    const shippedCount = this.args.model.children!.filter(
+      (child) => child.status.label === 'Shipped',
+    ).length;
+    return Math.round((shippedCount / this.childrenCount) * 100);
+  }
+
+  get progressLabel() {
+    return `${this.progress}%`;
+  }
+
+  get hasChildren() {
+    return this.args.model.children && this.args.model.children.length > 0;
+  }
+
+  get childrenCount() {
+    return this.args.model.children ? this.args.model.children.length : 0;
+  }
+
+  get shippedCount() {
+    return this.args.model.children
+      ? this.args.model.children.filter(
+          (child) => child.status.label === 'Shipped',
+        ).length
+      : 0;
+  }
+}
+
 export class Task extends CardDef {
   static displayName = 'Task';
   @field shortId = contains(StringField, {
@@ -464,307 +766,7 @@ export class Task extends CardDef {
     },
   });
 
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <div class='task-card'>
-        <div class='task-header'>
-          <h2 class='task-title'>{{@model.taskName}}</h2>
-          <Pill
-            class='small-pill'
-            style={{cssVar
-              pill-font-color=@model.status.color
-              pill-border-color=@model.status.color
-            }}
-          >
-            <:default>
-              {{@model.status.label}}
-            </:default>
-          </Pill>
-        </div>
-        <div class='task-detail'>
-          {{@model.taskDetail}}
-        </div>
-        <div class='task-meta'>
-          <div class='row-1'>
-            <Avatar
-              class='avatar'
-              @userId={{@model.assignee.id}}
-              @displayName={{@model.assignee.name}}
-              @isReady={{true}}
-            />
-            {{@model.assignee.name}}
-            {{#if this.hasDateRange}}
-              <div class='task-dates'>
-                <svg
-                  class='calendar-icon'
-                  width='16'
-                  height='16'
-                  viewBox='0 0 16 16'
-                  fill='none'
-                  xmlns='http://www.w3.org/2000/svg'
-                >
-                  <path
-                    d='M12.6667 2.66667H3.33333C2.59695 2.66667 2 3.26362 2 4V13.3333C2 14.0697 2.59695 14.6667 3.33333 14.6667H12.6667C13.403 14.6667 14 14.0697 14 13.3333V4C14 3.26362 13.403 2.66667 12.6667 2.66667Z'
-                    stroke='currentColor'
-                    stroke-width='1.33333'
-                    stroke-linecap='round'
-                    stroke-linejoin='round'
-                  />
-                  <path
-                    d='M10.6667 1.33333V4'
-                    stroke='currentColor'
-                    stroke-width='1.33333'
-                    stroke-linecap='round'
-                    stroke-linejoin='round'
-                  />
-                  <path
-                    d='M5.33333 1.33333V4'
-                    stroke='currentColor'
-                    stroke-width='1.33333'
-                    stroke-linecap='round'
-                    stroke-linejoin='round'
-                  />
-                  <path
-                    d='M2 6.66667H14'
-                    stroke='currentColor'
-                    stroke-width='1.33333'
-                    stroke-linecap='round'
-                    stroke-linejoin='round'
-                  />
-                </svg>
-                <span class='date-range'>
-                  <@fields.dateStarted />
-                  -
-                  <@fields.dueDate />
-                </span>
-              </div>
-            {{/if}}
-          </div>
-          <div class='row-2'>
-            {{#each this.tagNames as |tagLabel|}}
-              <Pill class='tag-pill'>
-                <:default>
-                  <span class='tag-dot'></span>
-                  {{tagLabel}}
-                </:default>
-              </Pill>
-            {{/each}}
-          </div>
-        </div>
-        {{#if this.hasChildren}}
-          <div class='subtasks-section'>
-            <div class='subtasks-header-container'>
-              <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
-                child tasks)</h4>
-              <div class='progress-bar-container'>
-                <ProgressBar
-                  @label={{this.progressLabel}}
-                  @value={{this.progress}}
-                  @max={{100}}
-                />
-              </div>
-            </div>
-            <div class='subtasks-container'>
-              <div class='status-column'>
-                {{#each this.shippedArr as |isShipped|}}
-                  <div class='status-indicator'>
-                    {{#if isShipped}}
-                      <div class='circle completed'>
-                        <CheckMark width='15px' height='15px' />
-                      </div>
-                    {{else}}
-                      <div class='circle incomplete'></div>
-                    {{/if}}
-                  </div>
-                {{/each}}
-              </div>
-              <div class='children-column'>
-                {{#each @fields.children as |ChildTask|}}
-                  <div class='subtask-item'>
-                    <ChildTask />
-                  </div>
-                {{/each}}
-              </div>
-            </div>
-          </div>
-        {{/if}}
-      </div>
-      <style scoped>
-        .task-card {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-sm);
-          padding: 0 var(--boxel-sp);
-        }
-        .task-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .task-detail {
-          min-height: var(--boxel-form-control-height);
-          margin-bottom: var(--boxel-sp-sm);
-        }
-        .task-meta {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar {
-          --profile-avatar-icon-size: var(--boxel-icon-med);
-        }
-        .row-1 {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
-        .row-2 {
-          display: flex;
-          gap: var(--boxel-sp-xxs);
-        }
-        .progress-bar-container {
-          --boxel-progress-bar-fill-color: var(--boxel-highlight);
-          width: 35%;
-          max-width: 400px;
-        }
-        .task-dates {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-          color: var(--boxel-400); /* Light grey color for the text */
-        }
-        .calendar-icon {
-          color: var(--boxel-400); /* Light grey color for the icon */
-        }
-        .date-range {
-          font-size: var(--boxel-font-size-sm);
-        }
-        .children-header {
-          font-size: var(--boxel-font-size-sm);
-          color: var(--boxel-purple);
-          margin-bottom: var(--boxel-sp-xxs);
-        }
-        .subtasks-section {
-          border-radius: var(--boxel-border-radius);
-          min-width: 150px;
-          max-width: 600px;
-        }
-        .subtasks-header-container {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-        .subtasks-header {
-          padding: 0 var(--boxel-sp-xxs);
-          font-size: var(--boxel-font-size-sm);
-          color: var(--boxel-purple);
-        }
-        .subtasks-container {
-          display: flex;
-          gap: var(--boxel-sp-sm);
-        }
-        .status-column {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xxs);
-        }
-        .children-column {
-          flex-grow: 1;
-        }
-        .status-indicator {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          height: 65px; /* Increased height to match subtask-item */
-        }
-        .subtask-item {
-          height: 65px; /* Set a fixed height for subtask items */
-          width: 100%;
-          display: flex;
-          align-items: center;
-        }
-        .circle {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px solid var(--boxel-dark);
-        }
-        .circle.completed {
-          background-color: var(--boxel-highlight);
-        }
-        .circle.incomplete {
-          background-color: white;
-        }
-        .tag-pill {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
-        .tag-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background-color: var(--boxel-purple);
-        }
-      </style>
-    </template>
-
-    get shippedArr() {
-      return (
-        this.args.model.children?.map(
-          (child) => child.status.label === 'Shipped',
-        ) ?? []
-      );
-    }
-
-    @action
-    isShipped(status: unknown): boolean {
-      if (typeof status === 'string') {
-        return status.includes('Shipped'); // checking for html content
-      }
-      return false;
-    }
-
-    get tagNames() {
-      return this.args.model.tags?.map((tag) => tag.name) ?? [];
-    }
-
-    get hasDateRange() {
-      return this.args.model.dateStarted && this.args.model.dueDate;
-    }
-
-    get progress() {
-      if (!this.hasChildren) return 0;
-      const shippedCount = this.args.model.children!.filter(
-        (child) => child.status.label === 'Shipped',
-      ).length;
-      return Math.round((shippedCount / this.childrenCount) * 100);
-    }
-
-    get progressLabel() {
-      return `${this.progress}%`;
-    }
-
-    get hasChildren() {
-      return this.args.model.children && this.args.model.children.length > 0;
-    }
-
-    get childrenCount() {
-      return this.args.model.children ? this.args.model.children.length : 0;
-    }
-
-    get shippedCount() {
-      return this.args.model.children
-        ? this.args.model.children.filter(
-            (child) => child.status.label === 'Shipped',
-          ).length
-        : 0;
-    }
-  };
+  static isolated = TaskIsolated;
 
   static atom = class Atom extends Component<typeof this> {
     <template>
