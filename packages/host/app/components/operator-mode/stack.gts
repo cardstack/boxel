@@ -41,14 +41,14 @@ export default class OperatorModeStack extends Component<Signature> {
     }
 
     // add closing animation on last item
-    const lastItemIndex = this.args.stackItems.length - 1;
-    const lastItemEl = document.querySelector(
-      `[data-stack-card-index="${lastItemIndex}"]`,
-    ) as HTMLElement;
-    if (lastItemEl) {
-      lastItemEl.classList.add('closing-animation');
-    }
     if (!isTesting()) {
+      const lastItemIndex = this.args.stackItems.length - 1;
+      const lastItemEl = document.querySelector(
+        `[data-stack-card-index="${lastItemIndex}"]`,
+      ) as HTMLElement;
+      if (lastItemEl) {
+        lastItemEl.classList.add('closing-animation');
+      }
       await timeout(100);
     }
 

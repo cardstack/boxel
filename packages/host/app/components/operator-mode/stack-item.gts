@@ -19,6 +19,7 @@ import {
   restartableTask,
   timeout,
   waitForProperty,
+  dropTask,
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
@@ -440,21 +441,29 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
-  private closeItem = async () => {
+  private closeItem = dropTask(async () => {
     this.isClosing = true;
-    // wait for the animation to complete
     if (!isTesting()) {
+      // wait for the animation to complete
       await timeout(100);
     }
     this.args.close(this.args.item);
-  };
+  });
+
+  private get doOpeningAnimation() {
+    return !isTesting() && this.isLastItem;
+  }
+
+  private get doClosingAnimation() {
+    return !isTesting() && this.isClosing;
+  }
 
   <template>
     <div
       class='item
         {{if this.isBuried "buried"}}
-        {{if this.isLastItem "opening-animation"}}
-        {{if this.isClosing "closing-animation"}}'
+        {{if this.doOpeningAnimation "opening-animation"}}
+        {{if this.doClosingAnimation "closing-animation"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
@@ -583,7 +592,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     @height='16px'
                     class='icon-button'
                     aria-label='Close'
-                    {{on 'click' this.closeItem}}
+                    {{on 'click' (perform this.closeItem)}}
                     data-test-close-button
                   />
                 </:trigger>
