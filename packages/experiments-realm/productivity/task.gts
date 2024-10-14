@@ -116,7 +116,7 @@ export class TaskStatusField extends StatusField {
 
   static embedded = class Embedded extends Component<typeof TaskStatusField> {
     <template>
-      {{this.args.model.label}}
+      {{@model.label}}
     </template>
   };
 
