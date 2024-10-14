@@ -9,10 +9,7 @@ import {
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
-import {
-  CardContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import {
   BoxelButton,
   BoxelDropdown,
@@ -481,9 +478,6 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
               @format='fitted'
               @realms={{@realms}}
             >
-              <:loading>
-                <LoadingIndicator class='loading-indicator' />
-              </:loading>
               <:response as |cards|>
                 {{#each cards as |card|}}
                   <li
@@ -557,13 +551,6 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
         justify-content: flex-end;
         gap: var(--boxel-sp);
         margin-top: var(--boxel-sp);
-      }
-      .loading-indicator {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100%;
-        width: 100%;
       }
     </style>
   </template>
