@@ -579,9 +579,9 @@ export class Task extends CardDef {
                 {{/each}}
               </div>
               <div class='children-column'>
-                {{#each @fields.children as |childTask|}}
+                {{#each @fields.children as |ChildTask|}}
                   <div class='subtask-item'>
-                    <childTask />
+                    <ChildTask />
                   </div>
                 {{/each}}
               </div>

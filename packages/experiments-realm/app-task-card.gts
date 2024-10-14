@@ -185,11 +185,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
                 {{this.selectedFilter}}
               {{else}}
                 Filter
-                <DropdownArrowFilled
-                  width='10'
-                  height='10'
-                  style='margin-left: 5px;'
-                />
+                <DropdownArrowFilled width='10' height='10' />
               {{/if}}
             </BoxelButton>
           </:trigger>
