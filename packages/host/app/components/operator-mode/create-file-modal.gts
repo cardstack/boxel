@@ -651,6 +651,10 @@ export class ${className} extends ${exportName} {
 
   static edit = class Edit extends Component<typeof this> {
     <template></template>
+  }
+  
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
   }`,
     );
     src.push(`  */`);
