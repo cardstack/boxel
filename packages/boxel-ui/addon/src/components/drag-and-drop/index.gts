@@ -1,16 +1,16 @@
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import {
-  sortableItem,
   dropTarget,
-  removeItem,
+  insertAfter,
   insertAt,
   insertBefore,
-  insertAfter,
+  removeItem,
+  sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
-import { hash, fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 
 //Dnd Kanban Board
@@ -19,8 +19,8 @@ export interface ColumnHeaderArgs {
 }
 
 export interface DndKanbanBoardArgs<Column> {
-  columns: Column[];
   columnHeader?: ComponentLike<ColumnHeaderArgs>;
+  columns: Column[];
 }
 
 export interface DndKanbanBoardSignature<Column> {

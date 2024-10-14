@@ -5,6 +5,7 @@ import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
+import DndKanbanBoard from './components/drag-and-drop/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
@@ -37,7 +38,6 @@ import BoxelSelect from './components/select/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
-import DndKanbanBoard from './components/drag-and-drop/index.gts';
 
 export {
   Accordion,
@@ -58,6 +58,7 @@ export {
   CardContainer,
   CardContentContainer,
   CircleSpinner,
+  DndKanbanBoard,
   FieldContainer,
   Filter,
   FilterList,
@@ -77,5 +78,4 @@ export {
   Switch,
   TabbedHeader,
   Tooltip,
-  DndKanbanBoard,
 };

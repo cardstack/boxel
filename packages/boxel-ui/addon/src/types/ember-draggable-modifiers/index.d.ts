@@ -4,26 +4,26 @@ declare module 'ember-draggable-modifiers/modifiers/sortable-item' {
   export default class SortableItemModifier extends Modifier<{
     Args: {
       Named: {
-        data?: any;
-        group?: string;
         accepts?: string[];
-        dragHandleElement?: string;
-        direction?: 'horizontal' | 'vertical';
-        allowedEdges?: ('top' | 'bottom' | 'left' | 'right')[];
-        allowDropOnItself?: boolean;
         allowDropOnChildren?: boolean;
+        allowDropOnItself?: boolean;
+        allowedEdges?: ('top' | 'bottom' | 'left' | 'right')[];
+        canDrop?: (event: DragEvent) => boolean;
+        data?: any;
+        direction?: 'horizontal' | 'vertical';
         disabled?: boolean;
         disabledDrag?: boolean;
         disabledDrop?: boolean;
+        dragHandleElement?: string;
+        group?: string;
         isDraggingClass?: string;
         isOnTargetClass?: string;
-        canDrop?: (event: DragEvent) => boolean;
-        onDrop?: (event: DragEvent, item: any) => void;
-        onHover?: (event: DragEvent) => void;
+        onDragEnd?: (event: DragEvent) => void;
         onDragEnter?: (event: DragEvent) => void;
         onDragLeave?: (event: DragEvent) => void;
         onDragStart?: (event: DragEvent) => void;
-        onDragEnd?: (event: DragEvent) => void;
+        onDrop?: (event: DragEvent, item: any) => void;
+        onHover?: (event: DragEvent) => void;
       };
       Positional: [];
     };
@@ -37,13 +37,13 @@ declare module 'ember-draggable-modifiers/modifiers/draggable-item' {
     Args: {
       Named: {
         data?: any;
-        group?: string;
-        dragHandleElement?: string;
         disabled?: boolean;
+        dragHandleElement?: string;
+        group?: string;
         isDraggingClass?: string;
-        onDragStart?: (event: DragEvent) => void;
         onDragEnd?: (event: DragEvent) => void;
-        onDrop?: (event: { source: unknown; destination: unknown }) => void;
+        onDragStart?: (event: DragEvent) => void;
+        onDrop?: (event: { destination: unknown; source: unknown }) => void;
       };
       Positional: [];
     };
@@ -56,20 +56,20 @@ declare module 'ember-draggable-modifiers/modifiers/drop-target' {
   export default class DropTargetModifier extends Modifier<{
     Args: {
       Named: {
-        data?: any;
-        group?: string;
         accepts?: string[];
-        direction?: 'horizontal' | 'vertical';
-        allowedEdges?: ('top' | 'bottom' | 'left' | 'right')[];
-        allowDropOnItself?: boolean;
         allowDropOnChildren?: boolean;
-        disabled?: boolean;
-        isOnTargetClass?: string;
+        allowDropOnItself?: boolean;
+        allowedEdges?: ('top' | 'bottom' | 'left' | 'right')[];
         canDrop?: (event: DragEvent) => boolean;
-        onDrop?: (event: DragEvent, item: any) => void;
-        onHover?: (event: DragEvent) => void;
+        data?: any;
+        direction?: 'horizontal' | 'vertical';
+        disabled?: boolean;
+        group?: string;
+        isOnTargetClass?: string;
         onDragEnter?: (event: DragEvent) => void;
         onDragLeave?: (event: DragEvent) => void;
+        onDrop?: (event: DragEvent, item: any) => void;
+        onHover?: (event: DragEvent) => void;
       };
       Positional: [];
     };
@@ -96,9 +96,9 @@ declare module 'ember-draggable-modifiers/modifiers/file-drop-target' {
     Args: {
       Named: {
         accept?: string[];
-        multiple?: boolean;
         disabled?: boolean;
         isDraggingOverClass?: string;
+        multiple?: boolean;
         onDragEnter?: (event: DragEvent) => void;
         onDragLeave?: (event: DragEvent) => void;
         onDrop?: (event: DragEvent, files: File[]) => void;

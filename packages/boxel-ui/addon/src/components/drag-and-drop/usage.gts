@@ -1,19 +1,20 @@
-import Component from '@glimmer/component';
-import Pill from '../pill/index.gts';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import DndKanbanBoard, {
-  Column,
-  Card,
-  type ColumnHeaderArgs,
-} from './index.gts';
-import { get } from '@ember/object';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { action } from '@ember/object';
+import { get } from '@ember/object';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+
+import Pill from '../pill/index.gts';
+import DndKanbanBoard, {
+  type ColumnHeaderArgs,
+  Card,
+  Column,
+} from './index.gts';
 
 export default class DndUsage extends Component {
   @tracked columns = [
@@ -91,7 +92,7 @@ export default class DndUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
 
-    <style>
+    <style scoped>
       .column-info {
         display: table;
         margin-left: auto;
