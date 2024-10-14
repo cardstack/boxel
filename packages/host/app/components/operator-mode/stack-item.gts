@@ -6,6 +6,9 @@ import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
+
+import { isTesting } from '@embroider/macros';
+
 import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
@@ -440,7 +443,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private closeItem = async () => {
     this.isClosing = true;
     // wait for the animation to complete
-    await timeout(100);
+    if (!isTesting()) {
+      await timeout(100);
+    }
     this.args.close(this.args.item);
   };
 

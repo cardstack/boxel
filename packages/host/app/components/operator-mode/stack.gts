@@ -1,6 +1,9 @@
 import Component from '@glimmer/component';
 
 import { task, timeout } from 'ember-concurrency';
+
+import { isTesting } from '@embroider/macros';
+
 import perform from 'ember-concurrency/helpers/perform';
 
 import type { Actions } from '@cardstack/runtime-common';
@@ -46,7 +49,9 @@ export default class OperatorModeStack extends Component<Signature> {
     if (lastItemEl) {
       lastItemEl.classList.add('closing-animation');
     }
-    await timeout(100);
+    if (!isTesting()) {
+      await timeout(100);
+    }
 
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
