@@ -180,12 +180,16 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       <div class='filter-section'>
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <BoxelButton {{bindings}}>
+            <BoxelButton {{bindings}} class='dropdown-filter-button'>
               {{#if this.selectedFilter.length}}
                 {{this.selectedFilter}}
               {{else}}
-                Filter
-                <DropdownArrowFilled width='10' height='10' />
+                <span class='dropdown-filter-text'>Filter</span>
+                <DropdownArrowFilled
+                  width='10'
+                  height='10'
+                  class='dropdown-arrow'
+                />
               {{/if}}
             </BoxelButton>
           </:trigger>
@@ -269,6 +273,19 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         justify-content: flex-end;
         gap: var(--boxel-sp);
         margin-top: var(--boxel-sp);
+      }
+
+      .dropdown-filter-button {
+        display: flex;
+        align-items: center;
+      }
+
+      .dropdown-filter-text {
+        margin-right: var(--boxel-sp-xxs);
+      }
+
+      .dropdown-arrow {
+        display: inline-block;
       }
     </style>
   </template>
