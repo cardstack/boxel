@@ -1,9 +1,6 @@
 exports.up = (pgm) => {
   pgm.createTable('users', {
-    id: {
-      type: 'serial',
-      primaryKey: true,
-    },
+    id: 'id',
     matrix_user_id: { type: 'varchar', notNull: true, unique: true },
     stripe_customer_id: { type: 'varchar' },
     created_at: {
@@ -14,10 +11,7 @@ exports.up = (pgm) => {
   });
 
   pgm.createTable('plans', {
-    id: {
-      type: 'serial',
-      primaryKey: true,
-    },
+    id: 'id',
     name: { type: 'varchar', notNull: true },
     monthly_price: { type: 'numeric', notNull: true },
     credits_included: { type: 'integer', notNull: true },
@@ -30,20 +24,14 @@ exports.up = (pgm) => {
   });
 
   pgm.createTable('billing_cycles', {
-    id: {
-      type: 'serial',
-      primaryKey: true,
-    },
+    id: 'id',
     subscription_id: { type: 'integer' },
     period_start: { type: 'timestamp', notNull: true },
     period_end: { type: 'timestamp', notNull: true },
   });
 
   pgm.createTable('subscriptions', {
-    id: {
-      type: 'serial',
-      primaryKey: true,
-    },
+    id: 'id',
     user_id: { type: 'integer', references: 'users(id)' },
     plan_id: { type: 'integer', references: 'plans(id)' },
     started_at: { type: 'timestamp', notNull: true },
@@ -64,10 +52,7 @@ exports.up = (pgm) => {
   });
 
   pgm.createTable('ai_actions', {
-    id: {
-      type: 'serial',
-      primaryKey: true,
-    },
+    id: 'id',
     action_type: { type: 'varchar', notNull: true },
     user_id: { type: 'integer', references: 'users(id)' },
     cost_in_usd: { type: 'numeric', notNull: true },
@@ -135,28 +120,7 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
-  pgm.dropIndex('users', 'stripe_customer_id');
-  pgm.dropIndex('subscriptions', 'user_id');
-  pgm.dropIndex('subscriptions', 'plan_id');
-  pgm.dropIndex('subscriptions', 'status');
-  pgm.dropIndex('subscriptions', 'stripe_subscription_id');
-  pgm.dropIndex('subscriptions', 'current_billing_cycle_id');
-  pgm.dropIndex('billing_cycles', 'subscription_id');
-  pgm.dropIndex('billing_cycles', ['period_start', 'period_end']);
-  pgm.dropIndex('ai_actions', 'user_id');
-  pgm.dropIndex('ai_actions', 'created_at');
-
-  pgm.dropTrigger('subscriptions', 'ensure_single_active_subscription_trigger');
-
-  pgm.dropFunction('ensure_single_active_subscription', []);
-
   pgm.dropTable('ai_actions', { ifExists: true, cascade: true });
-
-  pgm.dropConstraint(
-    'subscriptions',
-    'subscriptions_current_billing_cycle_id_fkey',
-  );
-
   pgm.dropTable('subscriptions', { cascade: true });
   pgm.dropTable('billing_cycles', { cascade: true });
   pgm.dropTable('plans', { cascade: true });
