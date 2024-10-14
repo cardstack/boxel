@@ -398,7 +398,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await this.expectEvents({
       assert,
       realm: testRealm,
-      expectedNumberOfEvents: 1,
+      expectedNumberOfEvents: 2,
       callback: async () => {
         let owner = (getContext() as TestContext).owner;
         let cardService = owner.lookup('service:card-service') as CardService;
