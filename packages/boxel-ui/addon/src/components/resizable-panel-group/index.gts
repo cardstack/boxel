@@ -13,6 +13,7 @@ import ResizablePanel from './panel.gts';
 export { default as ResizeHandle } from './handle.gts';
 export { default as ResizablePanel } from './panel.gts';
 
+import { debounce } from '@ember/runloop';
 import { buildWaiter } from '@ember/test-waiters';
 
 let waiter = buildWaiter('resizable-panel-group');
@@ -53,7 +54,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   <template>
     <div
       class='boxel-panel-group {{@orientation}}'
-      {{didResizeModifier this.onContainerResize}}
+      {{! debouce prevents the "ResizeObserver loop completed with undelivered notifications" error that happens in tests }}
+      {{didResizeModifier this.debounceContainerResize}}
       ...attributes
     >
       {{#if this.panelGroupElement}}
@@ -478,12 +480,21 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
+  debounceContainerResize(
+    entry?: ResizeObserverEntry,
+    observer?: ResizeObserver,
+  ) {
+    // debounce prevents the "ResizeObserver loop completed with undelivered notifications" error that happens in tests
+    debounce(this, this.onContainerResize, entry, observer, 1);
+  }
+
+  @action
   onContainerResize(entry?: ResizeObserverEntry, observer?: ResizeObserver) {
     if (!this.panelGroupElement) {
       if (entry) {
         waiter.endAsync(this.initializationWaiter);
         this.panelGroupElement = entry.target as HTMLDivElement;
-        next(this, this.onContainerResize, entry, observer);
+        next(this, this.debounceContainerResize, entry, observer);
       }
       return;
     }
