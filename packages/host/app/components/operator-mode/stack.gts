@@ -38,12 +38,12 @@ export default class OperatorModeStack extends Component<Signature> {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
 
-    // add dismissed animation on last item
+    // add closing animation on last item
     const lastItemEl = document.querySelector(
       `.operator-mode-stack > .inner > .item:last-child`,
     ) as HTMLElement;
     if (lastItemEl) {
-      lastItemEl.classList.add('dismissed');
+      lastItemEl.classList.add('closing-animation');
     }
     await timeout(100);
 

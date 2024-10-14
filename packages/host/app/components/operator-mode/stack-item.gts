@@ -448,8 +448,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <div
       class='item
         {{if this.isBuried "buried"}}
-        {{if this.isLastItem "open"}}
-        {{if this.isClosing "dismissed"}}'
+        {{if this.isLastItem "opening-animation"}}
+        {{if this.isClosing "closing-animation"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
@@ -695,10 +695,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         z-index: 0;
         pointer-events: none;
       }
-      .item.open {
+      .item.opening-animation {
         animation: scaleIn 0.2s forwards;
       }
-      .item.dismissed {
+      .item.closing-animation {
         animation: fadeOut 0.2s forwards;
       }
 
