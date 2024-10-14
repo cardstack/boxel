@@ -1,7 +1,7 @@
 declare module 'ember-draggable-modifiers/modifiers/sortable-item' {
   import Modifier from 'ember-modifier';
 
-  export default class SortableItemModifier extends Modifier<{
+  export default class DndSortableItemModifier extends Modifier<{
     Args: {
       Named: {
         accepts?: string[];
@@ -33,7 +33,7 @@ declare module 'ember-draggable-modifiers/modifiers/sortable-item' {
 declare module 'ember-draggable-modifiers/modifiers/draggable-item' {
   import Modifier from 'ember-modifier';
 
-  export default class DraggableItemModifier extends Modifier<{
+  export default class DndDraggableItemModifier extends Modifier<{
     Args: {
       Named: {
         data?: any;
@@ -53,7 +53,7 @@ declare module 'ember-draggable-modifiers/modifiers/draggable-item' {
 declare module 'ember-draggable-modifiers/modifiers/drop-target' {
   import Modifier from 'ember-modifier';
 
-  export default class DropTargetModifier extends Modifier<{
+  export default class DndDropTargetModifier extends Modifier<{
     Args: {
       Named: {
         accepts?: string[];
@@ -79,7 +79,7 @@ declare module 'ember-draggable-modifiers/modifiers/drop-target' {
 declare module 'ember-draggable-modifiers/modifiers/draggable-item-handle' {
   import Modifier from 'ember-modifier';
 
-  export default class DraggableItemHandleModifier extends Modifier<{
+  export default class DndDraggableItemHandleModifier extends Modifier<{
     Args: {
       Named: {
         disabled?: boolean;
@@ -92,7 +92,7 @@ declare module 'ember-draggable-modifiers/modifiers/draggable-item-handle' {
 declare module 'ember-draggable-modifiers/modifiers/file-drop-target' {
   import Modifier from 'ember-modifier';
 
-  export default class FileDropTargetModifier extends Modifier<{
+  export default class DndFileDropTargetModifier extends Modifier<{
     Args: {
       Named: {
         accept?: string[];

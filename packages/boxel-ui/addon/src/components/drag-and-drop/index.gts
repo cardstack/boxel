@@ -1,10 +1,10 @@
 import {
-  dropTarget,
+  DndDropTargetModifier,
+  DndSortableItemModifier,
   insertAfter,
   insertAt,
   insertBefore,
   removeItem,
-  sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
 import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -120,7 +120,7 @@ export default class DndKanbanBoard extends Component<
       {{#each this.columns as |column columnIndex|}}
         <div
           class='column'
-          {{dropTarget
+          {{DndDropTargetModifier
             group='cards'
             data=(hash parent=column)
             onDrop=this.moveCard
@@ -149,7 +149,7 @@ export default class DndKanbanBoard extends Component<
             {{#each column.cards as |card|}}
               <div
                 class='draggable-card'
-                {{sortableItem
+                {{DndSortableItemModifier
                   group='cards'
                   data=(hash item=card parent=column)
                   onDrop=this.moveCard
