@@ -39,8 +39,9 @@ export default class OperatorModeStack extends Component<Signature> {
     }
 
     // add closing animation on last item
+    const lastItemIndex = this.args.stackItems.length - 1;
     const lastItemEl = document.querySelector(
-      `.operator-mode-stack > .inner > .item:last-child`,
+      `[data-stack-card-index="${lastItemIndex}"]`,
     ) as HTMLElement;
     if (lastItemEl) {
       lastItemEl.classList.add('closing-animation');

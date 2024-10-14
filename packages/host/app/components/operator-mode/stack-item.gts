@@ -455,6 +455,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
+      {{! To target last item with closing animation  }}
+      data-stack-card-index={{@index}}
       style={{this.styleForStackedCard}}
     >
       <CardContainer
