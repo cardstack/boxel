@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import type { Actions } from '@cardstack/runtime-common';
@@ -37,6 +37,17 @@ export default class OperatorModeStack extends Component<Signature> {
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
+
+    // add closing animation on last item
+    const lastItemIndex = this.args.stackItems.length - 1;
+    const lastItemEl = document.querySelector(
+      `[data-stack-card-index="${lastItemIndex}"]`,
+    ) as HTMLElement;
+    if (lastItemEl) {
+      lastItemEl.classList.add('closing-animation');
+    }
+    await timeout(100);
+
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
@@ -76,6 +87,7 @@ export default class OperatorModeStack extends Component<Signature> {
         padding: var(--stack-padding-top) var(--boxel-sp)
           var(--stack-padding-bottom);
         position: relative;
+        transition: padding-top var(--boxel-transition);
       }
       .operator-mode-stack.with-bg-image:before {
         content: ' ';
