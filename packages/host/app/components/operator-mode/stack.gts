@@ -3,7 +3,6 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { task, timeout } from 'ember-concurrency';
-
 import perform from 'ember-concurrency/helpers/perform';
 
 import type { Actions } from '@cardstack/runtime-common';
