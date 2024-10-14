@@ -254,6 +254,11 @@ export default class InteractSubmode extends Component<Signature> {
           loadedCard = card as CardDef;
         }
 
+        // if is workspace index card, do not allow deletion
+        if (here.realm.isIndexCard(loadedCard.id)) {
+          throw new Error('Cannot delete workspace index card');
+        }
+
         if (!here.itemToDelete) {
           here.itemToDelete = loadedCard;
           return;
