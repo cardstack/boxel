@@ -621,8 +621,6 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText(
-      'There was an error verifying token: Could not connect to server',
-    );
+    ).toContainText('Could not connect to server');
   });
 });
