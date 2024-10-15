@@ -75,6 +75,7 @@ const stackItemScrollers = new WeakMap<
     scrollIntoView: (_selector: string) => void;
   }
 >();
+const closeAnimation = new WeakMap<StackItem, () => void>();
 
 interface NeighborStackTriggerButtonSignature {
   Element: HTMLButtonElement;
@@ -285,6 +286,13 @@ export default class InteractSubmode extends Component<Signature> {
           }
         }
         await changeSizeCallback();
+      },
+      doCloseAnimation: async (card: CardDef) => {
+        const stackItem = here.findCardInStack(card, stackIndex);
+        const doCloseAnimation = closeAnimation.get(stackItem);
+        if (doCloseAnimation) {
+          await doCloseAnimation();
+        }
       },
       changeSubmode: (url: URL, submode: Submode = 'code'): void => {
         here.operatorModeStateService.updateCodePath(url);
@@ -567,12 +575,14 @@ export default class InteractSubmode extends Component<Signature> {
     doClearSelections: () => void,
     doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
     doScrollIntoView: (selector: string) => void,
+    doCloseAnimation: () => void,
   ) => {
     clearSelections.set(item, doClearSelections);
     stackItemScrollers.set(item, {
       stableScroll: doWithStableScroll,
       scrollIntoView: doScrollIntoView,
     });
+    closeAnimation.set(item, doCloseAnimation);
   };
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
