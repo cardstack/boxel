@@ -1,17 +1,11 @@
-import {
-  DndDropTargetModifier,
-  DndSortableItemModifier,
-  insertAfter,
-  insertAt,
-  insertBefore,
-  removeItem,
-} from '@cardstack/boxel-ui/modifiers';
 import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 //Dnd Kanban Board
 export interface ColumnHeaderArgs {
@@ -53,8 +47,57 @@ export class Column {
 export default class DndKanbanBoard extends Component<
   DndKanbanBoardSignature<Column>
 > {
+  @tracked isModifiersLoaded = false;
+  @tracked DndDraggableItemModifier: any = null;
+  @tracked DndDropTargetModifier: any = null;
+  @tracked DndSortableItemModifier: any = null;
+  @tracked insertAfter: any;
+  @tracked insertAt: any;
+  @tracked insertBefore: any;
+  @tracked removeItem: any;
   @tracked columns: Column[] = this.args.columns;
   @tracked hoveredColumnIndex: number | null = null;
+
+  constructor(owner: unknown, args: DndKanbanBoardArgs<Column>) {
+    super(owner, args);
+
+    if (!isFastBoot) {
+      this.loadModifiers();
+    }
+  }
+
+  async loadModifiers() {
+    try {
+      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+      const DndDraggableItemModifier = await import(
+        'ember-draggable-modifiers/modifiers/draggable-item'
+      );
+
+      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+      const DndDropTargetModifier = await import(
+        'ember-draggable-modifiers/modifiers/drop-target'
+      );
+
+      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+      const DndSortableItemModifier = await import(
+        'ember-draggable-modifiers/modifiers/sortable-item'
+      );
+      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+      const arrayUtils = await import('ember-draggable-modifiers/utils/array');
+
+      this.DndDraggableItemModifier = DndDraggableItemModifier.default;
+      this.DndDropTargetModifier = DndDropTargetModifier.default;
+      this.DndSortableItemModifier = DndSortableItemModifier.default;
+      this.insertAfter = arrayUtils.insertAfter;
+      this.insertAt = arrayUtils.insertAt;
+      this.insertBefore = arrayUtils.insertBefore;
+      this.removeItem = arrayUtils.removeItem;
+
+      this.isModifiersLoaded = true;
+    } catch (e) {
+      console.error('Error loading modifiers:', e);
+    }
+  }
 
   get isDropZoneTargeted() {
     return (columnIndex: number) => this.hoveredColumnIndex === columnIndex;
@@ -76,12 +119,12 @@ export default class DndKanbanBoard extends Component<
     source: { data: draggedItem },
     target: { data: dropTarget, edge },
   }: any) {
-    this.columns = removeItem(this.columns, draggedItem);
+    this.columns = this.removeItem(this.columns, draggedItem);
 
     if (edge === 'left') {
-      this.columns = insertBefore(this.columns, dropTarget, draggedItem);
+      this.columns = this.insertBefore(this.columns, dropTarget, draggedItem);
     } else {
-      this.columns = insertAfter(this.columns, dropTarget, draggedItem);
+      this.columns = this.insertAfter(this.columns, dropTarget, draggedItem);
     }
   }
 
@@ -94,18 +137,25 @@ export default class DndKanbanBoard extends Component<
       edge,
     },
   }: any) {
-    draggedItemParent.cards = removeItem(draggedItemParent.cards, draggedItem);
+    draggedItemParent.cards = this.removeItem(
+      draggedItemParent.cards,
+      draggedItem,
+    );
 
     if (!dropTarget) {
-      dropTargetParent.cards = insertAt(dropTargetParent.cards, 0, draggedItem);
+      dropTargetParent.cards = this.insertAt(
+        dropTargetParent.cards,
+        0,
+        draggedItem,
+      );
     } else if (edge === 'top') {
-      dropTargetParent.cards = insertBefore(
+      dropTargetParent.cards = this.insertBefore(
         dropTargetParent.cards,
         dropTarget,
         draggedItem,
       );
     } else {
-      dropTargetParent.cards = insertAfter(
+      dropTargetParent.cards = this.insertAfter(
         dropTargetParent.cards,
         dropTarget,
         draggedItem,
@@ -116,53 +166,77 @@ export default class DndKanbanBoard extends Component<
   }
 
   <template>
-    <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
-      {{#each this.columns as |column columnIndex|}}
-        <div
-          class='column'
-          {{DndDropTargetModifier
-            group='cards'
-            data=(hash parent=column)
-            onDrop=this.moveCard
-            onDragEnter=(fn this.onColumnDragEnter columnIndex)
-            onDragLeave=this.onColumnDragLeave
-          }}
-        >
-          <div class='column-header'>
-            {{#if @columnHeader}}
-              <@columnHeader @title={{column.title}} />
-            {{else}}
-              {{column.title}}
-            {{/if}}
-          </div>
-
+    {{#if this.isModifiersLoaded}}
+      <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
+        {{#each this.columns as |column columnIndex|}}
           <div
-            class='column-drop-zone
-              {{if (this.isDropZoneTargeted columnIndex) "is-hovered"}}'
+            class='column'
+            {{this.DndDropTargetModifier
+              group='cards'
+              data=(hash parent=column)
+              onDrop=this.moveCard
+              onDragEnter=(fn this.onColumnDragEnter columnIndex)
+              onDragLeave=this.onColumnDragLeave
+            }}
           >
-            {{#if (this.isDropZoneTargeted columnIndex)}}
-              <div class='column-drop-zone-overlay'>
-                Board ordered by Priority
-              </div>
-            {{/if}}
+            <div class='column-header'>
+              {{#if @columnHeader}}
+                <@columnHeader @title={{column.title}} />
+              {{else}}
+                {{column.title}}
+              {{/if}}
+            </div>
 
-            {{#each column.cards as |card|}}
-              <div
-                class='draggable-card'
-                {{DndSortableItemModifier
-                  group='cards'
-                  data=(hash item=card parent=column)
-                  onDrop=this.moveCard
-                  isOnTargetClass='is-on-target'
-                }}
-              >
-                {{yield card column}}
-              </div>
-            {{/each}}
+            <div
+              class='column-drop-zone
+                {{if (this.isDropZoneTargeted columnIndex) "is-hovered"}}'
+            >
+              {{#if (this.isDropZoneTargeted columnIndex)}}
+                <div class='column-drop-zone-overlay'>
+                  Board ordered by Priority
+                </div>
+              {{/if}}
+
+              {{#each column.cards as |card|}}
+                <div
+                  class='draggable-card'
+                  {{this.DndSortableItemModifier
+                    group='cards'
+                    data=(hash item=card parent=column)
+                    onDrop=this.moveCard
+                    isOnTargetClass='is-on-target'
+                  }}
+                >
+                  {{yield card column}}
+                </div>
+              {{/each}}
+            </div>
           </div>
-        </div>
-      {{/each}}
-    </div>
+        {{/each}}
+      </div>
+    {{else}}
+      <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
+        {{#each this.columns as |column|}}
+          <div class='column'>
+            <div class='column-header'>
+              {{#if @columnHeader}}
+                <@columnHeader @title={{column.title}} />
+              {{else}}
+                {{column.title}}
+              {{/if}}
+            </div>
+
+            <div class='column-drop-zone'>
+              {{#each column.cards as |card|}}
+                <div class='draggable-card'>
+                  {{yield card column}}
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        {{/each}}
+      </div>
+    {{/if}}
 
     <style scoped>
       .draggable-container {

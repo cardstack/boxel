@@ -19,10 +19,10 @@ import DndKanbanBoard, {
 export default class DndUsage extends Component {
   @tracked columns = [
     new Column('Todo', [
-      new Card({ assignee: 'Justin', task: 'Climbing on the Tree' }),
-      new Card({ assignee: 'Lucas', task: 'Driving on car' }),
-      new Card({ assignee: 'Richard', task: 'Build on house' }),
-      new Card({ assignee: 'Chuan', task: 'RUN on bot' }),
+      new Card({ assignee: 'Justin', task: 'Implement a Todo App' }),
+      new Card({ assignee: 'Lucas', task: 'Create Boxel UI Compoennt' }),
+      new Card({ assignee: 'Richard', task: 'Design a Chess App' }),
+      new Card({ assignee: 'Chuan', task: 'Research on Bug' }),
     ]),
     new Column('In progress', []),
     new Column('Done', []),
@@ -50,6 +50,14 @@ export default class DndUsage extends Component {
         dnd-kanban-drop-zone-bg=this.dndKanbanDropZoneBg.value
       }}
     >
+      <:description>
+        This component implements a drag-and-drop Kanban board using
+        ember-draggable-modifiers. It allows users to create custom
+        functionality for column headers and design custom draggable cards. This
+        flexibility enables developers to implement unique actions or menus
+        within column headers. Users can also define their own draggable card
+        designs with custom styles.
+      </:description>
       <:example>
         <DndKanbanBoard
           @columns={{this.columns}}
