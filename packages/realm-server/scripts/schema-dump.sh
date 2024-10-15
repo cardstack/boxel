@@ -15,6 +15,8 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=ai_actions \
   --exclude-table-and-children=users \
   --exclude-table-and-children=plans \
+  --exclude-table-and-children=credit_balance_changes \
+  --exclude-table-and-children=stripe_events \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \
