@@ -47,7 +47,7 @@ export class Column {
 export default class DndKanbanBoard extends Component<
   DndKanbanBoardSignature<Column>
 > {
-  @tracked isModifiersLoaded = false;
+  @tracked areModifiersLoaded = false;
   @tracked DndDraggableItemModifier: any = null;
   @tracked DndDropTargetModifier: any = null;
   @tracked DndSortableItemModifier: any = null;
@@ -67,36 +67,32 @@ export default class DndKanbanBoard extends Component<
   }
 
   async loadModifiers() {
-    try {
-      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-      const DndDraggableItemModifier = await import(
-        'ember-draggable-modifiers/modifiers/draggable-item'
-      );
+    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+    const DndDraggableItemModifier = await import(
+      'ember-draggable-modifiers/modifiers/draggable-item'
+    );
 
-      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-      const DndDropTargetModifier = await import(
-        'ember-draggable-modifiers/modifiers/drop-target'
-      );
+    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+    const DndDropTargetModifier = await import(
+      'ember-draggable-modifiers/modifiers/drop-target'
+    );
 
-      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-      const DndSortableItemModifier = await import(
-        'ember-draggable-modifiers/modifiers/sortable-item'
-      );
-      // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-      const arrayUtils = await import('ember-draggable-modifiers/utils/array');
+    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+    const DndSortableItemModifier = await import(
+      'ember-draggable-modifiers/modifiers/sortable-item'
+    );
+    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
+    const arrayUtils = await import('ember-draggable-modifiers/utils/array');
 
-      this.DndDraggableItemModifier = DndDraggableItemModifier.default;
-      this.DndDropTargetModifier = DndDropTargetModifier.default;
-      this.DndSortableItemModifier = DndSortableItemModifier.default;
-      this.insertAfter = arrayUtils.insertAfter;
-      this.insertAt = arrayUtils.insertAt;
-      this.insertBefore = arrayUtils.insertBefore;
-      this.removeItem = arrayUtils.removeItem;
+    this.DndDraggableItemModifier = DndDraggableItemModifier.default;
+    this.DndDropTargetModifier = DndDropTargetModifier.default;
+    this.DndSortableItemModifier = DndSortableItemModifier.default;
+    this.insertAfter = arrayUtils.insertAfter;
+    this.insertAt = arrayUtils.insertAt;
+    this.insertBefore = arrayUtils.insertBefore;
+    this.removeItem = arrayUtils.removeItem;
 
-      this.isModifiersLoaded = true;
-    } catch (e) {
-      console.error('Error loading modifiers:', e);
-    }
+    this.areModifiersLoaded = true;
   }
 
   get isDropZoneTargeted() {
@@ -166,7 +162,7 @@ export default class DndKanbanBoard extends Component<
   }
 
   <template>
-    {{#if this.isModifiersLoaded}}
+    {{#if this.areModifiersLoaded}}
       <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
         {{#each this.columns as |column columnIndex|}}
           <div
