@@ -1245,6 +1245,14 @@ module('Acceptance | code submode tests', function (_hooks) {
         {
           type: 'index',
           data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}in-this-file.gts`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
             type: 'incremental',
             invalidations: [`${testRealmURL}in-this-file.gts`],
           },
@@ -1374,6 +1382,14 @@ module('Acceptance | code submode tests', function (_hooks) {
         {
           type: 'index',
           data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
             type: 'incremental',
             invalidations: [`${testRealmURL}Person/fadhlan`],
           },
@@ -1438,6 +1454,14 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
       let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
         {
           type: 'index',
           data: {

@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import type { CardContext, BaseDef, CardDef } from '../card-api';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 export default class DefaultFittedTemplate extends GlimmerComponent<{
   Args: {
@@ -16,17 +16,23 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
     <div class='fitted-template'>
       {{#if @model}}
         <div class='thumbnail-section'>
-          <div
-            class='card-thumbnail'
-            style={{cssUrl 'background-image' @model.thumbnailURL}}
-          >
-            {{#unless @model.thumbnailURL}}
-              <div
-                class='card-thumbnail-placeholder'
-                data-test-card-thumbnail-placeholder
-              ></div>
-            {{/unless}}
-          </div>
+          {{#if @model.thumbnailURL}}
+            <div
+              class='card-thumbnail'
+              style={{cssUrl 'background-image' @model.thumbnailURL}}
+            >
+              {{#unless @model.thumbnailURL}}
+                <div
+                  class='card-thumbnail-placeholder'
+                  data-test-card-thumbnail-placeholder
+                ></div>
+              {{/unless}}
+            </div>
+          {{else}}
+            {{#let (cardTypeIcon @model) as |CardTypeIcon|}}
+              <CardTypeIcon data-test-card-type-icon class='card-type-icon' />
+            {{/let}}
+          {{/if}}
         </div>
         <div class='info-section'>
           <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
@@ -49,6 +55,10 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         height: 100%;
         display: flex;
         overflow: hidden;
+      }
+
+      .thumbnail-section {
+        display: flex;
       }
 
       /* Aspect Ratio <= 1.0 */
@@ -295,6 +305,8 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         background-repeat: no-repeat;
         color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-sm);
+        width: 100%;
+        height: 100%;
       }
       .card-title {
         text-overflow: ellipsis;
@@ -319,6 +331,13 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
       }
       .thumbnail-section {
         justify-content: center;
+        align-items: center;
+      }
+      .card-type-icon {
+        width: 52px;
+        height: 52px;
+        max-width: 100%;
+        max-height: 100%;
       }
     </style>
   </template>

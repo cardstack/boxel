@@ -83,6 +83,21 @@ export async function openAiAssistant(page: Page) {
   ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
 }
 
+export async function createRealm(
+  page: Page,
+  endpoint: string,
+  name = endpoint,
+) {
+  await page.locator('[data-test-add-workspace]').click();
+  await page.locator('[data-test-display-name-field]').fill(name);
+  await page.locator('[data-test-endpoint-field]').fill(endpoint);
+  await page.locator('[data-test-create-workspace-submit]').click();
+  await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
+  await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
+    0,
+  );
+}
+
 export async function openRoot(page: Page, url = testHost) {
   await page.goto(url);
 }
@@ -272,6 +287,11 @@ export async function enterWorkspace(
     page.locator(`[data-test-workspace="${workspace}"]`),
   ).toHaveCount(1);
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
+  await expect(
+    page.locator(
+      `[data-test-stack-card-index="0"] [data-test-boxel-header-title]`,
+    ),
+  ).toContainText(workspace);
 }
 
 export async function showAllCards(page: Page) {

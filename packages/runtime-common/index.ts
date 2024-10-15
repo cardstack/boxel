@@ -78,7 +78,10 @@ export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
-export { cardTypeDisplayName } from './helpers/card-type-display-name';
+export {
+  cardTypeDisplayName,
+  cardTypeIcon,
+} from './helpers/card-type-display-name';
 export { maybeRelativeURL, maybeURL, relativeURL } from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
