@@ -10,7 +10,6 @@ import { Resource } from 'ember-resources';
 
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 
-import { stripFileExtension } from '@cardstack/host/lib/utils';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -198,32 +197,14 @@ class _FileResource extends Resource<Args> {
       },
     });
 
-    this.setSubscription(realmURL, (event: { data: string }) => {
+    this.setSubscription(realmURL, (event: { type: string; data: string }) => {
       let eventData = JSON.parse(event.data);
-
-      if (!eventData.invalidations) {
+      if (event.type !== 'index' || !eventData.updatedFile) {
         return;
       }
 
-      let isInvalidated = eventData.invalidations.some(
-        (invalidationUrl: string) => {
-          let invalidationUrlHasExtension = invalidationUrl
-            .split('/')
-            .pop()!
-            .includes('.');
-
-          // This conditional is here because changes to card instance json files, for example `experiments/Authors/1.json`,
-          // will be in invalidations in the following form: `experiments/Authors/1` (without the .json extension)
-          if (invalidationUrlHasExtension) {
-            return this.url === invalidationUrl;
-          } else {
-            return stripFileExtension(this.url) === invalidationUrl;
-          }
-        },
-      );
-
-      // Do not reload this file if some other client else made changes to some other file
-      if (isInvalidated) {
+      let { updatedFile } = eventData as { updatedFile: string };
+      if (this.url === updatedFile) {
         this.read.perform();
       }
     });

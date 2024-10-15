@@ -1293,6 +1293,14 @@ module('Acceptance | interact submode tests', function (hooks) {
         {
           type: 'index',
           data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
             type: 'incremental',
             invalidations: [`${testRealmURL}Person/fadhlan`],
           },
