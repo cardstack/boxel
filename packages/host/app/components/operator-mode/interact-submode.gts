@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { provide } from 'ember-provide-consume-context';
 
 import { isEqual } from 'lodash';
 import get from 'lodash/get';
@@ -17,10 +18,11 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
+  CardContextName,
   aiBotUsername,
   Deferred,
   codeRefWithAbsoluteURL,
@@ -48,6 +50,7 @@ import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type Realm from '../../services/realm';
 
 import type { Submode } from '../submode-switcher';
 
@@ -122,6 +125,7 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: Realm;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private itemToDelete: CardDef | undefined = undefined;
@@ -195,7 +199,11 @@ export default class InteractSubmode extends Component<Signature> {
       viewCard: async (
         card: CardDef,
         format: Format = 'isolated',
+        opts?: { openCardInRightMostStack?: boolean },
       ): Promise<void> => {
+        if (opts?.openCardInRightMostStack) {
+          stackIndex = this.stacks.length;
+        }
         let newItem = new StackItem({
           owner: here,
           card,
@@ -204,6 +212,7 @@ export default class InteractSubmode extends Component<Signature> {
         });
         await newItem.ready();
         here.addToStack(newItem);
+        here.operatorModeStateService.workspaceChooserOpened = false;
       },
       editCard(card: CardDef): void {
         let item = here.findCardInStack(card, stackIndex);
@@ -214,6 +223,11 @@ export default class InteractSubmode extends Component<Signature> {
             format: 'edit',
           }),
         );
+      },
+      copyCard: async (card: CardDef): Promise<CardDef> => {
+        let deferred = new Deferred<CardDef>();
+        here._copyCard.perform(card, stackIndex, deferred);
+        return await deferred.promise;
       },
       saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
         let item = here.findCardInStack(card, stackIndex);
@@ -268,16 +282,12 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      runCommand: async (
+      runCommand: (
         card: CardDef,
         skillCardId: string,
         message?: string,
-      ): Promise<void> => {
-        await here.runCommand.perform(
-          card,
-          skillCardId,
-          message ?? 'Run command',
-        );
+      ): void => {
+        here.runCommand.perform(card, skillCardId, message ?? 'Run command');
       },
     };
   }
@@ -424,6 +434,39 @@ export default class InteractSubmode extends Component<Signature> {
     }
   }
 
+  private _copyCard = dropTask(
+    async (card: CardDef, stackIndex: number, done: Deferred<CardDef>) => {
+      let newCard: CardDef | undefined;
+      try {
+        // use existing card in stack to determine realm url,
+        // otherwise use user's first writable realm
+        let topCard =
+          this.operatorModeStateService.topMostStackItems()[stackIndex]?.card;
+        let realmURL: URL | undefined;
+        if (topCard) {
+          let url = await this.cardService.getRealmURL(topCard);
+          // open card might be from a realm in which we don't have write permissions
+          if (url && this.realm.canWrite(url.href)) {
+            realmURL = url;
+          }
+        }
+        if (!realmURL) {
+          if (!this.realm.defaultWritableRealm) {
+            throw new Error('Could not find a writable realm');
+          }
+          realmURL = new URL(this.realm.defaultWritableRealm.path);
+        }
+        newCard = await this.cardService.copyCard(card, realmURL);
+      } catch (e) {
+        done.reject(e);
+      } finally {
+        if (newCard) {
+          done.fulfill(newCard);
+        }
+      }
+    },
+  );
+
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
@@ -440,6 +483,9 @@ export default class InteractSubmode extends Component<Signature> {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
         );
+        if (!destinationRealmURL) {
+          throw new Error('Could not determine the copy destination realm');
+        }
         let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCard: CardDef | undefined;
@@ -623,6 +669,14 @@ export default class InteractSubmode extends Component<Signature> {
     openSearchCallback();
   }
 
+  @provide(CardContextName)
+  // @ts-ignore "cardContext is declared but not used"
+  private get cardContext() {
+    return {
+      actions: this.publicAPI(this, 0),
+    };
+  }
+
   <template>
     <SubmodeLayout
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
@@ -662,6 +716,11 @@ export default class InteractSubmode extends Component<Signature> {
                 class={{cn
                   'operator-mode-stack'
                   (if backgroundImageURLSpecificToThisStack 'with-bg-image')
+                  (if
+                    (and (gt stack.length 1) (lt stack.length 3))
+                    'medium-padding-top'
+                  )
+                  (if (gt stack.length 2) 'small-padding-top')
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack

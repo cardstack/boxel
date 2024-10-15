@@ -193,7 +193,7 @@ export class MatrixClient {
     userId: string,
   ): Promise<{ displayname: string } | undefined> {
     let response = await this.request(
-      `_matrix/client/v3/profile/${userId}`,
+      `_matrix/client/v3/profile/${encodeURIComponent(userId)}`,
       'GET',
       undefined,
       false,

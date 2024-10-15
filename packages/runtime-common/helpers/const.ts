@@ -5,4 +5,5 @@ export const testRealmInfo: RealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
+  visibility: 'public',
 };

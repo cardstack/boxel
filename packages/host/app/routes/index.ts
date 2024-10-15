@@ -46,9 +46,9 @@ export default class Index extends Route<void> {
     cardPath?: string;
     path: string;
     operatorModeState: string;
-    operatorModeEnabled: boolean;
+    workspaceChooserOpened?: boolean;
   }): Promise<void> {
-    let { operatorModeState, cardPath } = params;
+    let { operatorModeState, cardPath, workspaceChooserOpened } = params;
 
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
@@ -104,7 +104,15 @@ export default class Index extends Route<void> {
         ],
       ];
     }
-    if (!operatorModeState) {
+    let operatorModeStateObject = operatorModeState
+      ? JSON.parse(operatorModeState)
+      : undefined;
+    if (
+      !operatorModeStateObject ||
+      (operatorModeStateObject.submode === Submodes.Interact &&
+        operatorModeStateObject.stacks.length === 0 &&
+        workspaceChooserOpened !== true)
+    ) {
       this.router.transitionTo('index', {
         queryParams: {
           cardPath: undefined,
@@ -117,8 +125,6 @@ export default class Index extends Route<void> {
       });
       return;
     } else {
-      let operatorModeStateObject = JSON.parse(operatorModeState);
-
       if (this.operatorModeStateService.serialize() === operatorModeState) {
         // If the operator mode state in the query param is the same as the one we have in memory,
         // we don't want to restore it again, because it will lead to rerendering of the stack items, which can

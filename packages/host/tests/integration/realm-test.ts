@@ -357,6 +357,7 @@ module('Integration | realm', function (hooks) {
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
               showAsCatalog: null,
+              visibility: 'public',
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -735,6 +736,14 @@ module('Integration | realm', function (hooks) {
       },
     });
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}dir/card`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -2478,6 +2487,14 @@ module('Integration | realm', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}cards/2`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}cards/2`],
         },
@@ -2596,6 +2613,14 @@ module('Integration | realm', function (hooks) {
         {
           type: 'index',
           data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}dir/person.gts`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
             type: 'incremental',
             invalidations: [`${testRealmURL}dir/person.gts`],
           },
@@ -2663,6 +2688,14 @@ module('Integration | realm', function (hooks) {
     });
 
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}person.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -3032,6 +3065,7 @@ module('Integration | realm', function (hooks) {
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
               showAsCatalog: null,
+              visibility: 'public',
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -3206,6 +3240,7 @@ posts/ignore-me.gts
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
             showAsCatalog: null,
+            visibility: 'public',
           },
         },
       },

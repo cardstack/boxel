@@ -50,6 +50,7 @@ import {
   getFastbootState,
   matrixRegistrationSecret,
   seedPath,
+  testRealmInfo,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -230,12 +231,7 @@ module('Realm Server', function (hooks) {
                 module: `./person`,
                 name: 'Person',
               },
-              realmInfo: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-                showAsCatalog: null,
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmURL.href,
             },
             links: {
@@ -322,8 +318,8 @@ module('Realm Server', function (hooks) {
         let id: string | undefined;
         let response = await expectEvent({
           assert,
-          expectedNumberOfEvents: 1,
-          onEvents: ([event]) => {
+          expectedNumberOfEvents: 2,
+          onEvents: ([_, event]) => {
             if (event.type === 'incremental') {
               id = event.invalidations[0].split('/').pop()!;
               assert.true(uuidValidate(id!), 'card identifier is a UUID');
@@ -499,8 +495,14 @@ module('Realm Server', function (hooks) {
         let entry = 'person-1.json';
         let expected = [
           {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}person-1.json`,
+          },
+          {
             type: 'incremental',
             invalidations: [`${testRealmURL}person-1`],
+            realmURL: testRealmURL.href,
             clientRequestId: null,
           },
         ];
@@ -675,7 +677,13 @@ module('Realm Server', function (hooks) {
         let entry = 'person-1.json';
         let expected = [
           {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}person-1.json`,
+          },
+          {
             type: 'incremental',
+            realmURL: testRealmURL.href,
             invalidations: [`${testRealmURL}person-1`],
           },
         ];
@@ -708,7 +716,13 @@ module('Realm Server', function (hooks) {
         let entry = 'person-1.json';
         let expected = [
           {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}person-1.json`,
+          },
+          {
             type: 'incremental',
+            realmURL: testRealmURL.href,
             invalidations: [`${testRealmURL}person-1`],
           },
         ];
@@ -949,7 +963,13 @@ module('Realm Server', function (hooks) {
         let entry = 'unused-card.gts';
         let expected = [
           {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}unused-card.gts`,
+          },
+          {
             type: 'incremental',
+            realmURL: testRealmURL.href,
             invalidations: [`${testRealmURL}unused-card.gts`],
           },
         ];
@@ -982,7 +1002,13 @@ module('Realm Server', function (hooks) {
         let entry = 'person-1';
         let expected = [
           {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}person-1.json`,
+          },
+          {
             type: 'incremental',
+            realmURL: testRealmURL.href,
             invalidations: [`${testRealmURL}person-1`],
           },
         ];
@@ -1059,8 +1085,14 @@ module('Realm Server', function (hooks) {
         let entry = 'unused-card.gts';
         let expected = [
           {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}unused-card.gts`,
+          },
+          {
             type: 'incremental',
             invalidations: [`${testRealmURL}unused-card.gts`],
+            realmURL: testRealmURL.href,
             clientRequestId: null,
           },
         ];
@@ -1102,8 +1134,14 @@ module('Realm Server', function (hooks) {
         {
           let expected = [
             {
+              type: 'incremental-index-initiation',
+              realmURL: testRealmURL.href,
+              updatedFile: `${testRealmURL}test-card.gts`,
+            },
+            {
               type: 'incremental',
               invalidations: [`${testRealmURL}test-card.gts`],
+              realmURL: testRealmURL.href,
               clientRequestId: null,
             },
           ];
@@ -1133,7 +1171,7 @@ module('Realm Server', function (hooks) {
         {
           let response = await expectEvent({
             assert,
-            expectedNumberOfEvents: 1,
+            expectedNumberOfEvents: 2,
             callback: async () => {
               return await request
                 .post('/')
@@ -1169,8 +1207,14 @@ module('Realm Server', function (hooks) {
         {
           let expected = [
             {
+              type: 'incremental-index-initiation',
+              realmURL: testRealmURL.href,
+              updatedFile: `${testRealmURL}test-card.gts`,
+            },
+            {
               type: 'incremental',
               invalidations: [`${testRealmURL}test-card.gts`, id],
+              realmURL: testRealmURL.href,
               clientRequestId: null,
             },
           ];
@@ -1216,8 +1260,14 @@ module('Realm Server', function (hooks) {
         {
           let expected = [
             {
+              type: 'incremental-index-initiation',
+              realmURL: testRealmURL.href,
+              updatedFile: `${id}.json`,
+            },
+            {
               type: 'incremental',
               invalidations: [id],
+              realmURL: testRealmURL.href,
               clientRequestId: null,
             },
           ];
@@ -2048,12 +2098,7 @@ module('Realm Server', function (hooks) {
             data: {
               id: testRealmHref,
               type: 'realm-info',
-              attributes: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-                showAsCatalog: null,
-              },
+              attributes: testRealmInfo,
             },
           },
           '/_info response is correct',
@@ -2063,7 +2108,7 @@ module('Realm Server', function (hooks) {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
-        john: ['read'],
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -2097,10 +2142,87 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'private' },
+            },
+          },
+          '/_info response is correct',
+        );
+      });
+    });
+
+    module(
+      'shared realm because there is `users` permission',
+      function (hooks) {
+        setupPermissionedRealm(hooks, {
+          users: ['read'],
+        });
+
+        test('200 with permission', async function (assert) {
+          let response = await request
+            .get(`/_info`)
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'users', ['read'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              data: {
+                id: testRealmHref,
+                type: 'realm-info',
+                attributes: { ...testRealmInfo, visibility: 'shared' },
+              },
+            },
+            '/_info response is correct',
+          );
+        });
+      },
+    );
+
+    module('shared realm because there are multiple users', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        bob: ['read'],
+        jane: ['read'],
+        john: ['read', 'write'],
+      });
+
+      test('200 with permission', async function (assert) {
+        let response = await request
+          .get(`/_info`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'shared' },
+            },
+          },
+          '/_info response is correct',
+        );
       });
     });
   });
@@ -2182,7 +2304,7 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: 'Test Realm',
+                ...testRealmInfo,
                 endpoint,
                 backgroundURL: 'http://example.com/background.jpg',
                 iconURL: 'http://example.com/icon.jpg',
@@ -2200,8 +2322,8 @@ module('Realm Server', function (hooks) {
             type: 'realm',
             id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
             attributes: {
+              ...testRealmInfo,
               endpoint,
-              name: 'Test Realm',
               backgroundURL: 'http://example.com/background.jpg',
               iconURL: 'http://example.com/icon.jpg',
             },
@@ -2867,7 +2989,13 @@ module('Realm Server', function (hooks) {
       }
       let expected = [
         {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL.href,
+          updatedFile: `${testRealmURL}new-card.json`,
+        },
+        {
           type: 'incremental',
+          realmURL: testRealmURL.href,
           invalidations: [`${testRealmURL}new-card`],
         },
       ];
@@ -2928,12 +3056,7 @@ module('Realm Server', function (hooks) {
                 module: `./person`,
                 name: 'Person',
               },
-              realmInfo: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-                showAsCatalog: null,
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmURL.href,
             },
             links: {
@@ -2959,7 +3082,13 @@ module('Realm Server', function (hooks) {
 
       let expected = [
         {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL.href,
+          updatedFile: `${testRealmURL}person-1.json`,
+        },
+        {
           type: 'incremental',
+          realmURL: testRealmURL.href,
           invalidations: [`${testRealmURL}person-1`],
         },
       ];
@@ -3010,7 +3139,13 @@ module('Realm Server', function (hooks) {
 
       let expected = [
         {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL.href,
+          updatedFile: `${testRealmURL}person-1.json`,
+        },
+        {
           type: 'incremental',
+          realmURL: testRealmURL.href,
           invalidations: [`${testRealmURL}person-1`],
         },
       ];
@@ -3085,12 +3220,7 @@ module('Realm Server', function (hooks) {
           {
             type: 'catalog-realm',
             id: `${testRealm2URL}`,
-            attributes: {
-              name: 'Test Realm',
-              iconURL: null,
-              backgroundURL: null,
-              showAsCatalog: null,
-            },
+            attributes: testRealmInfo,
           },
         ],
       });

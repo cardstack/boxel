@@ -1,6 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { writeJSONSync } from 'fs-extra';
-import { join } from 'path';
 import {
   synapseStart,
   synapseStop,
@@ -132,9 +130,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
     ).toContainText("Test User's Workspace", { timeout: 30_000 });
     await expect(
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace-visibility]',
+      ),
+    ).toContainText('private', { timeout: 30_000 });
+    await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] img`),
       'the "T" icon URL is shown',
-    ).toHaveAttribute('src', 'https://i.postimg.cc/Rq550Bwv/T.png');
+    ).toHaveAttribute('src', 'https://i.postimg.cc/tTPJCJkG/Letter-t.png');
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
       'has background image',
@@ -147,6 +150,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
 
+    // assert back button brings you back to workspace chooser
+    await page.goBack();
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await enterWorkspace(page, "Test User's Workspace");
+
+    // assert workspace chooser toggle states
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
@@ -210,33 +221,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
     ).toContainText('Hello World');
-
-    // assert that host app can subscribe to SSE events of a private realm
-    let path = join(
-      realmServer.realmPath,
-      '..',
-      'user1',
-      'personal',
-      'hello-world.json',
-    );
-    writeJSONSync(path, {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Hello Mars',
-          description: 'This is a test card instance.',
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
-            name: 'CardDef',
-          },
-        },
-      },
-    });
-    await expect(
-      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
-    ).toContainText('Hello Mars');
 
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo

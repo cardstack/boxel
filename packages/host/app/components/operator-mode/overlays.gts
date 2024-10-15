@@ -70,7 +70,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
               selected=isSelected
               hovered=(this.isHovered renderedCard)
             }}
-            {{velcro renderedCard.element middleware=(Array this.offset)}}
+            {{velcro renderedCard.element middleware=(array this.offset)}}
             data-test-overlay-selected={{if
               isSelected
               (removeFileExtension cardId)
@@ -550,7 +550,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
         return;
       }
 
-      await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
+      await this.args.publicAPI.viewCard(card, format, {
+        fieldType,
+        fieldName,
+      });
     },
   );
 

@@ -39,6 +39,13 @@ const testMatrix: MatrixConfig = {
   url: matrixURL,
   username: 'node-test_realm',
 };
+export const testRealmInfo = {
+  name: 'Test Realm',
+  backgroundURL: null,
+  iconURL: null,
+  showAsCatalog: null,
+  visibility: 'public',
+};
 
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,

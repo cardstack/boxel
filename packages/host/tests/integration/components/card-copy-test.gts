@@ -666,9 +666,9 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      expectedNumberOfEvents: 1,
-      onEvents: ([event]) => {
-        if (event.type === 'index') {
+      expectedNumberOfEvents: 2,
+      onEvents: ([_, event]) => {
+        if (event.data.type === 'incremental') {
           assert.deepEqual(event.data.invalidations, [
             `${testRealm2URL}Pet/${id}`,
           ]);
@@ -770,15 +770,23 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      expectedNumberOfEvents: 2,
+      expectedNumberOfEvents: 4,
       onEvents: (events) => {
         assert.deepEqual(
-          events.map((e) => e.type),
-          ['index', 'index'],
+          events.map((e) => e.data.type),
+          [
+            'incremental-index-initiation',
+            'incremental',
+            'incremental-index-initiation',
+            'incremental',
+          ],
           'event types are correct',
         );
         assert.deepEqual(
-          flatMap(events, (e) => e.data.invalidations),
+          flatMap(
+            events.filter((e) => e.data.type === 'incremental'),
+            (e) => e.data.invalidations,
+          ),
           [savedCards[0].data.id, savedCards[1].data.id],
           'event invalidations are correct',
         );
@@ -911,9 +919,9 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      expectedNumberOfEvents: 1,
-      onEvents: ([event]) => {
-        if (event.type === 'index') {
+      expectedNumberOfEvents: 2,
+      onEvents: ([_, event]) => {
+        if (event.data.type === 'incremental') {
           assert.deepEqual(event.data.invalidations, [
             `${testRealm2URL}Person/${id}`,
           ]);
@@ -1043,9 +1051,9 @@ module('Integration | card-copy', function (hooks) {
     await this.expectEvents({
       assert,
       realm: realm2,
-      expectedNumberOfEvents: 1,
-      onEvents: ([event]) => {
-        if (event.type === 'index') {
+      expectedNumberOfEvents: 2,
+      onEvents: ([_, event]) => {
+        if (event.data.type === 'incremental') {
           assert.deepEqual(event.data.invalidations, [
             `${testRealm2URL}Person/${id}`,
           ]);

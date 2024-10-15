@@ -284,7 +284,7 @@ export default class SearchSheet extends Component<Signature> {
         left: calc(4.5 * var(--boxel-sp));
         width: calc(100% - (9 * var(--boxel-sp)));
         position: absolute;
-        z-index: 1;
+        z-index: 3;
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);
