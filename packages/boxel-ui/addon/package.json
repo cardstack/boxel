@@ -85,8 +85,6 @@
     "eslint-plugin-ember": "^11.4.2",
     "eslint-plugin-n": "^15.6.0",
     "eslint-plugin-prettier": "^5.0.0",
-    "eslint-plugin-simple-import-sort": "^8.0.0",
-    "eslint-plugin-typescript-sort-keys": "^3.2.0",
     "glimmer-scoped-css": "^0.6.0",
     "prettier": "^2.8.7",
     "prettier-plugin-ember-template-tag": "^1.1.0",

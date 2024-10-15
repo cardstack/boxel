@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "devDependencies": {
+    "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@koa/cors": "^4.0.0",
