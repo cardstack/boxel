@@ -173,7 +173,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @searchEnabled={{@searchEnabled}}
       @closeOnSelect={{@closeOnSelect}}
       @ariaLabel={{@ariaLabel}}
-      {{! do not eventType argument }}
+      {{! do not remove eventType argument }}
       @eventType='click'
       {{! actions }}
       @onOpen={{@onOpen}}
