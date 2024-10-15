@@ -51,6 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
@@ -73,6 +76,21 @@ jobs:
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
+  boxel-icons-raw-icon-changes-only:
+    name: Boxel Icons ensure raw icon changes only
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
+      - name: Rebuild boxel-icons icons
+        run: pnpm rebuild:all
+        working-directory: packages/boxel-icons
+      - name: Fail if generated icons have been changed without underlying raw icon changing
+        run: git diff --exit-code
+
   matrix-client-test:
     name: Matrix Client Tests
     runs-on: ubuntu-latest
@@ -90,6 +108,9 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Serve boxel-icons
+        run: pnpm build && pnpm serve &
+        working-directory: packages/boxel-icons
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
@@ -218,6 +239,9 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Serve boxel-icons
+        run: pnpm build && pnpm serve &
+        working-directory: packages/boxel-icons
       - name: Start host to serve assets for fastboot
         run: pnpm start &
         env:
@@ -255,6 +279,9 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
       - name: Prepublish
         run: pnpm vscode:prepublish
         working-directory: packages/vscode-boxel-tools
@@ -287,6 +314,7 @@ jobs:
               - 'packages/ai-bot/**'
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
+              - 'packages/boxel-icons/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
