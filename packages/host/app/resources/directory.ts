@@ -65,9 +65,20 @@ export class DirectoryResource extends Resource<Args> {
         url: realmURL.href,
         unsubscribe: this.messageService.subscribe(
           realmURL.href,
-          ({ type }) => {
-            // we are only interested in the filesystem based events
-            if (type === 'update') {
+          ({ type, data: dataStr }) => {
+            if (!this.directoryURL) {
+              return;
+            }
+            let eventData = JSON.parse(dataStr);
+            if (type !== 'index' || !eventData.updatedFile) {
+              return;
+            }
+
+            let { updatedFile } = eventData as { updatedFile: string };
+            let segments = updatedFile.split('/');
+            segments.pop();
+            let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
+            if (updatedDir === this.directoryURL.href) {
               this.readdir.perform();
             }
           },

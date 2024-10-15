@@ -568,6 +568,10 @@ export class TrèsTestCard extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim();
       await visitOperatorMode();
@@ -661,6 +665,10 @@ export class TestCard extends Person {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
   */
@@ -778,6 +786,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim(),
           'the source is correct',
@@ -860,6 +872,10 @@ export class TestCard extends Pet {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim(),
           'the source is correct',
@@ -915,6 +931,10 @@ export class Pet extends PetParent {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
   */
@@ -973,6 +993,10 @@ export class Map0 extends Pet {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim(),
           'the source is correct',
@@ -1007,6 +1031,10 @@ export class TestCard extends CardDef {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
   */
@@ -1062,6 +1090,10 @@ export class TestCard extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim();
 
@@ -1113,6 +1145,10 @@ export class TestCard extends CardDef {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
   */

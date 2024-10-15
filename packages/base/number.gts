@@ -10,6 +10,7 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
+import HashIcon from '@cardstack/boxel-icons/photo';
 
 function serialize(val: number | null): string | undefined {
   if (val != null && val === 0) {
@@ -71,6 +72,7 @@ class View extends Component<typeof NumberField> {
 
 export default class NumberField extends FieldDef {
   static displayName = 'Number';
+  static icon = HashIcon;
   static [primitive]: number;
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends BaseDefConstructor>(
