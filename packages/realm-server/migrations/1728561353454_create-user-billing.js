@@ -30,7 +30,7 @@ exports.up = (pgm) => {
     },
   });
 
-  pgm.createTable('billing_cycles', {
+  pgm.createTable('subscription_cycles', {
     id: {
       type: 'uuid',
       primaryKey: true,
@@ -57,16 +57,20 @@ exports.up = (pgm) => {
     stripe_subscription_id: { type: 'varchar', notNull: true },
     current_billing_cycle_id: {
       type: 'uuid',
-      references: 'billing_cycles(id)',
+      references: 'subscription_cycles(id)',
     },
   });
 
-  pgm.addConstraint('billing_cycles', 'billing_cycles_subscription_id_fkey', {
-    foreignKeys: {
-      columns: 'subscription_id',
-      references: 'subscriptions(id)',
+  pgm.addConstraint(
+    'subscription_cycles',
+    'subscription_cycles_subscription_id_fkey',
+    {
+      foreignKeys: {
+        columns: 'subscription_id',
+        references: 'subscriptions(id)',
+      },
     },
-  });
+  );
 
   pgm.createTable('ai_actions', {
     id: {
@@ -98,7 +102,7 @@ exports.up = (pgm) => {
     change_in_credits: { type: 'numeric', notNull: true }, // can be negative
     balance_change_type: { type: 'balance_change_type', notNull: true },
     ai_action_id: { type: 'uuid', references: 'ai_actions(id)' }, // can be related to an ai_action, or null for manual adjustments (topping up, or pro-rating when changing plan)
-    billing_cycle_id: { type: 'uuid', references: 'billing_cycles(id)' },
+    billing_cycle_id: { type: 'uuid', references: 'subscription_cycles(id)' },
     created_at: {
       type: 'timestamp',
       notNull: true,
@@ -158,8 +162,8 @@ exports.up = (pgm) => {
   pgm.createIndex('subscriptions', 'status');
   pgm.createIndex('subscriptions', 'stripe_subscription_id');
   pgm.createIndex('subscriptions', 'current_billing_cycle_id');
-  pgm.createIndex('billing_cycles', 'subscription_id');
-  pgm.createIndex('billing_cycles', ['period_start', 'period_end']);
+  pgm.createIndex('subscription_cycles', 'subscription_id');
+  pgm.createIndex('subscription_cycles', ['period_start', 'period_end']);
   pgm.createIndex('ai_actions', 'user_id');
   pgm.createIndex('ai_actions', 'created_at');
   pgm.createIndex('credit_balance_changes', 'balance_change_type');
@@ -179,7 +183,7 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.dropTable('ai_actions', { ifExists: true, cascade: true });
   pgm.dropTable('subscriptions', { cascade: true });
-  pgm.dropTable('billing_cycles', { cascade: true });
+  pgm.dropTable('subscription_cycles', { cascade: true });
   pgm.dropTable('plans', { cascade: true });
   pgm.dropTable('users', { cascade: true });
   pgm.dropTable('stripe_events', { cascade: true });
