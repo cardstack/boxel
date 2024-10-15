@@ -81,8 +81,6 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4201 | `/experiments` experiments realm                              | ✅                  | 🚫                   |
 | :4201 | `/seed` seed realm                                            | ✅                  | 🚫                   |
 | :4202 | `/test` host test realm, `/node-test` node test realm         | ✅                  | 🚫                   |
-| :4203 | `root (/)` base realm                                         | ✅                  | 🚫                   |
-| :4204 | `root (/)` experiments realm                                  | ✅                  | 🚫                   |
 | :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
