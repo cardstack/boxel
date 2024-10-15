@@ -11,6 +11,7 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
+import Number99SmallIcon from '@cardstack/boxel-icons/number-99-small';
 
 function _serialize(val: bigint | null): string | undefined {
   return val == null ? undefined : String(val);
@@ -70,6 +71,7 @@ class Edit extends Component<typeof BigIntegerField> {
 
 export default class BigIntegerField extends FieldDef {
   static displayName = 'BigInteger';
+  static icon = Number99SmallIcon;
   static [primitive]: bigint;
   static [serialize](val: bigint | null) {
     return _serialize(val);

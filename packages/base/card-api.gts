@@ -55,6 +55,7 @@ import MissingEmbeddedTemplate from './default-templates/missing-embedded';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
+import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -1829,6 +1830,7 @@ export class ReadOnlyField extends FieldDef {
 
 export class StringField extends FieldDef {
   static displayName = 'String';
+  static icon = LetterCaseIcon;
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {

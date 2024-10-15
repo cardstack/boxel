@@ -4,8 +4,10 @@ import path from 'path';
 import { optimize } from 'svgo';
 
 const srcDirs = [
-  new URL('../node_modules/lucide-static/icons', import.meta.url).pathname,
   new URL('../node_modules/@lucide/lab/icons', import.meta.url).pathname,
+  new URL('../node_modules/lucide-static/icons', import.meta.url).pathname,
+  new URL('../node_modules/@tabler/icons/icons/outline', import.meta.url)
+    .pathname,
 ];
 
 const destDir = new URL('../src', import.meta.url).pathname;
