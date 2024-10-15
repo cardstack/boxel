@@ -1,4 +1,3 @@
-// import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';

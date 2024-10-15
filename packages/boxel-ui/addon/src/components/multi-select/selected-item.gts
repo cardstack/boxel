@@ -3,7 +3,6 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-// import { CheckMark } from '@cardstack/boxel-ui/icons';
 import type { Select } from 'ember-power-select/components/power-select';
 
 // Inside the trigger component, the selected item component is called within in ember-power-select

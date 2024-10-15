@@ -6,7 +6,6 @@ import type { Select } from 'ember-power-select/components/power-select';
 
 export interface BoxelAfterOptionComponentArgs {
   Args: {
-    allowClosing: () => void;
     select: Select;
   };
 }
@@ -21,7 +20,6 @@ export class BoxelAfterOptionsComponent extends Component<BoxelAfterOptionCompon
   @action
   onClose() {
     this.args.select.actions.close();
-    this.args.allowClosing();
   }
   <template>
     <div class='control-buttons'>
