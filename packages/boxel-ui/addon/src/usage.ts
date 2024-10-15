@@ -8,6 +8,7 @@ import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
+import DndUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
@@ -38,6 +39,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['CardContainer', CardContainerUsage],
   ['CardContentContainer', CardContentContainerUsage],
   ['CircleSpinner', CircleSpinnerUsage],
+  ['DragAndDrop', DndUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
   ['FieldContainer', FieldContainerUsage],

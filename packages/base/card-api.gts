@@ -53,6 +53,8 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import MissingEmbeddedTemplate from './default-templates/missing-embedded';
 import FieldDefEditTemplate from './default-templates/field-edit';
+import CaptionsIcon from '@cardstack/boxel-icons/captions';
+import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -1644,9 +1646,15 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
+  static icon: ComponentLike<{
+    Element: Element;
+  }>;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
+  }
+  static getIconComponent(instance: BaseDef) {
+    return instance.constructor.icon;
   }
 
   static [serialize](
@@ -1797,6 +1805,7 @@ export class FieldDef extends BaseDef {
   // class type cannot masquarade as a FieldDef class type
   static isFieldDef = true;
   static displayName = 'Field';
+  static icon = RectangleEllipsisIcon;
 
   static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -1873,6 +1882,7 @@ export class CardDef extends BaseDef {
   @field thumbnailURL = contains(MaybeBase64Field);
   static displayName = 'Card';
   static isCardDef = true;
+  static icon = CaptionsIcon;
 
   static assignInitialFieldValue(
     instance: BaseDef,

@@ -150,6 +150,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
 
+    // assert back button brings you back to workspace chooser
+    await page.goBack();
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await enterWorkspace(page, "Test User's Workspace");
+
+    // assert workspace chooser toggle states
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
