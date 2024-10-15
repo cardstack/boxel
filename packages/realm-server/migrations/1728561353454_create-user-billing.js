@@ -178,6 +178,15 @@ exports.up = (pgm) => {
     ('Creator', 12, 500),
     ('Power User', 49, 2500);
   `);
+
+  pgm.sql(`
+    INSERT INTO users (matrix_user_id)
+    SELECT DISTINCT username
+    FROM realm_user_permissions
+    WHERE username NOT ILIKE '@realm/%'
+      AND username NOT IN ('users', '*')
+      AND username NOT ILIKE '%_realm:%';
+  `);
 };
 
 exports.down = (pgm) => {

@@ -15,6 +15,7 @@ import {
   type DBAdapter,
   type QueuePublisher,
   type RealmPermissions,
+  upsertUser,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
@@ -529,6 +530,8 @@ export class RealmServer {
       [userId]: DEFAULT_PERMISSIONS,
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
+
+    await upsertUser(this.dbAdapter, ownerUserId);
 
     writeJSONSync(join(realmPath, '.realm.json'), {
       name,
