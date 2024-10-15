@@ -2556,7 +2556,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-item="2"]`).hasText('Buzz');
 
     let dragAndDrop = async (itemSelector: string, targetSelector: string) => {
-      await settled();
       let itemElement = document.querySelector(itemSelector);
       let targetElement = document.querySelector(targetSelector);
 
