@@ -26,6 +26,7 @@ interface Signature {
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
+      doCloseAnimation: () => void,
     ) => void;
   };
   Blocks: {};
@@ -37,6 +38,11 @@ export default class OperatorModeStack extends Component<Signature> {
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
+
+    // do closing animation on last item
+    const lastItem = this.args.stackItems[this.args.stackItems.length - 1];
+    await this.args.publicAPI.doCloseAnimation(lastItem.card);
+
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
@@ -76,6 +82,7 @@ export default class OperatorModeStack extends Component<Signature> {
         padding: var(--stack-padding-top) var(--boxel-sp)
           var(--stack-padding-bottom);
         position: relative;
+        transition: padding-top var(--boxel-transition);
       }
       .operator-mode-stack.with-bg-image:before {
         content: ' ';
