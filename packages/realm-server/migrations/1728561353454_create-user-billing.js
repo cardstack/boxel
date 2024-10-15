@@ -169,10 +169,10 @@ exports.up = (pgm) => {
   pgm.createIndex('credit_balance_changes', 'billing_cycle_id');
 
   pgm.sql(`
-    INSERT INTO plans (name, monthly_price, credits_included, overage_fee_per_credit_in_usd) VALUES
-    ('Free', 0, 100, NULL),
-    ('Creator', 12, 500, 0.02),
-    ('Power User', 49, 2500, 0.0125);
+    INSERT INTO plans (name, monthly_price, credits_included) VALUES
+    ('Free', 0, 100),
+    ('Creator', 12, 500),
+    ('Power User', 49, 2500);
   `);
 };
 
