@@ -370,13 +370,15 @@ export class RealmFS implements vscode.FileSystemProvider {
 
     try {
       let headers = {
-        Accept: 'application/vnd.api+source',
+        Accept: 'application/vnd.api+json',
         Authorization: `${await this.getJWT(apiUrl)}`,
       };
 
       // Add special header for .gts files
-      if (uri.path.endsWith('.gts') || uri.path.endsWith('.json')) {
+      if (uri.path.endsWith('.gts')) {
         headers['Accept'] = 'application/vnd.card+source';
+      } else if (uri.path.endsWith('.json')) {
+        headers['Accept'] = 'application/vnd.card+json';
       }
 
       console.log('Headers:', headers);
@@ -389,7 +391,15 @@ export class RealmFS implements vscode.FileSystemProvider {
       }
       console.log('Response:', response);
 
-      const content = new Uint8Array(await response.arrayBuffer());
+      const contentType = response.headers.get('Content-Type');
+      let content: Uint8Array;
+
+      if (contentType && contentType.includes('application/json')) {
+        const jsonData = await response.json();
+        content = new TextEncoder().encode(JSON.stringify(jsonData, null, 2));
+      } else {
+        content = new Uint8Array(await response.arrayBuffer());
+      }
 
       const file = new File(path.basename(uri.path));
       file.data = content;
