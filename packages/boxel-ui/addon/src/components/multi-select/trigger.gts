@@ -85,18 +85,18 @@ export default class BoxelTrigger<ItemT> extends Component<
         <div class='boxel-trigger-placeholder'>{{@placeholder}}</div>
       {{/if}}
 
-      {{#each this.visibleContent as |item|}}
-        {{#if @selectedItemComponent}}
-          {{#let
-            (component @selectedItemComponent option=item select=this.select)
-            as |SelectedItemComponent|
-          }}
-            <SelectedItemComponent />
-          {{/let}}
-        {{else}}
-          <BoxelSelectedItem @option={{item}} @select={{this.select}} />
-        {{/if}}
-      {{/each}}
+      {{#let
+        (if
+          @selectedItemComponent
+          (component @selectedItemComponent)
+          (component BoxelSelectedItem)
+        )
+        as |SelectedComponent|
+      }}
+        {{#each this.visibleContent as |item|}}
+          <SelectedComponent @option={{item}} @select={{this.select}} />
+        {{/each}}
+      {{/let}}
 
       {{#if this.hasMoreItems}}
         <span class='ember-power-select-multiple-option'>
