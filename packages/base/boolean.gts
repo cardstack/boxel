@@ -13,6 +13,7 @@ import {
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import ToggleLeftIcon from '@cardstack/boxel-icons/toggle-left';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -33,6 +34,7 @@ class View extends Component<typeof BooleanField> {
 
 export default class BooleanField extends FieldDef {
   static displayName = 'Boolean';
+  static icon = ToggleLeftIcon;
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {

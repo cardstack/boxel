@@ -193,6 +193,14 @@ module('Integration | card-delete', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/mango`],
         },
@@ -287,6 +295,14 @@ module('Integration | card-delete', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/mango`],
         },
@@ -346,6 +362,14 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card stack item in edit mode', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -411,6 +435,14 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that appears in both stacks as a stack item', async function (assert) {
     assert.expect(8);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -487,6 +519,14 @@ module('Integration | card-delete', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/mango`],
         },
@@ -551,6 +591,14 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that appears in both stacks as an index item and an element of the index card', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -635,6 +683,14 @@ module('Integration | card-delete', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/mango`],
         },
@@ -707,6 +763,14 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {

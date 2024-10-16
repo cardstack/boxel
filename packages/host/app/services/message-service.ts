@@ -21,6 +21,14 @@ export default class MessageService extends Service {
   }
 
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+    if (isTesting()) {
+      // we don't have a way of dealing with internal testing realm URLs when
+      // creating an EventSource. The EventSource API is a native browser API
+      // that will try to issue a network request for our testing realm URLs
+      // otherwise.
+      return () => {};
+    }
+
     let maybeEventSource = this.subscriptions.get(realmURL);
 
     if (!maybeEventSource) {

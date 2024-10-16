@@ -20,6 +20,7 @@ import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import { htmlSafe } from '@ember/template';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import PhotoIcon from '@cardstack/boxel-icons/photo';
 
 const atomImgHeight = 200;
 
@@ -284,6 +285,7 @@ function getConstrainedImageSize(maxHeight: number) {
 
 export class Base64ImageField extends FieldDef {
   static displayName = 'Base64 Image Card';
+  static icon = PhotoIcon;
   @field altText = contains(StringField);
   @field size = contains(ImageSizeField);
   @field height = contains(NumberField);
