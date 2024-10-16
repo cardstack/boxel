@@ -2910,6 +2910,11 @@ module('Realm Server', function (hooks) {
       }
     });
 
+    test('returns 404 for request that has malformed URI', async function (assert) {
+      let response = await request2.get('/%c0').set('Accept', '*/*');
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+    });
+
     test('can dynamically load a card definition from own realm', async function (assert) {
       let ref = {
         module: `${testRealmHref}person`,
@@ -3251,7 +3256,7 @@ module('Realm Server', function (hooks) {
   });
 });
 
-module('Realm Server serving from root', function (hooks) {
+module('Realm server with realm mounted at the origin', function (hooks) {
   let testRealmServer: Server;
 
   let request: SuperTest<Test>;
@@ -3295,7 +3300,7 @@ module('Realm Server serving from root', function (hooks) {
     },
   });
 
-  test('serves a root directory GET request', async function (assert) {
+  test('serves an origin realm directory GET request', async function (assert) {
     let response = await request
       .get('/')
       .set('Accept', 'application/vnd.api+json');
