@@ -44,25 +44,38 @@ export default class BoxelSelectedItem<ItemT> extends Component<
   <template>
     <div class='ember-power-select-multiple-option'>
       {{@option.name}}
-      <IconX
+      <button
+        type='button'
+        class='boxel-multi-select__remove-button'
         {{on 'click' (fn this.remove @option)}}
-        class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-      />
+        aria-label='Remove {{@option.name}}'
+      >
+        <IconX
+          class='boxel-multi-select__icon boxel-multi-select__icon--remove'
+        />
+      </button>
     </div>
 
     <style scoped>
       .ember-power-select-multiple-option {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
       }
-      .boxel-multi-select__icon--remove {
+      .boxel-multi-select__remove-button {
         all: unset;
         display: flex;
         justify-content: center;
+        align-items: center;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
+      }
+      .boxel-multi-select__icon--remove {
         width: 10px;
         height: 10px;
-        cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
     </style>
