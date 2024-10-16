@@ -68,16 +68,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         {{yield option}}
       </PowerSelectMultiple>
     </div>
-    <style scoped>
-      .boxel-multi-select__wrapper {
-        position: relative;
-        display: flex;
-        align-items: stretch;
-        flex-grow: 1;
-        overflow: hidden;
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius-sm);
-      }
+    <style>
       .boxel-multi-select__dropdown {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
@@ -114,6 +105,17 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       .boxel-multi-select__dropdown
         .ember-power-select-option--no-matches-message {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+      }
+    </style>
+    <style scoped>
+      .boxel-multi-select__wrapper {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        flex-grow: 1;
+        overflow: hidden;
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-sm);
       }
       .ember-basic-dropdown-trigger {
         padding: var(--boxel-sp-xxxs);
