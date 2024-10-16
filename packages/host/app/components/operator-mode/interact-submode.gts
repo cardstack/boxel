@@ -254,7 +254,7 @@ export default class InteractSubmode extends Component<Signature> {
           loadedCard = card as CardDef;
         }
 
-        const stackItem = this.allStackItems.find(
+        const stackItem = here.allStackItems.find(
           (item) => item.card === loadedCard,
         );
         // if is workspace index card, do not allow deletion
