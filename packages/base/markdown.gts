@@ -3,6 +3,7 @@ import { Component } from './card-api';
 import StringField from './string';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownToHtml } from '@cardstack/runtime-common';
+import AlignBoxLeftMiddleIcon from '@cardstack/boxel-icons/align-box-left-middle';
 
 class View extends Component<typeof MarkdownField> {
   <template>
@@ -15,6 +16,7 @@ class View extends Component<typeof MarkdownField> {
 
 export default class MarkdownField extends StringField {
   static displayName = 'Markdown';
+  static icon = AlignBoxLeftMiddleIcon;
 
   static embedded = View;
   static atom = View;

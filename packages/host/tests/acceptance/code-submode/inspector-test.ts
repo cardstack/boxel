@@ -1804,6 +1804,10 @@ export class TestCard extends ExportedCard {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim();
     await visitOperatorMode({
@@ -1929,6 +1933,10 @@ export class TestField extends ExportedField {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim(),
         'the source is correct',
@@ -2005,6 +2013,10 @@ export class ExportedCard extends ExportedCardParent {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
   */

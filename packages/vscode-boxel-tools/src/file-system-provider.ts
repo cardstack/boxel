@@ -186,6 +186,23 @@ export class RealmFS implements vscode.FileSystemProvider {
     throw vscode.FileSystemError.FileNotFound();
   }
 
+  async readRawTextFile(
+    uri: vscode.Uri,
+  ): Promise<{ success: boolean; body: string }> {
+    console.log('Fetching raw file:', uri);
+    let apiUrl = getUrl(uri);
+    console.log('API URL:', apiUrl);
+    const headers = {
+      Authorization: `${await this.getJWT(apiUrl)}`,
+    };
+
+    const response = await fetch(apiUrl, { headers });
+    return {
+      success: response.ok,
+      body: await response.text(),
+    };
+  }
+
   async writeFile(
     uri: vscode.Uri,
     content: Uint8Array,
