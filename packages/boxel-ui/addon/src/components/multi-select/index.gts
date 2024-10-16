@@ -173,7 +173,10 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @searchEnabled={{@searchEnabled}}
       @closeOnSelect={{@closeOnSelect}}
       @ariaLabel={{@ariaLabel}}
-      {{! do not remove eventType argument }}
+      {{! Do not remove eventType argument 
+    This is to ensure that the click event from selected item does not bubble up to the trigger
+     and cause the dropdown to close
+       do not remove eventType argument }}
       @eventType='click'
       {{! actions }}
       @onOpen={{@onOpen}}

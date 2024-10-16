@@ -29,7 +29,9 @@ export default class BoxelSelectedItem<ItemT> extends Component<
 > {
   @action
   remove(item: ItemT, event: MouseEvent) {
-    // Do not remove these event
+    // Do not remove these event methods
+    // This is to ensure that the close/click event from selected item does not bubble up to the trigger
+    // and cause the dropdown to close
     event.preventDefault();
     event.stopPropagation();
     if (typeof this.args.select.actions.remove === 'function') {
