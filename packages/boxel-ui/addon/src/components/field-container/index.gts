@@ -65,24 +65,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       gap: var(--boxel-sp-xs);
     }
-    .vertical {
-      grid-template-rows: auto 1fr;
-    }
-    .vertical .label {
-      --boxel-label-font: 600 var(--boxel-font-xs);
-      grid-column: 2;
-    }
 
     .centered-display {
       justify-items: center;
-    }
-
-    .horizontal {
-      grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
-    }
-
-    .horizontal .label-container {
-      padding-top: var(--boxel-sp-sm);
     }
 
     .small-label {
@@ -103,14 +88,33 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       flex-shrink: 0;
     }
 
-    .horizontal .content {
+    .horizontal {
+      grid-template-columns: var(--boxel-field-label-size, minmax(8rem, 25%)) 1fr;
+    }
+
+    .horizontal > .label-container {
+      padding-top: var(--boxel-sp-sm);
+    }
+
+    .horizontal > .content {
       min-height: var(--boxel-form-control-height);
       display: flex;
       align-items: center;
     }
 
-    .horizontal .content > :deep(*) {
+    .horizontal > .content > :deep(*) {
       flex: 1;
+    }
+
+    .vertical {
+      grid-template-rows: auto 1fr;
+    }
+
+    .vertical .label {
+      --boxel-label-font: 600 var(--boxel-font-xs);
+      grid-column: 2;
+      line-height: 1rem;
+      margin-bottom: var(--boxel-sp-4xs);
     }
 
     .vertical.with-icon:not(.centered-display) .content {
