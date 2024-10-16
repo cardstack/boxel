@@ -23,6 +23,7 @@ exports.up = (pgm) => {
     name: { type: 'varchar', notNull: true },
     monthly_price: { type: 'numeric', notNull: true },
     credits_included: { type: 'integer', notNull: true },
+    stripe_plan_id: { type: 'varchar' },
     created_at: {
       type: 'timestamp',
       notNull: true,
@@ -55,10 +56,6 @@ exports.up = (pgm) => {
     ended_at: { type: 'timestamp', notNull: true },
     status: { type: 'subscription_status', notNull: true },
     stripe_subscription_id: { type: 'varchar', notNull: true },
-    current_billing_cycle_id: {
-      type: 'uuid',
-      references: 'subscription_cycles(id)',
-    },
   });
 
   pgm.addConstraint(
@@ -87,20 +84,23 @@ exports.up = (pgm) => {
     },
   });
 
-  pgm.createType('balance_change_type', [
+  pgm.createType('credit_type', [
     'plan_allowance',
-    'extra_credit_balance',
+    'plan_allowance_used',
+    'extra_credit',
+    'extra_credit_used',
+    'plan_allowance_expired',
   ]);
 
-  pgm.createTable('credit_balance_changes', {
+  pgm.createTable('credit_balance_events', {
     id: {
       type: 'uuid',
       primaryKey: true,
       default: pgm.func('gen_random_uuid()'),
     },
     user_id: { type: 'uuid', references: 'users(id)' },
-    change_in_credits: { type: 'numeric', notNull: true }, // can be negative
-    balance_change_type: { type: 'balance_change_type', notNull: true },
+    credit_amount: { type: 'numeric', notNull: true }, // can be negative
+    credit_type: { type: 'credit_type', notNull: true },
     ai_action_id: { type: 'uuid', references: 'ai_actions(id)' }, // can be related to an ai_action, or null for manual adjustments (topping up, or pro-rating when changing plan)
     billing_cycle_id: { type: 'uuid', references: 'subscription_cycles(id)' },
     created_at: {
@@ -111,12 +111,7 @@ exports.up = (pgm) => {
   });
 
   pgm.createTable('stripe_events', {
-    id: {
-      type: 'uuid',
-      primaryKey: true,
-      default: pgm.func('gen_random_uuid()'),
-    },
-    stripe_event_id: { type: 'varchar', notNull: true },
+    stripe_event_id: { type: 'varchar', notNull: true, primaryKey: true },
     event_type: { type: 'varchar', notNull: true },
     event_data: { type: 'jsonb', notNull: true },
     created_at: {
@@ -161,16 +156,15 @@ exports.up = (pgm) => {
   pgm.createIndex('subscriptions', 'plan_id');
   pgm.createIndex('subscriptions', 'status');
   pgm.createIndex('subscriptions', 'stripe_subscription_id');
-  pgm.createIndex('subscriptions', 'current_billing_cycle_id');
   pgm.createIndex('subscription_cycles', 'subscription_id');
   pgm.createIndex('subscription_cycles', ['period_start', 'period_end']);
   pgm.createIndex('ai_actions', 'user_id');
   pgm.createIndex('ai_actions', 'created_at');
-  pgm.createIndex('credit_balance_changes', 'balance_change_type');
-  pgm.createIndex('credit_balance_changes', 'created_at');
-  pgm.createIndex('credit_balance_changes', 'ai_action_id');
-  pgm.createIndex('credit_balance_changes', 'user_id');
-  pgm.createIndex('credit_balance_changes', 'billing_cycle_id');
+  pgm.createIndex('credit_balance_events', 'credit_type');
+  pgm.createIndex('credit_balance_events', 'created_at');
+  pgm.createIndex('credit_balance_events', 'ai_action_id');
+  pgm.createIndex('credit_balance_events', 'user_id');
+  pgm.createIndex('credit_balance_events', 'billing_cycle_id');
 
   pgm.sql(`
     INSERT INTO plans (name, monthly_price, credits_included) VALUES
@@ -196,7 +190,7 @@ exports.down = (pgm) => {
   pgm.dropTable('plans', { cascade: true });
   pgm.dropTable('users', { cascade: true });
   pgm.dropTable('stripe_events', { cascade: true });
-  pgm.dropTable('credit_balance_changes', { cascade: true });
-  pgm.dropType('balance_change_type');
+  pgm.dropTable('credit_balance_events', { cascade: true });
+  pgm.dropType('credit_type');
   pgm.dropType('subscription_status');
 };
