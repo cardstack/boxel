@@ -287,9 +287,8 @@ export default class InteractSubmode extends Component<Signature> {
         }
         await changeSizeCallback();
       },
-      doCloseAnimation: async (card: CardDef) => {
-        const stackItem = here.findCardInStack(card, stackIndex);
-        const doCloseAnimation = closeAnimation.get(stackItem);
+      doCloseAnimation: async (item: StackItem) => {
+        const doCloseAnimation = closeAnimation.get(item);
         if (doCloseAnimation) {
           await doCloseAnimation();
         }
