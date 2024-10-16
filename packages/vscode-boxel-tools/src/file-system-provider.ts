@@ -9,6 +9,7 @@ import {
   RealmAuthClient,
   RealmAuthMatrixClientInterface,
 } from '@cardstack/runtime-common/realm-auth-client';
+import { SupportedMimeType } from '@cardstack/runtime-common/router';
 import { createClient } from 'matrix-js-sdk';
 
 function getUrl(uri: vscode.Uri) {
@@ -216,7 +217,7 @@ export class RealmFS implements vscode.FileSystemProvider {
     let headers: Record<string, string> = {
       'Content-Type': 'text/plain;charset=UTF-8',
       Authorization: `${await this.getJWT(apiUrl)}`,
-      Accept: 'application/vnd.card+source',
+      Accept: SupportedMimeType.CardSource,
     };
 
     try {
