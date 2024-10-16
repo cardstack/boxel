@@ -521,10 +521,22 @@ export default class OperatorModeStateService extends Service {
   }
 
   get realmURL() {
+    // i think we only want to use this logic in code mode (?)
     if (isReady(this.openFile.current)) {
       return new URL(this.readyFile.realmURL);
     } else if (this.cachedRealmURL) {
       return this.cachedRealmURL;
+    }
+
+    // For interact mode, the idea of "current realm" is a bit abstract. the
+    // realm background that you see in interact mode is the realm of the
+    // bottom-most card in the stack. however you can have cards of differing
+    // realms in the same stack. so the current realm probably just means the
+    // top-most item in the stack. When there are multiple stacks we are just
+    // picking the right most stack.
+    let topRightStackItem = this.topMostStackItems().pop();
+    if (topRightStackItem?.realmURL) {
+      return topRightStackItem.realmURL;
     }
 
     return new URL(this.realm.defaultReadableRealm.path);

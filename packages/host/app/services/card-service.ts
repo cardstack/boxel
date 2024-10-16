@@ -36,6 +36,7 @@ import { trackCard } from '../resources/card-resource';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
+import type OperatorModeStateService from './operator-mode-state-service';
 import type Realm from './realm';
 import type ResetService from './reset';
 
@@ -52,6 +53,7 @@ export default class CardService extends Service {
   @service private declare network: NetworkService;
   @service private declare realm: Realm;
   @service private declare reset: ResetService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
@@ -179,10 +181,16 @@ export default class CardService extends Service {
       // in the case where we get no realm URL from the card, we are dealing with
       // a new card instance that does not have a realm URL yet.
       if (!realmURL) {
-        if (!this.realm.defaultWritableRealm) {
+        realmURL = this.realm.canWrite(
+          this.operatorModeStateService.realmURL.href,
+        )
+          ? this.operatorModeStateService.realmURL
+          : this.realm.defaultReadableRealm
+          ? new URL(this.realm.defaultReadableRealm.path)
+          : undefined;
+        if (!realmURL) {
           throw new Error('Could not find a writable realm');
         }
-        realmURL = new URL(this.realm.defaultWritableRealm.path);
       }
       let json = await this.saveCardDocument(doc, realmURL);
       let isNew = !card.id;

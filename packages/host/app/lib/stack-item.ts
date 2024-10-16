@@ -70,6 +70,13 @@ export class StackItem {
     );
   }
 
+  get realmURL() {
+    if (this.cardResource) {
+      return this.cardResource.realmURL;
+    }
+    return undefined;
+  }
+
   get card(): CardDef {
     if (this.newCard) {
       return this.newCard;
