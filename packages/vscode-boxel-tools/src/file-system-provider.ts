@@ -389,11 +389,7 @@ export class RealmFS implements vscode.FileSystemProvider {
       }
       console.log('Response:', response);
 
-      const contentType = response.headers.get('Content-Type');
-      console.log('Content type:', contentType);
-      let content: Uint8Array;
-
-      content = new Uint8Array(await response.arrayBuffer());
+      const content = new Uint8Array(await response.arrayBuffer());
 
       const file = new File(path.basename(uri.path));
       file.data = content;
