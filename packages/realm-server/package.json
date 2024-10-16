@@ -81,8 +81,6 @@
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh",
     "start:test-realms": "./scripts/start-test-realms.sh",
-    "start:base:root": "./scripts/start-base-root.sh",
-    "start:experiments:root": "./scripts/start-experiments-root.sh",
     "start:all": "./scripts/start-all.sh",
     "start:without-matrix": "./scripts/start-without-matrix.sh",
     "start:staging": "./scripts/start-staging.sh",

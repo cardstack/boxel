@@ -60,11 +60,6 @@ exports.up = (pgm) => {
            ('http://localhost:4202/node-test/', '@node-test_realm:localhost', true, true, true),
            ('http://localhost:4202/node-test/', '*', true, false, false),
            ('http://localhost:4202/node-test/', 'users', true, true, false),
-           ('http://localhost:4203/', '@base_realm:localhost', true, true, true),
-           ('http://localhost:4203/', '*', true, false, false),
-           ('http://localhost:4204/', '@experiments_realm:localhost', true, true, true),
-           ('http://localhost:4204/', '*', true, false, false),
-           ('http://localhost:4204/', 'users', true, true, false),
            ('http://localhost:4205/test/', '@test_realm:localhost', true, true, true),
            ('http://localhost:4205/test/', '*', true, false, false),
            ('http://localhost:4205/test/', 'users', true, true, false)
@@ -118,12 +113,6 @@ exports.down = (pgm) => {
       );
       pgm.sql(
         "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4202/node-test/' AND username = '@node-test_realm:localhost'",
-      );
-      pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4203/' AND username = '@base_realm:localhost'",
-      );
-      pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4204/' AND username = '@experiments_realm:localhost'",
       );
       pgm.sql(
         "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4205/test/' AND username = '@test_realm:localhost'",
