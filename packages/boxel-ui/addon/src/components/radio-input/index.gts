@@ -20,7 +20,7 @@ export interface Signature {
     keyName?: string;
     name: string;
     orientation?: string;
-    spacing?: string; // New argument to specify the key name
+    spacing?: string;
   };
   Blocks: {
     default: [

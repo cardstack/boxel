@@ -27,10 +27,8 @@ export function stringToColor(string: string | null) {
 
 interface Signature {
   Args: {
-    // CSS length value
     border?: string;
     displayName?: string;
-    // CSS border value
     isReady: boolean;
     size?: string;
     userId: string;
