@@ -442,9 +442,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private doCloseAnimation = dropTask(async () => {
     this.isClosing = true;
-    if (!isTesting()) {
-      // wait for the animation to complete
-      await timeout(100);
+    if (this.itemEl) {
+      await (this.itemEl.getAnimations() || []).map((a) => a.finished);
     }
   });
 
@@ -456,12 +455,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private setupItemEl = (el: HTMLElement) => {
+    this.itemEl = el;
+  };
+
   private get doOpeningAnimation() {
-    return !isTesting() && this.isLastItem;
+    return this.isLastItem;
   }
 
   private get doClosingAnimation() {
-    return !isTesting() && this.isClosing;
+    return this.isClosing;
   }
 
   <template>
@@ -476,6 +479,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
+      {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
         class={{cn 'card' edit=(eq @item.format 'edit')}}
