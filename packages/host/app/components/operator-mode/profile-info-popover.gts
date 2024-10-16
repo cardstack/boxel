@@ -80,11 +80,15 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         font: 700 var(--boxel-font-sm);
         font-style: capitalize;
       }
+      .credit-info__top .change-plan {
+        align-items: flex-end;
+      }
       .change-plan,
       .buy-credits {
         font: 700 var(--boxel-font-sm);
         cursor: pointer;
         justify-content: flex-start;
+        align-items: flex-start;
         padding: 0;
       }
       .credit-info__top {
