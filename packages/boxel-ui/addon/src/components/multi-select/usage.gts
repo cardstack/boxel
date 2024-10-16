@@ -10,10 +10,15 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 import { includes } from 'lodash';
+import pluralize from 'pluralize';
 
 import cssVar from '../../helpers/css-var.ts';
 import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
 import BoxelSelectedItem from './selected-item.gts';
+
+export function getPlural(s: string, count?: number) {
+  return pluralize(s, count);
+}
 
 interface Country {
   name: string;
@@ -78,10 +83,8 @@ interface AssigneePillArgs {
 //Custom component for rendering dropdown items with enhanced design and functionality
 class AssigneePill extends Component<AssigneePillArgs> {
   get issueText() {
-    const { issues } = this.args.option;
-    return `${issues} ${issues === 1 ? 'issue' : 'issues'}`;
+    return String(this.args.option.issues);
   }
-
   <template>
     <span class='assignee-pill'>
       <div class='assignee-pill-content'>
@@ -89,7 +92,7 @@ class AssigneePill extends Component<AssigneePillArgs> {
         <div class='assignee-avatar'>{{@option.avatar}}</div>
         <div class='assignee-name'>{{@option.name}}</div>
       </div>
-      <div class='assignee-issues'>{{this.issueText}}</div>
+      <div class='assignee-issues'>{{getPlural this.issueText}}</div>
     </span>
 
     <style scoped>
