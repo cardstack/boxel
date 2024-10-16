@@ -149,3 +149,8 @@ export class StackItem {
     });
   }
 }
+
+export function isIndexCard(stackItem: StackItem) {
+  let realmURL = stackItem.card[stackItem.api.realmURL];
+  return stackItem.card.id === `${realmURL!.href}index`;
+}

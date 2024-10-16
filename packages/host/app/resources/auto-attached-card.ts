@@ -6,6 +6,7 @@ import { Resource } from 'ember-resources';
 import { TrackedSet } from 'tracked-built-ins';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
+import { isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -44,7 +45,7 @@ export class AutoAttachment extends Resource<Args> {
       }
       this.cards.clear();
       topMostStackItems.forEach((item) => {
-        if (!this.hasRealmURL(item) || this.isIndexCard(item)) {
+        if (!this.hasRealmURL(item) || isIndexCard(item)) {
           return;
         }
         if (
@@ -74,11 +75,6 @@ export class AutoAttachment extends Resource<Args> {
   private hasRealmURL(stackItem: StackItem) {
     let realmURL = stackItem.card[stackItem.api.realmURL];
     return Boolean(realmURL);
-  }
-
-  private isIndexCard(stackItem: StackItem) {
-    let realmURL = stackItem.card[stackItem.api.realmURL];
-    return stackItem.card.id === `${realmURL!.href}index`;
   }
 
   private isAlreadyAttached(
