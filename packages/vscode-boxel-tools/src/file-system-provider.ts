@@ -375,9 +375,7 @@ export class RealmFS implements vscode.FileSystemProvider {
       };
 
       // Add special header for .gts files
-      if (uri.path.endsWith('.gts')) {
-        headers['Accept'] = 'application/vnd.card+source';
-      } else if (uri.path.endsWith('.json')) {
+      if (uri.path.endsWith('.gts') || uri.path.endsWith('.json')) {
         headers['Accept'] = 'application/vnd.card+source';
       }
 
