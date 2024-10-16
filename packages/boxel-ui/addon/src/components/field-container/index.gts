@@ -81,6 +81,10 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
     }
 
+    .horizontal .label-container {
+      padding-top: var(--boxel-sp-sm);
+    }
+
     .small-label {
       --boxel-field-label-size: minmax(4rem, 10%);
     }
@@ -97,6 +101,16 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       width: var(--boxel-icon-xs);
       height: var(--boxel-icon-xs);
       flex-shrink: 0;
+    }
+
+    .horizontal .content {
+      min-height: var(--boxel-form-control-height);
+      display: flex;
+      align-items: center;
+    }
+
+    .horizontal .content > :deep(*) {
+      flex: 1;
     }
 
     .vertical.with-icon:not(.centered-display) .content {
