@@ -96,7 +96,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
 
       .header.active {
         --boxel-header-background-color: var(--boxel-highlight);
-        --boxel-header-text-color: var(--boxel-light);
+        --boxel-header-text-color: var(--boxel-dark);
       }
       .content {
         display: flex;

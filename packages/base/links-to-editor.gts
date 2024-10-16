@@ -94,13 +94,15 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
       .remove {
         --icon-color: var(--boxel-light);
+        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-dark);
         align-self: center;
         outline: 0;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-dark);
-        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--boxel-highlight);
       }
       .remove:focus + :deep(.boxel-card-container.embedded-format),
       .remove:hover + :deep(.boxel-card-container.embedded-format) {

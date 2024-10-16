@@ -711,11 +711,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .edit .header {
         background-color: var(--boxel-highlight);
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
       }
 
       .edit .icon-button {
-        --icon-color: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
       }
 
       .edit .icon-button:hover {
@@ -737,11 +737,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-button {
-        --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
+        --icon-color: var(--boxel-header-text-color, var(--boxel-dark));
       }
 
       .icon-button:hover {
-        --icon-color: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
       }
 
@@ -751,7 +751,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-save:hover {
-        --icon-color: var(--boxel-highlight);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-light);
       }
 
       .header-icon {
