@@ -115,8 +115,6 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         .ember-power-select-option--no-matches-message {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
       }
-    </style>
-    <style scoped>
       .ember-basic-dropdown-trigger {
         padding: var(--boxel-sp-xxxs);
         display: flex;
