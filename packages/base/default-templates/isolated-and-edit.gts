@@ -4,7 +4,6 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
 import { getField } from '@cardstack/runtime-common';
-import { get } from '@ember/helper';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
@@ -20,10 +19,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     <div class={{cn 'default-card-template' @format}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
-          {{#if (eq @format 'edit')}}
-            {{log (get @model key)}}
-            {{log (get (get (getField @model.constructor key) 'card') 'icon')}}
-          {{/if}}
           <FieldContainer
             {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
             @label={{startCase key}}
