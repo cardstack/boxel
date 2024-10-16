@@ -443,7 +443,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
-  private doCloseAnimation = task(async () => {
+  private doCloseAnimation = dropTask(async () => {
     this.isClosing = true;
     if (!isTesting()) {
       // wait for the animation to complete
