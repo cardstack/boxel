@@ -63,7 +63,8 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   Therefore, our out-of-the-box scoped css solution do not work and we must use an escape hatch (ie :global) to
   ensure styles are being applied correctly.
    }}
-  <style scoped>
+  {{! template-lint-disable no-unscoped-styles }}
+  <style>
     :global(.boxel-select__dropdown) {
       --boxel-select-current-color: var(--boxel-highlight);
       --boxel-select-selected-color: var(--boxel-light-100);

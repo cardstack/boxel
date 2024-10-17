@@ -68,7 +68,8 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         {{yield option}}
       </PowerSelectMultiple>
     </div>
-    <style scoped>
+    {{! template-lint-disable no-unscoped-styles }}
+    <style>
       .boxel-multi-select__dropdown {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
