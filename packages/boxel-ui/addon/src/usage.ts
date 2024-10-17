@@ -22,6 +22,7 @@ import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
+import MultiSelectUsage from './components/multi-select/usage.gts';
 import PillUsage from './components/pill/usage.gts';
 import ProgressBarUsage from './components/progress-bar/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
@@ -53,6 +54,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Menu', MenuUsage],
   ['Message', MessageUsage],
   ['Modal', ModalUsage],
+  ['MultiSelect', MultiSelectUsage],
   ['Pill', PillUsage],
   ['ProgressBar', ProgressBarUsage],
   ['RadioInput', RadioInputUsage],
