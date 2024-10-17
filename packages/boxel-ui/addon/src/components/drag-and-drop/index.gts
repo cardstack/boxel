@@ -91,7 +91,6 @@ export default class DndKanbanBoard extends Component<
     this.insertAt = arrayUtils.insertAt;
     this.insertBefore = arrayUtils.insertBefore;
     this.removeItem = arrayUtils.removeItem;
-
     this.areModifiersLoaded = true;
   }
 
