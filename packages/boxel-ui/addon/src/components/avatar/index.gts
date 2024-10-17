@@ -3,23 +3,26 @@ import Component from '@glimmer/component';
 
 import cssVar from '../../helpers/css-var.ts';
 
+/**
+ * The purpose of this function is to select a random color from a set of colors based on the input string.
+ * This is used to assign a unique color to each user in the app.
+ */
 export function stringToColor(string: string | null) {
   if (!string) {
     return 'transparent';
   }
 
   let hash = 0;
-  let i;
 
-  for (i = 0; i < string.length; i += 1) {
+  for (let i = 0; i < string.length; i += 1) {
     hash = string.charCodeAt(i) + ((hash << 5) - hash);
   }
 
   let color = '#';
 
-  for (i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const value = (hash >> (i * 8)) & 0xff;
-    color += `00${value.toString(16)}`.substr(-2);
+    color += `00${value.toString(16)}`.slice(-2);
   }
 
   return color;
