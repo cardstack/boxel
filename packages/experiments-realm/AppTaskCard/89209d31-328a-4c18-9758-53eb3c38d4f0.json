@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "moduleId": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../app-task-card",
+        "name": "AppTaskCard"
+      }
+    }
+  }
+}

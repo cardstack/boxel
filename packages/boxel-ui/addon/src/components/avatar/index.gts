@@ -1,40 +1,55 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { bool } from '@cardstack/boxel-ui/helpers';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
+import cssVar from '../../helpers/css-var.ts';
 
-import { stringToColor } from '@cardstack/host/lib/utils';
-import MatrixService from '@cardstack/host/services/matrix-service';
+/**
+ * The purpose of this function is to select a random color from a set of colors based on the input string.
+ * This is used to assign a unique color to each user in the app.
+ */
+export function stringToColor(string: string | null) {
+  if (!string) {
+    return 'transparent';
+  }
+
+  let hash = 0;
+
+  for (let i = 0; i < string.length; i += 1) {
+    hash = string.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  let color = '#';
+
+  for (let i = 0; i < 3; i += 1) {
+    const value = (hash >> (i * 8)) & 0xff;
+    color += `00${value.toString(16)}`.slice(-2);
+  }
+
+  return color;
+}
 
 interface Signature {
   Args: {
-    userId: string | null;
-    size?: string;
-    border?: string;
+    displayName?: string;
+    isReady: boolean;
+    userId: string;
   };
   Element: HTMLDivElement;
 }
 
 export default class ProfileAvatarIcon extends Component<Signature> {
-  @service declare matrixService: MatrixService;
-
   get profileInitials() {
-    let displayName = this.matrixService.profile?.displayName;
-
-    if (displayName) {
-      return displayName.slice(0, 1).toUpperCase();
-    } else {
-      return this.args.userId?.split(':')[0].slice(1, 2).toUpperCase(); // Transform @user:localhost into U, for example
-    }
+    let displayName = this.args.displayName ?? 'Default';
+    return displayName.slice(0, 1).toUpperCase();
   }
 
   <template>
     <ProfileAvatarIconVisual
-      @isReady={{bool this.matrixService.profile.loaded}}
+      @isReady={{@isReady}}
       @profileInitials={{this.profileInitials}}
-      {{setCssVar profile-avatar-icon-background=(stringToColor @userId)}}
+      style={{cssVar profile-avatar-icon-background=(stringToColor @userId)}}
+      data-test-profile-user-id={{@userId}}
+      data-test-profile-display-name={{@displayName}}
       ...attributes
     />
   </template>
@@ -75,5 +90,3 @@ const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSign
       </span>
     </div>
   </template>;
-
-export { ProfileAvatarIconVisual };
