@@ -69,83 +69,55 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
-  get backlogQuery() {
-    return this.getQueryForStatus('Backlog');
-  }
-
-  get nextSprintQuery() {
-    return this.getQueryForStatus('Next Sprint');
-  }
-
-  get currentSprintQuery() {
-    return this.getQueryForStatus('Current Sprint');
-  }
-
-  get inProgressQuery() {
-    return this.getQueryForStatus('In Progress');
-  }
-
-  get inReviewQuery() {
-    return this.getQueryForStatus('In Review');
-  }
-
-  get stagedQuery() {
-    return this.getQueryForStatus('Staged');
-  }
-
-  get shippedQuery() {
-    return this.getQueryForStatus('Shipped');
-  }
-
   columnData: ColumnData[] = [
     {
       status: {
         label: 'Backlog',
         index: 0,
       },
-      query: this.backlogQuery,
+      query: this.getQueryForStatus('Backlog'),
     },
     {
       status: {
         label: 'Next Sprint',
         index: 1,
       },
-      query: this.nextSprintQuery,
+      query: this.getQueryForStatus('Next Sprint'),
     },
     {
       status: {
         label: 'Current Sprint',
         index: 2,
       },
-      query: this.currentSprintQuery,
+      query: this.getQueryForStatus('Current Sprint'),
     },
     {
       status: {
         label: 'In Progress',
         index: 3,
       },
-      query: this.inProgressQuery,
+      query: this.getQueryForStatus('In Progress'),
     },
     {
       status: {
         label: 'In Review',
         index: 4,
       },
-      query: this.inReviewQuery,
+      query: this.getQueryForStatus('In Review'),
     },
     {
       status: {
         label: 'Staged',
         index: 5,
       },
-      query: this.stagedQuery,
+      query: this.getQueryForStatus('Staged'),
     },
     {
       status: {
         label: 'Shipped',
         index: 6,
       },
-      query: this.shippedQuery,
+      query: this.getQueryForStatus('Shipped'),
     },
   ].map((column): ColumnData => {
     return {
