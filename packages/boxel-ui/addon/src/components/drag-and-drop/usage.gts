@@ -8,6 +8,7 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, {
   type ColumnHeaderArgs,
