@@ -1129,6 +1129,25 @@ module('Realm Server', function (hooks) {
         );
       });
 
+      test('serves a card-source POST request for a .txt file', async function (assert) {
+        let response = await request
+          .post('/hello-world.txt')
+          .set('Accept', 'application/vnd.card+source')
+          .send(`Hello World`);
+
+        assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+        let txtFile = join(
+          dir.name,
+          'realm_server_1',
+          'test',
+          'hello-world.txt',
+        );
+        assert.ok(existsSync(txtFile), 'file exists');
+        let src = readFileSync(txtFile, { encoding: 'utf8' });
+        assert.strictEqual(src, 'Hello World');
+      });
+
       test('can serialize a card instance correctly after card definition is changed', async function (assert) {
         // create a card def
         {

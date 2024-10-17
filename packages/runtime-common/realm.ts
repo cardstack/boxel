@@ -276,14 +276,6 @@ export class Realm {
     return this.paths.url;
   }
 
-  get writableFileExtensions(): string[] {
-    // We include .json (card instance data) because we want to allow the
-    // card instance data to be overwritten directly (by the code editor) and not go
-    // through the card API which tries to fetch the instance data from the index and patch it.
-    // The card instance in the index could be broken so we want to have a way to overwrite it directly.
-    return [...executableExtensions, '.json'];
-  }
-
   constructor(
     {
       url,
@@ -387,7 +379,7 @@ export class Realm {
         this.removeCard.bind(this),
       )
       .post(
-        `/.+(${this.writableFileExtensions.map((e) => '\\' + e).join('|')})`,
+        '/.*',
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
