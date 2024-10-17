@@ -6,6 +6,11 @@ import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
+import DndKanbanBoard, {
+  type DndKanbanBoardArgs,
+  Card as DndCard,
+  Column as DndColumn,
+} from './components/drag-and-drop/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
@@ -60,6 +65,10 @@ export {
   CardContainer,
   CardContentContainer,
   CircleSpinner,
+  DndCard,
+  DndColumn,
+  DndKanbanBoard,
+  DndKanbanBoardArgs,
   FieldContainer,
   Filter,
   FilterList,
