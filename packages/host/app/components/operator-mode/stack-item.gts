@@ -3,7 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule } from '@ember/runloop';
+import { schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
 
@@ -136,6 +136,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
+  private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
   get permissions(): Permissions {
@@ -446,7 +447,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private doCloseAnimation = dropTask(async () => {
     this.isClosing = true;
     if (this.itemEl) {
-      await (this.itemEl.getAnimations() || []).map((a) => a.finished);
+      await new Promise<void>((resolve) => {
+        scheduleOnce('afterRender', this, () => {
+          const animations = this.itemEl!.getAnimations() || [];
+          Promise.all(animations.map((animation) => animation.finished)).then(
+            () => resolve(),
+          );
+        });
+      });
     }
   });
 
