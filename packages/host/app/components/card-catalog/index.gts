@@ -12,6 +12,9 @@ import type { RealmInfo } from '@cardstack/runtime-common';
 
 import { HTMLComponent } from '@cardstack/host/lib/html-component';
 
+import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
+
 import { removeFileExtension } from '../search-sheet/utils';
 
 import CardCatalogResultsHeader from './results-header';
@@ -28,6 +31,7 @@ interface Signature {
     cards: PrerenderedCard[];
     select: (cardUrl?: string, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCardUrl?: string;
+    hasPreselectedCard?: boolean;
     realmInfos: Record<string, RealmInfo>;
   };
 }
@@ -45,7 +49,13 @@ export default class CardCatalog extends Component<Signature> {
             @resultsCount={{realmData.cardsTotal}}
           />
 
-          <ul class='card-catalog__group'>
+          <ul
+            class='card-catalog__group'
+            {{RestoreScrollPosition
+              key=@selectedCardUrl
+              container='card-catalog'
+            }}
+          >
             {{#each realmData.cards as |card index|}}
               {{#if (lt index realmData.displayedCardsCount)}}
                 {{#let (eq @selectedCardUrl card.url) as |isSelected|}}
@@ -61,6 +71,11 @@ export default class CardCatalog extends Component<Signature> {
                         card.url
                       }}
                       data-test-card-catalog-item-selected={{isSelected}}
+                      {{scrollIntoViewModifier
+                        isSelected
+                        container='card-catalog'
+                        key=card.url
+                      }}
                     >
                       {{card.component}}
                     </button>
@@ -214,7 +229,8 @@ export default class CardCatalog extends Component<Signature> {
     return groupedCards;
   }
 
-  pageSize = 5;
+  // do not paginate if there's pre-selected card (because we scroll to it)
+  pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
 
   @action
   handleEnterKey(cardUrl: string, event: KeyboardEvent) {
