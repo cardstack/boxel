@@ -28,6 +28,9 @@ export default class DndUsage extends Component {
     new Column('Done', []),
   ];
 
+
+  cardpreferender =  {module: http; html: <div> ,status}
+
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanHeaderBg: CSSVariableInfo;
 

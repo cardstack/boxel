@@ -4,7 +4,6 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
-import { restartableTask } from 'ember-concurrency';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -63,11 +62,11 @@ export default class DndKanbanBoard extends Component<
     super(owner, args);
 
     if (!isFastBoot) {
-      this.loadModifiers.perform();
+      this.loadModifiers();
     }
   }
 
-  private loadModifiers = restartableTask(async () => {
+  async loadModifiers() {
     // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
     const DndDraggableItemModifier = await import(
       'ember-draggable-modifiers/modifiers/draggable-item'
@@ -92,8 +91,9 @@ export default class DndKanbanBoard extends Component<
     this.insertAt = arrayUtils.insertAt;
     this.insertBefore = arrayUtils.insertBefore;
     this.removeItem = arrayUtils.removeItem;
+
     this.areModifiersLoaded = true;
-  });
+  }
 
   get isDropZoneTargeted() {
     return (columnIndex: number) => this.hoveredColumnIndex === columnIndex;
