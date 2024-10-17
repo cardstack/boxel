@@ -222,14 +222,6 @@ export interface CardSearch {
     cardError?: undefined | { id: string; error: Error };
   };
   trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
-  getLiveCards(
-    query: Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
 }
 
 export interface CardCatalogQuery extends Query {
@@ -267,16 +259,6 @@ export function trackCard<T extends object>(
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.trackCard(owner, card, realmURL);
-}
-
-export function getLiveCards(
-  query: Query,
-  realms?: string[],
-  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCards(query, realms, doWhileRefreshing);
 }
 
 export interface CardCreator {
