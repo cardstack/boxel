@@ -125,10 +125,6 @@ export class CardResource extends Resource<Args> {
     });
   }
 
-  get realmURL() {
-    return this.card?.[this.api.realmURL];
-  }
-
   get card() {
     if (this.loadLiveModel.isRunning || this.loadStaticModel.isRunning) {
       return this.staleCard;

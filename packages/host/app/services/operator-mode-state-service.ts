@@ -531,14 +531,7 @@ export default class OperatorModeStateService extends Service {
     // For interact mode, the idea of "current realm" is a bit abstract. the
     // realm background that you see in interact mode is the realm of the
     // bottom-most card in the stack. however you can have cards of differing
-    // realms in the same stack. so the current realm probably just means the
-    // top-most item in the stack. When there are multiple stacks we are just
-    // picking the right most stack.
-    let topRightStackItem = this.topMostStackItems().pop();
-    if (topRightStackItem?.realmURL) {
-      return topRightStackItem.realmURL;
-    }
-
+    // realms in the same stack and keep in mind you can have multiple stacks...
     return new URL(this.realm.defaultReadableRealm.path);
   }
 

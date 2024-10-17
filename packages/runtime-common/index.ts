@@ -178,7 +178,11 @@ export interface CardChooser {
   chooseCard<T extends BaseDef>(
     query: CardCatalogQuery,
     opts?: {
-      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+      offerToCreate?: {
+        ref: CodeRef;
+        relativeTo: URL | undefined;
+        realmURL: URL | undefined;
+      };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -188,7 +192,11 @@ export interface CardChooser {
 export async function chooseCard<T extends BaseDef>(
   query: CardCatalogQuery,
   opts?: {
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+      realmURL: URL | undefined;
+    };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
   },
