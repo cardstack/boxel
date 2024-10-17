@@ -27,7 +27,7 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
 import { isEqual } from 'lodash';
 import { initSharedState } from './shared-state';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 
@@ -129,24 +129,11 @@ export function getBoxComponent(
     userFormat: Format | undefined,
     defaultFormats: FieldFormats,
   ): FieldFormats {
-    let result: FieldFormats;
     let availableFormats = formats;
-    let effectiveDefaultFormats = { ...defaultFormats };
-    if (field?.computeVia) {
-      availableFormats = formats.filter(
-        (f) => !['isolated', 'edit'].includes(f),
-      );
-      if (!availableFormats.includes(effectiveDefaultFormats.fieldDef)) {
-        effectiveDefaultFormats.fieldDef = 'embedded';
-      }
-      if (!availableFormats.includes(effectiveDefaultFormats.cardDef)) {
-        effectiveDefaultFormats.cardDef = 'fitted';
-      }
-    }
-    result =
+    let result: FieldFormats =
       userFormat && availableFormats.includes(userFormat)
         ? { fieldDef: userFormat, cardDef: userFormat }
-        : effectiveDefaultFormats;
+        : defaultFormats;
     return result;
   }
 
@@ -246,7 +233,10 @@ export function getBoxComponent(
                         @set={{model.set}}
                         @fieldName={{model.name}}
                         @context={{context}}
-                        @canEdit={{permissions.canWrite}}
+                        @canEdit={{and
+                          (not field.computeVia)
+                          permissions.canWrite
+                        }}
                       />
                     </CardContainer>
                   </DefaultFormatsProvider>
@@ -269,7 +259,10 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
-                      @canEdit={{permissions.canWrite}}
+                      @canEdit={{and
+                        (not field.computeVia)
+                        permissions.canWrite
+                      }}
                     />
                   </div>
                 </DefaultFormatsProvider>
@@ -285,7 +278,7 @@ export function getBoxComponent(
                     @set={{model.set}}
                     @fieldName={{model.name}}
                     @context={{context}}
-                    @canEdit={{permissions.canWrite}}
+                    @canEdit={{and (not field.computeVia) permissions.canWrite}}
                     ...attributes
                   />
                 </DefaultFormatsProvider>

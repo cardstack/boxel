@@ -1927,6 +1927,9 @@ module('Integration | card-basics', function (hooks) {
 
       await renderCard(loader, helloWorld, 'edit');
       assert.dom('[data-test-field="title"]').hasText('Title');
+      assert
+        .dom('[data-test-field="title"] .boxel-field__icon')
+        .hasClass('icon-tabler-letter-case');
       assert.dom('[data-test-field="title"] input').hasValue('My Post');
       assert
         .dom(
@@ -1936,6 +1939,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="author"] [data-test-field="firstName"] input')
         .hasValue('Arthur');
+      assert
+        .dom('[data-test-field="author"] .boxel-field__icon')
+        .hasClass('lucide-rectangle-ellipsis');
 
       await fillIn('[data-test-field="title"] input', 'New Post');
       await fillIn('[data-test-field="firstName"] input', 'Carl Stack');

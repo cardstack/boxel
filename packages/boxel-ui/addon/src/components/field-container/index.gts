@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
-import { eq, not, or } from '../../helpers/truth-helpers.ts';
+import { bool, eq, not, or } from '../../helpers/truth-helpers.ts';
 import type { Icon } from '../../icons/types.ts';
 import Label from '../label/index.gts';
 
@@ -31,25 +31,23 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         horizontal=(not (or @vertical @centeredDisplay))
         small-label=(eq @horizontalLabelSize 'small')
         centered-display=@centeredDisplay
+        with-icon=(bool @icon)
       }}
       data-test-boxel-field
       data-test-boxel-field-id={{@fieldId}}
       ...attributes
     >
-      <Label class='label' data-test-boxel-field-label>
-        {{@label}}
-      </Label>
-
-      {{#if @icon}}
-        <div class='with-icon'>
+      <div class='label-container'>
+        {{#if @icon}}
           <@icon class='boxel-field__icon' role='presentation' />
-          <div class='yield-with-icon'>
-            {{yield}}
-          </div>
-        </div>
-      {{else}}
+        {{/if}}
+        <Label class='label' data-test-boxel-field-label>
+          {{@label}}
+        </Label>
+      </div>
+      <div class='content'>
         {{yield}}
-      {{/if}}
+      </div>
     </Tag>
   {{/let}}
   <style scoped>
@@ -58,29 +56,18 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-field-label-padding-top: 0;
 
       display: grid;
-      gap: var(--boxel-sp-xs) 0;
       overflow-wrap: anywhere;
     }
-
-    .vertical {
-      grid-template-rows: auto 1fr;
-      gap: var(--boxel-sp-xxs) 0;
+    .label-container {
+      align-items: start;
     }
-    .vertical .label {
-      --boxel-label-font: 600 var(--boxel-font-xs);
+    .with-icon .label-container {
+      display: flex;
+      gap: var(--boxel-sp-xs);
     }
 
     .centered-display {
       justify-items: center;
-    }
-
-    .centered-display > *:last-child {
-      order: -1;
-    }
-
-    .horizontal {
-      grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
-      gap: 0 var(--boxel-sp-lg);
     }
 
     .small-label {
@@ -95,18 +82,43 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       padding-top: var(--boxel-field-label-padding-top);
     }
 
-    .with-icon {
+    :deep(.boxel-field__icon) {
+      width: var(--boxel-icon-xs);
+      height: var(--boxel-icon-xs);
+      flex-shrink: 0;
+    }
+
+    .horizontal {
+      grid-template-columns: var(--boxel-field-label-size, minmax(8rem, 25%)) 1fr;
+    }
+
+    .horizontal > .label-container {
+      padding-top: var(--boxel-sp-sm);
+    }
+
+    .horizontal > .content {
+      min-height: var(--boxel-form-control-height);
       display: flex;
+      align-items: center;
     }
 
-    :global(.boxel-field__icon) {
-      width: var(--boxel-icon-sm);
-      height: var(--boxel-icon-sm);
-      margin-right: var(--boxel-sp-xxs);
+    .horizontal > .content > :deep(*) {
+      flex: 1;
     }
 
-    .yield-with-icon {
-      width: 100%;
+    .vertical {
+      grid-template-rows: auto 1fr;
+    }
+
+    .vertical .label {
+      --boxel-label-font: 600 var(--boxel-font-xs);
+      grid-column: 2;
+      line-height: 1rem;
+      margin-bottom: var(--boxel-sp-4xs);
+    }
+
+    .vertical.with-icon:not(.centered-display) .content {
+      padding-left: calc(var(--boxel-icon-xs) + var(--boxel-sp-xs));
     }
   </style>
 </template>;
