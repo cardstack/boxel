@@ -187,8 +187,19 @@ export default class BoxelTrigger<ItemT> extends Component<
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
         width: 40px;
       }
-    </style>
-    <style scoped>
+      .ember-power-select-multiple-option {
+        padding: var(--boxel-sp-5xs);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
+        color: var(--boxel-multi-select-pill-color, var(--boxel-dark));
+        background-color: var(
+          --boxel-selected-pill-background-color,
+          var(--boxel-200)
+        );
+        margin: 0;
+      }
       .ember-power-select-multiple-remove-btn {
         display: none; /* We have to remove the default x button placed on selected items*/
       }

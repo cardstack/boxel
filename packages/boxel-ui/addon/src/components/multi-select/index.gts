@@ -139,19 +139,6 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         gap: var(--boxel-sp-xxxs);
         width: auto;
       }
-      .ember-power-select-multiple-option {
-        padding: var(--boxel-sp-5xs);
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
-        color: var(--boxel-multi-select-pill-color, var(--boxel-dark));
-        background-color: var(
-          --boxel-selected-pill-background-color,
-          var(--boxel-200)
-        );
-        margin: 0;
-      }
     </style>
   </template>
 }
