@@ -478,12 +478,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.isClosing;
   }
 
+  private get isTesting() {
+    return isTesting();
+  }
+
   <template>
     <div
       class='item
         {{if this.isBuried "buried"}}
         {{if this.doOpeningAnimation "opening-animation"}}
-        {{if this.doClosingAnimation "closing-animation"}}'
+        {{if this.doClosingAnimation "closing-animation"}}
+        {{if this.isTesting "testing"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
@@ -735,6 +740,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
       .item.closing-animation {
         animation: fadeOut 0.2s forwards;
+      }
+      .item.opening-animation.testing {
+        animation-duration: 0s;
+      }
+      .item.closing-animation.testing {
+        animation-duration: 0s;
       }
 
       .card {
