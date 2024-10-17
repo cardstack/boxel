@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -7,7 +8,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -26,6 +27,12 @@ interface ProfileInfoSignature {
 }
 
 export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSignature> {
+  @service declare matrixService: MatrixService;
+
+  @action logout() {
+    this.matrixService.logout();
+  }
+
   <template>
     <style scoped>
       .profile-popover {
@@ -60,7 +67,9 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
 
       .credit-info {
         display: flex;
-        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
         gap: var(--boxel-sp-lg);
         margin-bottom: auto;
         padding-top: var(--boxel-sp-lg);
@@ -83,94 +92,76 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .credit-info__top .change-plan {
         align-items: flex-end;
       }
-      .change-plan,
-      .buy-credits {
-        font: 700 var(--boxel-font-sm);
-        cursor: pointer;
-        justify-content: flex-start;
-        align-items: flex-start;
-        padding: 0;
-      }
-      .credit-info__top {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-      }
-      .credit-info__bottom {
-        display: flex;
-        gap: var(--boxel-sp-lg);
-      }
     </style>
 
     <div
-      class={{cn
-        'profile-popover'
-        display-choose-plan-button=this.isChoosePlanButtonDisplayed
-      }}
+      class={{cn 'profile-popover' display-choose-plan-button=this.isFreePlan}}
       data-test-profile-popover
       ...attributes
     >
       <header class='header'>
-        <div class='label'>
-          Signed in as
-        </div>
-
         <BoxelButton
           @kind='secondary-light'
-          @size='extra-small'
+          @size='small'
           {{on 'click' @toggleProfileSettings}}
           data-test-settings-button
         >
           Settings
         </BoxelButton>
+
+        <BoxelButton
+          @kind='primary-dark'
+          @size='small'
+          {{on 'click' this.logout}}
+          data-test-signout-button
+        >
+          Sign Out
+        </BoxelButton>
       </header>
 
       <ProfileInfo />
       <div class='credit-info' data-test-credit-info>
-        <div class='credit-info__top'>
-          <div class='info-group'>
-            <span class='label'>Membership Tier</span>
-            <span class='value' data-test-membership-tier>{{this.plan}}</span>
-          </div>
-          {{#if this.isChangePlanDisplayed}}
-            <BoxelButton
-              class='change-plan'
-              @kind='text-only'
-              data-test-change-plan-button
-              {{on 'click' @toggleProfileSettings}}
-            >Change plan</BoxelButton>
-          {{/if}}
+        <div class='info-group'>
+          <span class='label'>Membership Tier</span>
+          <span class='value' data-test-membership-tier>{{this.plan}}</span>
         </div>
-        <div class='credit-info__bottom'>
-          <div class='info-group'>
-            <span class='label'>Monthly Credit</span>
-            <span
-              class='value'
-              data-test-monthly-credit
-            >{{this.monthlyCredit}}</span>
-          </div>
-          <div class='info-group'>
-            <span class='label'>Additional Balance</span>
-            {{#if (eq this.creditsAvailableInBalance 0)}}
-              <BoxelButton
-                class='buy-credits'
-                {{on 'click' @toggleProfileSettings}}
-                @kind='text-only'
-                data-test-buy-additional-credits
-              >Buy Credits</BoxelButton>
-            {{else}}
-              <span
-                class='value'
-                data-test-additional-balance
-              >{{this.creditsAvailableInBalance}}</span>
-            {{/if}}
-          </div>
+        {{#if this.isChangePlanDisplayed}}
+          <BoxelButton
+            @kind='secondary-light'
+            @size='small'
+            data-test-change-plan-button
+            {{on 'click' @toggleProfileSettings}}
+          >Change plan</BoxelButton>
+        {{/if}}
+        <div class='info-group'>
+          <span class='label'>Monthly Credit</span>
+          <span
+            class='value'
+            data-test-monthly-credit
+          >{{this.monthlyCredit}}</span>
+        </div>
+        {{#if
+          (eq
+            this.creditsUsedInPlanAllowance this.creditsIncludedInPlanAllowance
+          )
+        }}
+          <span class='label' data-test-out-of-credit>You have used all of
+            credits from the free trial, please upgrade your plan.</span>
+        {{/if}}
+        <div class='info-group'>
+          <span class='label'>Additional Credit</span>
+          <span class='value' data-test-additional-balance>{{if
+              this.isFreePlan
+              'Upgrade to Enable'
+              this.creditsAvailableInBalance
+            }}</span>
         </div>
       </div>
-      {{#if this.isChoosePlanButtonDisplayed}}
+      {{#if this.isFreePlan}}
         <BoxelButton
           {{on 'click' @toggleProfileSettings}}
-          @kind='primary-dark'
+          style={{cssVar boxel-button-text-color='var(--boxel-dark)'}}
+          @kind='primary'
           data-test-choose-plan-button
         >
           Choose Plan
@@ -204,16 +195,18 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   private get monthlyCredit() {
     return this.creditsUsedInPlanAllowance != undefined &&
       this.creditsIncludedInPlanAllowance != undefined
-      ? `${this.creditsUsedInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`
+      ? `${
+          this.creditsIncludedInPlanAllowance - this.creditsUsedInPlanAllowance
+        } of ${this.creditsIncludedInPlanAllowance} left`
       : '';
   }
 
-  private get isChoosePlanButtonDisplayed() {
-    return this.plan === 'Free';
+  private get isFreePlan() {
+    return this.plan?.toLowerCase() === 'free';
   }
 
   private get isChangePlanDisplayed() {
-    return this.plan && !this.isChoosePlanButtonDisplayed;
+    return this.plan && !this.isFreePlan;
   }
 }
 

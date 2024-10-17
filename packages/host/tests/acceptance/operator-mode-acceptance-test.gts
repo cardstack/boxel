@@ -42,7 +42,7 @@ let userResponseBody = {
       matrixUserId: '@testuser:staging',
       stripeCustomerId: 'stripe-id-1',
       creditsUsedInPlanAllowance: 0,
-      creditsAvailableInBalance: 100,
+      creditsAvailableInBalance: 0,
     },
     relationships: {
       subscription: {
@@ -734,8 +734,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert.dom('[data-test-profile-popover]').exists();
     assert.dom('[data-test-membership-tier]').hasText('Free');
-    assert.dom('[data-test-monthly-credit]').hasText('0 of 100 left');
-    assert.dom('[data-test-additional-balance]').hasText('100');
+    assert.dom('[data-test-monthly-credit]').hasText('100 of 100 left');
+    assert.dom('[data-test-additional-balance]').hasText('Upgrade to Enable');
+    assert.dom('[data-test-change-plan-button]').doesNotExist();
     assert.dom('[data-test-choose-plan-button]').exists();
 
     await click('[data-test-choose-plan-button]');
@@ -745,6 +746,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test(`displays change plan button in user's credit info, if plan is not free plan`, async function (assert) {
     userResponseBody.included[1].attributes.name = 'Creator';
+    userResponseBody.data.attributes.creditsAvailableInBalance = 100;
     lookupNetworkService().mount(
       async (req: Request) => {
         if (req.url.includes('_user')) {
@@ -767,12 +769,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
 
     assert.dom('[data-test-profile-popover]').doesNotExist();
-
     await click('[data-test-profile-icon-button]');
 
     assert.dom('[data-test-profile-popover]').exists();
     assert.dom('[data-test-membership-tier]').hasText('Creator');
-    assert.dom('[data-test-monthly-credit]').hasText('0 of 100 left');
+    assert.dom('[data-test-monthly-credit]').hasText('100 of 100 left');
     assert.dom('[data-test-additional-balance]').hasText('100');
     assert.dom('[data-test-choose-plan-button]').doesNotExist();
     assert.dom('[data-test-change-plan-button]').exists();
@@ -782,8 +783,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
   });
 
-  test(`displays buy additional credit button in user's credit info, if no available credits in balance`, async function (assert) {
+  test(`displays out of credits text if plan is free plan`, async function (assert) {
     userResponseBody.included[1].attributes.name = 'Free';
+    userResponseBody.data.attributes.creditsUsedInPlanAllowance = 100;
     userResponseBody.data.attributes.creditsAvailableInBalance = 0;
     lookupNetworkService().mount(
       async (req: Request) => {
@@ -813,11 +815,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-profile-popover]').exists();
     assert.dom('[data-test-membership-tier]').hasText('Free');
     assert.dom('[data-test-monthly-credit]').hasText('0 of 100 left');
-    assert.dom('[data-test-additional-balance]').doesNotExist();
-    assert.dom('[data-test-buy-additional-credits]').exists();
-
-    await click('[data-test-buy-additional-credits]');
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
+    assert.dom('[data-test-change-plan-button]').doesNotExist();
+    assert.dom('[data-test-out-of-credit]').exists();
   });
 });
