@@ -44,7 +44,15 @@ export class RealmPaths {
   }
 
   inRealm(url: URL): boolean {
-    let decodedHref = decodeURI(url.href);
+    let decodedHref: string;
+    try {
+      decodedHref = decodeURI(url.href);
+    } catch (e) {
+      console.warn(
+        `encountered malformed URI ${url} when checking if in realm ${this.url}, treating as not in this realm`,
+      );
+      return false;
+    }
     return (
       decodedHref.startsWith(this.url) ||
       decodedHref.split('?')[0] == this.url.replace(/\/$/, '') // check if url without querystring same as realm url without trailing slash (for detecting root realm urls with missing trailing slash)
