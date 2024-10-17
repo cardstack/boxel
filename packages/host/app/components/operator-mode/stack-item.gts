@@ -62,7 +62,7 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import config from '@cardstack/host/config/environment';
 
-import { type StackItem } from '@cardstack/host/lib/stack-item';
+import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import type {
   CardDef,
@@ -291,7 +291,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         disabled: !this.card.id,
       }),
     ];
-    if (this.realm.canWrite(this.card.id)) {
+    if (
+      !isIndexCard(this.args.item) && // workspace index card cannot be deleted
+      this.realm.canWrite(this.card.id)
+    ) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
           action: () => this.args.publicAPI.delete(this.card),
