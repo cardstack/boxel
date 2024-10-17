@@ -99,7 +99,7 @@ exports.up = (pgm) => {
       default: pgm.func('gen_random_uuid()'),
     },
     user_id: { type: 'uuid', references: 'users(id)' },
-    credit_amount: { type: 'numeric', notNull: true }, // can be negative
+    credit_amount: { type: 'integer', notNull: true }, // can be negative
     credit_type: { type: 'credit_type', notNull: true },
     ai_action_id: { type: 'uuid', references: 'ai_actions(id)' }, // can be related to an ai_action, or null for manual adjustments (topping up, or pro-rating when changing plan)
     billing_cycle_id: { type: 'uuid', references: 'subscription_cycles(id)' },
@@ -168,9 +168,9 @@ exports.up = (pgm) => {
 
   pgm.sql(`
     INSERT INTO plans (name, monthly_price, credits_included) VALUES
-    ('Free', 0, 100),
-    ('Creator', 12, 500),
-    ('Power User', 49, 2500);
+    ('Free', 0, 1000),
+    ('Creator', 12, 5000),
+    ('Power User', 49, 25000);
   `);
 
   pgm.sql(`
