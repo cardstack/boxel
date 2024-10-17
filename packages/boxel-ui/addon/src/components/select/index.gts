@@ -63,41 +63,35 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   Therefore, our out-of-the-box scoped css solution do not work and we must use an escape hatch (ie :global) to
   ensure styles are being applied correctly.
    }}
-  {{! template-lint-disable no-unscoped-styles }}
+  {{! template-lint-disable require-scoped-style }}
   <style>
-    :global(.boxel-select__dropdown) {
+    .boxel-select__dropdown {
       --boxel-select-current-color: var(--boxel-highlight);
       --boxel-select-selected-color: var(--boxel-light-100);
       box-shadow: var(--boxel-box-shadow);
       border-radius: var(--boxel-form-control-border-radius);
     }
-    :global(.boxel-select__dropdown ul) {
+    .boxel-select__dropdown ul {
       list-style: none;
       padding: 0;
       overflow: auto;
     }
-    :global(
-        .boxel-select__dropdown .ember-power-select-option[aria-selected='true']
-      ) {
+    .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
       background-color: var(--boxel-select-selected-color);
     }
 
-    :global(
-        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
-      ) {
+    .boxel-select__dropdown .ember-power-select-option[aria-current='true'] {
       background-color: var(--boxel-select-current-color);
       color: black;
     }
 
-    :global(.boxel-select__dropdown .ember-power-select-search-input:focus) {
+    .boxel-select__dropdown .ember-power-select-search-input:focus {
       border: 1px solid var(--boxel-outline-color);
       box-shadow: var(--boxel-box-shadow-hover);
       outline: var(--boxel-outline);
     }
 
-    :global(
-        .boxel-select__dropdown .ember-power-select-option--no-matches-message
-      ) {
+    .boxel-select__dropdown .ember-power-select-option--no-matches-message {
       padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
     }
   </style>
