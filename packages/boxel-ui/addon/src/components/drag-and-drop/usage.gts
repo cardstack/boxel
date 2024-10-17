@@ -8,7 +8,6 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, {
   type ColumnHeaderArgs,
@@ -20,7 +19,7 @@ export default class DndUsage extends Component {
   @tracked columns = [
     new Column('Todo', [
       new Card({ assignee: 'Justin', task: 'Implement a Todo App' }),
-      new Card({ assignee: 'Lucas', task: 'Create Boxel UI Compoennt' }),
+      new Card({ assignee: 'Lucas', task: 'Create Boxel UI Component' }),
       new Card({ assignee: 'Richard', task: 'Design a Chess App' }),
       new Card({ assignee: 'Chuan', task: 'Research on Bug' }),
     ]),
