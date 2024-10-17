@@ -706,7 +706,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('duplicate card in a stack is not allowed', async function (assert) {
+    test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -794,6 +794,30 @@ module('Acceptance | interact submode tests', function (hooks) {
         'Do this and that and this and that',
       );
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+    });
+
+    test<TestContextWithSave>('new card is created in the current realm', async function (assert) {
+      assert.expect(1);
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+      this.onSave((url) => {
+        if (url.href.includes('Pet')) {
+          assert.ok(
+            url.href.startsWith(testRealmURL),
+            `The pet card is saved in the current realm ${testRealmURL}`,
+          );
+        }
+      });
+      await click('[data-test-add-new]');
+      await click('[data-test-card-catalog-create-new-button]');
     });
   });
 
