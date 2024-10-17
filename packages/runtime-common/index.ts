@@ -147,7 +147,7 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
-import type { StackItem } from 'https://cardstack.com/host/lib/stack-item';
+import type { StackItem } from '../host/app/lib/stack-item';
 
 export const maxLinkDepth = 5;
 
