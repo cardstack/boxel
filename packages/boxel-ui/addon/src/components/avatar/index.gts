@@ -30,11 +30,9 @@ export function stringToColor(string: string | null) {
 
 interface Signature {
   Args: {
-    border?: string;
     displayName?: string;
+    userId: string; //this is assumed to be unique
     isReady: boolean;
-    size?: string;
-    userId: string;
   };
   Element: HTMLDivElement;
 }
