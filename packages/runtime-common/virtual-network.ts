@@ -234,6 +234,7 @@ async function withRetries(
       if (
         (globalThis as any).__environment !== 'test' ||
         !baseRealm.inRealm(url) ||
+        !url.href.startsWith('https://boxel-icons.boxel.ai/') ||
         ++attempt > maxAttempts
       ) {
         throw err;
