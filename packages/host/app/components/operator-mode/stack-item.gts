@@ -3,7 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule } from '@ember/runloop';
+import { schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
 
@@ -136,6 +136,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
+  private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
   get permissions(): Permissions {
@@ -442,9 +443,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private doCloseAnimation = dropTask(async () => {
     this.isClosing = true;
-    if (!isTesting()) {
-      // wait for the animation to complete
-      await timeout(100);
+    if (this.itemEl) {
+      await new Promise<void>((resolve) => {
+        scheduleOnce('afterRender', this, () => {
+          const animations = this.itemEl!.getAnimations() || [];
+          Promise.all(animations.map((animation) => animation.finished)).then(
+            () => resolve(),
+          );
+        });
+      });
     }
   });
 
@@ -456,12 +463,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private setupItemEl = (el: HTMLElement) => {
+    this.itemEl = el;
+  };
+
   private get doOpeningAnimation() {
-    return !isTesting() && this.isLastItem;
+    return this.isLastItem;
   }
 
   private get doClosingAnimation() {
-    return !isTesting() && this.isClosing;
+    return this.isClosing;
   }
 
   <template>
@@ -476,6 +487,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
+      {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
         class={{cn 'card' edit=(eq @item.format 'edit')}}
