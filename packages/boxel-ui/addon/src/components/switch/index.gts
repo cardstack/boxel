@@ -1,6 +1,7 @@
-import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+
+import cn from '../..//helpers/cn.ts';
 
 interface SwitchSiganture {
   Args: SwitchArgs;

@@ -10,7 +10,7 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
-import HashIcon from '@cardstack/boxel-icons/photo';
+import HashIcon from '@cardstack/boxel-icons/hash';
 
 function serialize(val: number | null): string | undefined {
   if (val != null && val === 0) {

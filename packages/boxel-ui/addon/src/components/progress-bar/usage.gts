@@ -1,4 +1,3 @@
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -8,6 +7,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { cssVar } from '../..//helpers/css-var.ts';
 import BoxelProgressBar, { type BoxelProgressBarPosition } from './index.gts';
 
 export default class ProgressBarUsage extends Component {

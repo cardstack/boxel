@@ -943,7 +943,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert
         .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
-        .doesNotExist();
+        .exists({ count: 1 });
 
       assert
         .dom(

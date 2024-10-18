@@ -51,7 +51,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     <style scoped>
       .skill-menu {
         --boxel-header-gap: var(--boxel-sp-xxs);
-        --boxel-header-detail-margin-left: 0;
       }
       .skill-menu.pill-menu--minimized {
         --boxel-pill-menu-width: 3.75rem;
