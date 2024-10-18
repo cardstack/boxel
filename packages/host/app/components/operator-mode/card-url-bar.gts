@@ -44,7 +44,7 @@ export default class CardURLBar extends Component<Signature> {
       <div class='realm-info' data-test-card-url-bar-realm-info>
         {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
           <div class='realm-icon'>
-            <RealmIcon @realmInfo={{realmInfo}} />
+            <RealmIcon @realmInfo={{realmInfo}} @canAnimate={{true}} />
           </div>
           <span>in {{realmInfo.name}}</span>
         {{/let}}
