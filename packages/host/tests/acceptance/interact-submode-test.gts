@@ -1373,4 +1373,21 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasText('FadhlanXXX');
     });
   });
+
+  module('workspace index card', function () {
+    test('cannot be deleted', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-more-options-button]');
+      assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
+    });
+  });
 });
