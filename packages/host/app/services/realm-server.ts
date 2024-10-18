@@ -45,6 +45,13 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
+interface CreditInfo {
+  plan: string;
+  creditsIncludedInPlanAllowance: number;
+  creditsUsedInPlanAllowance: number;
+  creditsAvailableInBalance: number;
+}
+
 export default class RealmServerService extends Service {
   @service private declare network: NetworkService;
   @service private declare reset: ResetService;
@@ -164,6 +171,27 @@ export default class RealmServerService extends Service {
           );
         }
       });
+  }
+
+  async fetchCreditInfo(): Promise<CreditInfo> {
+    let response = await this.network.authedFetch(`${this.url.origin}/_user`);
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
+      );
+    }
+    let json = await response.json();
+    let plan = json.included.find((i: { type: string }) => i.type === 'plan');
+    let creditsUsedInPlanAllowance =
+      json.data.attributes.creditsUsedInPlanAllowance;
+    let creditsAvailableInBalance =
+      json.data.attributes.creditsAvailableInBalance;
+    return {
+      plan: plan.attributes.name,
+      creditsIncludedInPlanAllowance: plan.attributes.creditsIncluded,
+      creditsUsedInPlanAllowance,
+      creditsAvailableInBalance,
+    };
   }
 
   private async fetchCatalogRealms() {
