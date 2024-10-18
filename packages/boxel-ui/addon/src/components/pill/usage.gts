@@ -1,6 +1,4 @@
 /* eslint-disable no-console */
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,6 +8,8 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { cssVar } from '../../helpers.ts';
+import { IconPlus } from '../../icons.gts';
 import Pill, { type BoxelPillKind } from './index.gts';
 
 export default class PillUsage extends Component {

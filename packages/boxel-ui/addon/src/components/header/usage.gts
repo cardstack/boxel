@@ -1,5 +1,3 @@
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -9,6 +7,8 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { cssVar } from '../../helpers.ts';
+import { ThreeDotsHorizontal } from '../../icons.gts';
 import BoxelButton from '../button/index.gts';
 import CardContainer from '../card-container/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
