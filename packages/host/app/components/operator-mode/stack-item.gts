@@ -224,6 +224,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
+  private get isTopCard() {
+    return !this.isBuried;
+  }
+
   private get cardContext() {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
@@ -477,6 +481,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 {{#if realmInfo.iconURL}}
                   <RealmIcon
                     @realmInfo={{realmInfo}}
+                    @canAnimate={{this.isTopCard}}
                     class='header-icon'
                     style={{cssVar
                       realm-icon-background=(getContrastColor
@@ -637,7 +642,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .edit .header-icon {
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         border: 1px solid var(--boxel-light);
       }
 
