@@ -63,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
   );
 
-  vscode.commands.registerCommand('boxelrealm.createWorkspace', async (_) => {
+  vscode.commands.registerCommand('boxelrealm.attachToBoxelWorkspaces', async (_) => {
     const realmUrls = await realmFs.getRealmUrls();
     const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
       canPickMany: false,
