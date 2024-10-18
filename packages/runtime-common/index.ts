@@ -351,7 +351,6 @@ export interface Actions {
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  doCloseAnimation: (card: CardDef) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
   runCommand?: (
     card: CardDef, // the card that the command is being run on
