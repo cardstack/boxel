@@ -448,15 +448,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.isClosing = true;
     if (this.itemEl) {
       await new Promise<void>((resolve) => {
-        scheduleOnce('afterRender', this, () => {
-          const animations = this.itemEl!.getAnimations() || [];
-          Promise.all(animations.map((animation) => animation.finished)).then(
-            () => resolve(),
-          );
-        });
+        scheduleOnce('afterRender', this, this.handleCloseAnimation, resolve);
       });
     }
   });
+
+  private handleCloseAnimation(resolve: () => void) {
+    if (!this.itemEl) {
+      return;
+    }
+    const animations = this.itemEl.getAnimations() || [];
+    Promise.all(animations.map((animation) => animation.finished)).then(() =>
+      resolve(),
+    );
+  }
 
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
