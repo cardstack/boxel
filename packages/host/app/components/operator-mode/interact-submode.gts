@@ -34,7 +34,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import { StackItem } from '@cardstack/host/lib/stack-item';
+import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
@@ -252,6 +252,14 @@ export default class InteractSubmode extends Component<Signature> {
           loadedCard = _loadedCard;
         } else {
           loadedCard = card as CardDef;
+        }
+
+        const stackItem = here.allStackItems.find(
+          (item) => item.card === loadedCard,
+        );
+        // if is workspace index card, do not allow deletion
+        if (stackItem && isIndexCard(stackItem)) {
+          throw new Error('Cannot delete workspace index card');
         }
 
         if (!here.itemToDelete) {
