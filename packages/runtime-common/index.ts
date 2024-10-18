@@ -88,6 +88,7 @@ export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
 export * from './realm-permission-queries';
+export * from './user-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
