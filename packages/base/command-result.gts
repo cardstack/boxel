@@ -184,7 +184,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
     <div class='command-result' data-test-command-result>
       <Header
         @title='Search Results'
-        @subtitle='{{this.numberOfCards}} {{if
+        @detail='{{this.numberOfCards}} {{if
           (eq this.numberOfCards 1)
           "Result"
           "Results"

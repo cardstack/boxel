@@ -48,11 +48,11 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         class='header {{if @isActive "active"}}'
         data-test-definition-header
       >
-        <:detail>
+        <:actions>
           <div data-test-definition-file-extension>
             {{@fileExtension}}
           </div>
-        </:detail>
+        </:actions>
       </Header>
       <div class='content'>
         <div class='definition-info'>

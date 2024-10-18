@@ -3,7 +3,7 @@ import type { CardDef, Format } from '../card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
-import { getField } from '@cardstack/runtime-common';
+import { cardTypeIcon, getField } from '@cardstack/runtime-common';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
@@ -13,7 +13,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   };
 }> {
   getFieldIcon = (key: string) => {
-    return getField(this.args.model.constructor, key)?.card?.icon;
+    let fieldInstance = getField(this.args.model.constructor, key).card;
+    return fieldInstance ? cardTypeIcon(fieldInstance) : undefined;
   };
   <template>
     <div class={{cn 'default-card-template' @format}}>

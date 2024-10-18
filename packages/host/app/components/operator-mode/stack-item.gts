@@ -56,6 +56,7 @@ import {
   PermissionsContextName,
   type Permissions,
   Deferred,
+  cardTypeIcon,
 } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
@@ -435,6 +436,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private numberOfHeaderButtons() {
+    if (this.isBuried) {
+      return 0;
+    }
+    if (this.realm.canWrite(this.card.id)) {
+      return 3;
+    }
+    return 2;
+  }
+
   <template>
     <div
       class='item {{if this.isBuried "buried"}}'
@@ -458,11 +469,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <Header
             @size='large'
             @title={{this.headerTitle}}
+            @titleIcon={{cardTypeIcon @item.card}}
             @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             style={{cssVar
               boxel-header-background-color=@item.headerColor
               boxel-header-text-color=(getContrastColor @item.headerColor)
+              boxel-header-icon-container-min-width=(if
+                this.isBuried '50px' '95px'
+              )
+              boxel-header-actions-min-width=(if this.isBuried '50px' '95px')
             }}
             {{on
               'click'
@@ -616,7 +632,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-icon-width: var(--boxel-icon-med);
         --boxel-header-icon-height: var(--boxel-icon-med);
         --boxel-header-padding: var(--boxel-sp-sm);
-        --boxel-header-text-font: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
         --boxel-header-background-color: var(--boxel-light);
         z-index: 1;
@@ -647,9 +662,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .save-indicator {
-        font: var(--boxel-font-sm);
-        padding-top: 0.4rem;
-        padding-left: 0.5rem;
+        font: var(--boxel-font-xs);
         opacity: 0.6;
       }
 
@@ -700,13 +713,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .buried .header {
         cursor: pointer;
-        font: 600 var(--boxel-font);
+        font: 600 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxxs);
         --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-font: var(--boxel-font-size);
+        --boxel-header-text-font: var(--boxel-font-size-xs);
         --boxel-header-icon-width: var(--boxel-icon-sm);
         --boxel-header-icon-height: var(--boxel-icon-sm);
         --boxel-header-border-radius: var(--boxel-border-radius-lg);
+        --boxel-header-title-icon-size: var(--boxel-icon-xxs);
       }
 
       .edit .header {

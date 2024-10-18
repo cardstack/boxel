@@ -1,6 +1,9 @@
-import { fn } from '@ember/helper';
+import CaptionsIcon from '@cardstack/boxel-icons/captions';
+import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { ComponentLike } from '@glint/template';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
   type CSSVariableInfo,
@@ -17,7 +20,8 @@ import BoxelHeader from './index.gts';
 
 export default class HeaderUsage extends Component {
   @tracked title = 'Title';
-  @tracked subtitle = undefined;
+  @tracked titleIcon: ComponentLike<{ Element: Element }> = CaptionsIcon;
+  @tracked detail = undefined;
   @tracked size: 'large' | undefined = 'large';
   @tracked hasBackground = true;
   @tracked isHighlighted = false;
@@ -27,6 +31,12 @@ export default class HeaderUsage extends Component {
   declare boxelHeaderTextFont: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelHeaderTextTransform: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelHeaderTitleIconSize: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelHeaderIconContainerMinWidth: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelHeaderActionsMinWidth: CSSVariableInfo;
 
   get sizes() {
     return ['large', '<anyting other than large>'];
@@ -38,6 +48,9 @@ export default class HeaderUsage extends Component {
       style={{cssVar
         boxel-header-text-font=this.boxelHeaderTextFont.value
         boxel-header-text-transform=this.boxelHeaderTextTransform.value
+        boxel-header-title-icon-size=this.boxelHeaderTitleIconSize.value
+        boxel-header-icon-container-min-width=this.boxelHeaderIconContainerMinWidth.value
+        boxel-header-actions-min-width=this.boxelHeaderActionsMinWidth.value
       }}
     >
       <FreestyleUsage @name='Header'>
@@ -47,7 +60,8 @@ export default class HeaderUsage extends Component {
         <:example>
           <BoxelHeader
             @title={{this.title}}
-            @subtitle={{this.subtitle}}
+            @titleIcon={{this.titleIcon}}
+            @detail={{this.detail}}
             @size={{this.size}}
             @hasBackground={{this.hasBackground}}
             @isHighlighted={{this.isHighlighted}}
@@ -68,11 +82,18 @@ export default class HeaderUsage extends Component {
             @value={{this.title}}
             @onInput={{fn (mut this.title)}}
           />
+          <Args.Component
+            @name='titleIcon'
+            @description='Title icon (often the card type icon)'
+            @value={{this.titleIcon}}
+            @options={{array CaptionsIcon LayoutGridIcon}}
+            @onChange={{fn (mut this.titleIcon)}}
+          />
           <Args.String
-            @name='subtitle'
-            @description='Subtitle'
-            @value={{this.subtitle}}
-            @onInput={{fn (mut this.subtitle)}}
+            @name='detail'
+            @description='detail'
+            @value={{this.detail}}
+            @onInput={{fn (mut this.detail)}}
           />
           <Args.String
             @name='size'
@@ -125,6 +146,30 @@ export default class HeaderUsage extends Component {
             @value={{this.boxelHeaderTextTransform.value}}
             @onInput={{this.boxelHeaderTextTransform.update}}
           />
+          <Css.Basic
+            @name='boxel-header-title-icon-size'
+            @type='length'
+            @description='width and height of the title icon'
+            @defaultValue={{this.boxelHeaderTitleIconSize.defaults}}
+            @value={{this.boxelHeaderTitleIconSize.value}}
+            @onInput={{this.boxelHeaderTitleIconSize.update}}
+          />
+          <Css.Basic
+            @name='boxel-header-icon-container-min-width'
+            @type='length'
+            @description='minimum width of the icon container; useful to set matching boxel-header-actions-min-width to keep the title centered opverall'
+            @defaultValue={{this.boxelHeaderIconContainerMinWidth.defaults}}
+            @value={{this.boxelHeaderIconContainerMinWidth.value}}
+            @onInput={{this.boxelHeaderIconContainerMinWidth.update}}
+          />
+          <Css.Basic
+            @name='boxel-header-actions-min-width'
+            @type='length'
+            @description='minimum width of the actions container; useful to set matching boxel-header-icon-container-min-width to keep the title centered opverall'
+            @defaultValue={{this.boxelHeaderActionsMinWidth.defaults}}
+            @value={{this.boxelHeaderActionsMinWidth.value}}
+            @onInput={{this.boxelHeaderActionsMinWidth.update}}
+          />
         </:cssVars>
       </FreestyleUsage>
 
@@ -147,11 +192,11 @@ export default class HeaderUsage extends Component {
             @hasBackground={{true}}
             class='definition-container'
           >
-            <:detail>
+            <:actions>
               <div>
                 .gts
               </div>
-            </:detail>
+            </:actions>
           </BoxelHeader>
         </:example>
       </FreestyleUsage>
@@ -159,7 +204,7 @@ export default class HeaderUsage extends Component {
         <:example>
           <BoxelHeader
             @title=' Results'
-            @subtitle='25 results'
+            @detail='25 results'
             @hasBackground={{this.hasBackground}}
             @isHighlighted={{this.isHighlighted}}
             class='command-results'
