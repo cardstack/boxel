@@ -1388,7 +1388,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       await click('[data-test-more-options-button]');
       assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
-      await click('[data-test-close-button]');
     });
   });
 });
