@@ -26,19 +26,46 @@ interface Signature {
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
+      doCloseAnimation: () => void,
     ) => void;
   };
   Blocks: {};
 }
 
 export default class OperatorModeStack extends Component<Signature> {
+  private closeAnimation = new WeakMap<StackItem, () => void>();
+
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
+
+    // do closing animation on last item
+    const lastItem = this.args.stackItems[this.args.stackItems.length - 1];
+    const closeAnimation = this.closeAnimation.get(lastItem);
+    if (closeAnimation) {
+      await closeAnimation();
+    }
+
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
+
+  private setupStackItem = (
+    item: StackItem,
+    doClearSelections: () => void,
+    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+    doScrollIntoView: (selector: string) => void,
+    doCloseAnimation: () => void,
+  ) => {
+    this.args.setupStackItem(
+      item,
+      doClearSelections,
+      doWithStableScroll,
+      doScrollIntoView,
+    );
+    this.closeAnimation.set(item, doCloseAnimation);
+  };
 
   <template>
     <div ...attributes>
@@ -52,7 +79,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
-            @setupStackItem={{@setupStackItem}}
+            @setupStackItem={{this.setupStackItem}}
           />
         {{/each}}
       </div>
@@ -76,6 +103,7 @@ export default class OperatorModeStack extends Component<Signature> {
         padding: var(--stack-padding-top) var(--boxel-sp)
           var(--stack-padding-bottom);
         position: relative;
+        transition: padding-top var(--boxel-transition);
       }
       .operator-mode-stack.with-bg-image:before {
         content: ' ';
