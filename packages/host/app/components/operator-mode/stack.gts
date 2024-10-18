@@ -41,7 +41,7 @@ export default class OperatorModeStack extends Component<Signature> {
 
     // do closing animation on last item
     const lastItem = this.args.stackItems[this.args.stackItems.length - 1];
-    await this.args.publicAPI.doCloseAnimation(lastItem);
+    await this.args.publicAPI.doCloseAnimation(lastItem.card);
 
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });

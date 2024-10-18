@@ -147,7 +147,6 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
-import type { StackItem } from '@cardstack/host/lib/stack-item';
 
 export const maxLinkDepth = 5;
 
@@ -352,7 +351,7 @@ export interface Actions {
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  doCloseAnimation: (item: StackItem) => Promise<void>;
+  doCloseAnimation: (card: CardDef) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
   runCommand?: (
     card: CardDef, // the card that the command is being run on
