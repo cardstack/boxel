@@ -269,10 +269,8 @@ module('Integration | card-editor', function (hooks) {
 
     await waitFor('[data-test-field="firstName"]'); // we need to wait for the card instance to load
     assert.dom('[data-test-field="firstName"] input').hasValue('Mango');
-    assert.dom('[data-test-field="nickName"]').containsText('Mango-poo');
-    assert
-      .dom('[data-test-field="nickName"] input')
-      .doesNotExist('computeds do not have an input field');
+    assert.dom('[data-test-field="nickName"] input').hasValue('Mango-poo');
+    assert.dom('[data-test-field="nickName"] input').hasAttribute('disabled');
     assert.dom('[data-test-field="lastName"] input').hasValue('Abdel-Rahman');
   });
 
