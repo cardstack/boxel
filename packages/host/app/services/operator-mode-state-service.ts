@@ -337,7 +337,7 @@ export default class OperatorModeStateService extends Service {
     // solve UX issues with back button referring back to request url of redirect
     // when it should refer back to the previous code path
     this.state.codePath = codePath;
-    this.router.replaceWith('card', {
+    this.router.replaceWith('index', {
       queryParams: {
         operatorModeState: this.serialize(),
       },
