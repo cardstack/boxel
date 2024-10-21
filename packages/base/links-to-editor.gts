@@ -15,6 +15,7 @@ import {
   type Box,
   type Field,
   CardContext,
+  realmURL,
 } from './card-api';
 import {
   chooseCard,
@@ -115,10 +116,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
-  create = () => {
-    (this.createCard as unknown as Descriptor<any, any[]>).perform();
-  };
-
   remove = () => {
     this.args.model.value = null;
   };
@@ -147,23 +144,16 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter: { type } },
       {
-        offerToCreate: { ref: type, relativeTo: undefined },
+        offerToCreate: {
+          ref: type,
+          relativeTo: undefined,
+          realmURL: this.args.model.value?.[realmURL],
+        },
         createNewCard: this.cardContext?.actions?.createCard,
       },
     );
     if (chosenCard) {
       this.args.model.value = chosenCard;
-    }
-  });
-
-  private createCard = restartableTask(async () => {
-    let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: CardDef | undefined =
-      await this.cardContext?.actions?.createCard(type, undefined, {
-        isLinkedCard: true,
-      });
-    if (newCard) {
-      this.args.model.value = newCard;
     }
   });
 }

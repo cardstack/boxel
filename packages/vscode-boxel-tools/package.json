@@ -2,7 +2,7 @@
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
   "description": "Access boxel realm data and code from your vscode workspace.",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "publisher": "cardstack",
   "private": true,
   "license": "MIT",
@@ -29,8 +29,8 @@
         "category": "boxelrealm"
       },
       {
-        "command": "boxelrealm.createWorkspace",
-        "title": "Create Workspace",
+        "command": "boxelrealm.attachToBoxelWorkspaces",
+        "title": "Attach to Boxel Workspaces",
         "category": "boxelrealm"
       }
     ],
@@ -40,7 +40,7 @@
           "command": "boxelrealm.logout"
         },
         {
-          "command": "boxelrealm.createWorkspace"
+          "command": "boxelrealm.attachToBoxelWorkspaces"
         }
       ]
     },
@@ -66,6 +66,7 @@
     "vscode:publish": "pnpm vsce publish --no-dependencies",
     "vscode:publish:prerelease": "pnpm vsce publish --no-dependencies --pre-release",
     "compile": "node esbuild.mjs --production",
+    "compile:development": "node esbuild.mjs",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --cache",
