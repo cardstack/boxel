@@ -60,6 +60,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               @kind='primary-dark'
               @disabled={{this._generateCode.isRunning}}
               @loading={{this._generateCode.isRunning}}
+              data-test-generate-app
             >
               {{#unless this._generateCode.isRunning}}
                 <span class='generate-button-logo' />
@@ -83,6 +84,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                   {{on 'click' this.viewModule}}
                   class='view-module-button'
                   @kind='text-only'
+                  data-test-view-module
                 >
                   <@fields.moduleURL />
                 </Button>
@@ -102,6 +104,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                   @kind='primary-dark'
                   @disabled={{this._createInstance.isRunning}}
                   @loading={{this._createInstance.isRunning}}
+                  data-test-create-instance
                 >
                   {{#unless this._createInstance.isRunning}}
                     <span class='generate-button-logo' />
