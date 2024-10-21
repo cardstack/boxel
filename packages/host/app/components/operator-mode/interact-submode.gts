@@ -75,7 +75,6 @@ const stackItemScrollers = new WeakMap<
     scrollIntoView: (_selector: string) => void;
   }
 >();
-const closeAnimation = new WeakMap<StackItem, () => void>();
 
 interface NeighborStackTriggerButtonSignature {
   Element: HTMLButtonElement;
