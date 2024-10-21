@@ -26,7 +26,6 @@ interface Signature {
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
-      doCloseAnimation: () => void,
     ) => void;
   };
   Blocks: {};
