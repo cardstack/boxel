@@ -40,12 +40,10 @@ import type ResetService from './reset';
 
 const log = logger('service:realm');
 
-export type EnhancedRealmInfo = RealmInfo & { isIndexing: boolean };
-
-interface Meta {
-  info: EnhancedRealmInfo;
+export type EnhancedRealmInfo = RealmInfo & {
+  isIndexing: boolean;
   isPublic: boolean;
-}
+};
 
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
@@ -56,7 +54,7 @@ class RealmResource {
   @service private declare network: NetworkService;
   @service private declare messageService: MessageService;
 
-  @tracked meta: Meta | undefined;
+  info: EnhancedRealmInfo | undefined; // TrackedObject
 
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
@@ -99,12 +97,12 @@ class RealmResource {
     this.tokenRefresher.perform();
   }
 
-  get info() {
-    return this.meta?.info;
-  }
+  // get info() {
+  //   return this.meta?.info;
+  // }
 
   get isPublic() {
-    return this.meta?.isPublic;
+    return this.info?.isPublic;
   }
 
   get claims(): JWTPayload | undefined {
@@ -115,9 +113,7 @@ class RealmResource {
   }
 
   get canRead() {
-    return (
-      !!this.meta?.isPublic || !!this.claims?.permissions?.includes('read')
-    );
+    return !!this.isPublic || !!this.claims?.permissions?.includes('read');
   }
 
   get canWrite() {
@@ -143,12 +139,12 @@ class RealmResource {
       return;
     }
 
-    await this.fetchMeta();
+    await this.fetchInfo();
     this.subscription = {
       unsubscribe: this.messageService.subscribe(
         this.realmURL,
         ({ type, data: dataStr }: { type: string; data: string }) => {
-          if (!this.meta) {
+          if (!this.info) {
             console.warn(
               `No realm meta exists for ${this.realmURL} when trying to set indexing status`,
             );
@@ -163,10 +159,10 @@ class RealmResource {
           }
           switch (data.type) {
             case 'incremental-index-initiation':
-              this.meta.info.isIndexing = true;
+              this.info.isIndexing = true;
               break;
             case 'incremental':
-              this.meta.info.isIndexing = false;
+              this.info.isIndexing = false;
               break;
             default:
               throw assertNever(data);
@@ -195,23 +191,23 @@ class RealmResource {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
-    this.fetchMetaTask.cancelAll();
+    this.fetchInfoTask.cancelAll();
     this.fetchingMeta = undefined;
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
   private fetchingMeta: Promise<void> | undefined;
 
-  async fetchMeta(): Promise<void> {
+  async fetchInfo(): Promise<void> {
     if (!this.fetchingMeta) {
-      this.fetchingMeta = this.fetchMetaTask.perform();
+      this.fetchingMeta = this.fetchInfoTask.perform();
     }
     await this.fetchingMeta;
   }
 
-  private fetchMetaTask = dropTask(async () => {
+  private fetchInfoTask = dropTask(async () => {
     try {
-      if (this.meta) {
+      if (this.info) {
         return;
       }
       let headers: Record<string, string> = {
@@ -236,10 +232,7 @@ class RealmResource {
       let isPublic = Boolean(
         response.headers.get('x-boxel-realm-public-readable'),
       );
-      this.meta = {
-        info: new TrackedObject({ ...info, isIndexing: false }),
-        isPublic,
-      };
+      this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {
       this.fetchingMeta = undefined;
     }
@@ -294,7 +287,7 @@ export default class RealmService extends Service {
 
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
-    await resource.fetchMeta();
+    await resource.fetchInfo();
   }
 
   async login(realmURL: string): Promise<void> {
@@ -316,11 +309,12 @@ export default class RealmService extends Service {
         showAsCatalog: null,
         visibility: 'private',
         isIndexing: false,
+        isPublic: false,
       };
     }
 
-    if (!resource.meta) {
-      resource.fetchMeta();
+    if (!resource.info) {
+      resource.fetchInfo();
       return {
         name: 'Unknown Workspace',
         backgroundURL: null,
@@ -328,9 +322,10 @@ export default class RealmService extends Service {
         showAsCatalog: null,
         visibility: 'private',
         isIndexing: false,
+        isPublic: false,
       };
     } else {
-      return resource.meta.info;
+      return resource.info;
     }
   };
 
@@ -375,8 +370,10 @@ export default class RealmService extends Service {
   };
 
   get allRealmsMeta() {
-    const realmsMeta: Record<string, { info: RealmInfo; canWrite: boolean }> =
-      Object.create(null);
+    const realmsMeta: Record<
+      string,
+      { info: EnhancedRealmInfo; canWrite: boolean }
+    > = Object.create(null);
     for (const [url, _resource] of this.realms.entries()) {
       realmsMeta[url] = this.meta(url);
     }

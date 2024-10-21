@@ -21,6 +21,8 @@ export default class RealmIcon extends Component<Signature> {
       class='realm-icon {{if this.showAnimation "indexing"}}'
       data-test-realm-indexing-indicator={{this.showAnimation}}
       data-test-realm-icon-url={{@realmInfo.iconURL}}
+      {{! hide this from percy since it might be animating !}}
+      data-test-percy-hide
       ...attributes
     />
 
