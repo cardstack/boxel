@@ -10,7 +10,7 @@
       "command": "pnpm",
       "args": ["watch"],
       "isBackground": true,
-      "problemMatcher": ["$tsc"]
+      "problemMatcher": ["$tsc-watch"]
     }
   ]
 }
