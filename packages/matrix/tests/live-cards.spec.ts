@@ -168,5 +168,28 @@ test.describe('Live Cards', () => {
     await expect(
       page.locator(`[data-test-stack-card="${realmURL}test"]`),
     ).toContainText('Hello Mango !!!!');
+
+    // assert that code mode file tree is live bound
+    await page.goto(
+      `${realmURL}?operatorModeState=${encodeURIComponent(
+        JSON.stringify({
+          stacks: [],
+          codePath: `${realmURL}index.json`,
+          fileView: 'browser',
+          submode: 'code',
+        }),
+      )}`,
+    );
+    await expect(page.locator('[data-test-file="index.json"]')).toHaveCount(1);
+    await expect(page.locator('[data-test-file="hello.txt"]')).toHaveCount(0);
+    let instance2Path = join(
+      realmServer.realmPath,
+      '..',
+      'user1',
+      realmName,
+      'hello.txt',
+    );
+    writeFileSync(instance2Path, 'hi');
+    await expect(page.locator('[data-test-file="hello.txt"]')).toHaveCount(1);
   });
 });

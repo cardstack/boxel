@@ -14,6 +14,7 @@ import {
   type JSONAPISingleResourceDocument,
 } from './card-api';
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import CodeIcon from '@cardstack/boxel-icons/code';
 
 class BaseView extends Component<typeof CodeRefField> {
   <template>
@@ -27,6 +28,7 @@ class BaseView extends Component<typeof CodeRefField> {
 }
 
 export default class CodeRefField extends FieldDef {
+  static icon = CodeIcon;
   static [primitive]: ResolvedCodeRef;
 
   static [serialize](

@@ -28,7 +28,7 @@ export class Author extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContentContainer>
-        <h3><@fields.title /></h3>
+        <h3>Yo, my name is: <@fields.title /></h3>
         <p><@fields.body /></p>
       </CardContentContainer>
     </template>

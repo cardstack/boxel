@@ -1,10 +1,16 @@
 import Accordion from './components/accordion/index.gts';
 import AddButton from './components/add-button/index.gts';
+import Avatar from './components/avatar/index.gts';
 import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
+import DndKanbanBoard, {
+  type DndKanbanBoardArgs,
+  Card as DndCard,
+  Column as DndColumn,
+} from './components/drag-and-drop/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
@@ -28,6 +34,7 @@ import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
 import Pill from './components/pill/index.gts';
+import ProgressBar from './components/progress-bar/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
@@ -41,6 +48,7 @@ import Tooltip from './components/tooltip/index.gts';
 export {
   Accordion,
   AddButton,
+  Avatar,
   BoxelButton,
   BoxelDropdown,
   BoxelDropdownAPI,
@@ -57,6 +65,10 @@ export {
   CardContainer,
   CardContentContainer,
   CircleSpinner,
+  DndCard,
+  DndColumn,
+  DndKanbanBoard,
+  DndKanbanBoardArgs,
   FieldContainer,
   Filter,
   FilterList,
@@ -69,6 +81,7 @@ export {
   Message,
   Modal,
   Pill,
+  ProgressBar,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,

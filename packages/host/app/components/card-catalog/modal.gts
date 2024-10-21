@@ -75,7 +75,11 @@ type Request = {
   search: Search;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+      realmURL: URL | undefined;
+    };
     createNewCard?: CreateNewCard;
   };
 };
@@ -177,6 +181,7 @@ export default class CardCatalogModal extends Component<Signature> {
                           this.createNew
                           this.state.request.opts.offerToCreate.ref
                           this.state.request.opts.offerToCreate.relativeTo
+                          this.state.request.opts.offerToCreate.realmURL
                         )
                       }}
                       data-test-card-catalog-create-new-button
@@ -337,7 +342,11 @@ export default class CardCatalogModal extends Component<Signature> {
   async chooseCard<T extends CardDef>(
     query: CardCatalogQuery,
     opts?: {
-      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+      offerToCreate?: {
+        ref: CodeRef;
+        relativeTo: URL | undefined;
+        realmURL: URL | undefined;
+      };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
       preselectedCardTypeQuery?: Query;
@@ -368,7 +377,11 @@ export default class CardCatalogModal extends Component<Signature> {
     async <T extends CardDef>(
       query: CardCatalogQuery,
       opts: {
-        offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+        offerToCreate?: {
+          ref: CodeRef;
+          relativeTo: URL | undefined;
+          realmURL: URL | undefined;
+        };
         multiSelect?: boolean;
         preselectedCardTypeQuery?: Query;
       } = {},
@@ -592,14 +605,19 @@ export default class CardCatalogModal extends Component<Signature> {
     this.pickCard.perform(cardUrlOrCardDef, state);
   }
 
-  @action createNew(ref: CodeRef, relativeTo: URL | undefined) {
-    this.createNewTask.perform(ref, relativeTo);
+  @action createNew(
+    ref: CodeRef,
+    relativeTo: URL | undefined,
+    realmURL: URL | undefined,
+  ) {
+    this.createNewTask.perform(ref, relativeTo, realmURL);
   }
 
   createNewTask = task(
     async (
       ref: CodeRef,
       relativeTo: URL | undefined /* this should be the catalog entry ID */,
+      realmURL: URL | undefined,
     ) => {
       if (!this.state) {
         return;
@@ -617,10 +635,11 @@ export default class CardCatalogModal extends Component<Signature> {
           relativeTo,
           {
             isLinkedCard: true,
+            realmURL,
           },
         );
       } else {
-        newCard = await createNewCard(ref, relativeTo);
+        newCard = await createNewCard(ref, relativeTo, { realmURL });
       }
       this.pick(newCard, currentState);
     },

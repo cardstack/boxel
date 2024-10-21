@@ -15,6 +15,7 @@ import {
   type DBAdapter,
   type QueuePublisher,
   type RealmPermissions,
+  upsertUser,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
@@ -411,6 +412,15 @@ export class RealmServer {
           } ms`,
         );
       }
+
+      let creationTimeMs = Date.now() - start;
+      if (creationTimeMs > 15_000) {
+        let msg = `it took a long time, ${creationTimeMs} ms, to create realm for ${ownerUserId}, ${JSON.stringify(
+          json.data.attributes,
+        )}`;
+        console.error(msg);
+        Sentry.captureMessage(msg);
+      }
     }
 
     let response = createResponse({
@@ -529,6 +539,11 @@ export class RealmServer {
       [userId]: DEFAULT_PERMISSIONS,
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
+
+    // It's not desirable to have user insertion entangled with realm creation–
+    // In the future we could refactor this to handle user creation in a separate
+    // endpoint
+    await upsertUser(this.dbAdapter, ownerUserId);
 
     writeJSONSync(join(realmPath, '.realm.json'), {
       name,

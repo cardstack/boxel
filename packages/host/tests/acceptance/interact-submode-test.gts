@@ -889,7 +889,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
     });
 
-    test<TestContextWithSave>('duplicate card in a stack is not allowed', async function (assert) {
+    test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -977,6 +977,30 @@ module('Acceptance | interact submode tests', function (hooks) {
         'Do this and that and this and that',
       );
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+    });
+
+    test<TestContextWithSave>('new card is created in the current realm', async function (assert) {
+      assert.expect(1);
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+      this.onSave((url) => {
+        if (url.href.includes('Pet')) {
+          assert.ok(
+            url.href.startsWith(testRealmURL),
+            `The pet card is saved in the current realm ${testRealmURL}`,
+          );
+        }
+      });
+      await click('[data-test-add-new]');
+      await click('[data-test-card-catalog-create-new-button]');
     });
   });
 
@@ -1102,7 +1126,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert
         .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
-        .doesNotExist();
+        .exists({ count: 1 });
 
       assert
         .dom(
@@ -1530,6 +1554,23 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
         .hasText('FadhlanXXX');
+    });
+  });
+
+  module('workspace index card', function () {
+    test('cannot be deleted', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-more-options-button]');
+      assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
     });
   });
 });

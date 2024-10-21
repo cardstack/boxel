@@ -12,6 +12,7 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
+import CurrencyEthereum from '@cardstack/boxel-icons/currency-ethereum';
 
 function isChecksumAddress(address: string): boolean {
   return getAddress(address) === address;
@@ -75,6 +76,7 @@ class Edit extends Component<typeof EthereumAddressField> {
 
 export default class EthereumAddressField extends FieldDef {
   static displayName = 'EthereumAddress';
+  static icon = CurrencyEthereum;
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends BaseDefConstructor>(

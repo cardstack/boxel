@@ -287,6 +287,11 @@ export async function enterWorkspace(
     page.locator(`[data-test-workspace="${workspace}"]`),
   ).toHaveCount(1);
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
+  await expect(
+    page.locator(
+      `[data-test-stack-card-index="0"] [data-test-boxel-header-title]`,
+    ),
+  ).toContainText(workspace);
 }
 
 export async function showAllCards(page: Page) {

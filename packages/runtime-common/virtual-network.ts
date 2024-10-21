@@ -3,6 +3,8 @@ import { baseRealm } from './index';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
+  type ModuleLike,
+  ModuleDescriptor,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
@@ -15,6 +17,7 @@ export type Handler = (req: Request) => Promise<Response | null>;
 export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
+  private importMap: Map<string, (rest: string) => string> = new Map();
 
   constructor(nativeFetch = globalThis.fetch.bind(globalThis)) {
     this.nativeFetch = nativeFetch;
@@ -22,6 +25,11 @@ export class VirtualNetwork {
   }
 
   resolveImport = (moduleIdentifier: string) => {
+    for (let [prefix, handler] of this.importMap) {
+      if (moduleIdentifier.startsWith(prefix)) {
+        return handler(moduleIdentifier.slice(prefix.length));
+      }
+    }
     if (!isUrlLike(moduleIdentifier)) {
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
     }
@@ -30,12 +38,20 @@ export class VirtualNetwork {
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
 
-  shimModule(moduleIdentifier: string, module: Record<string, any>) {
+  shimModule(moduleIdentifier: string, module: ModuleLike) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
+  }
+
+  shimAsyncModule(descriptor: ModuleDescriptor) {
+    this.packageShimHandler.shimAsyncModule(descriptor);
   }
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
+  }
+
+  addImportMap(prefix: string, handler: (rest: string) => string): void {
+    this.importMap.set(prefix, handler);
   }
 
   private nativeFetch: typeof globalThis.fetch;
@@ -217,7 +233,8 @@ async function withRetries(
     } catch (err: any) {
       if (
         (globalThis as any).__environment !== 'test' ||
-        !baseRealm.inRealm(url) ||
+        (!baseRealm.inRealm(url) &&
+          !url.href.startsWith('https://boxel-icons.boxel.ai/')) ||
         ++attempt > maxAttempts
       ) {
         throw err;

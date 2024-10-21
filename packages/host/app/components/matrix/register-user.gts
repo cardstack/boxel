@@ -585,9 +585,10 @@ export default class RegisterUser extends Component<Signature> {
         console.log('Error verifying token', e);
 
         let extractedError = extractTokenErrorMessage(e);
-        let errorText = extractedError || e.message;
-
-        this.tokenError = `There was an error verifying token: ${errorText}`;
+        let errorText =
+          extractedError ||
+          'This registration token does not exist or has exceeded its usage limit.';
+        this.tokenError = errorText;
 
         if (!extractedError) {
           throw e;

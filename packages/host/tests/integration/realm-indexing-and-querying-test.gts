@@ -1360,9 +1360,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       cleanWhiteSpace(`
           <div class="fitted-template">
             <div class="thumbnail-section">
-              <div class="card-thumbnail">
-                <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
-              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions card-type-icon" viewBox="0 0 24 24" data-test-card-type-icon><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>
             </div>
             <div class="info-section">
               <h3 class="card-title" data-test-card-title></h3>
@@ -3307,6 +3305,10 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
         'http://localhost:4202/test/person',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
