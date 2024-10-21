@@ -114,7 +114,7 @@ export default class RealmDropdown extends Component<Signature> {
 
   get realms(): RealmDropdownItem[] {
     let items: RealmDropdownItem[] | [] = [];
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsMeta)) {
+    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
       if (!realmMeta.canWrite) {
         continue;
       }

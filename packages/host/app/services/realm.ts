@@ -97,10 +97,6 @@ class RealmResource {
     this.tokenRefresher.perform();
   }
 
-  // get info() {
-  //   return this.meta?.info;
-  // }
-
   get isPublic() {
     return this.info?.isPublic;
   }
@@ -369,7 +365,7 @@ export default class RealmService extends Service {
     };
   };
 
-  get allRealmsMeta() {
+  get allRealmsInfo() {
     const realmsMeta: Record<
       string,
       { info: EnhancedRealmInfo; canWrite: boolean }
@@ -383,13 +379,13 @@ export default class RealmService extends Service {
   @cached
   get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let maybePersonalRealm = `${this.realmServer.url.href}${this.matrixService.userName}/personal/`;
-    if (Object.keys(this.allRealmsMeta).find((r) => r === maybePersonalRealm)) {
+    if (Object.keys(this.allRealmsInfo).find((r) => r === maybePersonalRealm)) {
       return {
         path: maybePersonalRealm,
-        info: this.allRealmsMeta[maybePersonalRealm].info,
+        info: this.allRealmsInfo[maybePersonalRealm].info,
       };
     }
-    let writeableRealms = Object.entries(this.allRealmsMeta)
+    let writeableRealms = Object.entries(this.allRealmsInfo)
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
@@ -398,11 +394,11 @@ export default class RealmService extends Service {
     if (!first) {
       log.debug(
         `No writable realms found, known realms and writability: ${Object.keys(
-          this.allRealmsMeta,
+          this.allRealmsInfo,
         )
           .map(
             (realmUrl) =>
-              `${realmUrl}: ${this.allRealmsMeta[realmUrl].canWrite}`,
+              `${realmUrl}: ${this.allRealmsInfo[realmUrl].canWrite}`,
           )
           .join(', ')}`,
       );
@@ -419,10 +415,10 @@ export default class RealmService extends Service {
       return this.defaultWritableRealm;
     }
 
-    let allRealmsMetaEntries = Object.entries(this.allRealmsMeta);
+    let allRealmsInfoEntries = Object.entries(this.allRealmsInfo);
 
-    if (allRealmsMetaEntries.length > 0) {
-      let firstMeta = allRealmsMetaEntries[0];
+    if (allRealmsInfoEntries.length > 0) {
+      let firstMeta = allRealmsInfoEntries[0];
       return { path: firstMeta[0], info: firstMeta[1].info };
     }
 
