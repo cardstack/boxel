@@ -468,11 +468,13 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .dom('[data-test-card-format="edit"][data-test-field-component-card]')
       .exists();
     assert
-      .dom('[data-test-field="transferAmount"] > [data-test-boxel-field-label]')
+      .dom(
+        '[data-test-field="transferAmount"] > .label-container > [data-test-boxel-field-label]',
+      )
       .hasText('Transfer Amount');
     assert
       .dom(
-        '[data-test-field="transferAmount"] > [data-test-compound-field-format="edit"] [data-test-field="quantity"] input',
+        '[data-test-field="transferAmount"] > .content > [data-test-compound-field-format="edit"] [data-test-field="quantity"] input',
       )
       .hasValue('250');
     assert.dom('[data-test-field="quantity"]').hasClass('vertical');
