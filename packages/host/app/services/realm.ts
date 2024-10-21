@@ -54,7 +54,7 @@ class RealmResource {
   @service private declare network: NetworkService;
   @service private declare messageService: MessageService;
 
-  info: EnhancedRealmInfo | undefined; // TrackedObject
+  @tracked info: EnhancedRealmInfo | undefined;
 
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
@@ -142,7 +142,7 @@ class RealmResource {
         ({ type, data: dataStr }: { type: string; data: string }) => {
           if (!this.info) {
             console.warn(
-              `No realm meta exists for ${this.realmURL} when trying to set indexing status`,
+              `No realm info exists for ${this.realmURL} when trying to set indexing status`,
             );
             return;
           }
@@ -188,17 +188,17 @@ class RealmResource {
     this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
     this.fetchInfoTask.cancelAll();
-    this.fetchingMeta = undefined;
+    this.fetchingInfo = undefined;
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
-  private fetchingMeta: Promise<void> | undefined;
+  private fetchingInfo: Promise<void> | undefined;
 
   async fetchInfo(): Promise<void> {
-    if (!this.fetchingMeta) {
-      this.fetchingMeta = this.fetchInfoTask.perform();
+    if (!this.fetchingInfo) {
+      this.fetchingInfo = this.fetchInfoTask.perform();
     }
-    await this.fetchingMeta;
+    await this.fetchingInfo;
   }
 
   private fetchInfoTask = dropTask(async () => {
@@ -230,7 +230,7 @@ class RealmResource {
       );
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {
-      this.fetchingMeta = undefined;
+      this.fetchingInfo = undefined;
     }
   });
 
