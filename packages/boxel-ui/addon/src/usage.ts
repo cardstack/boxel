@@ -7,6 +7,7 @@ import AvatarUsage from './components/avatar/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
+import CardHeaderUsage from './components/card-header/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import DndUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
@@ -39,6 +40,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
   ['CardContentContainer', CardContentContainerUsage],
+  ['CardHeader', CardHeaderUsage],
   ['CircleSpinner', CircleSpinnerUsage],
   ['DragAndDrop', DndUsage],
   ['DropdownTrigger', DropdownTriggerUsage],

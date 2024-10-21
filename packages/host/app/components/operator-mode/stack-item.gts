@@ -28,7 +28,7 @@ import {
   BoxelDropdown,
   Menu as BoxelMenu,
   CardContainer,
-  Header,
+  CardHeader,
   IconButton,
   Tooltip,
   LoadingIndicator,
@@ -439,16 +439,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
-  private numberOfHeaderButtons() {
-    if (this.isBuried) {
-      return 0;
-    }
-    if (this.realm.canWrite(this.card.id)) {
-      return 3;
-    }
-    return 2;
-  }
-
   <template>
     <div
       class='item {{if this.isBuried "buried"}}'
@@ -469,19 +459,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <span class='loading__message'>Loading card...</span>
           </div>
         {{else}}
-          <Header
-            @size='large'
+          <CardHeader
             @title={{this.headerTitle}}
             @titleIcon={{cardTypeIcon @item.card}}
-            @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             style={{cssVar
-              boxel-header-background-color=@item.headerColor
-              boxel-header-text-color=(getContrastColor @item.headerColor)
-              boxel-header-icon-container-min-width=(if
+              boxel-card-header-background-color=@item.headerColor
+              boxel-card-header-text-color=(getContrastColor @item.headerColor)
+              boxel-card-header-icon-container-min-width=(if
                 this.isBuried '50px' '95px'
               )
-              boxel-header-actions-min-width=(if this.isBuried '50px' '95px')
+              boxel-card-header-actions-min-width=(if
+                this.isBuried '50px' '95px'
+              )
             }}
             {{on
               'click'
@@ -491,7 +481,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             }}
             data-test-stack-card-header
           >
-            <:icon>
+            <:realmIcon>
               {{#let (this.realm.info this.card.id) as |realmInfo|}}
                 {{#if realmInfo.iconURL}}
                   <RealmIcon
@@ -502,13 +492,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         @item.headerColor 'transparent'
                       )
                     }}
-                    data-test-boxel-header-icon={{realmInfo.iconURL}}
+                    data-test-card-header-realm-icon={{realmInfo.iconURL}}
                     {{on 'mouseenter' this.hoverOnRealmIcon}}
                     {{on 'mouseleave' this.hoverOnRealmIcon}}
                   />
                 {{/if}}
               {{/let}}
-            </:icon>
+            </:realmIcon>
             <:actions>
               {{#if (this.realm.canWrite this.card.id)}}
                 {{#if (eq @item.format 'isolated')}}
@@ -603,7 +593,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 {{/if}}
               </div>
             </:detail>
-          </Header>
+          </CardHeader>
           <div
             class='content'
             {{ContentElement onSetup=this.setupContentEl}}

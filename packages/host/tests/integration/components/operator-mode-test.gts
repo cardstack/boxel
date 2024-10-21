@@ -446,7 +446,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert
-      .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
+      .dom(`[data-test-card-header-realm-icon="https://example-icon.test"]`)
       .exists();
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
@@ -1935,16 +1935,16 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    await waitFor('[data-test-boxel-header-icon]');
+    await waitFor('[data-test-card-header-realm-icon]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert
-      .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
+      .dom(`[data-test-card-header-realm-icon="https://example-icon.test"]`)
       .exists();
-    await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseenter');
+    await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseenter');
     assert
       .dom('[data-test-boxel-header-title]')
       .hasText('In Operator Mode Workspace');
-    await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseleave');
+    await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseleave');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
   });
 
