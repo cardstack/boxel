@@ -1,3 +1,4 @@
+import Service from '@ember/service';
 import { waitFor, click, findAll } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -27,6 +28,12 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+class MockRouterService extends Service {
+  replaceWith(_route, _args) {
+    // This is a stub method that does nothing
+  }
+}
+
 module('Integration | create app module via ai-assistant', function (hooks) {
   const noop = () => {};
   let loader: Loader;
@@ -42,6 +49,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
+    this.owner.register('service:router', MockRouterService);
   });
 
   setupLocalIndexing(hooks);
