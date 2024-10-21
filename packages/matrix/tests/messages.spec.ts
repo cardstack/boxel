@@ -194,7 +194,7 @@ test.describe('Room messages', () => {
           {
             id: testCard,
             title: 'Hassan',
-            realmIconUrl: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+            realmIconUrl: 'https://boxel-images.boxel.ai/icons/cardstack.png',
           },
         ],
       },
