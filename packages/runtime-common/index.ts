@@ -88,6 +88,7 @@ export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
 export * from './realm-permission-queries';
+export * from './user-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -199,6 +200,7 @@ export async function chooseCard<T extends BaseDef>(
     };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
+    preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;
