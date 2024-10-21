@@ -424,7 +424,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Check that realm icons in the schema editor are correct (card and its fields)
 
     let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
-    let realm2IconUrl = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+    let realm2IconUrl = 'https://boxel-images.boxel.ai/icons/cardstack.png';
 
     await waitFor(
       // using non test selectors to disambiguate what we are waiting for, as
