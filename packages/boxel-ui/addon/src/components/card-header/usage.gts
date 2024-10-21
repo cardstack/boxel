@@ -21,7 +21,6 @@ export default class HeaderUsage extends Component {
   @tracked detail = undefined;
   @tracked size: 'large' | undefined = 'large';
   @tracked hasBackground = true;
-  @tracked isHighlighted = false;
   @tracked hasBottomBorder = false;
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
@@ -81,10 +80,17 @@ export default class HeaderUsage extends Component {
             @onChange={{fn (mut this.titleIcon)}}
           />
           <Args.Yield
-            @name='icon'
-            @description='Content for the icon of the header'
+            @name='realmIcon'
+            @description='This named block is rendered on the left side of the component.'
           />
-          <Args.Yield @description='Content' />
+          <Args.Yield
+            @name='actions'
+            @description='This named block is rendered on the right side of the component.'
+          />
+          <Args.Yield
+            @name='detail'
+            @description='This named block is rendered underneat the title in the center.'
+          />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
