@@ -1,18 +1,17 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import type { ComponentLike } from '@glint/template';
 
 import cn from '../../helpers/cn.ts';
-import { bool, eq, or } from '../../helpers/truth-helpers.ts';
+import { eq, or } from '../../helpers/truth-helpers.ts';
+import Label from '../label/index.gts';
 
 interface Signature {
   Args: {
-    detail?: string;
     hasBackground?: boolean;
     hasBottomBorder?: boolean;
     isHighlighted?: boolean;
     size?: 'large';
+    subtitle?: string;
     title?: string;
-    titleIcon?: ComponentLike<{ Element: Element }>;
   };
   Blocks: {
     actions: [];
@@ -35,34 +34,34 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if (has-block 'icon')}}
-      <div class='icon' data-test-boxel-header-icon>
-        {{yield to='icon'}}
-      </div>
+      {{yield to='icon'}}
     {{/if}}
 
-    {{#if (or (bool @title) (has-block 'detail') (bool @detail))}}
+    {{#if (or @subtitle @title)}}
       <div
         class='title {{if (has-block "detail") "with-detail"}}'
         data-test-boxel-header-title
       >
-        {{#if @titleIcon}}<@titleIcon />{{/if}}
         {{#if @title}}{{@title}}{{/if}}
-        {{#if (has-block 'detail')}}
-          <div data-test-boxel-header-label class='detail'>
-            {{yield to='detail'}}
-          </div>
-        {{else if @detail}}
-          <div data-test-boxel-header-label class='detail'>
-            {{@detail}}
-          </div>
+        {{#if @subtitle}}
+          <Label data-test-boxel-header-label>
+            {{@subtitle}}
+
+          </Label>
         {{/if}}
+      </div>
+    {{/if}}
+
+    {{#if (has-block 'detail')}}
+      <div class='detail'>
+        {{yield to='detail'}}
       </div>
     {{/if}}
 
     {{yield}}
 
     {{#if (has-block 'actions')}}
-      <div class='actions' data-test-boxel-header-actions>
+      <div class='content' data-test-boxel-header-content>
         {{yield to='actions'}}
       </div>
     {{/if}}
@@ -70,10 +69,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     @layer {
       header {
-        --inner-boxel-header-title-icon-size: var(
-          --boxel-header-title-icon-size,
-          1rem
-        );
         --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
         position: relative;
         display: flex;
@@ -104,24 +99,17 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         text-overflow: var(--boxel-header-text-overflow, ellipsis);
         overflow: hidden;
         text-wrap: nowrap;
-        flex-grow: 1;
+      }
+      header .title.with-detail {
+        max-width: var(
+          --boxel-header-detail-max-width,
+          calc(100% - 23rem)
+        ); /* fits last saved message */
       }
       .large {
         padding: var(--boxel-header-padding, var(--boxel-sp-xl));
         font: var(--boxel-header-font-weight, 600)
-          var(--boxel-header-text-font, var(--boxel-font-sm));
-      }
-
-      header.large .title {
-        text-align: center;
-      }
-      header .title > :deep(svg) {
-        display: inline-block;
-        vertical-align: middle;
-        max-height: var(--inner-boxel-header-title-icon-size);
-        max-width: var(--inner-boxel-header-title-icon-size);
-        margin-right: var(--boxel-sp-xxxs);
-        margin-bottom: calc(1rem - var(--boxel-font-size-sm));
+          var(--boxel-header-text-font, var(--boxel-font-lg));
       }
       .hasBottomBorder {
         border-bottom: 1px solid
@@ -136,19 +124,14 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       .highlighted {
         background-color: var(--boxel-highlight);
       }
-      .icon {
-        display: flex;
-        align-items: center;
-        min-width: var(--boxel-header-icon-container-min-width);
-        justify-content: left;
-      }
-      .actions {
+      .content {
         display: flex;
         align-items: center;
         margin-left: auto;
         gap: var(--boxel-sp-xxs);
-        min-width: var(--boxel-header-actions-min-width);
-        justify-content: right;
+      }
+      .detail {
+        margin-left: var(--boxel-header-detail-margin-left, auto);
       }
     }
   </style>
