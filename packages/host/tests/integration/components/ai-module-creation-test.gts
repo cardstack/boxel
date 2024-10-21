@@ -29,7 +29,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | create app module via ai-assistant', function (hooks) {
   const noop = () => {};
-  const testCardsRealm = 'http://localhost:4202/test/';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
