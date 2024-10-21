@@ -14,7 +14,7 @@ import {
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
-  getLiveCards,
+  getCards,
   codeRefWithAbsoluteURL,
   type Query,
   type Loader,
@@ -353,19 +353,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
         },
       };
     }
-    this.liveQuery = getLiveCards(
+    // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
+    this.liveQuery = getCards(
       query,
       [this.currentRealm.href], // we're only searching in the current realm
-      async (ready: Promise<void> | undefined) => {
-        if (this.args.context?.actions) {
-          this.args.context.actions.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              await ready;
-            },
-          );
-        }
-      },
     );
   }
 

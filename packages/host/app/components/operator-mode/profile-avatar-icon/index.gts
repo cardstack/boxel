@@ -11,8 +11,8 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 interface Signature {
   Args: {
     userId: string | null;
-    size?: string; // CSS length value
-    border?: string; // CSS border value
+    size?: string;
+    border?: string;
   };
   Element: HTMLDivElement;
 }

@@ -17,6 +17,7 @@ import {
   baseRealm,
   type LooseSingleCardDocument,
   Deferred,
+  SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -115,6 +116,11 @@ module('Acceptance | interact submode tests', function (hooks) {
           </GridContainer>
         </template>
       };
+    }
+
+    class Puppy extends Pet {
+      static displayName = 'Puppy';
+      @field age = contains(StringField);
     }
 
     class ShippingInfo extends FieldDef {
@@ -217,13 +223,39 @@ module('Acceptance | interact submode tests', function (hooks) {
       };
     }
 
+    class Personnel extends Person {
+      static displayName = 'Personnel';
+    }
+
+    let generateCatalogEntry = (
+      fileName: string,
+      title: string,
+      ref: { module: string; name: string },
+    ) => ({
+      [`${fileName}.json`]: new CatalogEntry({
+        title,
+        description: `Catalog entry for ${title}`,
+        isField: false,
+        ref,
+      }),
+    });
+    let catalogEntries = {};
+    for (let i = 0; i < 5; i++) {
+      let entry = generateCatalogEntry(`p-${i + 1}`, `Personnel-${i + 1}`, {
+        module: `${testRealmURL}personnel`,
+        name: 'Personnel',
+      });
+      catalogEntries = { ...catalogEntries, ...entry };
+    }
+
     let mangoPet = new Pet({ name: 'Mango' });
 
     ({ realm } = await setupAcceptanceTestRealm({
       contents: {
         'address.gts': { Address },
         'person.gts': { Person },
-        'pet.gts': { Pet },
+        'personnel.gts': { Personnel },
+        'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
         'person-entry.json': new CatalogEntry({
@@ -233,6 +265,25 @@ module('Acceptance | interact submode tests', function (hooks) {
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
+          },
+        }),
+        'pet-entry.json': new CatalogEntry({
+          title: 'Pet Card',
+          description: 'Catalog entry for Pet Card',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        }),
+        ...catalogEntries,
+        'puppy-entry.json': new CatalogEntry({
+          title: 'Puppy Card',
+          description: 'Catalog entry for Puppy Card',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}pet`,
+            name: 'Puppy',
           },
         }),
         'Pet/mango.json': mangoPet,
@@ -268,6 +319,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
         'grid.json': new CardsGrid(),
         'index.json': new CardsGrid(),
         '.realm.json': {
@@ -672,16 +724,9 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(4);
+      assert.expect(7);
       await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}index`,
-              format: 'isolated',
-            },
-          ],
-        ],
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
       let deferred = new Deferred<void>();
       this.onSave((_, json) => {
@@ -697,6 +742,13 @@ module('Acceptance | interact submode tests', function (hooks) {
         deferred.fulfill();
       });
       await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist('No card is pre-selected');
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 7 });
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('3 not shown', 'Entries are paginated');
       await click(`[data-test-select="${testRealmURL}person-entry"]`);
       await click('[data-test-card-catalog-go-button]');
 
@@ -706,7 +758,138 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('duplicate card in a stack is not allowed', async function (assert) {
+    test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
+      assert.expect(12);
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+      let deferred: Deferred<SingleCardDocument<string>> | undefined;
+      this.onSave((_, json) => {
+        if (typeof json === 'string') {
+          throw new Error('expected JSON save data');
+        }
+        deferred?.fulfill(json);
+      });
+
+      await click('[data-test-boxel-filter-list-button="Person"]');
+      await click('[data-test-create-new-card-button]');
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 10 });
+      assert
+        .dom('[data-test-show-more-cards]')
+        .doesNotExist('All cards are visible');
+      assert
+        .dom(
+          `[data-test-card-catalog-item="${testRealmURL}person-entry"][data-test-card-catalog-item-selected]`,
+        )
+        .exists('Person catalog entry is pre-selected');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .exists({ count: 1 }, 'Only 1 card is selected');
+
+      await click('[data-test-card-catalog-cancel-button]');
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist(
+          'Pre-selection is cleared when filter does not specify card type',
+        );
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 7 });
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('3 not shown', 'Entries are paginated');
+      await click('[data-test-card-catalog-cancel-button]');
+
+      await click('[data-test-boxel-filter-list-button="Puppy"]');
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom(
+          `[data-test-card-catalog-item="${testRealmURL}puppy-entry"][data-test-card-catalog-item-selected]`,
+        )
+        .exists('Puppy catalog entry is pre-selected');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .exists({ count: 1 }, 'Only 1 card is selected');
+      await click('[data-test-card-catalog-go-button]');
+
+      deferred = new Deferred<SingleCardDocument<string>>();
+      await fillIn(`[data-test-field="name"] input`, 'Snoopy');
+      await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+
+      let json = await deferred.promise;
+      assert.strictEqual(json.data.attributes?.name, 'Snoopy');
+      assert.strictEqual(json.data.meta.realmURL, testRealmURL);
+      assert.deepEqual(
+        json.data.meta.adoptsFrom,
+        {
+          module: '../pet',
+          name: 'Puppy',
+        },
+        'Created card type is correct',
+      );
+    });
+
+    test<TestContextWithSave>('can change selection on card catalog after a card was pre-selected', async function (assert) {
+      assert.expect(10);
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      let deferred: Deferred<SingleCardDocument<string>> | undefined;
+      this.onSave((_, json) => {
+        if (typeof json === 'string') {
+          throw new Error('expected JSON save data');
+        }
+        deferred?.fulfill(json);
+      });
+
+      await click('[data-test-boxel-filter-list-button="Puppy"]');
+      await click('[data-test-create-new-card-button]');
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 10 });
+      assert
+        .dom('[data-test-show-more-cards]')
+        .doesNotExist('All cards are visible');
+      assert
+        .dom(
+          `[data-test-card-catalog-item="${testRealmURL}puppy-entry"][data-test-card-catalog-item-selected]`,
+        )
+        .exists('Puppy catalog entry is pre-selected');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .exists({ count: 1 }, 'Only 1 card is selected');
+
+      await click(`[data-test-select="${baseRealm.url}types/card"]`); // changing card selection
+      assert
+        .dom(
+          `[data-test-card-catalog-item="${baseRealm.url}types/card"][data-test-card-catalog-item-selected]`,
+        )
+        .exists('Card selection has changed');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .exists({ count: 1 }, 'Only 1 card is selected');
+      assert
+        .dom('[data-test-card-catalog-item]')
+        .exists({ count: 10 }, 'All cards are still visible');
+      await click('[data-test-card-catalog-go-button]');
+
+      deferred = new Deferred<SingleCardDocument<string>>();
+      await fillIn(`[data-test-field="title"] input`, 'Hello World');
+      await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+
+      let json = await deferred.promise;
+      assert.strictEqual(json.data.attributes?.title, 'Hello World');
+      assert.strictEqual(json.data.meta.realmURL, testRealmURL);
+      assert.deepEqual(
+        json.data.meta.adoptsFrom,
+        {
+          module: `${baseRealm.url}card-api`,
+          name: 'CardDef',
+        },
+        'Created card type is correct',
+      );
+    });
+
+    test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -794,6 +977,30 @@ module('Acceptance | interact submode tests', function (hooks) {
         'Do this and that and this and that',
       );
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+    });
+
+    test<TestContextWithSave>('new card is created in the current realm', async function (assert) {
+      assert.expect(1);
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+      this.onSave((url) => {
+        if (url.href.includes('Pet')) {
+          assert.ok(
+            url.href.startsWith(testRealmURL),
+            `The pet card is saved in the current realm ${testRealmURL}`,
+          );
+        }
+      });
+      await click('[data-test-add-new]');
+      await click('[data-test-card-catalog-create-new-button]');
     });
   });
 
@@ -1347,6 +1554,23 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
         .hasText('FadhlanXXX');
+    });
+  });
+
+  module('workspace index card', function () {
+    test('cannot be deleted', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-more-options-button]');
+      assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
     });
   });
 });
