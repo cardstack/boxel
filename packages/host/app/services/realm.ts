@@ -56,7 +56,7 @@ class RealmResource {
   @service private declare network: NetworkService;
   @service private declare messageService: MessageService;
 
-  meta: Meta | undefined;
+  @tracked meta: Meta | undefined;
 
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
