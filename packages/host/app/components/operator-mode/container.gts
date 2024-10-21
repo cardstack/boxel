@@ -20,7 +20,6 @@ import InteractSubmode from '@cardstack/host/components/operator-mode/interact-s
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
-  getLiveSearchResults,
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
@@ -81,21 +80,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action
   trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
     return trackCard(owner, card, realmURL);
-  }
-
-  // public API
-  @action
-  getLiveCards(
-    query: Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): Search {
-    return getLiveSearchResults(
-      this,
-      query,
-      realms,
-      doWhileRefreshing ? () => doWhileRefreshing : undefined,
-    );
   }
 
   private saveSource = task(async (url: URL, content: string) => {

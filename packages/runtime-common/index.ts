@@ -88,6 +88,7 @@ export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
 export * from './realm-permission-queries';
+export * from './user-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -178,7 +179,11 @@ export interface CardChooser {
   chooseCard<T extends BaseDef>(
     query: CardCatalogQuery,
     opts?: {
-      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+      offerToCreate?: {
+        ref: CodeRef;
+        relativeTo: URL | undefined;
+        realmURL: URL | undefined;
+      };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -188,7 +193,11 @@ export interface CardChooser {
 export async function chooseCard<T extends BaseDef>(
   query: CardCatalogQuery,
   opts?: {
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+      realmURL: URL | undefined;
+    };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
   },
@@ -222,14 +231,6 @@ export interface CardSearch {
     cardError?: undefined | { id: string; error: Error };
   };
   trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
-  getLiveCards(
-    query: Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
 }
 
 export interface CardCatalogQuery extends Query {
@@ -267,16 +268,6 @@ export function trackCard<T extends object>(
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.trackCard(owner, card, realmURL);
-}
-
-export function getLiveCards(
-  query: Query,
-  realms?: string[],
-  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCards(query, realms, doWhileRefreshing);
 }
 
 export interface CardCreator {

@@ -63,23 +63,26 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
   );
 
-  vscode.commands.registerCommand('boxelrealm.createWorkspace', async (_) => {
-    const realmUrls = await realmFs.getRealmUrls();
-    const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
-      canPickMany: false,
-      placeHolder: 'Select a realm to open',
-    });
-    console.log('Selected realm', selectedRealm);
-    vscode.workspace.updateWorkspaceFolders(
-      0,
-      vscode.workspace.workspaceFolders
-        ? vscode.workspace.workspaceFolders.length
-        : 0,
-      {
-        uri: vscode.Uri.parse(`boxelrealm+${selectedRealm}`),
-        name: `realm-${selectedRealm}`,
-      },
-    );
-    await vscode.commands.executeCommand('workbench.view.explorer');
-  });
+  vscode.commands.registerCommand(
+    'boxelrealm.attachToBoxelWorkspaces',
+    async (_) => {
+      const realmUrls = await realmFs.getRealmUrls();
+      const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
+        canPickMany: false,
+        placeHolder: 'Select a realm to open',
+      });
+      console.log('Selected realm', selectedRealm);
+      vscode.workspace.updateWorkspaceFolders(
+        0,
+        vscode.workspace.workspaceFolders
+          ? vscode.workspace.workspaceFolders.length
+          : 0,
+        {
+          uri: vscode.Uri.parse(`boxelrealm+${selectedRealm}`),
+          name: `realm-${selectedRealm}`,
+        },
+      );
+      await vscode.commands.executeCommand('workbench.view.explorer');
+    },
+  );
 }

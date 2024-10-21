@@ -29,8 +29,8 @@
         "category": "boxelrealm"
       },
       {
-        "command": "boxelrealm.createWorkspace",
-        "title": "Create Workspace",
+        "command": "boxelrealm.attachToBoxelWorkspaces",
+        "title": "Attach to Boxel Workspaces",
         "category": "boxelrealm"
       }
     ],
@@ -40,7 +40,7 @@
           "command": "boxelrealm.logout"
         },
         {
-          "command": "boxelrealm.createWorkspace"
+          "command": "boxelrealm.attachToBoxelWorkspaces"
         }
       ]
     },
