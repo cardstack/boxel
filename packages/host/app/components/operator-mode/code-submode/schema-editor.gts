@@ -64,43 +64,38 @@ interface TitleSignature {
 }
 
 const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
-  Schema Editor
-
-  {{#if @hasModuleError}}
-    <span class='syntax-error'>Fail to parse</span>
-  {{else}}
-    <div class='total-fields' data-test-total-fields>
-      <span class='total-fields-value'>{{@totalFields}}</span>
-      <span class='total-fields-label'>{{getPlural 'Field' @totalFields}}</span>
-    </div>
-  {{/if}}
+  <div class='schema-editor-title'>
+    <h3 class='title'>Schema Editor</h3>
+    {{#if @hasModuleError}}
+      <div class='description'>Failed to parse</div>
+    {{else}}
+      <div class='description' data-test-total-fields>
+        {{@totalFields}}
+        {{getPlural 'Field' @totalFields}}
+      </div>
+    {{/if}}
+  </div>
 
   <style scoped>
-    .syntax-error {
-      margin-left: auto;
-      color: var(--boxel-400);
-      font-size: var(--boxel-font-size-sm);
-      font-weight: 500;
-      margin-right: var(--boxel-sp-sm);
-      margin-top: 3px;
-    }
-    .total-fields {
+    .schema-editor-title {
+      width: 100%;
       display: flex;
-      align-items: baseline;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
       gap: var(--boxel-sp-xxxs);
-      margin-left: auto;
     }
-
-    .total-fields > * {
+    .title {
       margin: 0;
+      color: var(--boxel-dark);
+      font: 600 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp-xs);
     }
-
-    .total-fields-value {
-      font: 600 var(--boxel-font);
-    }
-
-    .total-fields-label {
-      font: var(--boxel-font-sm);
+    .description {
+      color: var(--boxel-450);
+      font: 500 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-xl);
+      text-transform: uppercase;
     }
   </style>
 </template>;

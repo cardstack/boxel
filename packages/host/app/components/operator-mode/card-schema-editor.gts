@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -163,25 +163,22 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .schema-editor-pill {
+        --pill-icon-size: 1.125rem;
+      }
+
+      .realm-icon {
+        border-radius: 4px;
       }
 
       .total-fields {
-        display: flex;
-        align-items: baseline;
-        gap: var(--boxel-sp-xxxs);
-        margin-left: auto;
-      }
-
-      .total-fields > * {
-        margin: 0;
-      }
-
-      .total-fields-value {
-        font: 600 var(--boxel-font);
-      }
-
-      .total-fields-label {
-        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
+        text-transform: uppercase;
       }
 
       .add-field-button {
@@ -248,12 +245,18 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
+                class='schema-editor-pill'
                 @kind='button'
                 {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
                 <:icon>
-                  <RealmIcon @realmInfo={{this.realm.info @cardType.module}} />
+                  <RealmIcon
+                    class='realm-icon'
+                    width='18'
+                    height='18'
+                    @realmInfo={{this.realm.info @cardType.module}}
+                  />
                 </:icon>
                 <:default>
                   {{@cardType.displayName}}
@@ -271,13 +274,10 @@ export default class CardSchemaEditor extends Component<Signature> {
           </Tooltip>
           <div class='total-fields' data-test-total-fields>
             {{#if (gt this.totalOwnFields 0)}}
-              <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
-              <span class='total-fields-label'>{{getPlural
-                  'Field'
-                  this.totalOwnFields
-                }}</span>
+              {{concat '+' this.totalOwnFields}}
+              {{getPlural 'Field' this.totalOwnFields}}
             {{else}}
-              <span class='total-fields-label'>No Fields</span>
+              No Fields
             {{/if}}
           </div>
         </div>

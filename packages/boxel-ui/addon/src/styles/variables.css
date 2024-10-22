@@ -64,7 +64,7 @@
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
   --boxel-border-flexible: 1px solid rgba(255, 255, 255, 0.35);
-  --boxel-border-card: 1px solid rgba(0,0,0, 0.1 );
+  --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
   --boxel-border-radius-xs: 1.5px;
   --boxel-border-radius-sm: 6px;
   --boxel-border-radius: 7.5px;
@@ -87,11 +87,11 @@
   --boxel-xl-container: 65rem; /* 1040px */
   --boxel-xxl-container: 83.76rem; /* 1340px */
 
-
   /* COLOR PALETTE */
 
   /**** Revisited Colors BOXEL-UI ****/
   --boxel-100: #f8f7fa;
+  --boxel-150: #ebeaed;
   --boxel-200: #e8e8e8;
   --boxel-300: #d1d1d1;
   --boxel-400: #afafb7;

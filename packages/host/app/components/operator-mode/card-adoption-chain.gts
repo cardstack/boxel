@@ -33,7 +33,7 @@ export default class CardAdoptionChain extends Component<Signature> {
   <template>
     <style scoped>
       .card-adoption-chain {
-        background-color: var(--boxel-200);
+        background-color: var(--boxel-150);
         min-height: 100%;
         padding: var(--boxel-sp-sm);
       }

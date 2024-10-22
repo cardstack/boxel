@@ -19,7 +19,7 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .accordion {
       --accordion-background-color: var(--boxel-light);
-      --accordion-border: var(--boxel-border);
+      --accordion-border: 1px solid var(--boxel-400);
       --accordion-border-radius: var(--boxel-border-radius-xl);
 
       display: flex;

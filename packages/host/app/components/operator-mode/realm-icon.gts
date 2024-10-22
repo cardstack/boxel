@@ -12,7 +12,7 @@ interface Signature {
 const RealmIcon: TemplateOnlyComponent<Signature> = <template>
   <img
     src={{@realmInfo.iconURL}}
-    alt='Icon for workspace {{@realmInfo.name}}'
+    alt={{@realmInfo.name}}
     data-test-realm-icon-url={{@realmInfo.iconURL}}
     ...attributes
   />
