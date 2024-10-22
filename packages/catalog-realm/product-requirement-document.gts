@@ -261,11 +261,9 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       if (!this.args.context?.actions?.runCommand) {
         throw new Error('Context action "runCommand" is not available');
       }
-      console.log('generating code, current module: ', import.meta.url);
       let skillCardUrl = new URL('./SkillCard/app-generator', import.meta.url)
         .href;
 
-      console.log('generating code, skill card url', skillCardUrl);
       await this.args.context.actions.runCommand(
         this.args.model as CardDef,
         skillCardUrl,
