@@ -52,15 +52,41 @@ export class Directory implements vscode.FileStat {
 
 export type Entry = File | Directory;
 
+const selectedRealmKey = 'selectedRealms';
 export class RealmFS implements vscode.FileSystemProvider {
   root = new Directory('');
   realmClients: Map<string, RealmAuthClient> = new Map();
   realmsInitialized = false;
   jwtPromises: Map<string, Promise<string>> = new Map();
-  selectedRealms: Set<string> = new Set();
 
+  private context: vscode.ExtensionContext;
+  private selectedRealms: Set<string> = new Set();
   private realmDirNamePromises: Map<string, Promise<string>> = new Map();
   private realmDirNameToUrl: Map<string, string> = new Map();
+
+  constructor(context: vscode.ExtensionContext) {
+    this.context = context;
+
+    let selectedRealms = this.context.globalState.get<string>(selectedRealmKey);
+    if (selectedRealms && typeof selectedRealms === 'string') {
+      this.selectedRealms = new Set(selectedRealms.split(','));
+    } else {
+      this.selectedRealms = new Set();
+    }
+  }
+
+  addSelectedRealms(realmURL: string) {
+    this.selectedRealms.add(realmURL);
+    this.context.globalState.update(
+      selectedRealmKey,
+      Array.from(this.selectedRealms).join(','),
+    );
+  }
+
+  resetSelectedRealms() {
+    this.selectedRealms = new Set();
+    this.context.globalState.update(selectedRealmKey, undefined);
+  }
 
   async getRealmUrls() {
     if (!this.realmsInitialized) {
@@ -377,9 +403,8 @@ export class RealmFS implements vscode.FileSystemProvider {
   }
 
   private async _fetchRootDirectoryEntry(uri: vscode.Uri) {
-    const realmUrls = await this.getRealmUrls();
-    for (const selectedRealmURL of realmUrls) {
-      let realmDirName = await this._getRealmDirName(selectedRealmURL);
+    for (const selectedRealmURL of this.selectedRealms) {
+      let realmDirName = await this.getRealmDirName(selectedRealmURL);
       console.log('Realm directory name:', realmDirName);
 
       let realmDirUri = uri.toString() + realmDirName;
@@ -470,7 +495,7 @@ export class RealmFS implements vscode.FileSystemProvider {
   // Realm directory name format:
   // [REALM NAME] ([REALM PATH join with '-'])
   // Example: My Workspace (fadhlan-workspace1)
-  private _getRealmDirName(realmURL: string) {
+  getRealmDirName(realmURL: string) {
     if (!this.realmDirNamePromises.has(realmURL)) {
       let promise = (async () => {
         let realmName = await this._getRealmName(realmURL);
