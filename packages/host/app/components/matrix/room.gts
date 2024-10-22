@@ -70,7 +70,7 @@ export default class Room extends Component<Signature> {
               />
             {{/each}}
           {{else}}
-            <NewSession @sendPrompt={{this.sendPrompt}} />
+            <NewSession @sendPrompt={{this.sendMessage}} />
           {{/if}}
           {{#if this.room}}
             <AiAssistantSkillMenu
@@ -238,12 +238,9 @@ export default class Room extends Component<Signature> {
     this.doSendMessage.perform(
       myLastMessage.message,
       attachedCards,
+      true,
       myLastMessage.clientGeneratedId,
     );
-  }
-
-  @action sendPrompt(prompt: string) {
-    this.doSendMessage.perform(prompt); // sends the prompt only
   }
 
   @action
@@ -252,7 +249,7 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private sendMessage() {
+  private sendMessage(prompt?: string) {
     let cards = [];
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
@@ -263,8 +260,9 @@ export default class Room extends Component<Signature> {
       });
     }
     this.doSendMessage.perform(
-      this.messageToSend,
+      prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
+      Boolean(prompt),
     );
   }
 
@@ -305,10 +303,16 @@ export default class Room extends Component<Signature> {
     async (
       message: string | undefined,
       cards?: CardDef[],
+      keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
     ) => {
-      this.matrixService.messagesToSend.set(this.args.roomId, undefined);
-      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      if (!keepInputAndAttachments) {
+        // this is for situations when a message is sent via some other way than the text box
+        // (example: ai prompt from new-session screen)
+        // if there were cards attached or a typed — but not sent — message, do not erase or remove them
+        this.matrixService.messagesToSend.set(this.args.roomId, undefined);
+        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      }
       let context = {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.operatorModeStateService
