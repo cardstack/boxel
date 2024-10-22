@@ -1247,7 +1247,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-cards-grid-item]');
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom(`[data-test-stack-card-index="2"]`).exists();
-    await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    await click('[data-test-stack-card-index="0"] [data-test-card-header]');
     assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -1930,7 +1930,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card-index="1"]`, { count: 1 });
   });
 
-  test('displays realm name as header title when hovering realm icon', async function (assert) {
+  test('displays realm name in tooltip when hovering realm icon', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1948,7 +1948,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseenter');
     assert
-      .dom('[data-test-boxel-card-header-title]')
+      .dom('[data-test-tooltip-content]')
       .hasText('In Operator Mode Workspace');
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseleave');
     assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
