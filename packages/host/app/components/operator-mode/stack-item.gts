@@ -622,11 +622,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header {
-        --boxel-header-icon-width: var(--boxel-icon-med);
-        --boxel-header-icon-height: var(--boxel-icon-med);
-        --boxel-header-padding: var(--boxel-sp-sm);
-        --boxel-header-border-radius: var(--boxel-border-radius-xl);
-        --boxel-header-background-color: var(--boxel-light);
+        --boxel-card-header-icon-width: var(--boxel-icon-med);
+        --boxel-card-header-icon-height: var(--boxel-icon-med);
+        --boxel-card-header-padding: var(--boxel-sp-sm);
+        --boxel-card-header-border-radius: var(--boxel-border-radius-xl);
+        --boxel-card-header-background-color: var(--boxel-light);
         z-index: 1;
         max-width: max-content;
         height: fit-content;
@@ -635,7 +635,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header:not(.edit .header) {
-        --boxel-header-detail-max-width: none;
+        --boxel-card-header-detail-max-width: none;
       }
 
       .header-icon {
@@ -650,8 +650,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header--icon-hovered {
-        --boxel-header-text-color: var(--boxel-highlight);
-        --boxel-header-text-font: var(--boxel-font);
+        --boxel-card-header-text-color: var(--boxel-highlight);
+        --boxel-card-header-text-font: var(--boxel-font);
       }
 
       .save-indicator {
@@ -708,12 +708,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         cursor: pointer;
         font: 600 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxxs);
-        --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-font: var(--boxel-font-size-xs);
-        --boxel-header-icon-width: var(--boxel-icon-sm);
-        --boxel-header-icon-height: var(--boxel-icon-sm);
-        --boxel-header-border-radius: var(--boxel-border-radius-lg);
-        --boxel-header-title-icon-size: var(--boxel-icon-xxs);
+        --boxel-card-header-padding: var(--boxel-sp-xs);
+        --boxel-card-header-text-font: var(--boxel-font-size-xs);
+        --boxel-card-header-icon-width: var(--boxel-icon-sm);
+        --boxel-card-header-icon-height: var(--boxel-icon-sm);
+        --boxel-card-header-border-radius: var(--boxel-border-radius-lg);
+        --boxel-card-header-title-icon-size: var(--boxel-icon-xxs);
       }
 
       .edit .header {
@@ -762,8 +762,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header-icon {
-        width: var(--boxel-header-icon-width);
-        height: var(--boxel-header-icon-height);
+        width: var(--boxel-card-header-icon-width);
+        height: var(--boxel-card-header-icon-height);
       }
 
       .loading {

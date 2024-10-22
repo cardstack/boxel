@@ -444,7 +444,7 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert
       .dom(`[data-test-card-header-realm-icon="https://example-icon.test"]`)
       .exists();
@@ -703,7 +703,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
     assert
-      .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+      .dom(
+        `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+      )
       .includesText('Person');
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
@@ -1271,7 +1273,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     assert
       .dom(
-        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-card-header-title]`,
       )
       .containsText('Person');
 
@@ -1299,7 +1301,7 @@ module('Integration | operator-mode', function (hooks) {
 
     assert
       .dom(
-        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`,
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-card-header-title]`,
       )
       .containsText('Person');
 
@@ -1536,7 +1538,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index="1"]').exists();
     assert
-      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+      .dom(
+        '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
+      )
       .hasText('Publishing Packet');
   });
 
@@ -1716,7 +1720,9 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
-      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+      .dom(
+        '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
+      )
       .hasText('Pet');
   });
 
@@ -1936,16 +1942,16 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor('[data-test-card-header-realm-icon]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert
       .dom(`[data-test-card-header-realm-icon="https://example-icon.test"]`)
       .exists();
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseenter');
     assert
-      .dom('[data-test-boxel-header-title]')
+      .dom('[data-test-boxel-card-header-title]')
       .hasText('In Operator Mode Workspace');
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseleave');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
   });
 
   test(`it has an option to copy the card url`, async function (assert) {
@@ -1979,7 +1985,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert
-      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+      .dom(
+        '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
+      )
       .includesText('Author');
   });
 

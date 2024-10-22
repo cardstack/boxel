@@ -16,8 +16,8 @@ interface Signature {
   Element: HTMLElement;
 }
 
-const Header: TemplateOnlyComponent<Signature> = <template>
-  <header data-test-boxel-header ...attributes>
+const CardHeader: TemplateOnlyComponent<Signature> = <template>
+  <header data-test-card-header ...attributes>
     {{#if (has-block 'realmIcon')}}
       <div class='realm-icon'>
         {{yield to='realmIcon'}}
@@ -27,12 +27,12 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     {{#if (or (bool @title) (has-block 'detail'))}}
       <div
         class='title {{if (has-block "detail") "with-detail"}}'
-        data-test-boxel-header-title
+        data-test-boxel-card-header-title
       >
         {{#if @titleIcon}}<@titleIcon />{{/if}}
         {{#if @title}}{{@title}}{{/if}}
         {{#if (has-block 'detail')}}
-          <div data-test-boxel-header-label class='detail'>
+          <div data-test-boxel-card-header-label class='detail'>
             {{yield to='detail'}}
           </div>
         {{/if}}
@@ -40,7 +40,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
 
     {{#if (has-block 'actions')}}
-      <div class='actions' data-test-boxel-header-actions>
+      <div class='actions' data-test-boxel-card-header-actions>
         {{yield to='actions'}}
       </div>
     {{/if}}
@@ -52,7 +52,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
           --boxel-card-header-title-icon-size,
           1rem
         );
-        --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
         position: relative;
         display: flex;
         align-items: center;
@@ -60,7 +59,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         color: var(--boxel-card-header-text-color, var(--boxel-dark));
         background-color: var(
           --boxel-card-header-background-color,
-          var(--boxel-100)
+          var(--boxel-light)
         );
         border-top-right-radius: calc(
           var(--boxel-card-header-border-radius, var(--boxel-border-radius)) -
@@ -118,4 +117,4 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   </style>
 </template>;
 
-export default Header;
+export default CardHeader;
