@@ -3,7 +3,7 @@ import { getOwner, setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
+import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import { type IndexWriter } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
@@ -101,7 +101,6 @@ export default class CardPrerender extends Component {
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, indexWriter } = this.getRunnerParams(realmURL);
-    await this.resetLoaderInFastboot.perform();
     let currentRun = new CurrentRun({
       realmURL,
       reader,
@@ -123,7 +122,6 @@ export default class CardPrerender extends Component {
       ignoreData: Record<string, string>,
     ) => {
       let { reader, indexWriter } = this.getRunnerParams(realmURL);
-      await this.resetLoaderInFastboot.perform();
       let currentRun = new CurrentRun({
         realmURL,
         reader,
@@ -140,14 +138,6 @@ export default class CardPrerender extends Component {
       return current;
     },
   );
-
-  // perform this in EC task to prevent rerender cycles
-  private resetLoaderInFastboot = restartableTask(async () => {
-    if (this.fastboot.isFastBoot) {
-      await Promise.resolve();
-      this.loaderService.reset();
-    }
-  });
 
   private getRunnerParams(realmURL: URL): {
     reader: Reader;
