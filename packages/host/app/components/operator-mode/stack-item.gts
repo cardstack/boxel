@@ -122,7 +122,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
-  @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
@@ -273,15 +272,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.item.url?.href;
   }
 
-  @action
-  private hoverOnRealmIcon() {
-    this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
-  }
-
   private get headerTitle() {
-    return this.isHoverOnRealmIcon && this.realmName
-      ? `In ${this.realmName}`
-      : cardTypeDisplayName(this.card);
+    return cardTypeDisplayName(this.card);
   }
 
   private get moreOptionsMenuItems() {
@@ -462,7 +454,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <CardHeader
             @title={{this.headerTitle}}
             @titleIcon={{cardTypeIcon @item.card}}
-            class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
+            class='header'
             style={{cssVar
               boxel-card-header-background-color=@item.headerColor
               boxel-card-header-text-color=(getContrastColor @item.headerColor)
@@ -484,18 +476,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <:realmIcon>
               {{#let (this.realm.info this.card.id) as |realmInfo|}}
                 {{#if realmInfo.iconURL}}
-                  <RealmIcon
-                    @realmInfo={{realmInfo}}
-                    class='header-icon'
-                    style={{cssVar
-                      realm-icon-background=(getContrastColor
-                        @item.headerColor 'transparent'
-                      )
-                    }}
-                    data-test-card-header-realm-icon={{realmInfo.iconURL}}
-                    {{on 'mouseenter' this.hoverOnRealmIcon}}
-                    {{on 'mouseleave' this.hoverOnRealmIcon}}
-                  />
+                  <Tooltip @placement='right'>
+                    <:trigger>
+                      <RealmIcon
+                        @realmInfo={{realmInfo}}
+                        class='header-icon'
+                        style={{cssVar
+                          realm-icon-background=(getContrastColor
+                            @item.headerColor 'transparent'
+                          )
+                        }}
+                        data-test-card-header-realm-icon={{realmInfo.iconURL}}
+                      />
+                    </:trigger>
+                    <:content>
+                      In
+                      {{this.realmName}}
+                    </:content>
+                  </Tooltip>
                 {{/if}}
               {{/let}}
             </:realmIcon>
@@ -647,11 +645,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .edit .header-icon {
         background: var(--boxel-light);
         border: 1px solid var(--boxel-light);
-      }
-
-      .header--icon-hovered {
-        --boxel-card-header-text-color: var(--boxel-highlight);
-        --boxel-card-header-text-font: var(--boxel-font);
       }
 
       .save-indicator {
