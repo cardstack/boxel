@@ -83,6 +83,11 @@ export class RealmFS implements vscode.FileSystemProvider {
     );
   }
 
+  deleteSelectedRealms(realmURL: string) {
+    this.selectedRealms.delete(realmURL);
+    this.context.globalState.update(selectedRealmKey, undefined);
+  }
+
   resetSelectedRealms() {
     this.selectedRealms = new Set();
     this.context.globalState.update(selectedRealmKey, undefined);
@@ -313,6 +318,10 @@ export class RealmFS implements vscode.FileSystemProvider {
   async delete(uri: vscode.Uri): Promise<void> {
     const dirname = uri.with({ path: path.posix.dirname(uri.path) });
     const basename = path.posix.basename(uri.path);
+    if (this.realmDirNameToUrl.has(basename)) {
+      this.deleteSelectedRealms(this.realmDirNameToUrl.get(basename)!);
+    }
+
     const parent = await this._lookupAsDirectory(dirname);
     if (!parent.entries.has(basename)) {
       throw vscode.FileSystemError.FileNotFound(uri);
