@@ -1,6 +1,4 @@
 import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { action } from '@ember/object';
-import { get } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -8,12 +6,12 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-
 import Pill from '../pill/index.gts';
+import { action } from '@ember/object';
 import DndKanbanBoard, {
   type ColumnHeaderArgs,
-  Card,
   Column,
+  Card,
 } from './index.gts';
 
 export default class DndUsage extends Component {
@@ -34,12 +32,8 @@ export default class DndUsage extends Component {
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanDropZoneBg: CSSVariableInfo;
 
-  @action handleColumnMove(newColumns: Column[]) {
-    this.columns = newColumns;
-  }
-
-  @action handleCardMove(newColumns: Column[]) {
-    this.columns = newColumns;
+  @action customMoveCardHandler() {
+    console.log('move2');
   }
 
   <template>
@@ -62,15 +56,17 @@ export default class DndUsage extends Component {
         <DndKanbanBoard
           @columns={{this.columns}}
           @columnHeader={{ColumnHeader}}
-          as |card column|
+          @onMoveCard={{this.customMoveCardHandler}}
         >
-          <div class='custom-card'>
-            <Pill @kind='default' class='column-info'>
-              {{column.title}}
-            </Pill>
-            <h3>{{get card 'assignee'}}</h3>
-            <p>{{get card 'task'}}</p>
-          </div>
+          <:card as |card column|>
+            <div class='custom-card'>
+              <Pill @kind='default' class='column-info'>
+                {{column.title}}
+              </Pill>
+              <h3>{{card.assignee}}</h3>
+              <p>{{card.task}}</p>
+            </div>
+          </:card>
         </DndKanbanBoard>
       </:example>
       <:api as |Args|>
@@ -99,8 +95,10 @@ export default class DndUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-
-    <style scoped>
+    <style>
+      .custom-card {
+        padding: var(--boxel-sp);
+      }
       .column-info {
         display: table;
         margin-left: auto;

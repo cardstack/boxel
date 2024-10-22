@@ -6,6 +6,7 @@ import {
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
+import { getCard } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
@@ -18,7 +19,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
-import { fn, array } from '@ember/helper';
+import { fn, array, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import {
   LooseSingleCardDocument,
@@ -27,6 +28,11 @@ import {
 } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from './app-card';
+import {
+  DndKanbanBoard,
+  DndCard as Card,
+  DndColumn as Column,
+} from '@cardstack/boxel-ui/components';
 
 interface ColumnData {
   status: {
@@ -37,10 +43,17 @@ interface ColumnData {
   codeRef: ResolvedCodeRef;
 }
 
-class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
+interface AppTaskCardIsolatedArgs {
+  context: CardContext;
+}
+
+class AppTaskCardIsolated extends Component<
+  typeof AppTaskCard | AppTaskCardIsolatedArgs
+> {
   @tracked isSheetOpen = false;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
+  @tracked triggeredColumnIndex: number | null = null;
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
   get realms(): string[] {
@@ -69,7 +82,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
-  columnData: ColumnData[] = [
+  columnData: any[] = [
     {
       status: {
         label: 'Backlog',
@@ -119,7 +132,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       },
       query: this.getQueryForStatus('Shipped'),
     },
-  ].map((column): ColumnData => {
+  ].map((column): any => {
     return {
       ...column,
       codeRef: this.assignedTaskCodeRef,
@@ -143,8 +156,148 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     }
   }
 
+  columns: any[] = this.columnData.map((column) => {
+    return new Column(column.status.label, column.cards, column);
+  });
+
+  @action
+  updateColumnCards(columnIndex: any, cards: any[]) {
+    const dndCards = cards.map(
+      (card) =>
+        new Card({
+          ...card,
+        }),
+    );
+    this.columns[columnIndex].cards = dndCards;
+  }
+
   get realmURL() {
     return this.args.model[realmURL];
+  }
+
+  @action createNewTask(column: any) {
+    this._createNewTask.perform(column.cardAPI);
+    this.triggeredColumnIndex = column.cardAPI.status.index;
+  }
+
+  _createNewTask = restartableTask(async (column: any, columnIndex: number) => {
+    if (this.realmURL === undefined) {
+      return;
+    }
+
+    try {
+      let cardRef = column.codeRef;
+
+      if (!cardRef) {
+        return;
+      }
+
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: {
+            taskName: null,
+            taskDetail: null,
+            status: column.status,
+            priority: {
+              index: null,
+              label: null,
+            },
+            dueDate: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          relationships: {
+            assignee: {
+              links: {
+                self: null,
+              },
+            },
+            project: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: cardRef,
+          },
+        },
+      };
+
+      console.log(
+        cardRef,
+        new URL(cardRef.module),
+        this.args.model[realmURL],
+        doc,
+      );
+
+      await this.args.context?.actions?.createCard?.(
+        cardRef,
+        new URL(cardRef.module),
+        {
+          realmURL: this.realmURL,
+          doc,
+        },
+      );
+
+      console.log('yes');
+    } catch (error) {
+      console.error('Error creating card:', error);
+    } finally {
+      this.triggeredColumnIndex = null;
+    }
+  });
+
+  @action async onMoveCardMutation(draggedCard: any, newColumn: any) {
+    try {
+      let cardUrl = new URL(draggedCard.data.url);
+      console.log('Attempting to fetch card at URL:', cardUrl);
+
+      let resource = getCard(cardUrl);
+      await resource.loaded;
+
+      const cardInstance: any = resource.card;
+
+      if (cardInstance) {
+        console.log('Card found:', cardInstance);
+        cardInstance.status.index = newColumn.cardAPI.status.index;
+        cardInstance.status.label = newColumn.cardAPI.status.label;
+
+        console.log('Updating card status to:', cardInstance);
+
+        await this.customSaveCard(cardInstance);
+      } else {
+        throw new Error(
+          `Could not find card ${draggedCard.data.url} in the system`,
+        );
+      }
+    } catch (error) {
+      console.error('Error updating card status:', error);
+    }
+  }
+
+  // 自定义保存方法
+  async customSaveCard(cardInstance: any) {
+    const publicAPI = this.args.context?.actions;
+    if (!publicAPI?.saveCard) {
+      throw new Error('saveCard action not available');
+    }
+
+    try {
+      await publicAPI.saveCard(cardInstance, false);
+      console.log('Card saved successfully');
+    } catch (saveError) {
+      console.error('Error in saveCard:', saveError);
+      if (saveError instanceof Error) {
+        console.error(
+          'SaveCard error details:',
+          saveError.message,
+          saveError.stack,
+        );
+      }
+      throw saveError;
+    }
   }
 
   <template>
@@ -185,14 +338,48 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         </button>
       </div>
       <div class='columns-container'>
-        {{#each this.columnData as |column|}}
-          <ColumnQuery
-            @context={{@context}}
-            @realms={{this.realms}}
-            @column={{column}}
-            @realmURL={{this.realmURL}}
-          />
+        {{! this is for update the column data with prerendered }}
+        {{#each this.columns as |column columnIndex|}}
+          {{#let
+            (component @context.prerenderedCardSearchComponent)
+            as |PrerenderedCardSearch|
+          }}
+            <PrerenderedCardSearch
+              @query={{column.cardAPI.query}}
+              @format='fitted'
+              @realms={{this.realms}}
+            >
+              <:loading>
+                loading
+              </:loading>
+              <:response as |cards|>
+                {{this.updateColumnCards columnIndex cards}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/let}}
         {{/each}}
+
+        <DndKanbanBoard
+          @columns={{this.columns}}
+          @onMoveCard={{this.onMoveCardMutation}}
+        >
+          {{! this is the udpated columns with cardAPI Data, modifier is only work after prerendered API return data }}
+          <:card as |card column actions|>
+            <CardContainer
+              {{@context.cardComponentModifier
+                cardId=card.data.url
+                format='data'
+                fieldType=undefined
+                fieldName=undefined
+              }}
+              data-test-cards-grid-item={{removeFileExtension card.data.url}}
+              data-cards-grid-item={{removeFileExtension card.data.url}}
+            >
+              {{card.component}}
+            </CardContainer>
+          </:card>
+        </DndKanbanBoard>
+
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
         <h2>Sheet Content</h2>
@@ -258,6 +445,40 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 
       .dropdown-arrow {
         display: inline-block;
+      }
+      .custom-kanban-layout {
+        display: flex;
+        gap: 1rem;
+        padding: 1rem;
+      }
+      .custom-column {
+        flex: 1;
+        min-width: 250px;
+        background-color: var(--dnd-kanban-header-bg, #f0f0f0);
+        border-radius: 8px;
+        padding: 1rem;
+      }
+      .column-title {
+        margin-bottom: 1rem;
+        font-size: 1.2rem;
+        font-weight: bold;
+      }
+      .create-new-task-button {
+        all: unset;
+        cursor: pointer;
+      }
+      .custom-card {
+        background-color: #ffffff;
+
+        margin-bottom: 0.5rem;
+        transition: all 0.3s ease;
+      }
+      .custom-card.is-on-target {
+        transform: scale(0.95);
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      .custom-card.is-drop-target {
+        background-color: #f0f0f0;
       }
     </style>
   </template>
@@ -345,187 +566,6 @@ export class AppTaskCard extends AppCard {
       return 'App Task';
     },
   });
-}
-
-interface ColumnQuerySignature {
-  Args: {
-    context: CardContext | undefined;
-    realms: string[];
-    column: ColumnData;
-    realmURL: URL | undefined;
-  };
-  Blocks: {
-    default: [];
-  };
-  Element: HTMLDivElement;
-}
-
-class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
-  @action createNewTask(column: ColumnData) {
-    this._createNewTask.perform(column);
-  }
-
-  _createNewTask = restartableTask(async (column: ColumnData) => {
-    if (this.args.realmURL === undefined) {
-      return;
-    }
-    try {
-      let cardRef = column.codeRef;
-
-      if (!cardRef) {
-        return;
-      }
-
-      let doc: LooseSingleCardDocument = {
-        data: {
-          type: 'card',
-          attributes: {
-            taskName: null,
-            taskDetail: null,
-            status: column.status,
-            priority: {
-              index: null,
-              label: null,
-            },
-            dueDate: null,
-            description: null,
-            thumbnailURL: null,
-          },
-          relationships: {
-            assignee: {
-              links: {
-                self: null,
-              },
-            },
-            project: {
-              links: {
-                self: null,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: cardRef,
-          },
-        },
-      };
-
-      await this.args.context?.actions?.createCard?.(
-        cardRef,
-        new URL(cardRef.module),
-        {
-          realmURL: this.args.realmURL,
-          doc,
-        },
-      );
-    } catch (error) {
-      console.error('Error creating card:', error);
-    }
-  });
-
-  <template>
-    <div class='column'>
-      <div class='column-title'>
-        <span>{{@column.status.label}}</span>
-        <div>
-          <button
-            class='create-new-task-button'
-            {{on 'click' (fn this.createNewTask @column)}}
-          >
-            {{#if this._createNewTask.isRunning}}
-              <CircleSpinner width='12px' height='12px' />
-            {{else}}
-              <IconPlus width='12px' height='12px' />
-            {{/if}}
-          </button>
-        </div>
-      </div>
-      <div class='column-data'>
-        <ul class='cards' data-test-cards-grid-cards>
-          {{#let
-            (component @context.prerenderedCardSearchComponent)
-            as |PrerenderedCardSearch|
-          }}
-            <PrerenderedCardSearch
-              @query={{@column.query}}
-              @format='fitted'
-              @realms={{@realms}}
-            >
-              <:response as |cards|>
-                {{#each cards as |card|}}
-                  <li
-                    class='card'
-                    {{@context.cardComponentModifier
-                      cardId=card.url
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                    data-test-cards-grid-item={{removeFileExtension card.url}}
-                    data-cards-grid-item={{removeFileExtension card.url}}
-                  >
-                    <CardContainer @displayBoundaries={{true}}>
-                      {{card.component}}
-                    </CardContainer>
-                  </li>
-                {{/each}}
-              </:response>
-            </PrerenderedCardSearch>
-          {{/let}}
-        </ul>
-      </div>
-    </div>
-
-    <style scoped>
-      .create-new-task-button {
-        all: unset;
-        cursor: pointer;
-      }
-      .column {
-        flex: 0 0 var(--boxel-xs-container);
-        border-right: var(--boxel-border);
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-      }
-
-      .column-title {
-        position: sticky;
-        top: 0;
-        background-color: var(--boxel-100);
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
-        font: var(--boxel-font-sm);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .column-data {
-        flex-grow: 1;
-        overflow-y: auto;
-      }
-
-      .cards {
-        padding: 0;
-        list-style-type: none;
-        display: flex;
-        flex-direction: column;
-      }
-      .card {
-        padding: var(--boxel-sp-xxs);
-      }
-      .modal-content {
-        background-color: white;
-        padding: var(--boxel-sp);
-        border-radius: var(--boxel-border-radius);
-      }
-      .button-container {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp);
-      }
-    </style>
-  </template>
 }
 
 function removeFileExtension(cardUrl: string) {

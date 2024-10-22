@@ -7,7 +7,7 @@ import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import DndKanbanBoard, {
-  type DndKanbanBoardArgs,
+  type DndKanbanBoardSignature,
   Card as DndCard,
   Column as DndColumn,
 } from './components/drag-and-drop/index.gts';
@@ -68,7 +68,7 @@ export {
   DndCard,
   DndColumn,
   DndKanbanBoard,
-  DndKanbanBoardArgs,
+  DndKanbanBoardSignature,
   FieldContainer,
   Filter,
   FilterList,

@@ -7,7 +7,6 @@ import type { ComponentLike } from '@glint/template';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
-//Dnd Kanban Board
 export interface ColumnHeaderArgs {
   title?: string;
 }
@@ -15,12 +14,24 @@ export interface ColumnHeaderArgs {
 export interface DndKanbanBoardArgs<Column> {
   columnHeader?: ComponentLike<ColumnHeaderArgs>;
   columns: Column[];
+  onMoveCard?: (card: Card, column: Column) => void;
 }
 
 export interface DndKanbanBoardSignature<Column> {
   Args: DndKanbanBoardArgs<Column>;
   Blocks: {
-    default: [card: Card, column: Column];
+    default: [
+      {
+        columns: any[];
+        DndDropTargetModifier: any;
+        DndSortableItemModifier: any;
+        moveCard: (event: any) => void;
+        onColumnDragEnter: (columnIndex: number) => void;
+        onColumnDragLeave: () => void;
+        isDropZoneTargeted: (columnIndex: number) => boolean;
+      },
+    ];
+    card: [card: any, column: any];
   };
 }
 
@@ -37,10 +48,12 @@ export class Card {
 export class Column {
   @tracked title: string;
   @tracked cards: Card[];
+  @tracked cardAPI?: any;
 
-  constructor(title: string, cards: Card[] = []) {
+  constructor(title: string, cards: Card[] = [], cardAPI?: any) {
     this.title = title;
     this.cards = cards;
+    this.cardAPI = cardAPI;
   }
 }
 
@@ -159,78 +172,75 @@ export default class DndKanbanBoard extends Component<
     }
 
     this.clearHoveredState();
+
+    if (this.args.onMoveCard) {
+      this.args.onMoveCard(draggedItem, dropTargetParent);
+    }
   }
 
   <template>
     {{#if this.areModifiersLoaded}}
       <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
-        {{#each this.columns as |column columnIndex|}}
-          <div
-            class='column'
-            {{this.DndDropTargetModifier
-              group='cards'
-              data=(hash parent=column)
-              onDrop=this.moveCard
-              onDragEnter=(fn this.onColumnDragEnter columnIndex)
-              onDragLeave=this.onColumnDragLeave
-            }}
-          >
-            <div class='column-header'>
-              {{#if @columnHeader}}
-                <@columnHeader @title={{column.title}} />
-              {{else}}
-                {{column.title}}
-              {{/if}}
-            </div>
-
+        {{#if (has-block 'card')}}
+          {{#each this.columns as |column columnIndex|}}
             <div
-              class='column-drop-zone
-                {{if (this.isDropZoneTargeted columnIndex) "is-hovered"}}'
+              class='column'
+              {{this.DndDropTargetModifier
+                group='cards'
+                data=(hash parent=column)
+                onDrop=this.moveCard
+                onDragEnter=(fn this.onColumnDragEnter columnIndex)
+                onDragLeave=this.onColumnDragLeave
+              }}
             >
-              {{#if (this.isDropZoneTargeted columnIndex)}}
-                <div class='column-drop-zone-overlay'>
-                  Board ordered by Priority
-                </div>
-              {{/if}}
+              <div class='column-header'>
+                {{#if @columnHeader}}
+                  <@columnHeader @title={{column.title}} />
+                {{else}}
+                  {{column.title}}
+                {{/if}}
+              </div>
 
-              {{#each column.cards as |card|}}
-                <div
-                  class='draggable-card'
-                  {{this.DndSortableItemModifier
-                    group='cards'
-                    data=(hash item=card parent=column)
-                    onDrop=this.moveCard
-                    isOnTargetClass='is-on-target'
-                  }}
-                >
-                  {{yield card column}}
-                </div>
-              {{/each}}
-            </div>
-          </div>
-        {{/each}}
-      </div>
-    {{else}}
-      <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
-        {{#each this.columns as |column|}}
-          <div class='column'>
-            <div class='column-header'>
-              {{#if @columnHeader}}
-                <@columnHeader @title={{column.title}} />
-              {{else}}
-                {{column.title}}
-              {{/if}}
-            </div>
+              <div
+                class='column-drop-zone
+                  {{if (this.isDropZoneTargeted columnIndex) "is-hovered"}}'
+              >
+                {{#if (this.isDropZoneTargeted columnIndex)}}
+                  <div class='column-drop-zone-overlay'>
+                    Board ordered by Priority
+                  </div>
+                {{/if}}
 
-            <div class='column-drop-zone'>
-              {{#each column.cards as |card|}}
-                <div class='draggable-card'>
-                  {{yield card column}}
-                </div>
-              {{/each}}
+                {{#each column.cards as |card|}}
+                  <div
+                    class='draggable-card'
+                    {{this.DndSortableItemModifier
+                      group='cards'
+                      data=(hash item=card parent=column)
+                      onDrop=this.moveCard
+                      isOnTargetClass='is-on-target'
+                    }}
+                  >
+                    {{yield card column to='card'}}
+                  </div>
+                {{/each}}
+              </div>
             </div>
-          </div>
-        {{/each}}
+          {{/each}}
+        {{else}}
+          {{! Customize the Kanban board columns by passing drag-and-drop function arguments }}
+          {{yield
+            (hash
+              columns=this.columns
+              DndDropTargetModifier=this.DndDropTargetModifier
+              DndSortableItemModifier=this.DndSortableItemModifier
+              moveCard=this.moveCard
+              onColumnDragEnter=this.onColumnDragEnter
+              onColumnDragLeave=this.onColumnDragLeave
+              isDropZoneTargeted=this.isDropZoneTargeted
+            )
+          }}
+        {{/if}}
       </div>
     {{/if}}
 
@@ -244,11 +254,12 @@ export default class DndKanbanBoard extends Component<
         height: 100vh;
       }
       .draggable-card {
-        padding: var(--boxel-sp);
         border: 2px solid var(--boxel-100);
         border-radius: var(--boxel-border-radius);
         background: var(--boxel-light);
-        height: auto;
+        height: 150px;
+        container-name: fitted-card;
+        container-type: size;
         overflow: hidden;
         transition:
           all 0.3s ease,
@@ -288,8 +299,8 @@ export default class DndKanbanBoard extends Component<
       .column-drop-zone {
         position: relative;
         padding: var(--boxel-sp);
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        align-content: flex-start;
         gap: var(--boxel-sp);
         height: 100%;
         background-color: var(--dnd-kanban-drop-zone-bg, var(--boxel-600));
