@@ -62,24 +62,13 @@ class HowToSidebar extends GlimmerComponent {
       </header>
       <div class='intro-content'>
         <p>
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-          eiusmod tempor.
+          Add a description of what you want, who it's for and any key features
+          you need. We'll generate a product requirements document for you with
+          the help of AI.
         </p>
         <p>
-          <ul class='intro-list'>
-            <li>Website</li>
-            <li>CRM</li>
-            <li>Scheduler</li>
-            <li>Chess Game</li>
-            <li>Music Instrument</li>
-            <li>Generative Art</li>
-          </ul>
-        </p>
-        <p>
-          Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-          dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non
-          proident, sunt in culpa qui officia deserunt mollit anim id est
-          laborum.
+          Look for the AI assistant icon in the bottom right of the screen to
+          see the assistant.
         </p>
       </div>
     </aside>
@@ -349,11 +338,11 @@ class DashboardTab extends GlimmerComponent<{
   };
   appCardRef = {
     name: 'AppCard',
-    module: `${this.args.currentRealm?.href}app-card`,
+    module: new URL('./app-card', import.meta.url).href,
   };
   prdCardRef = {
     name: 'ProductRequirementDocument',
-    module: `${this.args.currentRealm?.href}product-requirement-document`,
+    module: new URL('./product-requirement-document', import.meta.url).href,
   };
   @tracked errorMessage = '';
   @tracked prompt: Prompt = this.promptReset;
@@ -371,7 +360,10 @@ class DashboardTab extends GlimmerComponent<{
     this.generateRequirements.perform(this.prdCardRef, {
       data: {
         attributes: { appTitle, prompt },
-        meta: { adoptsFrom: this.prdCardRef },
+        meta: {
+          adoptsFrom: this.prdCardRef,
+          realmURL: this.args.currentRealm?.href,
+        },
       },
     });
   }
@@ -384,6 +376,7 @@ class DashboardTab extends GlimmerComponent<{
         if (!createCard || !viewCard || !runCommand) {
           throw new Error('Missing required card actions');
         }
+
         let card = await createCard(ref, this.args.currentRealm, {
           doc,
           cardModeAfterCreation: 'isolated',
@@ -391,9 +384,17 @@ class DashboardTab extends GlimmerComponent<{
         if (!card) {
           throw new Error('Error: Failed to create card');
         }
+
+        // Construct the relative URL for the SkillCard
+        let skillCardUrl = new URL(
+          './SkillCard/generate-product-requirements',
+          import.meta.url,
+        ).href;
+
+        // Update the runCommand call to use the constructed URL
         await runCommand(
           card,
-          `${baseRealm.url}SkillCard/generate-product-requirements`,
+          skillCardUrl,
           'Generate product requirements document',
         );
         this.prompt = this.promptReset;
@@ -482,7 +483,7 @@ class RequirementsTab extends GlimmerComponent<{
 
   cardRef = {
     name: 'ProductRequirementDocument',
-    module: `${this.args.currentRealm}product-requirement-document`,
+    module: new URL('./product-requirement-document', import.meta.url).href,
   };
 
   get isCreateCardRunning() {
@@ -521,18 +522,6 @@ class YourAppsTab extends GlimmerComponent<{
   };
 }> {
   <template>
-    <div class='query-container'>
-      <@context.prerenderedCardSearchComponent
-        @query={{getCardTypeQuery this.cardRef @appCardId}}
-        @format='fitted'
-        @realms={{@realms}}
-      >
-        <:loading>Loading...</:loading>
-        <:response as |cards|>
-          <CardsGrid @cards={{cards}} @context={{@context}} />
-        </:response>
-      </@context.prerenderedCardSearchComponent>
-    </div>
     <style scoped>
       .query-container {
         padding: var(--boxel-sp);
@@ -543,7 +532,7 @@ class YourAppsTab extends GlimmerComponent<{
 
   cardRef = {
     name: 'AppCard',
-    module: `${this.args.currentRealm}app-card`,
+    module: new URL('./app-card', import.meta.url).href,
   };
 }
 

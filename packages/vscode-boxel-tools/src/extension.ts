@@ -23,6 +23,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
   vscode.commands.registerCommand('boxelrealm.logout', async (_) => {
     await authProvider.clearAllSessions();
+    vscode.workspace.updateWorkspaceFolders(
+      0,
+      vscode.workspace.workspaceFolders?.length ?? 0,
+    );
     vscode.window.showInformationMessage('Logged out of synapse');
   });
 

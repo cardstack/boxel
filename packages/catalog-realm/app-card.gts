@@ -341,10 +341,22 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
         if (!this.activeTabRef) {
           throw new Error('Can not create a card without a card ref.');
         }
+        let opts = {
+          doc: doc
+            ? {
+                ...doc,
+                meta: {
+                  ...doc.meta,
+                  realmURL: this.args.currentRealm,
+                },
+              }
+            : undefined,
+          realmURL: this.args.currentRealm,
+        };
         await this.args.context?.actions?.createCard?.(
           this.activeTabRef,
           this.args.currentRealm,
-          { doc },
+          opts,
         );
       } catch (e: unknown) {
         throw e;

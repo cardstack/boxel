@@ -266,7 +266,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
-      const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+      const baseRealmIconURL =
+        'https://boxel-images.boxel.ai/icons/cardstack.png';
       assert.expect(13);
       await visitOperatorMode();
       await openNewFileModal('Card Instance');
