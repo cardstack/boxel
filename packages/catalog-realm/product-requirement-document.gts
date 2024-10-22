@@ -1,16 +1,6 @@
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-
-import { restartableTask } from 'ember-concurrency';
-
-import { Button } from '@cardstack/boxel-ui/components';
-import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
-import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
-
-import { baseRealm } from '@cardstack/runtime-common';
-
 import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import TextAreaField from 'https://cardstack.com/base/text-area';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
   CardDef,
   field,
@@ -20,9 +10,14 @@ import {
   realmURL,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-
+import { Button } from '@cardstack/boxel-ui/components';
+import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
+import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
+import { baseRealm } from '@cardstack/runtime-common';
 import { AppCard } from './app-card';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
@@ -65,7 +60,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               @kind='primary-dark'
               @disabled={{this._generateCode.isRunning}}
               @loading={{this._generateCode.isRunning}}
-              data-test-create-module
+              data-test-generate-app
             >
               {{#unless this._generateCode.isRunning}}
                 <span class='generate-button-logo' />
@@ -109,6 +104,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                   @kind='primary-dark'
                   @disabled={{this._createInstance.isRunning}}
                   @loading={{this._createInstance.isRunning}}
+                  data-test-create-instance
                 >
                   {{#unless this._createInstance.isRunning}}
                     <span class='generate-button-logo' />
@@ -183,6 +179,8 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         display: inline-block;
         width: var(--icon-size);
         height: var(--icon-size);
+        background: url('./ai-assist-icon@2x.webp') no-repeat center;
+        background-size: contain;
       }
       .new-instance-button {
         margin-top: var(--boxel-sp);
@@ -216,7 +214,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       }
       summary {
         margin: 0;
-        font: 600 var(--boxel-font);
+        font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
       }
       summary:hover {
@@ -263,9 +261,12 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       if (!this.args.context?.actions?.runCommand) {
         throw new Error('Context action "runCommand" is not available');
       }
+      let skillCardUrl = new URL('./SkillCard/app-generator', import.meta.url)
+        .href;
+
       await this.args.context.actions.runCommand(
         this.args.model as CardDef,
-        `${baseRealm.url}SkillCard/app-generator`,
+        skillCardUrl,
         'Generate code',
       );
     } catch (e) {
@@ -295,7 +296,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           declaration &&
           typeof declaration === 'function' &&
           'isCardDef' in declaration &&
-          !Object.prototype.isPrototypeOf.call(AppCard, declaration),
+          AppCard.isPrototypeOf(declaration),
       );
       if (!appCard) {
         throw new Error('Could not find app card in module');
@@ -316,7 +317,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                 title: this.args.model.appTitle,
                 moduleId: moduleURL,
               },
-              meta: { adoptsFrom: moduleRef },
+              meta: { adoptsFrom: moduleRef, realmURL: this.currentRealm },
             },
           },
           cardModeAfterCreation: 'isolated',
@@ -347,7 +348,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       return;
     }
     this.args.context.actions.changeSubmode(
-      new URL(`${this.args.model.moduleURL}.gts`),
+      new URL(this.args.model.moduleURL),
       'code',
     );
   }
