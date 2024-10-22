@@ -80,7 +80,7 @@ export async function activate(context: vscode.ExtensionContext) {
           : 0,
         {
           uri: vscode.Uri.parse(`boxelrealm://boxel-workspaces`),
-          name: `boxel-workspaces`,
+          name: `Boxel Workspaces`,
         },
       );
       await vscode.commands.executeCommand('workbench.view.explorer');
