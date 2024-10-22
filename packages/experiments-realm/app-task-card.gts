@@ -26,7 +26,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
-import { AppCard } from './app-card';
+import { AppCard } from '/catalog/app-card';
 
 interface ColumnData {
   status: {
