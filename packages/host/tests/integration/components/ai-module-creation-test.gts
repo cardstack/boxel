@@ -29,7 +29,7 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 class MockRouterService extends Service {
-  replaceWith(_route, _args) {
+  replaceWith(_route: any, _args: any) {
     // This is a stub method that does nothing
   }
 }
