@@ -20,6 +20,7 @@ interface Signature {
     cardTypeIcon?: ComponentLike<{ Element: Element }>;
     headerColor?: string;
     isSaving?: boolean;
+    isTopCard?: boolean;
     lastSavedMessage?: string;
     moreOptionsMenuItems?: MenuItem[];
     onClose?: () => void;
@@ -52,6 +53,7 @@ export default class CardHeader extends Component<Signature> {
           <Tooltip @placement='right'>
             <:trigger>
               <RealmIcon
+                @canAnimate={{@isTopCard}}
                 @realmInfo={{@realmInfo}}
                 class='realm-icon'
                 style={{cssVar

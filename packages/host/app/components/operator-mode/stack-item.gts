@@ -205,6 +205,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
+  private get isTopCard() {
+    return !this.isBuried;
+  }
+
   private get cardContext() {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
@@ -442,6 +446,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @cardTypeIcon={{cardTypeIcon @item.card}}
               @headerColor={{@item.headerColor}}
               @isSaving={{this.isSaving}}
+              @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.lastSavedMsg}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
