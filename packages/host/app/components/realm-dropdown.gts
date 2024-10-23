@@ -5,13 +5,15 @@ import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
-import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common';
+
+import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import RealmService from '../services/realm';
 
 import RealmIcon from './operator-mode/realm-icon';
 
-export interface RealmDropdownItem extends RealmInfo {
+export interface RealmDropdownItem extends EnhancedRealmInfo {
   path: string;
 }
 
@@ -112,7 +114,7 @@ export default class RealmDropdown extends Component<Signature> {
 
   get realms(): RealmDropdownItem[] {
     let items: RealmDropdownItem[] | [] = [];
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsMeta)) {
+    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
       if (!realmMeta.canWrite) {
         continue;
       }
