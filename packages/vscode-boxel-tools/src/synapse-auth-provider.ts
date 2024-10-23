@@ -93,7 +93,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   async createSession(scopes: string[]): Promise<vscode.AuthenticationSession> {
     const { username, password } = await promptForCredentials();
     const matrixServer = vscode.workspace
-      .getConfiguration('boxelrealm')
+      .getConfiguration('boxel-tools')
       .get('matrixServer') as string;
     if (!matrixServer) {
       throw new Error('No matrix server url found, please check your settings');
