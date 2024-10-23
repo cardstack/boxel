@@ -153,6 +153,11 @@ export class RealmFS implements vscode.FileSystemProvider {
   }
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
+    console.log('Statting:', uri);
+    if (uri.path.includes('.cursorrules')) {
+      console.log('Cursor rules file!', uri);
+      //return new File('.cursorrules');
+    }
     const entry = await this._lookup(uri);
     if (!entry) {
       throw vscode.FileSystemError.FileNotFound(uri);
@@ -364,7 +369,20 @@ export class RealmFS implements vscode.FileSystemProvider {
     }
   }
 
+  private async _fetchCursorRules(): Promise<File> {
+    const file = new File('.cursorrules');
+    file.data = new TextEncoder().encode(`Talk like a pirate`);
+    file.mtime = Date.now();
+    file.size = file.data.byteLength;
+    return file;
+  }
+
   private async _fetchFileEntry(uri: vscode.Uri): Promise<File> {
+    // special case for .cursorrules
+    // we construct is specially
+    if (path.basename(uri.path) === '.cursorrules') {
+      return this._fetchCursorRules();
+    }
     console.log('Fetching file entry:', uri);
     let apiUrl = getUrl(uri);
     console.log('API URL:', apiUrl);
