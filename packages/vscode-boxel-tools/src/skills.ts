@@ -11,10 +11,19 @@ export class SkillsProvider
     vscode.TreeItem | undefined | null | void
   > = this._onDidChangeTreeData.event;
 
-  refresh(): void {
+  private skillLists: SkillList[] = [];
+
+  constructor(private realmAuth: RealmAuth) {}
+
+  async refresh(): Promise<void> {
+    const realmUrls = await this.realmAuth.getRealmUrls();
+    this.skillLists = realmUrls.map((url) => new SkillList(url, url));
+    const loadingPromises = this.skillLists.map((skillList) => {
+      return skillList.loadSkills(this.realmAuth);
+    });
+    await Promise.all(loadingPromises);
     this._onDidChangeTreeData.fire();
   }
-  constructor(private realmAuth: RealmAuth) {}
 
   getTreeItem(element: Skill): vscode.TreeItem {
     return element;
@@ -22,9 +31,8 @@ export class SkillsProvider
 
   async getChildren(element?: SkillList): Promise<vscode.TreeItem[]> {
     if (!element) {
-      //return skill lists
-      const realmUrls = await this.realmAuth.getRealmUrls();
-      return Promise.resolve(realmUrls.map((url) => new SkillList(url, url)));
+      //No element means we are at the root
+      return Promise.resolve(this.skillLists);
     } else {
       // return children of the skill list
       return Promise.resolve(element.getChildren());
@@ -33,11 +41,13 @@ export class SkillsProvider
 }
 
 class Skill extends vscode.TreeItem {
-  constructor(public readonly label: string) {
+  constructor(
+    public readonly label: string,
+    public readonly skillContent: string,
+    public readonly id: string,
+  ) {
     super(label);
-    // Check in (global?) kv store if this is checked or not
-    // default to 'no'
-    this.checkboxState = vscode.TreeItemCheckboxState.Checked;
+    this.checkboxState = vscode.TreeItemCheckboxState.Unchecked;
   }
   getChildren(element?: SkillList): Thenable<Skill[]> {
     return Promise.resolve([]);
@@ -45,6 +55,8 @@ class Skill extends vscode.TreeItem {
 }
 
 class SkillList extends vscode.TreeItem {
+  skills: Skill[] = [];
+
   constructor(
     public readonly label: string,
     public readonly realmUrl: string,
@@ -53,11 +65,55 @@ class SkillList extends vscode.TreeItem {
     this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   }
 
-  getChildren(element?: Skill): Thenable<Skill[]> {
-    // return demo skills
-    return Promise.resolve([
-      new Skill('Demo Skill 1'),
-      new Skill('Demo Skill 2'),
-    ]);
+  getChildren(_element?: Skill): Skill[] {
+    return this.skills;
+  }
+
+  async loadSkills(realmAuth: RealmAuth): Promise<void> {
+    const jwt = await realmAuth.getJWT(this.realmUrl);
+    const searchUrl = new URL('./_search', this.realmUrl);
+
+    // Update search parameters to match the example URL
+    searchUrl.searchParams.set(
+      'sort[0][on][module]',
+      'https://cardstack.com/base/card-api',
+    );
+    searchUrl.searchParams.set('sort[0][on][name]', 'CardDef');
+    searchUrl.searchParams.set('sort[0][by]', 'title');
+    searchUrl.searchParams.set(
+      'filter[type][module]',
+      'https://cardstack.com/base/skill-card',
+    );
+    searchUrl.searchParams.set('filter[type][name]', 'SkillCard');
+
+    console.log('Search URL:', searchUrl);
+    const response = await fetch(searchUrl, {
+      headers: {
+        Accept: 'application/vnd.card+json',
+        Authorization: `${jwt}`,
+      },
+    });
+    console.log('Response!');
+
+    if (!response.ok) {
+      console.log(
+        'Response not ok:',
+        response.status,
+        response.statusText,
+        response.body,
+      );
+    }
+
+    const data: any = await response.json();
+    console.log('Response data:', data);
+
+    //const skills = await this.realmAuth.getSkills(jwt);
+    this.skills = data.data.map((skill: any) => {
+      return new Skill(
+        skill.attributes.title,
+        skill.attributes.instructions,
+        skill.id,
+      );
+    });
   }
 }
