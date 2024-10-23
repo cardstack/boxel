@@ -446,7 +446,9 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert
-      .dom(`[data-test-card-header-realm-icon="https://example-icon.test"]`)
+      .dom(
+        `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
+      )
       .exists();
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
@@ -1944,7 +1946,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-header-realm-icon]');
     assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert
-      .dom(`[data-test-card-header-realm-icon="https://example-icon.test"]`)
+      .dom(
+        `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
+      )
       .exists();
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseenter');
     assert
