@@ -12,7 +12,6 @@ import {
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 import { createClient } from 'matrix-js-sdk';
 import { RealmInfo } from '@cardstack/runtime-common/realm';
-import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
 export class File implements vscode.FileStat {
   type: vscode.FileType;
