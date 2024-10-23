@@ -105,12 +105,15 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
         working-directory: packages/matrix
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Serve boxel-icons
+        run: pnpm serve &
+        working-directory: packages/boxel-icons
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Serve boxel-icons
-        run: pnpm build && pnpm serve &
-        working-directory: packages/boxel-icons
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
@@ -236,12 +239,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Serve boxel-icons
+        run: pnpm serve &
+        working-directory: packages/boxel-icons
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Serve boxel-icons
-        run: pnpm build && pnpm serve &
-        working-directory: packages/boxel-icons
       - name: Start host to serve assets for fastboot
         run: pnpm start &
         env:
@@ -276,12 +282,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
       - name: Build boxel-icons
         run: pnpm build
         working-directory: packages/boxel-icons
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Prepublish
         run: pnpm vscode:prepublish
         working-directory: packages/vscode-boxel-tools

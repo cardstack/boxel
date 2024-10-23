@@ -19,6 +19,7 @@ import {
   BoxelInput,
   LoadingIndicator,
   Pill,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -48,8 +49,6 @@ import ModalContainer from '../modal-container';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
-
-import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';

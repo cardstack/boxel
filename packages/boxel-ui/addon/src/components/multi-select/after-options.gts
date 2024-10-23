@@ -1,8 +1,9 @@
-import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
+
+import BoxelButton from '../button/index.gts';
 
 export interface BoxelAfterOptionComponentArgs {
   Args: {

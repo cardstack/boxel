@@ -1,9 +1,10 @@
-import { IconX } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
+
+import IconX from '../../icons/icon-x.gts';
 
 // Inside the trigger component, the selected item component is called within in ember-power-select
 // It only passes option, select and extra as arguments

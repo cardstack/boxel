@@ -3,11 +3,14 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { IconButton, Pill, Switch } from '@cardstack/boxel-ui/components';
+import {
+  IconButton,
+  Pill,
+  RealmIcon,
+  Switch,
+} from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 

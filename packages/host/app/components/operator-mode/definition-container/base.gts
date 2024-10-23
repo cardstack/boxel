@@ -9,11 +9,11 @@ import {
   CardContainer,
   Header,
   Label,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import type RealmService from '@cardstack/host/services/realm';
 
 interface Action {

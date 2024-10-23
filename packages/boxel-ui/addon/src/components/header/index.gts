@@ -8,7 +8,6 @@ interface Signature {
   Args: {
     hasBackground?: boolean;
     hasBottomBorder?: boolean;
-    isHighlighted?: boolean;
     size?: 'large';
     subtitle?: string;
     title?: string;
@@ -26,7 +25,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
       has-background=@hasBackground
-      highlighted=@isHighlighted
       large=(eq @size 'large')
       hasBottomBorder=@hasBottomBorder
     }}
@@ -120,9 +118,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
           --boxel-header-background-color,
           var(--boxel-100)
         );
-      }
-      .highlighted {
-        background-color: var(--boxel-highlight);
       }
       .content {
         display: flex;

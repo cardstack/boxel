@@ -308,7 +308,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -476,7 +476,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     let otherCardID = `${testRealmURL}Person/burcu`;
@@ -2043,7 +2043,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-command-result] [data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
-      .dom(`${rightStackItem} [data-test-boxel-header-title]`)
+      .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
       .hasText('Command Result');
 
     const savedCardId = document
@@ -2118,7 +2118,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-command-result] [data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
-      .dom(`${stackItem} [data-test-boxel-header-title]`)
+      .dom(`${stackItem} [data-test-boxel-card-header-title]`)
       .hasText('Command Result');
 
     const savedCardId = document

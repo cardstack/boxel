@@ -1,11 +1,16 @@
 import Component from '@glimmer/component';
 
-import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
+export type RealmDisplayInfo = {
+  iconURL: string | null;
+  isIndexing?: boolean;
+  name: string;
+};
 
 interface Signature {
   Args: {
-    realmInfo: EnhancedRealmInfo;
     canAnimate?: boolean;
+    isIndexing?: boolean;
+    realmInfo: RealmDisplayInfo;
   };
   Element: HTMLElement;
 }

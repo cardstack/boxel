@@ -1,4 +1,3 @@
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { action } from '@ember/object';
 import { get } from '@ember/object';
 import Component from '@glimmer/component';
@@ -9,6 +8,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { cssVar } from '../../helpers/css-var.ts';
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, {
   type ColumnHeaderArgs,

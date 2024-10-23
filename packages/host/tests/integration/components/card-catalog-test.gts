@@ -227,7 +227,9 @@ module('Integration | card-catalog', function (hooks) {
     test(`pressing enter on a card selects it and submits the selection`, async function (assert) {
       const card = `${testRealmURL}CatalogEntry/publishing-packet`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -239,14 +241,18 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Publishing Packet');
     });
 
     test(`can select card using mouse click and then submit selection using enter key`, async function (assert) {
       const card = `${testRealmURL}CatalogEntry/blog-post`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -263,7 +269,9 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Blog Post');
     });
 
@@ -271,7 +279,9 @@ module('Integration | card-catalog', function (hooks) {
       const card1 = `${testRealmURL}CatalogEntry/blog-post`;
       const card2 = `${testRealmURL}CatalogEntry/author`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -294,14 +304,18 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Author');
     });
 
     test(`double-clicking on a card selects the card and submits the selection`, async function (assert) {
       const card = `${testRealmURL}CatalogEntry/blog-post`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -313,13 +327,17 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Blog Post');
     });
 
     test(`pressing escape key closes the modal`, async function (assert) {
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 

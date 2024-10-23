@@ -459,11 +459,15 @@ module('Acceptance | interact submode tests', function (hooks) {
       await percySnapshot(assert);
 
       assert
-        .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
+        .dom(
+          '[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]',
+        )
         .includesText('Person');
 
       assert
-        .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+        .dom(
+          '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
+        )
         .includesText('Pet');
 
       // Remove mango (the dog) from the stack

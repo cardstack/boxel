@@ -8,7 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
-import { Tooltip, Pill } from '@cardstack/boxel-ui/components';
+import { Tooltip, Pill, RealmIcon } from '@cardstack/boxel-ui/components';
 import { and, bool, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
@@ -19,7 +19,6 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
 import {
   type Type,
