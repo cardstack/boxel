@@ -40,7 +40,7 @@ jobs:
             echo "AWS_S3_BUCKET=cardstack-matrix-synapse-staging" >> $GITHUB_ENV
             echo "AWS_ECS_CLUSTER=staging" >> $GITHUB_ENV
             echo "AWS_ECS_SERVICE=synapse-staging" >> $GITHUB_ENV
-            echo "HOST_DOMAIN=realms-staging.stack.cards"
+            echo "HOST_DOMAIN=realms-staging.stack.cards" >> $GITHUB_ENV
           else
             echo "unrecognized environment"
             exit 1;
