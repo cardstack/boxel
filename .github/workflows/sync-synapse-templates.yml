@@ -34,11 +34,13 @@ jobs:
             echo "AWS_S3_BUCKET=cardstack-matrix-synapse-production" >> $GITHUB_ENV
             echo "AWS_ECS_CLUSTER=production" >> $GITHUB_ENV
             echo "AWS_ECS_SERVICE=synapse-production" >> $GITHUB_ENV
+            echo "HOST_DOMAIN=app.boxel.ai" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github-synapse" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-matrix-synapse-staging" >> $GITHUB_ENV
             echo "AWS_ECS_CLUSTER=staging" >> $GITHUB_ENV
             echo "AWS_ECS_SERVICE=synapse-staging" >> $GITHUB_ENV
+            echo "HOST_DOMAIN=realms-staging.stack.cards"
           else
             echo "unrecognized environment"
             exit 1;
@@ -49,6 +51,10 @@ jobs:
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
+
+      - name: Replace URL in registration success template
+        run: |
+          sed -i "s/http:\/\/localhost:4200/https:\/\/${{ env.HOST_DOMAIN }}/" packages/matrix/docker/synapse/templates/registration_success.html
 
       - name: S3 Sync
         run: |
