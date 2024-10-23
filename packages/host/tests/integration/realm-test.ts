@@ -355,7 +355,7 @@ module('Integration | realm', function (hooks) {
               name: 'Test Workspace A',
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-              iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+              iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -3063,7 +3063,7 @@ module('Integration | realm', function (hooks) {
               name: 'Test Workspace A',
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-              iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+              iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
               showAsCatalog: null,
               visibility: 'public',
             },

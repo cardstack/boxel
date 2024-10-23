@@ -200,6 +200,7 @@ export async function chooseCard<T extends BaseDef>(
     };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
+    preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;

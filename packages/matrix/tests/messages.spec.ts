@@ -194,7 +194,7 @@ test.describe('Room messages', () => {
           {
             id: testCard,
             title: 'Hassan',
-            realmIconUrl: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+            realmIconUrl: 'https://boxel-images.boxel.ai/icons/cardstack.png',
           },
         ],
       },
@@ -956,6 +956,7 @@ test.describe('Room messages', () => {
     const prompt = {
       from: 'user1',
       message: 'Make this more polite.', // a prompt on new-session template
+      cards: [],
     };
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
@@ -966,6 +967,75 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-prompt="1"]`).click();
     await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
     await assertMessages(page, [prompt]);
+  });
+
+  test('sending a prompt submits attached cards', async ({ page }) => {
+    const testCard1 = `${testHost}/mango`;
+    const testCard2 = `${testHost}/hassan`;
+
+    await login(page, 'user1', 'pass');
+    await getRoomId(page);
+    await showAllCards(page);
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
+
+    await page
+      .locator('[data-test-message-field]')
+      .fill(`Change title to Mango`);
+    await selectCardFromCatalog(page, testCard2);
+    await expect(page.locator(`[data-test-message-field]`)).toHaveValue(
+      'Change title to Mango',
+    );
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+    ).toHaveCount(2);
+
+    await page.locator(`[data-test-prompt="0"]`).click();
+
+    const message1 = {
+      from: 'user1',
+      message: 'Fill in the title and description.', // prompt is submitted
+      cards: [
+        { id: testCard1, title: 'Mango' }, // auto-attached card is submitted
+        { id: testCard2, title: 'Hassan' }, // attached card is submitted
+      ],
+    };
+    await assertMessages(page, [message1]);
+
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+    ).toHaveCount(2); // attached cards remain
+    await expect(page.locator(`[data-test-message-field]`)).toHaveValue(
+      'Change title to Mango',
+    ); // previously typed message remains
+
+    await page.locator('[data-test-send-message-btn]').click();
+
+    const message2 = {
+      from: 'user1',
+      message: 'Change title to Mango',
+      cards: [
+        { id: testCard1, title: 'Mango' },
+        { id: testCard2, title: 'Hassan' },
+      ],
+    };
+    await assertMessages(page, [message1, message2]);
+
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+    ).toHaveCount(1); // only auto-attached card remains
+    await expect(page.locator(`[data-test-message-field]`)).toBeEmpty(); // message field is empty
+
+    await page.locator('[data-test-send-message-btn]').click();
+
+    const message3 = {
+      from: 'user1',
+      cards: [{ id: testCard1, title: 'Mango' }],
+    };
+    await assertMessages(page, [message1, message2, message3]);
   });
 
   test('ai panel stays open when last card is closed and workspace chooser is opened', async ({

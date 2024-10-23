@@ -238,7 +238,7 @@ module('Integration | card-copy', function (hooks) {
           name: 'Test Workspace 2',
           backgroundURL:
             'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         },
       },
     }));

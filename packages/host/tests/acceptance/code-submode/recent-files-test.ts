@@ -323,7 +323,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png');
 
     await click('[data-test-file="index.json"]');
     assert
@@ -514,7 +514,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png')
+      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png')
       .hasAttribute('alt', 'Icon for workspace Base Workspace');
 
     await waitFor(
@@ -522,7 +522,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png');
 
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');
