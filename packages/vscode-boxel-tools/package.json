@@ -32,6 +32,11 @@
         "command": "boxelrealm.attachToBoxelWorkspaces",
         "title": "Attach to Boxel Workspaces",
         "category": "boxelrealm"
+      },
+      {
+        "command": "boxelrealm.reloadSkills",
+        "title": "Reload Skills",
+        "category": "boxelrealm"
       }
     ],
     "menus": {
@@ -41,6 +46,32 @@
         },
         {
           "command": "boxelrealm.attachToBoxelWorkspaces"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "boxelrealm.reloadSkills",
+          "when": "view == codingSkillList",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "coding-skills",
+          "title": "Coding Skills",
+          "icon": "resources/sparkle.svg"
+        }
+      ]
+    },
+    "views": {
+      "coding-skills": [
+        {
+          "id": "codingSkillList",
+          "name": "Coding Skills",
+          "icon": "resources/sparkle.svg",
+          "contextualTitle": "Coding Skills"
         }
       ]
     },

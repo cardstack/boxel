@@ -5,13 +5,8 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import {
-  RealmAuthClient,
-  RealmAuthMatrixClientInterface,
-} from '@cardstack/runtime-common/realm-auth-client';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
-import { createClient } from 'matrix-js-sdk';
-
+import { RealmAuth } from './realm-auth';
 function getUrl(uri: vscode.Uri) {
   let scheme = uri.scheme.split('+')[1];
   let auth = uri.authority;
@@ -60,104 +55,15 @@ export type Entry = File | Directory;
 
 export class RealmFS implements vscode.FileSystemProvider {
   root = new Directory('');
-  realmClients: Map<string, RealmAuthClient> = new Map();
-  realmsInitialized = false;
-  jwtPromises: Map<string, Promise<string>> = new Map();
 
-  async getRealmUrls() {
-    if (!this.realmsInitialized) {
-      console.log('No realm clients, setting up realms');
-      await this.setupRealms();
-    }
-    console.log('Realm clients', this.realmClients, this.realmClients.keys());
-    return Array.from(this.realmClients.keys());
-  }
-
-  async getJwtAndDeletePromise(url: string) {
-    let jwt = await this.jwtPromises.get(url);
-    this.jwtPromises.delete(url);
-    return jwt;
-  }
-
-  async setupRealms() {
-    const session = await vscode.authentication.getSession('synapse', [], {
-      createIfNone: true,
-    });
-    const serverUrl = vscode.workspace
-      .getConfiguration('boxelrealm')
-      .get('matrixServer') as string;
-    if (!serverUrl) {
-      throw new Error('No matrix server url found, please check your settings');
-    }
-    console.log('Session:', session);
-    const decodedAuth = JSON.parse(session.accessToken);
-    const matrixClient = createClient({
-      baseUrl: serverUrl,
-      accessToken: decodedAuth.access_token,
-      userId: decodedAuth.user_id,
-      deviceId: decodedAuth.device_id,
-    });
-    let realmsEventData =
-      (await matrixClient.getAccountDataFromServer(
-        'com.cardstack.boxel.realms',
-      )) || {};
-    console.log('Realms event data:', realmsEventData, typeof realmsEventData);
-    let realms = realmsEventData.realms || [];
-    console.log('Realms:', realms);
-    vscode.window.showInformationMessage(
-      `Boxel - found ${realms.length} realms`,
-    );
-    for (const realm of realms) {
-      console.log('new realm:', realm);
-      let newRealmClient = new RealmAuthClient(
-        new URL(realm),
-        matrixClient as unknown as RealmAuthMatrixClientInterface,
-        globalThis.fetch,
-      );
-      console.log('newRealmClient', newRealmClient);
-      this.realmClients.set(realm, newRealmClient);
-      console.log('Realm client set', realm);
-    }
-    console.log('Realm clients setup', this.realmClients);
-    this.realmsInitialized = true;
-  }
+  constructor(private realmAuth: RealmAuth) {}
 
   async getJWT(url: string) {
-    console.log('Getting JWT for ', url);
-    if (!this.realmsInitialized) {
-      await this.setupRealms();
-    }
-    // Find the realm client that prefixes the url
-    for (const [realmUrl, realmClient] of this.realmClients.entries()) {
-      if (url.startsWith(realmUrl.toString())) {
-        console.log(
-          'Found realm client for',
-          url,
-          "it's the one for",
-          realmUrl,
-        );
-        console.log("Checking if we're currently loading one");
-
-        if (this.jwtPromises.has(realmUrl.toString())) {
-          console.log("We're already loading one, waiting");
-          return this.getJwtAndDeletePromise(realmUrl.toString());
-        } else {
-          console.log("We're not currently loading one, creating");
-          const promise = realmClient.getJWT();
-          this.jwtPromises.set(realmUrl.toString(), promise);
-          return promise;
-        }
-      }
-    }
-    throw new Error('No realm client found for ' + url);
+    return await this.realmAuth.getJWT(url);
   }
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
     console.log('Statting:', uri);
-    if (uri.path.includes('.cursorrules')) {
-      console.log('Cursor rules file!', uri);
-      //return new File('.cursorrules');
-    }
     const entry = await this._lookup(uri);
     if (!entry) {
       throw vscode.FileSystemError.FileNotFound(uri);
@@ -371,6 +277,8 @@ export class RealmFS implements vscode.FileSystemProvider {
 
   private async _fetchCursorRules(): Promise<File> {
     const file = new File('.cursorrules');
+    // here we're just going to go through the already cached skills
+    // we're not re-reading them each time
     file.data = new TextEncoder().encode(`Talk like a pirate`);
     file.mtime = Date.now();
     file.size = file.data.byteLength;
