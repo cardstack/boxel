@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 
 export type RealmDisplayInfo = {
   iconURL: string | null;
+  isIndexing?: boolean;
   name: string;
 };
 
