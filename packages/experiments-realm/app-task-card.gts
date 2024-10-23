@@ -6,6 +6,7 @@ import {
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
+
 import { getCard } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -15,7 +16,6 @@ import {
   BoxelButton,
   BoxelDropdown,
   Menu as BoxelMenu,
-  CircleSpinner,
 } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
@@ -54,10 +54,12 @@ class AppTaskCardIsolated extends Component<
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
   @tracked triggeredColumnIndex: number | null = null;
+
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
   get realms(): string[] {
-    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+    const model = this.args.model as { [realmURL]: { href: string } };
+    return model[realmURL]?.href ? [model[realmURL].href] : [];
   }
 
   get assignedTaskCodeRef() {
@@ -156,18 +158,24 @@ class AppTaskCardIsolated extends Component<
     }
   }
 
-  columns: any[] = this.columnData.map((column) => {
-    return new Column(column.status.label, column.cards, column);
-  });
+  @tracked columns: column[] = [];
+  @tracked previousColumns: column[] = [];
+
+  constructor(owner: unknown, args: AppTaskCardIsolatedArgs) {
+    super(owner, args);
+    this.initializeColumns();
+  }
+
+  initializeColumns() {
+    this.columns = this.columnData.map((column) => {
+      return new Column(column.status.label, [], column);
+    });
+    this.previousColumns = [...this.columns];
+  }
 
   @action
-  updateColumnCards(columnIndex: any, cards: any[]) {
-    const dndCards = cards.map(
-      (card) =>
-        new Card({
-          ...card,
-        }),
-    );
+  updateColumnCards(columnIndex: number, cards: any[]) {
+    const dndCards = cards.map((card) => new Card({ ...card }));
     this.columns[columnIndex].cards = dndCards;
   }
 
@@ -225,13 +233,6 @@ class AppTaskCardIsolated extends Component<
         },
       };
 
-      console.log(
-        cardRef,
-        new URL(cardRef.module),
-        this.args.model[realmURL],
-        doc,
-      );
-
       await this.args.context?.actions?.createCard?.(
         cardRef,
         new URL(cardRef.module),
@@ -240,8 +241,6 @@ class AppTaskCardIsolated extends Component<
           doc,
         },
       );
-
-      console.log('yes');
     } catch (error) {
       console.error('Error creating card:', error);
     } finally {
@@ -249,53 +248,78 @@ class AppTaskCardIsolated extends Component<
     }
   });
 
-  @action async onMoveCardMutation(draggedCard: any, newColumn: any) {
+  @tracked isLoading = false;
+
+  @action async onMoveCardMutation(draggedCard: Card, newColumn: Column) {
     try {
       let cardUrl = new URL(draggedCard.data.url);
-      console.log('Attempting to fetch card at URL:', cardUrl);
 
       let resource = getCard(cardUrl);
       await resource.loaded;
 
       const cardInstance: any = resource.card;
 
-      if (cardInstance) {
-        console.log('Card found:', cardInstance);
+      if (cardInstance.status.index !== newColumn.cardAPI.status.index) {
+        this.isLoading = true;
+
+        this.previousColumns = this.columns.map((column) => ({
+          ...column,
+          cards: column.cards.map((card) => new Card({ ...card })),
+        }));
+
         cardInstance.status.index = newColumn.cardAPI.status.index;
         cardInstance.status.label = newColumn.cardAPI.status.label;
 
-        console.log('Updating card status to:', cardInstance);
+        this.previousColumns = this.columns.map((column) => ({
+          ...column,
+          cards: column.cards.map((card) => new Card({ ...card })),
+        }));
 
-        await this.customSaveCard(cardInstance);
-      } else {
-        throw new Error(
-          `Could not find card ${draggedCard.data.url} in the system`,
-        );
+        await this.saveUpdatedCard(cardInstance);
       }
     } catch (error) {
       console.error('Error updating card status:', error);
+      this.columns = this.previousColumns;
+    } finally {
+      this.isLoading = false;
     }
   }
 
-  // 自定义保存方法
-  async customSaveCard(cardInstance: any) {
+  async handleFrontendMoveCard(draggedCard: Card, newColumn: Column) {
+    const draggedCardId = draggedCard.data.url;
+    const oldColumnIndex = this.columns.findIndex((column) =>
+      column.cards.some((card) => card.data.url === draggedCardId),
+    );
+    const newColumnIndex = this.columns.findIndex(
+      (column) =>
+        column.cardAPI.status.index === newColumn.cardAPI.status.index,
+    );
+
+    if (oldColumnIndex !== -1 && newColumnIndex !== -1) {
+      const updatedColumns = [...this.columns];
+      const [movedCard] = updatedColumns[oldColumnIndex].cards.splice(
+        updatedColumns[oldColumnIndex].cards.findIndex(
+          (card: Card) => card.data.url === draggedCardId,
+        ),
+        1,
+      );
+
+      updatedColumns[newColumnIndex].cards.push(movedCard);
+      this.columns = updatedColumns;
+    }
+  }
+
+  async saveUpdatedCard(cardInstance: any) {
     const publicAPI = this.args.context?.actions;
-    if (!publicAPI?.saveCard) {
+
+    if (!publicAPI?.saveCardDirectly) {
       throw new Error('saveCard action not available');
     }
 
     try {
-      await publicAPI.saveCard(cardInstance, false);
-      console.log('Card saved successfully');
+      await publicAPI.saveCardDirectly(cardInstance, false);
     } catch (saveError) {
-      console.error('Error in saveCard:', saveError);
-      if (saveError instanceof Error) {
-        console.error(
-          'SaveCard error details:',
-          saveError.message,
-          saveError.stack,
-        );
-      }
+      this.columns = this.previousColumns;
       throw saveError;
     }
   }
@@ -338,8 +362,12 @@ class AppTaskCardIsolated extends Component<
         </button>
       </div>
       <div class='columns-container'>
+        {{log this.previousColumns this.columns}}
         {{! this is for update the column data with prerendered }}
-        {{#each this.columns as |column columnIndex|}}
+        {{#each
+          (if this.isLoading this.previousColumns this.columns)
+          as |column columnIndex|
+        }}
           {{#let
             (component @context.prerenderedCardSearchComponent)
             as |PrerenderedCardSearch|
@@ -349,9 +377,6 @@ class AppTaskCardIsolated extends Component<
               @format='fitted'
               @realms={{this.realms}}
             >
-              <:loading>
-                loading
-              </:loading>
               <:response as |cards|>
                 {{this.updateColumnCards columnIndex cards}}
               </:response>
@@ -361,10 +386,11 @@ class AppTaskCardIsolated extends Component<
 
         <DndKanbanBoard
           @columns={{this.columns}}
+          @isLoading={{this.isLoading}}
           @onMoveCard={{this.onMoveCardMutation}}
         >
           {{! this is the udpated columns with cardAPI Data, modifier is only work after prerendered API return data }}
-          <:card as |card column actions|>
+          <:card as |card|>
             <CardContainer
               {{@context.cardComponentModifier
                 cardId=card.data.url

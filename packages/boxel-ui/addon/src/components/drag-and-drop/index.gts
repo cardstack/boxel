@@ -1,9 +1,11 @@
 import { fn, hash } from '@ember/helper';
+import { and, eq } from '../../helpers/truth-helpers.ts';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -14,6 +16,7 @@ export interface ColumnHeaderArgs {
 export interface DndKanbanBoardArgs<Column> {
   columnHeader?: ComponentLike<ColumnHeaderArgs>;
   columns: Column[];
+  isLoading?: boolean;
   onMoveCard?: (card: Card, column: Column) => void;
 }
 
@@ -31,7 +34,7 @@ export interface DndKanbanBoardSignature<Column> {
         isDropZoneTargeted: (columnIndex: number) => boolean;
       },
     ];
-    card: [card: any, column: any];
+    card: [card?: any, column?: any];
   };
 }
 
@@ -69,6 +72,7 @@ export default class DndKanbanBoard extends Component<
   @tracked insertBefore: any;
   @tracked removeItem: any;
   @tracked columns: Column[] = this.args.columns;
+  @tracked draggedCard: Card | null = null;
   @tracked hoveredColumnIndex: number | null = null;
 
   constructor(owner: unknown, args: DndKanbanBoardArgs<Column>) {
@@ -178,9 +182,20 @@ export default class DndKanbanBoard extends Component<
     }
   }
 
+  @action
+  onDragStart(card: Card) {
+    this.draggedCard = card;
+  }
+
+  @action
+  onDragEnd() {
+    this.draggedCard = null;
+    this.clearHoveredState();
+  }
+
   <template>
     {{#if this.areModifiersLoaded}}
-      <div class='draggable-container' {{on 'dragend' this.clearHoveredState}}>
+      <div class='draggable-container' {{on 'dragend' this.onDragEnd}}>
         {{#if (has-block 'card')}}
           {{#each this.columns as |column columnIndex|}}
             <div
@@ -213,15 +228,27 @@ export default class DndKanbanBoard extends Component<
 
                 {{#each column.cards as |card|}}
                   <div
-                    class='draggable-card'
+                    class='draggable-card {{if @isLoading "is-loading"}}'
                     {{this.DndSortableItemModifier
                       group='cards'
                       data=(hash item=card parent=column)
                       onDrop=this.moveCard
                       isOnTargetClass='is-on-target'
+                      onDragStart=(fn this.onDragStart card)
                     }}
                   >
-                    {{yield card column to='card'}}
+                    {{#if (and @isLoading (eq card this.draggedCard))}}
+                      <div class='overlay'></div>
+                      {{yield card column to='card'}}
+                      <LoadingIndicator
+                        width='18'
+                        height='18'
+                        @color='var(--boxel-light)'
+                        class='loader'
+                      />
+                    {{else}}
+                      {{yield card column to='card'}}
+                    {{/if}}
                   </div>
                 {{/each}}
               </div>
@@ -269,6 +296,25 @@ export default class DndKanbanBoard extends Component<
         border: 2px solid var(--boxel-highlight);
         border-radius: var(--boxel-border-radius);
         filter: brightness(0.7);
+      }
+      .draggable-card.is-loading {
+        position: relative;
+      }
+      .draggable-card.is-loading > .overlay {
+        position: absolute;
+        top: 0%;
+        left: 0%;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(38 38 38 / 50%);
+        z-index: 1;
+      }
+      .draggable-card.is-loading > .loader {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
       }
       .draggable-card.is-on-target {
         transform: scale(0.95);

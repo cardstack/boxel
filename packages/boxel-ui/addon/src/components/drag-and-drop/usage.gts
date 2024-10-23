@@ -7,7 +7,6 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 import Pill from '../pill/index.gts';
-import { action } from '@ember/object';
 import DndKanbanBoard, {
   type ColumnHeaderArgs,
   Column,
@@ -32,10 +31,6 @@ export default class DndUsage extends Component {
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanDropZoneBg: CSSVariableInfo;
 
-  @action customMoveCardHandler() {
-    console.log('move2');
-  }
-
   <template>
     <FreestyleUsage
       @name='Dnd Kanban Board'
@@ -56,7 +51,6 @@ export default class DndUsage extends Component {
         <DndKanbanBoard
           @columns={{this.columns}}
           @columnHeader={{ColumnHeader}}
-          @onMoveCard={{this.customMoveCardHandler}}
         >
           <:card as |card column|>
             <div class='custom-card'>

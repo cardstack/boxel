@@ -5,13 +5,14 @@
       "taskName": "Create RHS Sheet",
       "taskDetail": null,
       "status": {
-        "index": 0,
-        "label": "Backlog"
+        "index": 1,
+        "label": "Next Sprint"
       },
       "priority": {
         "index": null,
         "label": null
       },
+      "dateStarted": null,
       "dueDate": null,
       "description": null,
       "thumbnailURL": null
@@ -30,6 +31,16 @@
       "team": {
         "links": {
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },

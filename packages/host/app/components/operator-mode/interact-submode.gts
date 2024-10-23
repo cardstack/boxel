@@ -230,7 +230,7 @@ export default class InteractSubmode extends Component<Signature> {
         return await deferred.promise;
       },
       saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
-        // let item = here.findCardInStack(card, stackIndex);
+        let item = here.findCardInStack(card, stackIndex);
         // WARNING: never await an ember concurrency perform outside of a task.
         // Inside of a task, the `await` is actually just syntactic sugar for a
         // `yield`. But if you await `perform()` outside of a task, that will cast
@@ -238,10 +238,18 @@ export default class InteractSubmode extends Component<Signature> {
         // ember concurrency.
         // https://ember-concurrency.com/docs/task-cancelation-help
         let deferred = new Deferred<void>();
-        here.save.perform(card, undefined, dismissItem, deferred);
+        here.save.perform(card, dismissItem, deferred);
         await deferred.promise;
       },
-
+      saveCardDirectly: async (
+        card: CardDef,
+        dismissItem: boolean,
+      ): Promise<void> => {
+        // save the card without checking stackIndex
+        let deferred = new Deferred<void>();
+        here.saveDirectly.perform(card, dismissItem, deferred);
+        await deferred.promise;
+      },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
 
@@ -335,34 +343,40 @@ export default class InteractSubmode extends Component<Signature> {
 
   private save = task(
     async (
-      card: CardDef,
-      item: StackItem | undefined,
+      item: StackItem,
       dismissStackItem: boolean,
-      done: Deferred<void>,
+      afterSave?: () => void,
     ) => {
+      let { request } = item;
+      let updatedCard = await this.args.write(item.card);
+
+      if (afterSave) {
+        afterSave();
+      }
+
+      if (updatedCard) {
+        request?.fulfill(updatedCard);
+        if (!dismissStackItem) {
+          return;
+        }
+        this.operatorModeStateService.replaceItemInStack(
+          item,
+          item.clone({
+            request,
+            format: 'isolated',
+          }),
+        );
+      }
+    },
+  );
+
+  private saveDirectly = task(
+    async (card: CardDef, dismissStackItem: boolean, done: Deferred<void>) => {
       let hasRejected = false;
 
       try {
-        let updatedCard: CardDef = await this.args.write(card);
-
-        if (item) {
-          item.request?.fulfill(updatedCard);
-          item.card = updatedCard;
-          if (dismissStackItem) {
-            this.operatorModeStateService.replaceItemInStack(
-              item,
-              item.clone({
-                request: item.request,
-                format: 'isolated',
-              }),
-            );
-          }
-        }
-        // else {
-        //   throw new Error('Failed to update card');
-        // }
+        await this.args.write(card);
       } catch (e) {
-        cosnoel.log('er', e);
         hasRejected = true;
         done.reject(e);
       } finally {

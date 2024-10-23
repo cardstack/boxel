@@ -5,8 +5,8 @@
       "taskName": "Pill Picker Example",
       "taskDetail": "Use multi-select but for pills",
       "status": {
-        "index": 2,
-        "label": "Current Sprint"
+        "index": 1,
+        "label": "Next Sprint"
       },
       "priority": {
         "index": 1,
