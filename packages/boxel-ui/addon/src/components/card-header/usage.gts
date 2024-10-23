@@ -10,18 +10,40 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import { cssVar } from '../../helpers.ts';
-import BoxelButton from '../button/index.gts';
+import cssVar from '../../helpers/css-var.ts';
+import { MenuItem } from '../../helpers/menu-item.ts';
+import { IconLink } from '../../icons.gts';
 import CardContainer from '../card-container/index.gts';
 import CardHeader from './index.gts';
 
-export default class HeaderUsage extends Component {
-  @tracked title = 'Title';
-  @tracked titleIcon: ComponentLike<{ Element: Element }> = CaptionsIcon;
+export default class CardHeaderUsage extends Component {
+  @tracked cardTypeDisplayName = 'My Card Type';
+  @tracked cardTypeIcon: ComponentLike<{ Element: Element }> = CaptionsIcon;
   @tracked detail = undefined;
   @tracked size: 'large' | undefined = 'large';
   @tracked hasBackground = true;
   @tracked hasBottomBorder = false;
+  @tracked headerColor: string | undefined;
+  @tracked isSaving: boolean = false;
+  @tracked lastSavedMessage = 'Saved one minute ago';
+  @tracked realmInfo = {
+    iconURL: 'https://boxel-images.boxel.ai/icons/Letter-j.png',
+    name: "John's Workspace",
+  };
+  @tracked moreOptionsMenuItems: MenuItem[] = [
+    new MenuItem('Copy Card URL', 'action', {
+      action: () => console.log('Copy Card URL'),
+      icon: IconLink,
+      disabled: false,
+    }),
+  ];
+  @tracked isEditing = false;
+  onEdit = () => {
+    this.isEditing = true;
+  };
+  onFinishEditing = () => {
+    this.isEditing = false;
+  };
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare cardHeaderTextFont: CSSVariableInfo;
@@ -37,6 +59,10 @@ export default class HeaderUsage extends Component {
   get sizes() {
     return ['large', '<anyting other than large>'];
   }
+
+  close = () => {
+    console.log('close');
+  };
 
   <template>
     <div
@@ -55,41 +81,65 @@ export default class HeaderUsage extends Component {
         </:description>
         <:example>
           <CardContainer>
-            <CardHeader @title={{this.title}} @titleIcon={{this.titleIcon}}>
-              <:realmIcon>
-                🌏
-              </:realmIcon>
-              <:actions>
-                <BoxelButton>Edit</BoxelButton>
-              </:actions>
-            </CardHeader>
+            <CardHeader
+              @cardTypeDisplayName={{this.cardTypeDisplayName}}
+              @cardTypeIcon={{this.cardTypeIcon}}
+              @headerColor={{this.headerColor}}
+              @isSaving={{this.isSaving}}
+              @lastSavedMessage={{this.lastSavedMessage}}
+              @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              @realmInfo={{this.realmInfo}}
+              @onEdit={{unless this.isEditing this.onEdit}}
+              @onFinishEditing={{if this.isEditing this.onFinishEditing}}
+              @onClose={{this.close}}
+            />
           </CardContainer>
         </:example>
         <:api as |Args|>
           <Args.String
-            @name='title'
-            @description='Title'
-            @value={{this.title}}
-            @onInput={{fn (mut this.title)}}
+            @name='cardTypeDisplayName'
+            @description='card type display name, shown in the center of the header'
+            @value={{this.cardTypeDisplayName}}
+            @onInput={{fn (mut this.cardTypeDisplayName)}}
           />
           <Args.Component
-            @name='titleIcon'
-            @description='Title icon (often the card type icon)'
-            @value={{this.titleIcon}}
+            @name='cardTypeIcon'
+            @description='The card type icon. Shown next to the card type display name.'
+            @value={{this.cardTypeIcon}}
             @options={{array CaptionsIcon LayoutGridIcon}}
-            @onChange={{fn (mut this.titleIcon)}}
+            @onChange={{fn (mut this.cardTypeIcon)}}
           />
-          <Args.Yield
-            @name='realmIcon'
-            @description='This named block is rendered on the left side of the component.'
+          <Args.String
+            @name='headerColor'
+            @description='background color of the header, defaults to boxel-light'
+            @value={{this.headerColor}}
+            @onInput={{fn (mut this.headerColor)}}
+          />
+          <Args.Bool
+            @name='isSaving'
+            @description='whether the card is currently saving'
+            @value={{this.isSaving}}
+            @onInput={{fn (mut this.isSaving)}}
+          />
+          <Args.String
+            @name='lastSavedMessage'
+            @description='message to show when the card was last saved'
+            @value={{this.lastSavedMessage}}
+            @onInput={{fn (mut this.lastSavedMessage)}}
+          />
+          <Args.Object
+            @name='moreOptionsMenuItems'
+            @description='items to show in the more options menu'
+            @value={{this.moreOptionsMenuItems}}
+          />
+          <Args.Object
+            @name='realmInfo'
+            @description='realm information'
+            @value={{this.realmInfo}}
           />
           <Args.Yield
             @name='actions'
             @description='This named block is rendered on the right side of the component.'
-          />
-          <Args.Yield
-            @name='detail'
-            @description='This named block is rendered underneat the title in the center.'
           />
         </:api>
         <:cssVars as |Css|>

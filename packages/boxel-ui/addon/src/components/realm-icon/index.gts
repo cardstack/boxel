@@ -1,10 +1,13 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { RealmInfo } from '@cardstack/runtime-common';
+export type RealmDisplayInfo = {
+  iconURL: string | null;
+  name: string;
+};
 
 interface Signature {
   Args: {
-    realmInfo: RealmInfo;
+    realmInfo: RealmDisplayInfo;
   };
   Element: HTMLElement;
 }

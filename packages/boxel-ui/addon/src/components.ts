@@ -37,6 +37,7 @@ import Modal from './components/modal/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
 import RadioInput from './components/radio-input/index.gts';
+import RealmIcon from './components/realm-icon/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
   ResizeHandle,
@@ -85,6 +86,7 @@ export {
   Pill,
   ProgressBar,
   RadioInput,
+  RealmIcon,
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,

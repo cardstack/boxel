@@ -419,7 +419,7 @@ module('Integration | operator-mode', function (hooks) {
         }),
         'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
         'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
         ...Object.fromEntries(personCards),
       },
     }));

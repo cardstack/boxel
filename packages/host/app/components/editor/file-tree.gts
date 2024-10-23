@@ -7,13 +7,11 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { Tooltip } from '@cardstack/boxel-ui/components';
+import { RealmIcon, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   IconPencilNotCrossedOut,
   IconPencilCrossedOut,
 } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import RealmService from '@cardstack/host/services/realm';
 

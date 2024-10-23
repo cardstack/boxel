@@ -1,15 +1,18 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
+import {
+  BoxelDropdown,
+  Button,
+  Menu,
+  RealmIcon,
+} from '@cardstack/boxel-ui/components';
 import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
 import RealmService from '../services/realm';
-
-import RealmIcon from './operator-mode/realm-icon';
 
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
