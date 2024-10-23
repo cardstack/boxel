@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -9,11 +8,9 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
+import { modifier } from 'ember-modifier';
 
 import { trackedFunction } from 'ember-resources/util/function';
-
-import { MatrixEvent } from 'matrix-js-sdk';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
@@ -44,66 +41,22 @@ interface Signature {
     roomId: string;
     message: Message;
     messages: Message[];
-    index?: number;
+    index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
     isPending?: boolean;
+    registerScroller: (args: {
+      index: number;
+      element: HTMLElement;
+      scrollTo: () => void;
+    }) => void;
   };
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
-
-interface SendReadReceiptModifierSignature {
-  Args: {
-    Named: {
-      matrixService: MatrixService;
-      roomId: string;
-      message: Message;
-      messages: Message[];
-    };
-    Positional: [];
-  };
-  Element: Element;
-}
-
-class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
-  async modify(
-    _element: Element,
-    _positional: [],
-    args: NamedArgs<SendReadReceiptModifierSignature>,
-  ) {
-    let { matrixService, message, messages, roomId } = args;
-    let isLastMessage = messages[messages.length - 1] === message;
-    if (!isLastMessage) {
-      return;
-    }
-
-    let messageIsFromBot = message.author.userId === aiBotUserId;
-
-    if (!messageIsFromBot) {
-      return;
-    }
-
-    if (matrixService.currentUserEventReadReceipts.has(message.eventId)) {
-      return;
-    }
-
-    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
-    let matrixEvent = {
-      getId: () => message.eventId,
-      getRoomId: () => roomId,
-      getTs: () => message.created.getTime(),
-    };
-
-    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
-    schedule('afterRender', () => {
-      matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
-    });
-  }
-}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -112,10 +65,9 @@ export default class RoomMessage extends Component<Signature> {
     this.checkStreamingTimeout.perform();
   }
 
-  @tracked streamingTimeout = false;
-  @tracked commandResult: any;
+  @tracked private streamingTimeout = false;
 
-  checkStreamingTimeout = task(async () => {
+  private checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
       return;
     }
@@ -132,11 +84,11 @@ export default class RoomMessage extends Component<Signature> {
     this.checkStreamingTimeout.perform();
   });
 
-  get isFromAssistant() {
+  private get isFromAssistant() {
     return this.args.message.author.userId === aiBotUserId;
   }
 
-  get getComponent() {
+  private get getComponent() {
     let { commandResult } = this.args.message;
     if (!commandResult || !isCardInstance(commandResult)) {
       return undefined;
@@ -153,18 +105,14 @@ export default class RoomMessage extends Component<Signature> {
     }}
     {{#if this.resources}}
       <AiAssistantMessage
-        {{SendReadReceipt
-          matrixService=this.matrixService
-          roomId=@roomId
-          message=@message
-          messages=@messages
-        }}
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe
           (markdownToHtml @message.formattedMessage)
         }}
         @datetime={{@message.created}}
+        @index={{@index}}
+        @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component
           ProfileAvatarIcon

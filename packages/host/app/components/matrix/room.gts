@@ -1,8 +1,10 @@
+import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -21,6 +23,11 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import max from 'lodash/max';
+import { MatrixEvent } from 'matrix-js-sdk';
+
+import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -52,7 +59,7 @@ export default class Room extends Component<Signature> {
         data-test-room-name={{this.roomResource.name}}
         data-test-room={{@roomId}}
       >
-        <AiAssistantConversation>
+        <AiAssistantConversation @setScrollPosition={{this.setScrollPosition}}>
           {{#if this.messages}}
             {{#each this.messages as |message i|}}
               <RoomMessage
@@ -60,6 +67,7 @@ export default class Room extends Component<Signature> {
                 @messages={{this.messages}}
                 @message={{message}}
                 @index={{i}}
+                @registerScroller={{this.registerScroller}}
                 @isPending={{this.isPendingMessage message}}
                 @monacoSDK={{@monacoSDK}}
                 @isStreaming={{this.isMessageStreaming message i}}
@@ -69,6 +77,15 @@ export default class Room extends Component<Signature> {
                 data-test-message-idx={{i}}
               />
             {{/each}}
+
+            <div>
+              {{this.unreadMessageIndicies.length}}
+              unread messages
+            </div>
+            <div>
+              is scrolled to bottom:
+              {{this.isScrolledToBottom}}
+            </div>
           {{else}}
             <NewSession @sendPrompt={{this.sendMessage}} />
           {{/if}}
@@ -148,12 +165,31 @@ export default class Room extends Component<Signature> {
   );
 
   @tracked private currentMonacoContainer: number | undefined;
+  @tracked private isScrolledToBottom = false;
+  @tracked private userHasScrolled = false;
+  private messageScrollers: Map<number, () => void> = new TrackedMap();
+  private messageElements: WeakMap<HTMLElement, number> = new TrackedWeakMap();
+  private messageVisibilityObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      let index = this.messageElements.get(entry.target as HTMLElement);
+      if (index != null) {
+        if (entry.isIntersecting) {
+          // we only send the read receipt after the message has scrolled into view
+          // Note: this is over sending (we always have), as we really only need
+          // to send a read receipt for messages that were read after the last read
+          // receipt the server told us about.
+          this.sendReadReceipt(this.messages[index]);
+        }
+      }
+    });
+  });
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
 
     this.loadRoomSkills.perform();
+    registerDestructor(this, () => this.messageVisibilityObserver.disconnect());
   }
 
   private loadRoomSkills = restartableTask(async () => {
@@ -164,14 +200,100 @@ export default class Room extends Component<Signature> {
     }
   });
 
-  maybeRetryAction = (messageIndex: number, message: Message) => {
+  private registerScroller = ({
+    index,
+    element,
+    scrollTo,
+  }: {
+    index: number;
+    element: HTMLElement;
+    scrollTo: () => void;
+  }) => {
+    this.messageElements.set(element, index);
+    this.messageScrollers.set(index, scrollTo);
+    this.messageVisibilityObserver.observe(element);
+    if (
+      (!this.userHasScrolled || this.isScrolledToBottom) &&
+      index === this.messages.length - 1
+    ) {
+      scrollTo();
+    }
+  };
+
+  private setScrollPosition = ({
+    isBottom,
+    // TODO eventually we'll want to perserve the current scroll position
+    // as user switches between rooms
+    currentPosition: _currentPosition,
+  }: {
+    currentPosition: number;
+    isBottom: boolean;
+  }) => {
+    this.isScrolledToBottom = isBottom;
+    if (!isBottom) {
+      this.userHasScrolled = true;
+    }
+  };
+
+  @cached
+  private get unreadMessageIndicies() {
+    // read receipts are implemented using “up to” markers. This marker indicates
+    // that the acknowledgement applies to all events “up to and including” the
+    // event specified. For example, marking an event as “read” would indicate that
+    // the user had read all events up to the referenced event.
+    let readReceiptIndicies: number[] = [];
+    let unviewedIndicies: number[] = [];
+    for (let receipt of this.matrixService.currentUserEventReadReceipts.keys()) {
+      let maybeIndex = this.messages.findIndex((m) => m.eventId === receipt);
+      if (maybeIndex != null) {
+        readReceiptIndicies.push(maybeIndex);
+      }
+    }
+    let firstUnreadIndex = (max(readReceiptIndicies) ?? -1) + 1;
+    for (let i = firstUnreadIndex; i < this.messages.length; i++) {
+      if (
+        this.matrixService.profile.userId === this.messages[i].author.userId
+      ) {
+        continue;
+      }
+      unviewedIndicies.push(i);
+    }
+    return unviewedIndicies;
+  }
+
+  private sendReadReceipt(message: Message) {
+    if (this.matrixService.profile.userId === message.author.userId) {
+      return;
+    }
+    if (this.matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      return;
+    }
+
+    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix
+    // SDK), but it' not available to us here - however, we can fake it by adding
+    // the necessary methods
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => this.args.roomId,
+      getTs: () => message.created.getTime(),
+    };
+
+    // Without scheduling this after render, this produces the "attempted to
+    // update value, but it had already been used previously in the same
+    // computation" error
+    schedule('afterRender', () => {
+      this.matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+    });
+  }
+
+  private maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: Message, messageIndex: number) {
+  @action private isMessageStreaming(message: Message, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -214,7 +336,7 @@ export default class Room extends Component<Signature> {
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
-  @action resendLastMessage() {
+  @action private resendLastMessage() {
     if (!this.room) {
       throw new Error(
         'Bug: should not be able to resend a message without a room.',
@@ -334,31 +456,8 @@ export default class Room extends Component<Signature> {
     },
   );
 
-  get topMostStackItems(): StackItem[] {
+  private get topMostStackItems(): StackItem[] {
     return this.operatorModeStateService.topMostStackItems();
-  }
-
-  get lastTopMostCard() {
-    let stackItems = this.operatorModeStateService.topMostStackItems();
-    if (stackItems.length === 0) {
-      return undefined;
-    }
-    let topMostItem = stackItems[stackItems.length - 1];
-    let topMostCard = topMostItem?.card;
-    if (!topMostCard) {
-      return undefined;
-    } else {
-      let realmURL = topMostItem.card[topMostItem.api.realmURL];
-      if (!realmURL) {
-        throw new Error(
-          `could not determine realm URL for card ${topMostItem.card.id}`,
-        );
-      }
-      if (topMostItem.card.id === `${realmURL.href}index`) {
-        return undefined;
-      }
-    }
-    return topMostCard;
   }
 
   private get autoAttachedCards() {
