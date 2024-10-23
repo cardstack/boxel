@@ -26,14 +26,12 @@ import { TrackedArray } from 'tracked-built-ins';
 import {
   CardContainer,
   CardHeader,
-  IconButton,
-  Tooltip,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { cn, cssVar, eq, optional } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
-import { IconPencil, IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
