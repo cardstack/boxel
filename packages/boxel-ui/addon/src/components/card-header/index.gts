@@ -185,8 +185,8 @@ export default class CardHeader extends Component<Signature> {
             --boxel-card-header-realm-icon-size,
             var(--boxel-icon-med)
           );
-          --inner-boxel-card-header-title-icon-size: var(
-            --boxel-card-header-title-icon-size,
+          --inner-boxel-card-header-card-type-icon-size: var(
+            --boxel-card-header-card-type-icon-size,
             1rem
           );
           position: relative;
@@ -235,8 +235,8 @@ export default class CardHeader extends Component<Signature> {
         header .card-type-display-name > :deep(svg) {
           display: inline-block;
           vertical-align: middle;
-          max-height: var(--inner-boxel-card-header-title-icon-size);
-          max-width: var(--inner-boxel-card-header-title-icon-size);
+          max-height: var(--inner-boxel-card-header-card-type-icon-size);
+          max-width: var(--inner-boxel-card-header-card-type-icon-size);
           margin-right: var(--boxel-sp-xxxs);
           margin-bottom: calc(1rem - var(--boxel-font-size-sm));
         }

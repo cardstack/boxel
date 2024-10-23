@@ -50,7 +50,7 @@ export default class CardHeaderUsage extends Component {
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare cardHeaderTextTransform: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
-  declare cardHeaderTitleIconSize: CSSVariableInfo;
+  declare cardHeaderCardTypeIconSize: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare cardHeaderIconContainerMinWidth: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
@@ -70,7 +70,7 @@ export default class CardHeaderUsage extends Component {
       style={{cssVar
         boxel-card-header-text-font=this.cardHeaderTextFont.value
         boxel-card-header-text-transform=this.cardHeaderTextTransform.value
-        boxel-card-header-title-icon-size=this.cardHeaderTitleIconSize.value
+        boxel-card-header-card-type-icon-size=this.cardHeaderCardTypeIconSize.value
         boxel-card-header-icon-container-min-width=this.cardHeaderIconContainerMinWidth.value
         boxel-card-header-actions-min-width=this.cardHeaderActionsMinWidth.value
       }}
@@ -160,12 +160,12 @@ export default class CardHeaderUsage extends Component {
             @onInput={{this.cardHeaderTextTransform.update}}
           />
           <Css.Basic
-            @name='boxel-card-header-title-icon-size'
+            @name='boxel-card-header-card-type-icon-size'
             @type='length'
             @description='width and height of the title icon'
-            @defaultValue={{this.cardHeaderTitleIconSize.defaults}}
-            @value={{this.cardHeaderTitleIconSize.value}}
-            @onInput={{this.cardHeaderTitleIconSize.update}}
+            @defaultValue={{this.cardHeaderCardTypeIconSize.defaults}}
+            @value={{this.cardHeaderCardTypeIconSize.value}}
+            @onInput={{this.cardHeaderCardTypeIconSize.update}}
           />
           <Css.Basic
             @name='boxel-card-header-icon-container-min-width'

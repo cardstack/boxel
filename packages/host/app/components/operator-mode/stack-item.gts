@@ -251,6 +251,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get moreOptionsMenuItems() {
+    if (this.isBuried) {
+      return undefined;
+    }
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () => this.copyToClipboard.perform(),
@@ -406,11 +409,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private get canEdit() {
-    return !this.isEditing && this.realm.canWrite(this.card.id);
+    return (
+      !this.isBuried && !this.isEditing && this.realm.canWrite(this.card.id)
+    );
   }
 
   private get isEditing() {
-    return this.args.item.format === 'edit';
+    return !this.isBuried && this.args.item.format === 'edit';
   }
 
   <template>
@@ -444,7 +449,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
               @onFinishEditing={{if this.isEditing (perform this.doneEditing)}}
-              @onClose={{fn @close @item}}
+              @onClose={{unless this.isBuried (fn @close @item)}}
               class='header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if
@@ -500,10 +505,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         gap: var(--boxel-sp-xxs);
       }
 
-      .header:not(.edit .header) {
-        --boxel-card-header-detail-max-width: none;
-      }
-
       .save-indicator {
         font: var(--boxel-font-xs);
         opacity: 0.6;
@@ -550,20 +551,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: none;
       }
 
-      .buried .header .icon-button {
-        display: none;
-      }
-
       .buried .header {
         cursor: pointer;
         font: 600 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxxs);
         --boxel-card-header-padding: var(--boxel-sp-xs);
         --boxel-card-header-text-font: var(--boxel-font-size-xs);
-        --boxel-card-header-icon-width: var(--boxel-icon-sm);
-        --boxel-card-header-icon-height: var(--boxel-icon-sm);
+        --boxel-card-header-realm-icon-size: var(--boxel-icon-sm);
         --boxel-card-header-border-radius: var(--boxel-border-radius-lg);
-        --boxel-card-header-title-icon-size: var(--boxel-icon-xxs);
+        --boxel-card-header-card-type-icon-size: var(--boxel-icon-xxs);
       }
 
       .loading {
