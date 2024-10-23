@@ -9,6 +9,7 @@ import {
   RealmAuthClient,
   RealmAuthMatrixClientInterface,
 } from '@cardstack/runtime-common/realm-auth-client';
+import { SupportedMimeType } from '@cardstack/runtime-common/router';
 import { createClient } from 'matrix-js-sdk';
 
 function getUrl(uri: vscode.Uri) {
@@ -216,19 +217,8 @@ export class RealmFS implements vscode.FileSystemProvider {
     let headers: Record<string, string> = {
       'Content-Type': 'text/plain;charset=UTF-8',
       Authorization: `${await this.getJWT(apiUrl)}`,
+      Accept: SupportedMimeType.CardSource,
     };
-
-    // Add special header for .gts files
-    if (uri.path.endsWith('.gts')) {
-      headers['Accept'] = 'application/vnd.card+source';
-      requestType = 'POST';
-    } else if (uri.path.endsWith('.json')) {
-      // We cannot write new files so this only works for editing existing ones
-      requestType = 'PATCH';
-      apiUrl = apiUrl.replace('.json', '');
-      console.log('API URL:', apiUrl, 'requestType:', requestType);
-      headers['Accept'] = 'application/vnd.card+json';
-    }
 
     try {
       // Convert Uint8Array to text

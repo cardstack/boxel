@@ -1129,6 +1129,25 @@ module('Realm Server', function (hooks) {
         );
       });
 
+      test('serves a card-source POST request for a .txt file', async function (assert) {
+        let response = await request
+          .post('/hello-world.txt')
+          .set('Accept', 'application/vnd.card+source')
+          .send(`Hello World`);
+
+        assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+        let txtFile = join(
+          dir.name,
+          'realm_server_1',
+          'test',
+          'hello-world.txt',
+        );
+        assert.ok(existsSync(txtFile), 'file exists');
+        let src = readFileSync(txtFile, { encoding: 'utf8' });
+        assert.strictEqual(src, 'Hello World');
+      });
+
       test('can serialize a card instance correctly after card definition is changed', async function (assert) {
         // create a card def
         {
@@ -2910,6 +2929,11 @@ module('Realm Server', function (hooks) {
       }
     });
 
+    test('returns 404 for request that has malformed URI', async function (assert) {
+      let response = await request2.get('/%c0').set('Accept', '*/*');
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+    });
+
     test('can dynamically load a card definition from own realm', async function (assert) {
       let ref = {
         module: `${testRealmHref}person`,
@@ -3251,7 +3275,7 @@ module('Realm Server', function (hooks) {
   });
 });
 
-module('Realm Server serving from root', function (hooks) {
+module('Realm server with realm mounted at the origin', function (hooks) {
   let testRealmServer: Server;
 
   let request: SuperTest<Test>;
@@ -3295,7 +3319,7 @@ module('Realm Server serving from root', function (hooks) {
     },
   });
 
-  test('serves a root directory GET request', async function (assert) {
+  test('serves an origin realm directory GET request', async function (assert) {
     let response = await request
       .get('/')
       .set('Accept', 'application/vnd.api+json');

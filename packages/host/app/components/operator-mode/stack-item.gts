@@ -62,7 +62,7 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import config from '@cardstack/host/config/environment';
 
-import { type StackItem } from '@cardstack/host/lib/stack-item';
+import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import type {
   CardDef,
@@ -224,6 +224,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
+  private get isTopCard() {
+    return !this.isBuried;
+  }
+
   private get cardContext() {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
@@ -291,7 +295,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         disabled: !this.card.id,
       }),
     ];
-    if (this.realm.canWrite(this.card.id)) {
+    if (
+      !isIndexCard(this.args.item) && // workspace index card cannot be deleted
+      this.realm.canWrite(this.card.id)
+    ) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
           action: () => this.args.publicAPI.delete(this.card),
@@ -477,6 +484,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 {{#if realmInfo.iconURL}}
                   <RealmIcon
                     @realmInfo={{realmInfo}}
+                    @canAnimate={{this.isTopCard}}
                     class='header-icon'
                     style={{cssVar
                       realm-icon-background=(getContrastColor
@@ -637,7 +645,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .edit .header-icon {
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         border: 1px solid var(--boxel-light);
       }
 

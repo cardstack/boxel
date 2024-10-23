@@ -409,7 +409,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Test Workspace A"]');
     assert
       .dom(
-        '[data-test-realm-icon-url="https://i.postimg.cc/d0B9qMvy/icon.png"]',
+        '[data-test-realm-icon-url="https://boxel-images.boxel.ai/icons/cardstack.png"]',
       )
       .exists();
     assert.dom('[data-test-realm-name]').hasText('In Test Workspace A');

@@ -4,6 +4,7 @@ import { fn } from '@ember/helper';
 import {
   BaseDef,
   CardContext,
+  realmURL,
   type Box,
   type BoxComponent,
   type CardDef,
@@ -97,7 +98,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
-        offerToCreate: { ref: type, relativeTo: undefined },
+        offerToCreate: {
+          ref: type,
+          relativeTo: undefined,
+          realmURL: this.args.model.value[realmURL],
+        },
         multiSelect: true,
         createNewCard: this.cardContext?.actions?.createCard,
       },

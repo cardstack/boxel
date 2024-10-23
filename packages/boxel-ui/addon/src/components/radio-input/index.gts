@@ -1,4 +1,5 @@
 import { hash } from '@ember/helper';
+import { get } from '@ember/object';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
@@ -16,6 +17,7 @@ export interface Signature {
     hideRadio?: boolean;
     invalid?: boolean;
     items: any[];
+    keyName?: string;
     name: string;
     orientation?: string;
     spacing?: string;
@@ -36,6 +38,11 @@ export default class RadioInput extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
   }
+
+  get checkedKey() {
+    return this.args.keyName || 'id';
+  }
+
   <template>
     <style scoped>
       .boxel-radio-fieldset {
@@ -104,7 +111,9 @@ export default class RadioInput extends Component<Signature> {
                 id=item.id
                 name=@name
                 disabled=@disabled
-                checked=(if @checkedId (eq @checkedId item.id))
+                checked=(if
+                  @checkedId (eq @checkedId (get item this.checkedKey))
+                )
                 hideRadio=@hideRadio
                 hideBorder=@hideBorder
               )
