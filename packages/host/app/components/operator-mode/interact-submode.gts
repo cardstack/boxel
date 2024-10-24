@@ -386,11 +386,20 @@ export default class InteractSubmode extends Component<Signature> {
       let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
         aiBotUsername,
       ]);
+      const context = {
+        submode: this.operatorModeStateService.state.submode,
+        openCardIds: this.operatorModeStateService
+          .topMostStackItems()
+          .map((item) => item.card.id),
+      };
+
       await this.matrixService.sendMessage(
         newRoomId,
         message,
         [card],
         [commandCard],
+        undefined,
+        context,
       );
     },
   );
