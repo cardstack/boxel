@@ -85,7 +85,7 @@ export default class Room extends Component<Signature> {
             <NewSession @sendPrompt={{this.sendMessage}} />
           {{/if}}
           {{#if this.room}}
-            {{#if this.hasUnreadMessages}}
+            {{#if this.showUnreadIndicator}}
               <div class='unread-indicator'>
                 <BoxelButton
                   @size='tall'
@@ -309,6 +309,13 @@ export default class Room extends Component<Signature> {
 
   private get hasUnreadMessages() {
     return this.numberOfUnreadMessages > 0;
+  }
+
+  private get showUnreadIndicator() {
+    // if user is already scrolled to bottom we don't show the indicator to
+    // prevent the flash of the indicator appearing and then disappearing during
+    // the read receipt acknowledgement
+    return this.hasUnreadMessages && !this.isScrolledToBottom;
   }
 
   private get unreadMessageText() {
