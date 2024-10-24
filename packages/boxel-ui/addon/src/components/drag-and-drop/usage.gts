@@ -1,4 +1,5 @@
 import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -6,11 +7,12 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, {
   type ColumnHeaderArgs,
-  Column,
   Card,
+  Column,
 } from './index.gts';
 
 export default class DndUsage extends Component {
@@ -24,6 +26,7 @@ export default class DndUsage extends Component {
     new Column('In progress', []),
     new Column('Done', []),
   ];
+  @tracked isLoading = false;
 
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanHeaderBg: CSSVariableInfo;
@@ -51,6 +54,7 @@ export default class DndUsage extends Component {
         <DndKanbanBoard
           @columns={{this.columns}}
           @columnHeader={{ColumnHeader}}
+          @isLoading={{this.isLoading}}
         >
           <:card as |card column|>
             <div class='custom-card'>
@@ -68,6 +72,21 @@ export default class DndUsage extends Component {
           @name='columns'
           @description='Array of Column objects representing the kanban board columns'
           @required={{true}}
+        />
+        <Args.Component
+          @name='columnHeader'
+          @description='Custom component for rendering column headers'
+        />
+        <Args.Bool
+          @name='isLoading'
+          @description='Indicates if the card is in a loading state. You can also use onMoveCard arguments to experiment with the loading state, allowing for dynamic updates during card movements.'
+          @optional={{true}}
+          @onInput={{fn (mut this.isLoading)}}
+          @value={{this.isLoading}}
+        />
+        <Args.Action
+          @name='onMoveCard'
+          @description='Custom callback function triggered when a card is moved'
         />
       </:api>
       <:cssVars as |Css|>
@@ -89,7 +108,7 @@ export default class DndUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .custom-card {
         padding: var(--boxel-sp);
       }

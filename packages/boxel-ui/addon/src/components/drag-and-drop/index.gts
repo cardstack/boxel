@@ -1,11 +1,12 @@
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { fn, hash } from '@ember/helper';
-import { and, eq } from '../../helpers/truth-helpers.ts';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
+import { and, eq } from '../../helpers/truth-helpers.ts';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -23,18 +24,18 @@ export interface DndKanbanBoardArgs<Column> {
 export interface DndKanbanBoardSignature<Column> {
   Args: DndKanbanBoardArgs<Column>;
   Blocks: {
+    card: [card?: any, column?: any];
     default: [
       {
-        columns: any[];
         DndDropTargetModifier: any;
         DndSortableItemModifier: any;
+        columns: any[];
+        isDropZoneTargeted: (columnIndex: number) => boolean;
         moveCard: (event: any) => void;
         onColumnDragEnter: (columnIndex: number) => void;
         onColumnDragLeave: () => void;
-        isDropZoneTargeted: (columnIndex: number) => boolean;
       },
     ];
-    card: [card?: any, column?: any];
   };
 }
 
