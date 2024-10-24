@@ -45,6 +45,8 @@ module('Integration | Component | RoomMessage', function (hooks) {
   }
 
   async function renderRoomMessageComponent(testScenario: any) {
+    function noop() {}
+
     await render(<template>
       {{! @glint-ignore }}
       <RoomMessage
@@ -53,6 +55,8 @@ module('Integration | Component | RoomMessage', function (hooks) {
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
         @currentEditor={{testScenario.currentEditor}}
+        @registerScroller={{noop}}
+        @index={{0}}
         @setCurrentEditor={{testScenario.setCurrentMonacoContainer}}
         @retryAction={{testScenario.maybeRetryAction}}
         data-test-message-idx='1'
