@@ -255,12 +255,11 @@ export default class ButtonComponent extends Component<Signature> {
         .kind-text-only:not(:disabled) {
           --boxel-button-color: transparent;
           --boxel-button-border: 1px solid transparent;
-          --boxel-button-text-color: var(--boxel-highlight);
           --boxel-button-letter-spacing: var(--boxel-lsp-xs);
         }
 
         .kind-text-only:not(:disabled):hover {
-          --boxel-button-text-color: var(--boxel-highlight-hover);
+          --boxel-button-text-color: var(--boxel-highlight);
         }
 
         /**

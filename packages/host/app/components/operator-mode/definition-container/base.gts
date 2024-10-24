@@ -171,13 +171,12 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
     }
     .action-button {
       --boxel-button-padding: 0 var(--boxel-sp-4xs);
-      --icon-color: var(--boxel-highlight);
       justify-content: flex-start;
       gap: var(--boxel-sp-xxs);
       align-self: flex-start;
     }
     .action-button:hover:not(:disabled) {
-      --icon-color: var(--boxel-highlight-hover);
+      --icon-color: var(--boxel-highlight);
     }
     .info-footer {
       margin-top: var(--boxel-sp-sm);
