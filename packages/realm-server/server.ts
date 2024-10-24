@@ -56,6 +56,7 @@ import {
   sign,
   verify,
 } from 'jsonwebtoken';
+import stripeWebhookHandler from './billing/stripe-webhook-handlers';
 
 interface RealmServerTokenClaim {
   user: string;
@@ -163,6 +164,7 @@ export class RealmServer {
     router.post('/_server-session', this.createSession());
     router.post('/_create-realm', this.handleCreateRealmRequest);
     router.get('/_catalog-realms', this.fetchCatalogRealms);
+    router.post('/_stripe-webhook', this.handleStripeWebhook);
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -655,6 +657,13 @@ export class RealmServer {
 
     throw new Error(`Can not determine the matrix registration secret`);
   }
+
+  private handleStripeWebhook = async (ctxt: Koa.Context, _next: Koa.Next) => {
+    let request = await fetchRequestFromContext(ctxt);
+
+    let response = await stripeWebhookHandler(this.dbAdapter, request);
+    await setContextResponse(ctxt, response);
+  };
 
   private fetchCatalogRealms = async (ctxt: Koa.Context, _next: Koa.Next) => {
     let catalogRealms = this.catalogRealms;

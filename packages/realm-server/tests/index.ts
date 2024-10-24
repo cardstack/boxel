@@ -11,3 +11,4 @@ import './permissions/permission-checker-test';
 import './queue-test';
 import './realm-server-test';
 import './virtual-network-test';
+import './billing-test';

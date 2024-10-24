@@ -1654,6 +1654,10 @@ importers:
         version: 5.1.6
 
   packages/realm-server:
+    dependencies:
+      stripe:
+        specifier: ^17.2.1
+        version: 17.2.1
     devDependencies:
       '@cardstack/boxel-icons':
         specifier: workspace:*
@@ -23462,6 +23466,14 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
     dev: true
+
+  /stripe@17.2.1:
+    resolution: {integrity: sha512-Mwb0SitV/UjxTLSUiTlUQ0VDE/gfyQ7OHDGdvDdvKIH4CNNqobPKlzlWhoZHFFU0OA/YsZyBtPULK4JG86BAAg==}
+    engines: {node: '>=12.*'}
+    dependencies:
+      '@types/node': 18.19.54
+      qs: 6.12.3
+    dev: false
 
   /style-loader@2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.89.0):
     resolution: {integrity: sha512-Z0gYUJmzZ6ZdRUqpg1r8GsaFKypE+3xAzuFeMuoHgjc9KZv3wMyCRjQIWEbhoFSq7+7yoHXySDJyyWQaPajeiQ==}
