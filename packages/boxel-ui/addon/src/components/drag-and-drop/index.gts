@@ -10,13 +10,14 @@ import { and, eq } from '../../helpers/truth-helpers.ts';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
-export interface ColumnHeaderArgs {
-  title?: string;
+export interface DndColumnHeaderArgs {
+  column?: Column;
 }
 
 export interface DndKanbanBoardArgs<Column> {
-  columnHeader?: ComponentLike<ColumnHeaderArgs>;
+  columnHeader?: ComponentLike<DndColumnHeaderArgs>;
   columns: Column[];
+  isDisabled?: boolean;
   isLoading?: boolean;
   onMoveCard?: (card: Card, column: Column) => void;
 }
@@ -24,18 +25,7 @@ export interface DndKanbanBoardArgs<Column> {
 export interface DndKanbanBoardSignature<Column> {
   Args: DndKanbanBoardArgs<Column>;
   Blocks: {
-    card: [card?: any, column?: any];
-    default: [
-      {
-        DndDropTargetModifier: any;
-        DndSortableItemModifier: any;
-        columns: any[];
-        isDropZoneTargeted: (columnIndex: number) => boolean;
-        moveCard: (event: any) => void;
-        onColumnDragEnter: (columnIndex: number) => void;
-        onColumnDragLeave: () => void;
-      },
-    ];
+    default: [card?: any, column?: any];
   };
 }
 
@@ -72,7 +62,6 @@ export default class DndKanbanBoard extends Component<
   @tracked insertAt: any;
   @tracked insertBefore: any;
   @tracked removeItem: any;
-  @tracked columns: Column[] = this.args.columns;
   @tracked draggedCard: Card | null = null;
   @tracked hoveredColumnIndex: number | null = null;
 
@@ -127,19 +116,6 @@ export default class DndKanbanBoard extends Component<
 
   @action clearHoveredState() {
     this.hoveredColumnIndex = null;
-  }
-
-  @action moveColumn({
-    source: { data: draggedItem },
-    target: { data: dropTarget, edge },
-  }: any) {
-    this.columns = this.removeItem(this.columns, draggedItem);
-
-    if (edge === 'left') {
-      this.columns = this.insertBefore(this.columns, dropTarget, draggedItem);
-    } else {
-      this.columns = this.insertAfter(this.columns, dropTarget, draggedItem);
-    }
   }
 
   @action moveCard({
@@ -197,37 +173,42 @@ export default class DndKanbanBoard extends Component<
   <template>
     {{#if this.areModifiersLoaded}}
       <div class='draggable-container' {{on 'dragend' this.onDragEnd}}>
-        {{#if (has-block 'card')}}
-          {{#each this.columns as |column columnIndex|}}
+        {{#each @columns as |column index|}}
+          <div
+            class='column'
+            {{this.DndDropTargetModifier
+              group='cards'
+              data=(hash parent=column)
+              onDrop=this.moveCard
+              onDragEnter=(fn this.onColumnDragEnter index)
+              onDragLeave=this.onColumnDragLeave
+            }}
+          >
+            <div class='column-header'>
+              {{#if @columnHeader}}
+                <@columnHeader @column={{column}} />
+              {{else}}
+                {{column.title}}
+              {{/if}}
+            </div>
+
             <div
-              class='column'
-              {{this.DndDropTargetModifier
-                group='cards'
-                data=(hash parent=column)
-                onDrop=this.moveCard
-                onDragEnter=(fn this.onColumnDragEnter columnIndex)
-                onDragLeave=this.onColumnDragLeave
-              }}
+              class='column-drop-zone
+                {{if (this.isDropZoneTargeted index) "is-hovered"}}'
             >
-              <div class='column-header'>
-                {{#if @columnHeader}}
-                  <@columnHeader @title={{column.title}} />
-                {{else}}
-                  {{column.title}}
-                {{/if}}
-              </div>
+              {{#if (this.isDropZoneTargeted index)}}
+                <div class='column-drop-zone-overlay'>
+                  Board ordered by Priority
+                </div>
+              {{/if}}
 
-              <div
-                class='column-drop-zone
-                  {{if (this.isDropZoneTargeted columnIndex) "is-hovered"}}'
-              >
-                {{#if (this.isDropZoneTargeted columnIndex)}}
-                  <div class='column-drop-zone-overlay'>
-                    Board ordered by Priority
+              {{#each column.cards as |card|}}
+                {{#if @isDisabled}}
+                  <div class='draggable-card is-disabled'>
+                    <div class='overlay'></div>
+                    {{yield card column}}
                   </div>
-                {{/if}}
-
-                {{#each column.cards as |card|}}
+                {{else}}
                   <div
                     class='draggable-card {{if @isLoading "is-loading"}}'
                     {{this.DndSortableItemModifier
@@ -240,7 +221,7 @@ export default class DndKanbanBoard extends Component<
                   >
                     {{#if (and @isLoading (eq card this.draggedCard))}}
                       <div class='overlay'></div>
-                      {{yield card column to='card'}}
+                      {{yield card column}}
                       <LoadingIndicator
                         width='18'
                         height='18'
@@ -248,27 +229,14 @@ export default class DndKanbanBoard extends Component<
                         class='loader'
                       />
                     {{else}}
-                      {{yield card column to='card'}}
+                      {{yield card column}}
                     {{/if}}
                   </div>
-                {{/each}}
-              </div>
+                {{/if}}
+              {{/each}}
             </div>
-          {{/each}}
-        {{else}}
-          {{! Customize the Kanban board columns by passing drag-and-drop function arguments }}
-          {{yield
-            (hash
-              columns=this.columns
-              DndDropTargetModifier=this.DndDropTargetModifier
-              DndSortableItemModifier=this.DndSortableItemModifier
-              moveCard=this.moveCard
-              onColumnDragEnter=this.onColumnDragEnter
-              onColumnDragLeave=this.onColumnDragLeave
-              isDropZoneTargeted=this.isDropZoneTargeted
-            )
-          }}
-        {{/if}}
+          </div>
+        {{/each}}
       </div>
     {{/if}}
 
@@ -277,7 +245,6 @@ export default class DndKanbanBoard extends Component<
         display: flex;
         overflow-x: auto;
         flex-grow: 1;
-        padding: var(--boxel-sp);
         transition: transform 0.5s ease;
         height: 100vh;
       }
@@ -292,6 +259,7 @@ export default class DndKanbanBoard extends Component<
         transition:
           all 0.3s ease,
           filter 0.3s ease;
+        cursor: grab;
       }
       .draggable-card.is-dragging {
         border: 2px solid var(--boxel-highlight);
@@ -316,6 +284,20 @@ export default class DndKanbanBoard extends Component<
         left: 50%;
         transform: translate(-50%, -50%);
         z-index: 2;
+      }
+      .draggable-card.is-disabled {
+        position: relative;
+      }
+      .draggable-card.is-disabled > .overlay {
+        position: absolute;
+        top: 0%;
+        left: 0%;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(38 38 38 / 5%);
+        z-index: 1;
+        filter: grayscale(100%);
+        cursor: not-allowed;
       }
       .draggable-card.is-on-target {
         transform: scale(0.95);

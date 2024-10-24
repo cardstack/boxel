@@ -1,17 +1,18 @@
 import {
   Component,
   realmURL,
-  CardContext,
   StringField,
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
-
 import { getCard } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
-import { CardContainer } from '@cardstack/boxel-ui/components';
+import {
+  CardContainer,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import {
   BoxelButton,
   BoxelDropdown,
@@ -19,7 +20,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
-import { fn, array, hash } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { action } from '@ember/object';
 import {
   LooseSingleCardDocument,
@@ -43,48 +44,19 @@ interface ColumnData {
   codeRef: ResolvedCodeRef;
 }
 
-interface AppTaskCardIsolatedArgs {
-  context: CardContext;
-}
-
-class AppTaskCardIsolated extends Component<
-  typeof AppTaskCard | AppTaskCardIsolatedArgs
-> {
+class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked isSheetOpen = false;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
   @tracked triggeredColumnIndex: number | null = null;
+  @tracked isDisabled = false;
+  @tracked isLoading = false;
+  columns: Column[] = [];
+  previousColumns: Column[] = [];
 
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
-  get realms(): string[] {
-    const model = this.args.model as { [realmURL]: { href: string } };
-    return model[realmURL]?.href ? [model[realmURL].href] : [];
-  }
-
-  get assignedTaskCodeRef() {
-    return {
-      module: `${this.args.model[realmURL]?.href}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
-      name: 'Task',
-    };
-  }
-
-  getQueryForStatus(status: string) {
-    return {
-      filter: {
-        on: this.assignedTaskCodeRef,
-        any: [
-          {
-            eq: {
-              'status.label': status,
-            },
-          },
-        ],
-      },
-    };
-  }
-
-  columnData: any[] = [
+  columnData: ColumnData[] = [
     {
       status: {
         label: 'Backlog',
@@ -141,6 +113,47 @@ class AppTaskCardIsolated extends Component<
     };
   });
 
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.initializeColumns();
+  }
+
+  initializeColumns() {
+    this.columns = this.columnData.map((column) => {
+      return new Column(column.status.label, [], column);
+    });
+    this.previousColumns = [...this.columns];
+  }
+
+  get realms(): string[] {
+    const model = this.args.model as { [realmURL]: { href: string } };
+    return model[realmURL]?.href ? [model[realmURL].href] : [];
+  }
+
+  get assignedTaskCodeRef() {
+    return {
+      module: `${this.args.model[realmURL]?.href}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
+      name: 'Task',
+    };
+  }
+
+  get realmURL() {
+    return this.args.model[realmURL];
+  }
+
+  getQueryForStatus(status: string): Query {
+    return {
+      filter: {
+        on: this.assignedTaskCodeRef,
+        any: [
+          {
+            eq: { 'status.label': status },
+          },
+        ],
+      },
+    };
+  }
+
   @action
   updateFilter(type: string, value: string) {
     switch (type) {
@@ -158,29 +171,55 @@ class AppTaskCardIsolated extends Component<
     }
   }
 
-  @tracked columns: column[] = [];
-  @tracked previousColumns: column[] = [];
-
-  constructor(owner: unknown, args: AppTaskCardIsolatedArgs) {
-    super(owner, args);
-    this.initializeColumns();
-  }
-
-  initializeColumns() {
-    this.columns = this.columnData.map((column) => {
-      return new Column(column.status.label, [], column);
-    });
-    this.previousColumns = [...this.columns];
-  }
-
   @action
   updateColumnCards(columnIndex: number, cards: any[]) {
     const dndCards = cards.map((card) => new Card({ ...card }));
     this.columns[columnIndex].cards = dndCards;
   }
 
-  get realmURL() {
-    return this.args.model[realmURL];
+  @action async onMoveCardMutation(draggedCard: Card, newColumn: Column) {
+    try {
+      let cardUrl = new URL(draggedCard.data.url);
+
+      let resource = getCard(cardUrl);
+      await resource.loaded;
+
+      const cardInstance: any = resource.card;
+
+      if (cardInstance.status.index !== newColumn.cardAPI.status.index) {
+        this.isLoading = true;
+
+        cardInstance.status.index = newColumn.cardAPI.status.index;
+        cardInstance.status.label = newColumn.cardAPI.status.label;
+
+        this.previousColumns = this.columns.map((column) => ({
+          ...column,
+          cards: column.cards.map((card: Card) => new Card({ ...card })),
+        }));
+
+        await this.saveUpdatedCard(cardInstance);
+      }
+    } catch (error) {
+      console.error('Error updating card status:', error);
+      this.columns = this.previousColumns;
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async saveUpdatedCard(cardInstance: any) {
+    const publicAPI = this.args.context?.actions;
+
+    if (!publicAPI?.saveCardDirectly) {
+      throw new Error('saveCard action not available');
+    }
+
+    try {
+      await publicAPI.saveCardDirectly(cardInstance, false);
+    } catch (saveError) {
+      this.columns = this.previousColumns;
+      throw saveError;
+    }
   }
 
   @action createNewTask(column: any) {
@@ -188,7 +227,7 @@ class AppTaskCardIsolated extends Component<
     this.triggeredColumnIndex = column.cardAPI.status.index;
   }
 
-  _createNewTask = restartableTask(async (column: any, columnIndex: number) => {
+  _createNewTask = restartableTask(async (column: Column) => {
     if (this.realmURL === undefined) {
       return;
     }
@@ -248,82 +287,6 @@ class AppTaskCardIsolated extends Component<
     }
   });
 
-  @tracked isLoading = false;
-
-  @action async onMoveCardMutation(draggedCard: Card, newColumn: Column) {
-    try {
-      let cardUrl = new URL(draggedCard.data.url);
-
-      let resource = getCard(cardUrl);
-      await resource.loaded;
-
-      const cardInstance: any = resource.card;
-
-      if (cardInstance.status.index !== newColumn.cardAPI.status.index) {
-        this.isLoading = true;
-
-        this.previousColumns = this.columns.map((column) => ({
-          ...column,
-          cards: column.cards.map((card) => new Card({ ...card })),
-        }));
-
-        cardInstance.status.index = newColumn.cardAPI.status.index;
-        cardInstance.status.label = newColumn.cardAPI.status.label;
-
-        this.previousColumns = this.columns.map((column) => ({
-          ...column,
-          cards: column.cards.map((card) => new Card({ ...card })),
-        }));
-
-        await this.saveUpdatedCard(cardInstance);
-      }
-    } catch (error) {
-      console.error('Error updating card status:', error);
-      this.columns = this.previousColumns;
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
-  async handleFrontendMoveCard(draggedCard: Card, newColumn: Column) {
-    const draggedCardId = draggedCard.data.url;
-    const oldColumnIndex = this.columns.findIndex((column) =>
-      column.cards.some((card) => card.data.url === draggedCardId),
-    );
-    const newColumnIndex = this.columns.findIndex(
-      (column) =>
-        column.cardAPI.status.index === newColumn.cardAPI.status.index,
-    );
-
-    if (oldColumnIndex !== -1 && newColumnIndex !== -1) {
-      const updatedColumns = [...this.columns];
-      const [movedCard] = updatedColumns[oldColumnIndex].cards.splice(
-        updatedColumns[oldColumnIndex].cards.findIndex(
-          (card: Card) => card.data.url === draggedCardId,
-        ),
-        1,
-      );
-
-      updatedColumns[newColumnIndex].cards.push(movedCard);
-      this.columns = updatedColumns;
-    }
-  }
-
-  async saveUpdatedCard(cardInstance: any) {
-    const publicAPI = this.args.context?.actions;
-
-    if (!publicAPI?.saveCardDirectly) {
-      throw new Error('saveCard action not available');
-    }
-
-    try {
-      await publicAPI.saveCardDirectly(cardInstance, false);
-    } catch (saveError) {
-      this.columns = this.previousColumns;
-      throw saveError;
-    }
-  }
-
   <template>
     <div class='task-app'>
       <div class='filter-section'>
@@ -362,8 +325,7 @@ class AppTaskCardIsolated extends Component<
         </button>
       </div>
       <div class='columns-container'>
-        {{log this.previousColumns this.columns}}
-        {{! this is for update the column data with prerendered }}
+        {{! This maps the current columns with the data returned from prerendered components }}
         {{#each
           (if this.isLoading this.previousColumns this.columns)
           as |column columnIndex|
@@ -386,24 +348,28 @@ class AppTaskCardIsolated extends Component<
 
         <DndKanbanBoard
           @columns={{this.columns}}
+          @columnHeader={{component
+            ColumnHeader
+            createNewTask=this.createNewTask
+            triggeredColumnIndex=this.triggeredColumnIndex
+          }}
           @isLoading={{this.isLoading}}
+          @isDisabled={{this.isLoading}}
           @onMoveCard={{this.onMoveCardMutation}}
+          as |card|
         >
-          {{! this is the udpated columns with cardAPI Data, modifier is only work after prerendered API return data }}
-          <:card as |card|>
-            <CardContainer
-              {{@context.cardComponentModifier
-                cardId=card.data.url
-                format='data'
-                fieldType=undefined
-                fieldName=undefined
-              }}
-              data-test-cards-grid-item={{removeFileExtension card.data.url}}
-              data-cards-grid-item={{removeFileExtension card.data.url}}
-            >
-              {{card.component}}
-            </CardContainer>
-          </:card>
+          <CardContainer
+            {{@context.cardComponentModifier
+              cardId=card.data.url
+              format='data'
+              fieldType=undefined
+              fieldName=undefined
+            }}
+            data-test-cards-grid-item={{removeFileExtension card.data.url}}
+            data-cards-grid-item={{removeFileExtension card.data.url}}
+          >
+            {{card.component}}
+          </CardContainer>
         </DndKanbanBoard>
 
       </div>
@@ -422,7 +388,6 @@ class AppTaskCardIsolated extends Component<
         font: var(--boxel-font);
         overflow: hidden;
       }
-
       .filter-section {
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         display: flex;
@@ -430,7 +395,6 @@ class AppTaskCardIsolated extends Component<
         gap: var(--boxel-sp);
         align-items: center;
       }
-
       .sheet-toggle {
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         background-color: var(--boxel-purple);
@@ -439,36 +403,30 @@ class AppTaskCardIsolated extends Component<
         border-radius: var(--boxel-border-radius);
         cursor: pointer;
       }
-
       .columns-container {
         display: flex;
         overflow-x: auto;
         flex-grow: 1;
       }
-
       .task-card {
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp);
         background-color: var(--boxel-light);
       }
-
       .button-container {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp);
         margin-top: var(--boxel-sp);
       }
-
       .dropdown-filter-button {
         display: flex;
         align-items: center;
       }
-
       .dropdown-filter-text {
         margin-right: var(--boxel-sp-xxs);
       }
-
       .dropdown-arrow {
         display: inline-block;
       }
@@ -547,12 +505,10 @@ class Sheet extends GlimmerComponent<SheetSignature> {
         pointer-events: none;
         transition: background-color 0.3s ease-out;
       }
-
       .sheet-overlay.is-open {
         background-color: rgba(0, 0, 0, 0.5);
         pointer-events: auto;
       }
-
       .sheet-content {
         width: 300px;
         height: 100%;
@@ -563,11 +519,9 @@ class Sheet extends GlimmerComponent<SheetSignature> {
         transition: transform 0.3s ease-out;
         position: relative;
       }
-
       .sheet-content.is-open {
         transform: translateX(0);
       }
-
       .close-button {
         position: absolute;
         top: var(--boxel-sp-xs);
@@ -578,6 +532,45 @@ class Sheet extends GlimmerComponent<SheetSignature> {
         cursor: pointer;
         padding: var(--boxel-sp-xxs);
         line-height: 1;
+      }
+    </style>
+  </template>
+}
+
+interface ColumnHeaderSignature {
+  column: Column;
+  createNewTask: (column: Column) => void;
+  triggeredColumnIndex: number | null;
+}
+
+class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
+  get isCreateTaskBtnTrigger() {
+    return (
+      this.args.triggeredColumnIndex == this.args.column.cardAPI.status.index
+    );
+  }
+  <template>
+    <div class='custom-header'>
+      {{@column.title}}
+      <button
+        class='create-new-task-button'
+        {{on 'click' (fn @createNewTask @column)}}
+      >
+        {{#if this.isCreateTaskBtnTrigger}}
+          <LoadingIndicator style='--boxel-loading-indicator-size:14px' />
+        {{else}}
+          <IconPlus width='12px' height='12px' />
+        {{/if}}
+      </button>
+    </div>
+    <style scoped>
+      .custom-header {
+        display: flex;
+        justify-content: space-between;
+      }
+      .create-new-task-button {
+        all: unset;
+        cursor: pointer;
       }
     </style>
   </template>

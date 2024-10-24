@@ -10,7 +10,7 @@ import {
 
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, {
-  type ColumnHeaderArgs,
+  type DndColumnHeaderArgs,
   Card,
   Column,
 } from './index.gts';
@@ -27,6 +27,7 @@ export default class DndUsage extends Component {
     new Column('Done', []),
   ];
   @tracked isLoading = false;
+  @tracked isDisabled = false;
 
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanHeaderBg: CSSVariableInfo;
@@ -55,16 +56,16 @@ export default class DndUsage extends Component {
           @columns={{this.columns}}
           @columnHeader={{ColumnHeader}}
           @isLoading={{this.isLoading}}
+          @isDisabled={{this.isDisabled}}
+          as |card column|
         >
-          <:card as |card column|>
-            <div class='custom-card'>
-              <Pill @kind='default' class='column-info'>
-                {{column.title}}
-              </Pill>
-              <h3>{{card.assignee}}</h3>
-              <p>{{card.task}}</p>
-            </div>
-          </:card>
+          <div class='custom-card'>
+            <Pill @kind='default' class='column-info'>
+              {{column.title}}
+            </Pill>
+            <h3>{{card.assignee}}</h3>
+            <p>{{card.task}}</p>
+          </div>
         </DndKanbanBoard>
       </:example>
       <:api as |Args|>
@@ -83,6 +84,13 @@ export default class DndUsage extends Component {
           @optional={{true}}
           @onInput={{fn (mut this.isLoading)}}
           @value={{this.isLoading}}
+        />
+        <Args.Bool
+          @name='isDisabled'
+          @description='Disables all drag and drop features on the DndKanban board'
+          @optional={{true}}
+          @onInput={{fn (mut this.isDisabled)}}
+          @value={{this.isDisabled}}
         />
         <Args.Action
           @name='onMoveCard'
@@ -120,10 +128,10 @@ export default class DndUsage extends Component {
   </template>
 }
 
-class ColumnHeader extends Component<ColumnHeaderArgs> {
+class ColumnHeader extends Component<DndColumnHeaderArgs> {
   <template>
     <div class='custom-header'>
-      {{@title}}
+      {{@column.title}}
     </div>
     <style scoped>
       .custom-header {
