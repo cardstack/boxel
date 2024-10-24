@@ -30,11 +30,11 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage('Logged out of synapse');
   });
 
-  const realmFs = new RealmFS();
+  const realmFs = new RealmFS(context);
 
   console.log('Registering file system providers now');
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxelrealm+http', realmFs, {
+    vscode.workspace.registerFileSystemProvider('boxelrealm', realmFs, {
       isCaseSensitive: true,
     }),
   );
@@ -70,11 +70,19 @@ export async function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand(
     'boxelrealm.attachToBoxelWorkspaces',
     async (_) => {
+      if (
+        !vscode.workspace.workspaceFolders ||
+        vscode.workspace.workspaceFolders?.length == 0
+      ) {
+        realmFs.resetSelectedRealms();
+      }
+
       const realmUrls = await realmFs.getRealmUrls();
       const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
         canPickMany: false,
         placeHolder: 'Select a realm to open',
       });
+      realmFs.addSelectedRealms(selectedRealm!);
       console.log('Selected realm', selectedRealm);
       vscode.workspace.updateWorkspaceFolders(
         0,
@@ -82,11 +90,13 @@ export async function activate(context: vscode.ExtensionContext) {
           ? vscode.workspace.workspaceFolders.length
           : 0,
         {
-          uri: vscode.Uri.parse(`boxelrealm+${selectedRealm}`),
-          name: `realm-${selectedRealm}`,
+          uri: vscode.Uri.parse(`boxelrealm://boxel-workspaces`),
+          name: `Boxel Workspaces`,
         },
       );
-      await vscode.commands.executeCommand('workbench.view.explorer');
+      await vscode.commands.executeCommand(
+        'workbench.files.action.refreshFilesExplorer',
+      );
     },
   );
 }
