@@ -40,7 +40,6 @@ interface Signature {
   Args: {
     roomId: string;
     message: Message;
-    messages: Message[];
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -51,7 +50,7 @@ interface Signature {
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
-      scrollTo: () => void;
+      scrollTo: Element['scrollIntoView'];
     }) => void;
   };
 }
@@ -377,6 +376,8 @@ export default class RoomMessage extends Component<Signature> {
     }
   }
 
+  // TODO need to reevalutate this modifier--do we want to hijack the scroll
+  // when the user views the code?
   private scrollBottomIntoView = modifier((element: HTMLElement) => {
     if (this.args.currentEditor !== this.args.message.index) {
       return;

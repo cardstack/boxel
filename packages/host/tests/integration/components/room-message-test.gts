@@ -50,7 +50,6 @@ module('Integration | Component | RoomMessage', function (hooks) {
       <RoomMessage
         @roomId={{testScenario.roomId}}
         @message={{testScenario.message}}
-        @messages={{testScenario.messages}}
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
         @currentEditor={{testScenario.currentEditor}}

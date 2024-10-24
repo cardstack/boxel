@@ -1,5 +1,5 @@
-import { registerDestructor } from '@ember/destroyable';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
@@ -37,7 +37,7 @@ interface Signature {
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
-      scrollTo: () => void;
+      scrollTo: Element['scrollIntoView'];
     }) => void;
     errorMessage?: string;
     isPending?: boolean;
@@ -53,7 +53,7 @@ interface MessageScrollerSignature {
       registerScroller: (args: {
         index: number;
         element: HTMLElement;
-        scrollTo: () => void;
+        scrollTo: Element['scrollIntoView'];
       }) => void;
     };
   };
@@ -71,9 +71,8 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
       registerScroller({
         index,
         element,
-        scrollTo: () => element.scrollIntoView(),
+        scrollTo: element.scrollIntoView.bind(element),
       });
-      console.log(`registering message ${index}`);
     }
   }
 }
@@ -90,7 +89,7 @@ interface ScrollPositionSignature {
 }
 
 // an amount of pixels from the bottom of the element that we would consider to
-// be scrolled "all the way"
+// be scrolled "all the way down"
 const BOTTOM_THRESHOLD = 50;
 class ScrollPosition extends Modifier<ScrollPositionSignature> {
   modify(

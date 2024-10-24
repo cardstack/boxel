@@ -1,15 +1,25 @@
 import { registerDestructor } from '@ember/destroyable';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { schedule } from '@ember/runloop';
 import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import max from 'lodash/max';
+
+import { MatrixEvent } from 'matrix-js-sdk';
+
+import pluralize from 'pluralize';
+
+import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
+
 import { v4 as uuidv4 } from 'uuid';
 
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import { unixTime } from '@cardstack/runtime-common';
@@ -23,11 +33,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import max from 'lodash/max';
-import { MatrixEvent } from 'matrix-js-sdk';
-
-import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -64,7 +69,6 @@ export default class Room extends Component<Signature> {
             {{#each this.messages as |message i|}}
               <RoomMessage
                 @roomId={{@roomId}}
-                @messages={{this.messages}}
                 @message={{message}}
                 @index={{i}}
                 @registerScroller={{this.registerScroller}}
@@ -77,25 +81,27 @@ export default class Room extends Component<Signature> {
                 data-test-message-idx={{i}}
               />
             {{/each}}
-
-            <div>
-              {{this.unreadMessageIndicies.length}}
-              unread messages
-            </div>
-            <div>
-              is scrolled to bottom:
-              {{this.isScrolledToBottom}}
-            </div>
           {{else}}
             <NewSession @sendPrompt={{this.sendMessage}} />
           {{/if}}
           {{#if this.room}}
-            <AiAssistantSkillMenu
-              class='skills'
-              @skills={{this.skills}}
-              @onChooseCard={{this.attachSkill}}
-              data-test-skill-menu
-            />
+            {{#if this.hasUnreadMessages}}
+              <div class='unread-indicator'>
+                <BoxelButton
+                  @size='tall'
+                  @kind='primary'
+                  class='unread-button'
+                  {{on 'click' this.scrollToFirstUnread}}
+                >{{this.unreadMessageText}}</BoxelButton>
+              </div>
+            {{else}}
+              <AiAssistantSkillMenu
+                class='skills'
+                @skills={{this.skills}}
+                @onChooseCard={{this.attachSkill}}
+                data-test-skill-menu
+              />
+            {{/if}}
           {{/if}}
         </AiAssistantConversation>
 
@@ -130,6 +136,15 @@ export default class Room extends Component<Signature> {
         position: sticky;
         bottom: 0;
         margin-left: auto;
+      }
+      .unread-indicator {
+        position: sticky;
+        bottom: 0;
+        margin-left: auto;
+        width: 100%;
+      }
+      .unread-button {
+        width: 100%;
       }
       .room-actions {
         padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
@@ -167,17 +182,14 @@ export default class Room extends Component<Signature> {
   @tracked private currentMonacoContainer: number | undefined;
   @tracked private isScrolledToBottom = false;
   @tracked private userHasScrolled = false;
-  private messageScrollers: Map<number, () => void> = new TrackedMap();
+  private messageScrollers: Map<number, Element['scrollIntoView']> =
+    new TrackedMap();
   private messageElements: WeakMap<HTMLElement, number> = new TrackedWeakMap();
   private messageVisibilityObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       let index = this.messageElements.get(entry.target as HTMLElement);
       if (index != null) {
-        if (entry.isIntersecting) {
-          // we only send the read receipt after the message has scrolled into view
-          // Note: this is over sending (we always have), as we really only need
-          // to send a read receipt for messages that were read after the last read
-          // receipt the server told us about.
+        if (entry.isIntersecting && index > this.lastReadMessageIndex) {
           this.sendReadReceipt(this.messages[index]);
         }
       }
@@ -212,9 +224,22 @@ export default class Room extends Component<Signature> {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
     this.messageVisibilityObserver.observe(element);
+    if (!this.isAllowedToAutoScroll) {
+      return;
+    }
+
     if (
-      (!this.userHasScrolled || this.isScrolledToBottom) &&
+      // If we are permitted to auto-scroll and if there are no unread messages in the
+      // room, then scroll to the last message in the room.
+      !this.hasUnreadMessages &&
       index === this.messages.length - 1
+    ) {
+      scrollTo();
+    } else if (
+      // otherwise if we are permitted to auto-scroll and if there are unread
+      // messages in the room, then scroll to the first unread message in the room.
+      this.hasUnreadMessages &&
+      index === this.lastReadMessageIndex + 1
     ) {
       scrollTo();
     }
@@ -235,30 +260,62 @@ export default class Room extends Component<Signature> {
     }
   };
 
-  @cached
-  private get unreadMessageIndicies() {
-    // read receipts are implemented using “up to” markers. This marker indicates
-    // that the acknowledgement applies to all events “up to and including” the
-    // event specified. For example, marking an event as “read” would indicate that
-    // the user had read all events up to the referenced event.
+  private scrollToFirstUnread = () => {
+    if (!this.hasUnreadMessages) {
+      return;
+    }
+
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    let scrollTo = this.messageScrollers.get(firstUnreadIndex);
+    if (!scrollTo) {
+      console.warn(`No scroller for message index ${firstUnreadIndex}`);
+    } else {
+      scrollTo({ behavior: 'smooth' });
+    }
+  };
+
+  private get isAllowedToAutoScroll() {
+    return !this.userHasScrolled || this.isScrolledToBottom;
+  }
+
+  // For efficiency, read receipts are implemented using “up to” markers. This
+  // marker indicates that the acknowledgement applies to all events “up to and
+  // including” the event specified. For example, marking an event as “read” would
+  // indicate that the user had read all events up to the referenced event.
+  @cached private get lastReadMessageIndex() {
     let readReceiptIndicies: number[] = [];
-    let unviewedIndicies: number[] = [];
     for (let receipt of this.matrixService.currentUserEventReadReceipts.keys()) {
       let maybeIndex = this.messages.findIndex((m) => m.eventId === receipt);
       if (maybeIndex != null) {
         readReceiptIndicies.push(maybeIndex);
       }
     }
-    let firstUnreadIndex = (max(readReceiptIndicies) ?? -1) + 1;
+    return max(readReceiptIndicies) ?? -1;
+  }
+
+  @cached private get numberOfUnreadMessages() {
+    let unreadMessagesCount = 0;
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
     for (let i = firstUnreadIndex; i < this.messages.length; i++) {
       if (
         this.matrixService.profile.userId === this.messages[i].author.userId
       ) {
         continue;
       }
-      unviewedIndicies.push(i);
+      unreadMessagesCount++;
     }
-    return unviewedIndicies;
+    return unreadMessagesCount;
+  }
+
+  private get hasUnreadMessages() {
+    return this.numberOfUnreadMessages > 0;
+  }
+
+  private get unreadMessageText() {
+    return `${this.numberOfUnreadMessages} unread ${pluralize(
+      'message',
+      this.numberOfUnreadMessages,
+    )}`;
   }
 
   private sendReadReceipt(message: Message) {
