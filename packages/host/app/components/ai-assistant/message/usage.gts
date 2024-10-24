@@ -40,6 +40,8 @@ export default class AiAssistantMessageUsage extends Component {
     return this.userId[0].toUpperCase();
   }
 
+  noop = () => {};
+
   <template>
     <FreestyleUsage @name='AiAssistant::Message'>
       <:description>
@@ -47,11 +49,13 @@ export default class AiAssistantMessageUsage extends Component {
       </:description>
       <:example>
         <div class='example-container'>
-          <AiAssistantConversation>
+          <AiAssistantConversation @setScrollPosition={{this.noop}}>
             <AiAssistantMessage
               @formattedMessage={{htmlSafe this.formattedMessage}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
+              @index={{0}}
+              @registerScroller={{this.noop}}
               @profileAvatar={{component
                 ProfileAvatarIconVisual
                 userId=this.userId
@@ -116,13 +120,15 @@ export default class AiAssistantMessageUsage extends Component {
       </:description>
       <:example>
         <div class='example-container'>
-          <AiAssistantConversation>
+          <AiAssistantConversation @setScrollPosition={{this.noop}}>
             <AiAssistantMessage
               @formattedMessage={{htmlSafe
                 'Please copy edit this message to make it more human.'
               }}
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
+              @index={{0}}
+              @registerScroller={{this.noop}}
               @profileAvatar={{component
                 ProfileAvatarIconVisual
                 userId=this.userId
@@ -135,6 +141,8 @@ export default class AiAssistantMessageUsage extends Component {
               @formattedMessage={{htmlSafe
                 'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
               }}
+              @index={{1}}
+              @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}
               @isStreaming={{false}}
