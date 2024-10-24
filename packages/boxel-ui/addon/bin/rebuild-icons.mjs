@@ -34,6 +34,7 @@ let componentsToGenerate = fs
 componentsToGenerate.sort((a, b) => a.name.localeCompare(b.name));
 
 for (const c of componentsToGenerate) {
+  console.log(`Generating ${c.sourceFile}...`);
   let fullPath = path.resolve(srcDir, c.sourceFile);
   let contents = fs.readFileSync(fullPath, 'utf-8');
   contents = optimize(contents, {

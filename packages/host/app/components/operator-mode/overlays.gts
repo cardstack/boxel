@@ -330,7 +330,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .actions-item__button:hover {
         --icon-bg: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-cyan);
+        background-color: var(--boxel-highlight);
       }
       .selected .actions-item.select {
         visibility: visible;

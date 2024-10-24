@@ -601,7 +601,6 @@ export default class DetailPanel extends Component<Signature> {
         --icon-color: var(--boxel-dark);
       }
       .delete-module-button {
-        --icon-color: var(--boxel-highlight);
         border-radius: var(--boxel-border-radius-xs);
         width: 24px;
         height: 24px;
