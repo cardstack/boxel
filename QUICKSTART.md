@@ -96,10 +96,6 @@ To build the entire repository and run the application, follow these steps:
     - Validate email
     - Go back to Host http://localhost:4201/ and login
 
-13. Trigger interact mode
-
-- After you see a list of cards, Ctrl+ . OR Ctrl +, to "interact" with them
-
 13. Run ai bot (Optional):
 
     ```zsh
