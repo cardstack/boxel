@@ -7,7 +7,7 @@ import { updateDiagnostics } from './diagnostics';
 
 export async function activate(context: vscode.ExtensionContext) {
   const diagnosticCollection =
-    vscode.languages.createDiagnosticCollection('boxelrealm');
+    vscode.languages.createDiagnosticCollection('boxel-tools');
 
   context.subscriptions.push(diagnosticCollection);
 
@@ -21,7 +21,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ),
   );
 
-  vscode.commands.registerCommand('boxelrealm.logout', async (_) => {
+  vscode.commands.registerCommand('boxel-tools.logout', async (_) => {
     await authProvider.clearAllSessions();
     vscode.workspace.updateWorkspaceFolders(
       0,
@@ -34,12 +34,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
   console.log('Registering file system providers now');
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxelrealm+http', realmFs, {
+    vscode.workspace.registerFileSystemProvider('boxel-tools+http', realmFs, {
       isCaseSensitive: true,
     }),
   );
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxelrealm+https', realmFs, {
+    vscode.workspace.registerFileSystemProvider('boxel-tools+https', realmFs, {
       isCaseSensitive: true,
     }),
   );
@@ -68,7 +68,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   vscode.commands.registerCommand(
-    'boxelrealm.attachToBoxelWorkspaces',
+    'boxel-tools.attachToBoxelWorkspaces',
     async (_) => {
       const realmUrls = await realmFs.getRealmUrls();
       const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
@@ -82,8 +82,8 @@ export async function activate(context: vscode.ExtensionContext) {
           ? vscode.workspace.workspaceFolders.length
           : 0,
         {
-          uri: vscode.Uri.parse(`boxelrealm+${selectedRealm}`),
-          name: `realm-${selectedRealm}`,
+          uri: vscode.Uri.parse(`boxel-tools+${selectedRealm}`),
+          name: `Workspace ${selectedRealm}`,
         },
       );
       await vscode.commands.executeCommand('workbench.view.explorer');
