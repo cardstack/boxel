@@ -228,6 +228,8 @@ export default class Room extends Component<Signature> {
       return;
     }
 
+    // TODO udpate this so that we preserve the scroll position as the user
+    // changes rooms and we restore the scroll position when a user enters a room
     if (
       // If we are permitted to auto-scroll and if there are no unread messages in the
       // room, then scroll to the last message in the room.
