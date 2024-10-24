@@ -24,23 +24,23 @@
   "contributes": {
     "commands": [
       {
-        "command": "boxelrealm.logout",
+        "command": "boxel-tools.logout",
         "title": "Logout",
-        "category": "boxelrealm"
+        "category": "Boxel Tools"
       },
       {
-        "command": "boxelrealm.attachToBoxelWorkspaces",
+        "command": "boxel-tools.attachToBoxelWorkspaces",
         "title": "Attach to Boxel Workspaces",
-        "category": "boxelrealm"
+        "category": "Boxel Tools"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "boxelrealm.logout"
+          "command": "boxel-tools.logout"
         },
         {
-          "command": "boxelrealm.attachToBoxelWorkspaces"
+          "command": "boxel-tools.attachToBoxelWorkspaces"
         }
       ]
     },
@@ -48,7 +48,7 @@
       {
         "title": "Matrix Server",
         "properties": {
-          "boxelrealm.matrixServer": {
+          "boxel-tools.matrixServer": {
             "type": "string",
             "description": "The matrix server to connect to, leave blank to connect to your boxel.ai realms.",
             "default": "https://matrix.boxel.ai/"
