@@ -11,6 +11,11 @@ import { prepareTestDB } from './helpers';
 import PgAdapter from '../pg-adapter';
 import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/subscribe';
 import {
+  LedgerEntry,
+  Plan,
+  Subscription,
+  SubscriptionCycle,
+  User,
   insertSubscriptionCycle,
   sumUpCreditsLedger,
 } from '../billing/billing_queries';
@@ -21,7 +26,7 @@ async function insertUser(
   dbAdapter: PgAdapter,
   matrixUserId: string,
   stripeCustomerId: string,
-) {
+): Promise<User> {
   let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
     matrix_user_id: matrixUserId,
     stripe_customer_id: stripeCustomerId,
@@ -32,7 +37,11 @@ async function insertUser(
     ` RETURNING *`,
   ] as Expression);
 
-  return result[0];
+  return {
+    id: result[0].id as string,
+    matrixUserId: result[0].matrix_user_id as string,
+    stripeCustomerId: result[0].stripe_customer_id as string,
+  };
 }
 
 async function insertPlan(
@@ -41,7 +50,7 @@ async function insertPlan(
   monthlyPrice: number,
   creditsIncluded: number,
   stripePlanId: string,
-) {
+): Promise<Plan> {
   let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
     name,
     monthly_price: monthlyPrice,
@@ -54,7 +63,12 @@ async function insertPlan(
     ` RETURNING *`,
   ] as Expression);
 
-  return result[0];
+  return {
+    id: result[0].id as string,
+    name: result[0].name as string,
+    monthlyPrice: result[0].monthly_price as number,
+    creditsIncluded: result[0].credits_included as number,
+  };
 }
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
@@ -64,36 +78,63 @@ async function fetchStripeEvents(dbAdapter: PgAdapter) {
 async function fetchSubscriptionsByUserId(
   dbAdapter: PgAdapter,
   userId: string,
-) {
-  return (await query(dbAdapter, [
+): Promise<Subscription[]> {
+  let results = (await query(dbAdapter, [
     `SELECT * FROM subscriptions WHERE user_id = `,
     param(userId),
   ])) as {
     id: string;
     user_id: string;
     plan_id: string;
-    started_at: string;
-    ended_at: string;
+    started_at: number;
+    ended_at: number;
     status: string;
     stripe_subscription_id: string;
   }[];
+
+  return results.map((result) => ({
+    id: result.id,
+    userId: result.user_id,
+    planId: result.plan_id,
+    startedAt: result.started_at,
+    status: result.status,
+    stripeSubscriptionId: result.stripe_subscription_id,
+  }));
 }
 
 async function fetchSubscriptionCyclesBySubscriptionId(
   dbAdapter: PgAdapter,
   subscriptionId: string,
-) {
-  return await query(dbAdapter, [
+): Promise<SubscriptionCycle[]> {
+  let results = await query(dbAdapter, [
     `SELECT * FROM subscription_cycles WHERE subscription_id = `,
     param(subscriptionId),
   ]);
+
+  return results.map((result) => ({
+    id: result.id as string,
+    subscriptionId: result.subscription_id as string,
+    periodStart: result.period_start as number,
+    periodEnd: result.period_end as number,
+  }));
 }
 
-async function fetchCreditsLedgerByUser(dbAdapter: PgAdapter, userId: string) {
-  return await query(dbAdapter, [
+async function fetchCreditsLedgerByUser(
+  dbAdapter: PgAdapter,
+  userId: string,
+): Promise<LedgerEntry[]> {
+  let results = await query(dbAdapter, [
     `SELECT * FROM credits_ledger WHERE user_id = `,
     param(userId),
   ]);
+
+  return results.map((result) => ({
+    id: result.id as string,
+    userId: result.user_id as string,
+    creditAmount: result.credit_amount as number,
+    creditType: result.credit_type as string,
+    subscriptionCycleId: result.subscription_cycle_id as string,
+  }));
 }
 
 module('billing', function (hooks) {
@@ -171,10 +212,10 @@ module('billing', function (hooks) {
           assert.equal(subscriptions.length, 1);
           let subscription = subscriptions[0];
 
-          assert.equal(subscription.user_id, user.id);
-          assert.equal(subscription.plan_id, plan.id);
+          assert.equal(subscription.userId, user.id);
+          assert.equal(subscription.planId, plan.id);
           assert.equal(subscription.status, 'active');
-          assert.equal(subscription.stripe_subscription_id, 'sub_1234567890');
+          assert.equal(subscription.stripeSubscriptionId, 'sub_1234567890');
 
           // Assert that the subscription cycle was created
           let subscriptionCycles =
@@ -185,13 +226,13 @@ module('billing', function (hooks) {
           assert.equal(subscriptionCycles.length, 1);
           let subscriptionCycle = subscriptionCycles[0];
 
-          assert.equal(subscriptionCycle.subscription_id, subscription.id);
+          assert.equal(subscriptionCycle.subscriptionId, subscription.id);
           assert.equal(
-            subscriptionCycle.period_start,
+            subscriptionCycle.periodStart,
             stripeInvoicePaymentSucceededEvent.data.object.period_start,
           );
           assert.equal(
-            subscriptionCycle.period_end,
+            subscriptionCycle.periodEnd,
             stripeInvoicePaymentSucceededEvent.data.object.period_end,
           );
 
@@ -202,11 +243,11 @@ module('billing', function (hooks) {
           );
           assert.equal(creditsLedger.length, 1);
           let creditLedgerEntry = creditsLedger[0];
-          assert.equal(creditLedgerEntry.user_id, user.id);
-          assert.equal(creditLedgerEntry.credit_amount, plan.credits_included);
-          assert.equal(creditLedgerEntry.credit_type, 'plan_allowance');
+          assert.equal(creditLedgerEntry.userId, user.id);
+          assert.equal(creditLedgerEntry.creditAmount, plan.creditsIncluded);
+          assert.equal(creditLedgerEntry.creditType, 'plan_allowance');
           assert.equal(
-            creditLedgerEntry.subscription_cycle_id,
+            creditLedgerEntry.subscriptionCycleId,
             subscriptionCycle.id,
           );
 
@@ -249,7 +290,7 @@ module('billing', function (hooks) {
         await addToCreditsLedger(
           dbAdapter,
           user.id,
-          plan.credits_included,
+          plan.creditsIncluded,
           'plan_allowance',
           subscriptionCycle.id,
         );
@@ -301,7 +342,7 @@ module('billing', function (hooks) {
         let availableCredits = await sumUpCreditsLedger(dbAdapter, {
           userId: user.id,
         });
-        assert.equal(availableCredits, plan.credits_included - 5 - 3);
+        assert.equal(availableCredits, plan.creditsIncluded - 5 - 3);
 
         await handlePaymentSucceeded(
           dbAdapter,
@@ -316,16 +357,16 @@ module('billing', function (hooks) {
         assert.equal(subscriptionCycles.length, 2);
 
         // Assert both subscription cycles have the correct period start and end
-        assert.equal(subscriptionCycles[0].period_start, 1);
-        assert.equal(subscriptionCycles[0].period_end, 2);
-        assert.equal(subscriptionCycles[1].period_start, 2);
-        assert.equal(subscriptionCycles[1].period_end, 3);
+        assert.equal(subscriptionCycles[0].periodStart, 1);
+        assert.equal(subscriptionCycles[0].periodEnd, 2);
+        assert.equal(subscriptionCycles[1].periodStart, 2);
+        assert.equal(subscriptionCycles[1].periodEnd, 3);
 
         // Assert that the ledger has the correct sum of credits going in and out
         availableCredits = await sumUpCreditsLedger(dbAdapter, {
           userId: user.id,
         });
-        assert.equal(availableCredits, plan.credits_included);
+        assert.equal(availableCredits, plan.creditsIncluded);
       });
     });
   });

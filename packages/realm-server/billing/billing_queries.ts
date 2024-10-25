@@ -9,6 +9,44 @@ import {
 } from '@cardstack/runtime-common';
 import { StripeEvent } from './stripe-webhook-handlers';
 
+export interface User {
+  id: string;
+  matrixUserId: string;
+  stripeCustomerId: string;
+}
+
+export interface Plan {
+  id: string;
+  name: string;
+  monthlyPrice: number;
+  creditsIncluded: number;
+}
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  planId: string;
+  startedAt: number;
+  endedAt?: number;
+  status: string;
+  stripeSubscriptionId: string;
+}
+
+export interface SubscriptionCycle {
+  id: string;
+  subscriptionId: string;
+  periodStart: number;
+  periodEnd: number;
+}
+
+export interface LedgerEntry {
+  id: string;
+  userId: string;
+  creditAmount: number;
+  creditType: string;
+  subscriptionCycleId: string;
+}
+
 export async function insertStripeEvent(
   dbAdapter: DBAdapter,
   event: StripeEvent,
@@ -27,7 +65,7 @@ export async function insertStripeEvent(
 export async function getPlanByStripeId(
   dbAdapter: DBAdapter,
   stripePlanId: string,
-) {
+): Promise<Plan> {
   let results = await query(dbAdapter, [
     `SELECT * FROM plans WHERE stripe_plan_id = `,
     param(stripePlanId),
@@ -37,18 +75,18 @@ export async function getPlanByStripeId(
     throw new Error(`No plan found with stripe plan id: ${stripePlanId}`);
   }
 
-  return results[0] as {
-    id: string;
-    name: string;
-    monthlyPrice: number;
-    creditsIncluded: number;
+  return {
+    id: results[0].id as string,
+    name: results[0].name as string,
+    monthlyPrice: results[0].monthly_price as number,
+    creditsIncluded: results[0].credits_included as number,
   };
 }
 
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
-) {
+): Promise<User> {
   let results = await query(dbAdapter, [
     `SELECT * FROM users WHERE stripe_customer_id = `,
     param(stripeCustomerId),
@@ -60,7 +98,11 @@ export async function getUserByStripeId(
     );
   }
 
-  return results[0];
+  return {
+    id: results[0].id as string,
+    matrixUserId: results[0].matrix_user_id as string,
+    stripeCustomerId: results[0].stripe_customer_id as string,
+  };
 }
 
 export async function insertSubscriptionCycle(
@@ -70,7 +112,7 @@ export async function insertSubscriptionCycle(
     periodStart: number;
     periodEnd: number;
   },
-) {
+): Promise<SubscriptionCycle> {
   let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
     subscription_id: subscriptionCycle.subscriptionId,
     period_start: subscriptionCycle.periodStart,
@@ -83,23 +125,31 @@ export async function insertSubscriptionCycle(
     ` RETURNING *`,
   ] as Expression);
 
-  return result[0];
+  return {
+    id: result[0].id as string,
+    subscriptionId: result[0].subscription_id as string,
+    periodStart: result[0].period_start as number,
+    periodEnd: result[0].period_end as number,
+  };
 }
 
 export async function getActiveSubscription(
   dbAdapter: DBAdapter,
   userId: string,
-) {
+): Promise<Subscription> {
   let results = await query(dbAdapter, [
     `SELECT * FROM subscriptions WHERE user_id = $1 AND status = 'active'`,
     param(userId),
   ]);
 
-  if (results.length !== 1) {
-    return null;
-  }
-
-  return results[0];
+  return {
+    id: results[0].id as string,
+    userId: results[0].user_id as string,
+    planId: results[0].plan_id as string,
+    startedAt: results[0].started_at as number,
+    status: results[0].status as string,
+    stripeSubscriptionId: results[0].stripe_subscription_id as string,
+  };
 }
 
 export async function insertSubscription(
@@ -111,7 +161,7 @@ export async function insertSubscription(
     status: string;
     stripe_subscription_id: string;
   },
-) {
+): Promise<Subscription> {
   let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
     user_id: subscription.user_id,
     plan_id: subscription.plan_id,
@@ -126,14 +176,25 @@ export async function insertSubscription(
     ` RETURNING *`,
   ] as Expression);
 
-  return result[0];
+  return {
+    id: result[0].id as string,
+    userId: result[0].user_id as string,
+    planId: result[0].plan_id as string,
+    startedAt: result[0].started_at as number,
+    status: result[0].status as string,
+  };
 }
 
 export async function addToCreditsLedger(
   dbAdapter: DBAdapter,
   user_id: string,
   credits: number,
-  creditType: 'plan_allowance' | 'extra_credit',
+  creditType:
+    | 'plan_allowance'
+    | 'extra_credit'
+    | 'plan_allowance_used'
+    | 'extra_credit_used'
+    | 'plan_allowance_expired',
   subscriptionCycleId: string,
 ) {
   let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
@@ -174,7 +235,7 @@ type CreditType =
 export async function sumUpCreditsLedger(
   dbAdapter: DBAdapter,
   params: {
-    creditType: CreditType | Array<CreditType>;
+    creditType?: CreditType | Array<CreditType>;
     userId?: string;
     subscriptionCycleId?: string;
   },
@@ -224,7 +285,7 @@ export async function sumUpCreditsLedger(
 export async function getCurrentActiveSubscription(
   dbAdapter: DBAdapter,
   userId: string,
-) {
+): Promise<Subscription | null> {
   let results = await query(dbAdapter, [
     `SELECT * FROM subscriptions WHERE user_id = `,
     param(userId),
@@ -240,13 +301,20 @@ export async function getCurrentActiveSubscription(
     );
   }
 
-  return results[0];
+  return {
+    id: results[0].id as string,
+    userId: results[0].user_id as string,
+    planId: results[0].plan_id as string,
+    startedAt: results[0].started_at as number,
+    status: results[0].status as string,
+    stripeSubscriptionId: results[0].stripe_subscription_id as string,
+  };
 }
 
 export async function getMostRecentSubscriptionCycle(
   dbAdapter: DBAdapter,
   subscriptionId: string,
-) {
+): Promise<SubscriptionCycle | null> {
   let results = await query(dbAdapter, [
     `SELECT * FROM subscription_cycles WHERE subscription_id = `,
     param(subscriptionId),
@@ -257,5 +325,10 @@ export async function getMostRecentSubscriptionCycle(
     return null;
   }
 
-  return results[0];
+  return {
+    id: results[0].id as string,
+    subscriptionId: results[0].subscription_id as string,
+    periodStart: results[0].period_start as number,
+    periodEnd: results[0].period_end as number,
+  };
 }

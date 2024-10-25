@@ -1,14 +1,5 @@
+import { DBAdapter, param, query } from '@cardstack/runtime-common';
 import {
-  DBAdapter,
-  Expression,
-  addExplicitParens,
-  asExpressions,
-  param,
-  query,
-  separatedByCommas,
-} from '@cardstack/runtime-common';
-import {
-  StripeEvent,
   addToCreditsLedger,
   getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
@@ -20,11 +11,12 @@ import {
   insertSubscriptionCycle,
   sumUpCreditsLedger,
 } from '../billing_queries';
+import { StripeEvent } from '.';
 
 export async function handlePaymentSucceeded(
   dbAdapter: DBAdapter,
   event: StripeEvent,
-): Promise<Response> {
+): Promise<void> {
   try {
     await insertStripeEvent(dbAdapter, event);
   } catch (error) {
@@ -81,7 +73,7 @@ export async function handlePaymentSucceeded(
     await addToCreditsLedger(
       dbAdapter,
       user.id,
-      plan.credits_included,
+      plan.creditsIncluded,
       'plan_allowance',
       subscriptionCycle.id,
     );
@@ -91,10 +83,22 @@ export async function handlePaymentSucceeded(
       user.id,
     );
 
+    if (!currentActiveSubscription) {
+      throw new Error(
+        'Should never get here: no active subscription found when renewing',
+      );
+    }
+
     let currentSubscriptionCycle = await getMostRecentSubscriptionCycle(
       dbAdapter,
       currentActiveSubscription.id,
     );
+
+    if (!currentSubscriptionCycle) {
+      throw new Error(
+        'Should never get here: no current subscription cycle found when renewing',
+      );
+    }
 
     let creditsToExpire = await sumUpCreditsLedger(dbAdapter, {
       creditType: ['plan_allowance', 'plan_allowance_used'],
@@ -118,12 +122,11 @@ export async function handlePaymentSucceeded(
     await addToCreditsLedger(
       dbAdapter,
       user.id,
-      plan.credits_included,
+      plan.creditsIncluded,
       'plan_allowance',
       newSubscriptionCycle.id,
     );
   }
-
   await query(dbAdapter, [
     `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
     param(event.id),
