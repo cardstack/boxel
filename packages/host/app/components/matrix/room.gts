@@ -91,6 +91,7 @@ export default class Room extends Component<Signature> {
                   @size='tall'
                   @kind='primary'
                   class='unread-button'
+                  data-test-unread-messages-button
                   {{on 'click' this.scrollToFirstUnread}}
                 >{{this.unreadMessageText}}</BoxelButton>
               </div>

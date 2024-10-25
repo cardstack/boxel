@@ -34,6 +34,16 @@ export class MockUtils {
       overrides,
     );
   };
+
+  setReadReceipt = (roomId: string, eventId: string, reader: string) => {
+    return this.testState.sdk!.serverState.addReceiptEvent(
+      roomId,
+      eventId,
+      reader,
+      'm.read' as MatrixSDK.ReceiptType,
+    );
+  };
+
   setExpiresInSec = (sec: number) => {
     this.testState.opts!.expiresInSec = sec;
   };

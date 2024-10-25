@@ -367,6 +367,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
     <div
       {{ScrollPosition setScrollPosition=@setScrollPosition}}
       class='ai-assistant-conversation'
+      data-test-ai-assistant-conversation
     >
       {{yield}}
     </div>
