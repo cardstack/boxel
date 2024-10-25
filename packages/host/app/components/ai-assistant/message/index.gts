@@ -80,10 +80,7 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
 interface ScrollPositionSignature {
   Args: {
     Named: {
-      setScrollPosition: (args: {
-        currentPosition: number;
-        isBottom: boolean;
-      }) => void;
+      setScrollPosition: (args: { isBottom: boolean }) => void;
       registerConversationScroller: (isScrollable: () => boolean) => void;
     };
   };
@@ -114,7 +111,7 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
         Math.abs(
           element.scrollHeight - element.clientHeight - element.scrollTop,
         ) <= BOTTOM_THRESHOLD;
-      setScrollPosition({ currentPosition: element.scrollTop, isBottom });
+      setScrollPosition({ isBottom });
     }, 500);
     element.addEventListener('scroll', detectPosition);
     registerDestructor(this, () =>
@@ -364,10 +361,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 interface AiAssistantConversationSignature {
   Element: HTMLDivElement;
   Args: {
-    setScrollPosition: (args: {
-      currentPosition: number;
-      isBottom: boolean;
-    }) => void;
+    setScrollPosition: (args: { isBottom: boolean }) => void;
     registerConversationScroller: (isScrollable: () => boolean) => void;
   };
   Blocks: {

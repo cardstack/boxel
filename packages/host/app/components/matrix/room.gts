@@ -1,4 +1,3 @@
-import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -15,7 +14,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
+import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -45,6 +44,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
+import type { RoomState } from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -184,33 +184,79 @@ export default class Room extends Component<Signature> {
   );
 
   @tracked private currentMonacoContainer: number | undefined;
-  @tracked private isScrolledToBottom = false;
-  @tracked private userHasScrolled = false;
-  @tracked private isConversationScrollable = false;
   private getConversationScrollability: (() => boolean) | undefined;
-  private messageScrollers: Map<number, Element['scrollIntoView']> =
-    new TrackedMap();
-  private messageElements: WeakMap<HTMLElement, number> = new TrackedWeakMap();
-  private messageVisibilityObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      let index = this.messageElements.get(entry.target as HTMLElement);
-      if (index != null) {
-        if (
-          (!this.isConversationScrollable || entry.isIntersecting) &&
-          index > this.lastReadMessageIndex
-        ) {
-          this.sendReadReceipt(this.messages[index]);
-        }
-      }
-    });
-  });
+  private roomScrollState: WeakMap<
+    RoomState,
+    {
+      messageElemements: WeakMap<HTMLElement, number>;
+      messageScrollers: Map<number, Element['scrollIntoView']>;
+      messageVisibilityObserver: IntersectionObserver;
+      isScrolledToBottom: boolean;
+      userHasScrolled: boolean;
+      isConversationScrollable: boolean;
+    }
+  > = new WeakMap();
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
-
     this.loadRoomSkills.perform();
-    registerDestructor(this, () => this.messageVisibilityObserver.disconnect());
+  }
+
+  @cached
+  private get scrollState() {
+    if (!this.room) {
+      throw new Error(`Cannot get room scroll state before room is loaded`);
+    }
+    let state = this.roomScrollState.get(this.room);
+    if (!state) {
+      state = new TrackedObject({
+        isScrolledToBottom: false,
+        userHasScrolled: false,
+        isConversationScrollable: false,
+        messageElemements: new WeakMap(),
+        messageScrollers: new Map(),
+        messageVisibilityObserver: new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            let index = this.messageElements.get(entry.target as HTMLElement);
+            if (index != null) {
+              if (
+                (!this.isConversationScrollable || entry.isIntersecting) &&
+                index > this.lastReadMessageIndex
+              ) {
+                this.sendReadReceipt(this.messages[index]);
+              }
+            }
+          });
+        }),
+      });
+      this.roomScrollState.set(this.room, state);
+    }
+    return state;
+  }
+
+  private get isScrolledToBottom() {
+    return this.scrollState.isScrolledToBottom;
+  }
+
+  private get userHasScrolled() {
+    return this.scrollState.userHasScrolled;
+  }
+
+  private get isConversationScrollable() {
+    return this.scrollState.isConversationScrollable;
+  }
+
+  private get messageElements() {
+    return this.scrollState.messageElemements;
+  }
+
+  private get messageScrollers() {
+    return this.scrollState.messageScrollers;
+  }
+
+  private get messageVisibilityObserver() {
+    return this.scrollState.messageVisibilityObserver;
   }
 
   private loadRoomSkills = restartableTask(async () => {
@@ -233,7 +279,7 @@ export default class Room extends Component<Signature> {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
     this.messageVisibilityObserver.observe(element);
-    this.isConversationScrollable = Boolean(
+    this.scrollState.isConversationScrollable = Boolean(
       this.getConversationScrollability?.(),
     );
     if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
@@ -265,18 +311,10 @@ export default class Room extends Component<Signature> {
     this.getConversationScrollability = isConversationScrollable;
   };
 
-  private setScrollPosition = ({
-    isBottom,
-    // TODO eventually we'll want to perserve the current scroll position
-    // as user switches between rooms
-    currentPosition: _currentPosition,
-  }: {
-    currentPosition: number;
-    isBottom: boolean;
-  }) => {
-    this.isScrolledToBottom = isBottom;
+  private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
+    this.scrollState.isScrolledToBottom = isBottom;
     if (!isBottom) {
-      this.userHasScrolled = true;
+      this.scrollState.userHasScrolled = true;
     }
   };
 

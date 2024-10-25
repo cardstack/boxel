@@ -1402,7 +1402,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-message-idx="40"]');
     await click('[data-test-unread-messages-button]');
-    await new Promise((r) => setTimeout(r, 1500)); // wait for animated scroll to complete
+    await new Promise((r) => setTimeout(r, 2000)); // wait for animated scroll to complete
     assert.ok(
       isAiAssistantScrolledToBottom(),
       'AI assistant is scrolled to bottom',
@@ -1520,6 +1520,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-has-active-sessions]');
     await click('[data-test-past-sessions-button]');
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
+    await waitFor('[data-test-message-idx="0"]');
 
     let matrixService = this.owner.lookup(
       'service:matrix-service',
