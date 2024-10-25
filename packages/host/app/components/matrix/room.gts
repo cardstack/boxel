@@ -203,8 +203,7 @@ export default class Room extends Component<Signature> {
     this.loadRoomSkills.perform();
   }
 
-  @cached
-  private get scrollState() {
+  private scrollState() {
     if (!this.room) {
       throw new Error(`Cannot get room scroll state before room is loaded`);
     }
@@ -236,27 +235,27 @@ export default class Room extends Component<Signature> {
   }
 
   private get isScrolledToBottom() {
-    return this.scrollState.isScrolledToBottom;
+    return this.scrollState().isScrolledToBottom;
   }
 
   private get userHasScrolled() {
-    return this.scrollState.userHasScrolled;
+    return this.scrollState().userHasScrolled;
   }
 
   private get isConversationScrollable() {
-    return this.scrollState.isConversationScrollable;
+    return this.scrollState().isConversationScrollable;
   }
 
   private get messageElements() {
-    return this.scrollState.messageElemements;
+    return this.scrollState().messageElemements;
   }
 
   private get messageScrollers() {
-    return this.scrollState.messageScrollers;
+    return this.scrollState().messageScrollers;
   }
 
   private get messageVisibilityObserver() {
-    return this.scrollState.messageVisibilityObserver;
+    return this.scrollState().messageVisibilityObserver;
   }
 
   private loadRoomSkills = restartableTask(async () => {
@@ -279,7 +278,7 @@ export default class Room extends Component<Signature> {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
     this.messageVisibilityObserver.observe(element);
-    this.scrollState.isConversationScrollable = Boolean(
+    this.scrollState().isConversationScrollable = Boolean(
       this.getConversationScrollability?.(),
     );
     if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
@@ -312,9 +311,9 @@ export default class Room extends Component<Signature> {
   };
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
-    this.scrollState.isScrolledToBottom = isBottom;
+    this.scrollState().isScrolledToBottom = isBottom;
     if (!isBottom) {
-      this.scrollState.userHasScrolled = true;
+      this.scrollState().userHasScrolled = true;
     }
   };
 
