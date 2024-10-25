@@ -15,6 +15,7 @@ import {
   insertStripeEvent,
   insertSubscription,
   insertSubscriptionCycle,
+  insertUserStripeCustomerId,
 } from '../billing_queries';
 
 export async function handlePaymentSucceeded(
@@ -74,6 +75,25 @@ export async function handlePaymentSucceeded(
     `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
     param(event.id),
   ]);
+
+  return new Response('ok');
+}
+
+export async function handleCheckoutSessionCompleted(
+  dbAdapter: DBAdapter,
+  event: StripeEvent,
+): Promise<Response> {
+  // Scenario 1: a user completes initial subscription through checkout session
+  // Scenario 2: a user resubscribes to a plan or upgrades/downgrades their plan
+
+  // TODO: handle scenario 2 to not create new user if user already exists
+
+  await insertStripeEvent(dbAdapter, event);
+
+  const stripeCustomerId = event.data.object.customer;
+  const matrixUserName = event.data.object.client_reference_id;
+
+  await insertUserStripeCustomerId(dbAdapter, matrixUserName, stripeCustomerId);
 
   return new Response('ok');
 }

@@ -45,6 +45,22 @@ export async function getPlanByStripeId(
   };
 }
 
+export async function insertUserStripeCustomerId(
+  dbAdapter: DBAdapter,
+  userId: string,
+  stripeCustomerId: string,
+) {
+  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+    matrix_user_id: userId,
+    stripe_customer_id: stripeCustomerId,
+  });
+
+  await query(dbAdapter, [
+    `INSERT INTO users (matrix_user_id, stripe_customer_id) VALUES`,
+    ...addExplicitParens(separatedByCommas(valueExpressions)),
+  ] as Expression);
+}
+
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,

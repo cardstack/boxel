@@ -1,5 +1,5 @@
 import { DBAdapter } from '@cardstack/runtime-common';
-import { handlePaymentSucceeded } from './subscribe';
+import { handlePaymentSucceeded, handleCheckoutSessionCompleted } from './subscribe';
 import Stripe from 'stripe';
 
 export type StripeEvent = {
@@ -47,6 +47,10 @@ export default async function stripeWebhookHandler(
   switch (type) {
     case 'invoice.payment_succeeded':
       await handlePaymentSucceeded(dbAdapter, event);
+      break;
+    case 'checkout.session.completed':
+      await handleCheckoutSessionCompleted(dbAdapter, event);
+      break;
   }
 
   return new Response('ok');

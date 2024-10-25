@@ -9,7 +9,7 @@ import {
 import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 import PgAdapter from '../pg-adapter';
-import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/subscribe';
+import { handlePaymentSucceeded, handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/subscribe';
 
 async function insertUser(
   dbAdapter: PgAdapter,
@@ -87,6 +87,16 @@ async function fetchCreditsLedgerByUser(dbAdapter: PgAdapter, userId: string) {
   return await query(dbAdapter, [
     `SELECT * FROM credits_ledger WHERE user_id = `,
     param(userId),
+  ]);
+}
+
+async function fetchUserByStripeCustomerId(
+  dbAdapter: PgAdapter,
+  stripeCustomerId: string,
+) {
+  return await query(dbAdapter, [
+    `SELECT * FROM users WHERE stripe_customer_id = `,
+    param(stripeCustomerId),
   ]);
 }
 
@@ -202,5 +212,44 @@ module('billing', function (hooks) {
         });
       },
     );
+  });
+
+  module('checkout session completed', function (hooks) {
+    test('insert user stripe customer id when checkout session completed', async function (assert) {
+      let stripeCheckoutSessionCompletedEvent ={
+        id: 'evt_1234567890',
+        object: 'event',
+        data: {
+          object: {
+            id: 'cs_test_1234567890',
+            object: 'checkout.session',
+            client_reference_id: 'testuser',
+            customer: 'cus_123',
+          },
+        },
+        type: 'checkout.session.completed',
+      };
+
+      await handleCheckoutSessionCompleted(
+        dbAdapter,
+        stripeCheckoutSessionCompletedEvent,
+      );
+
+      let stripeEvents = await fetchStripeEvents(dbAdapter);
+      assert.equal(stripeEvents.length, 1);
+      assert.equal(
+        stripeEvents[0].stripe_event_id,
+        stripeCheckoutSessionCompletedEvent.id,
+      );
+      assert.equal(stripeEvents[0].is_processed, true);
+
+      const createdUser = await fetchUserByStripeCustomerId(
+        dbAdapter,
+        'cus_123',
+      );
+      assert.equal(createdUser.length, 1);
+      assert.equal(createdUser[0].stripe_customer_id, 'cus_123');
+      assert.equal(createdUser[0].matrix_user_id, 'testuser');
+    });
   });
 });
