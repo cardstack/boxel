@@ -84,6 +84,7 @@ interface ScrollPositionSignature {
         currentPosition: number;
         isBottom: boolean;
       }) => void;
+      registerConversationScroller: (isScrollable: () => boolean) => void;
     };
   };
 }
@@ -92,11 +93,22 @@ interface ScrollPositionSignature {
 // be scrolled "all the way down"
 const BOTTOM_THRESHOLD = 50;
 class ScrollPosition extends Modifier<ScrollPositionSignature> {
+  private hasRegistered = false;
   modify(
     element: HTMLElement,
     _positional: [],
-    { setScrollPosition }: ScrollPositionSignature['Args']['Named'],
+    {
+      setScrollPosition,
+      registerConversationScroller,
+    }: ScrollPositionSignature['Args']['Named'],
   ) {
+    if (!this.hasRegistered) {
+      this.hasRegistered = true;
+      registerConversationScroller(
+        () => element.scrollHeight > element.clientHeight,
+      );
+    }
+
     let detectPosition = throttle(() => {
       let isBottom =
         Math.abs(
@@ -356,6 +368,7 @@ interface AiAssistantConversationSignature {
       currentPosition: number;
       isBottom: boolean;
     }) => void;
+    registerConversationScroller: (isScrollable: () => boolean) => void;
   };
   Blocks: {
     default: [];
@@ -365,7 +378,10 @@ interface AiAssistantConversationSignature {
 const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSignature> =
   <template>
     <div
-      {{ScrollPosition setScrollPosition=@setScrollPosition}}
+      {{ScrollPosition
+        setScrollPosition=@setScrollPosition
+        registerConversationScroller=@registerConversationScroller
+      }}
       class='ai-assistant-conversation'
       data-test-ai-assistant-conversation
     >

@@ -49,7 +49,10 @@ export default class AiAssistantMessageUsage extends Component {
       </:description>
       <:example>
         <div class='example-container'>
-          <AiAssistantConversation @setScrollPosition={{this.noop}}>
+          <AiAssistantConversation
+            @setScrollPosition={{this.noop}}
+            @registerConversationScroller={{this.noop}}
+          >
             <AiAssistantMessage
               @formattedMessage={{htmlSafe this.formattedMessage}}
               @datetime={{this.datetime}}
@@ -120,7 +123,10 @@ export default class AiAssistantMessageUsage extends Component {
       </:description>
       <:example>
         <div class='example-container'>
-          <AiAssistantConversation @setScrollPosition={{this.noop}}>
+          <AiAssistantConversation
+            @setScrollPosition={{this.noop}}
+            @registerConversationScroller={{this.noop}}
+          >
             <AiAssistantMessage
               @formattedMessage={{htmlSafe
                 'Please copy edit this message to make it more human.'

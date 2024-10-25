@@ -64,14 +64,17 @@ export default class Room extends Component<Signature> {
         data-test-room-name={{this.roomResource.name}}
         data-test-room={{@roomId}}
       >
-        <AiAssistantConversation @setScrollPosition={{this.setScrollPosition}}>
+        <AiAssistantConversation
+          @registerConversationScroller={{this.registerConversationScroller}}
+          @setScrollPosition={{this.setScrollPosition}}
+        >
           {{#if this.messages}}
             {{#each this.messages as |message i|}}
               <RoomMessage
                 @roomId={{@roomId}}
                 @message={{message}}
                 @index={{i}}
-                @registerScroller={{this.registerScroller}}
+                @registerScroller={{this.registerMessageScroller}}
                 @isPending={{this.isPendingMessage message}}
                 @monacoSDK={{@monacoSDK}}
                 @isStreaming={{this.isMessageStreaming message i}}
@@ -183,6 +186,8 @@ export default class Room extends Component<Signature> {
   @tracked private currentMonacoContainer: number | undefined;
   @tracked private isScrolledToBottom = false;
   @tracked private userHasScrolled = false;
+  @tracked private isConversationScrollable = false;
+  private getConversationScrollability: (() => boolean) | undefined;
   private messageScrollers: Map<number, Element['scrollIntoView']> =
     new TrackedMap();
   private messageElements: WeakMap<HTMLElement, number> = new TrackedWeakMap();
@@ -213,7 +218,7 @@ export default class Room extends Component<Signature> {
     }
   });
 
-  private registerScroller = ({
+  private registerMessageScroller = ({
     index,
     element,
     scrollTo,
@@ -225,7 +230,10 @@ export default class Room extends Component<Signature> {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
     this.messageVisibilityObserver.observe(element);
-    if (!this.isAllowedToAutoScroll) {
+    this.isConversationScrollable = Boolean(
+      this.getConversationScrollability?.(),
+    );
+    if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
       return;
     }
 
@@ -246,6 +254,12 @@ export default class Room extends Component<Signature> {
     ) {
       scrollTo();
     }
+  };
+
+  private registerConversationScroller = (
+    isConversationScrollable: () => boolean,
+  ) => {
+    this.getConversationScrollability = isConversationScrollable;
   };
 
   private setScrollPosition = ({
@@ -318,7 +332,11 @@ export default class Room extends Component<Signature> {
     // if user is already scrolled to bottom we don't show the indicator to
     // prevent the flash of the indicator appearing and then disappearing during
     // the read receipt acknowledgement
-    return this.hasUnreadMessages && !this.isScrolledToBottom;
+    return (
+      this.isConversationScrollable &&
+      this.hasUnreadMessages &&
+      !this.isScrolledToBottom
+    );
   }
 
   private get unreadMessageText() {
