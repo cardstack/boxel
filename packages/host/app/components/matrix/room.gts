@@ -195,7 +195,10 @@ export default class Room extends Component<Signature> {
     entries.forEach((entry) => {
       let index = this.messageElements.get(entry.target as HTMLElement);
       if (index != null) {
-        if (entry.isIntersecting && index > this.lastReadMessageIndex) {
+        if (
+          (!this.isConversationScrollable || entry.isIntersecting) &&
+          index > this.lastReadMessageIndex
+        ) {
           this.sendReadReceipt(this.messages[index]);
         }
       }
