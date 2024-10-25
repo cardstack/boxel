@@ -9,23 +9,39 @@ import {
 } from '@cardstack/runtime-common';
 import {
   StripeEvent,
-  addCreditsToUser,
+  addToCreditsLedger,
+  getCurrentActiveSubscription,
+  getMostRecentSubscriptionCycle,
   getPlanByStripeId,
+  getStripeEventById,
   getUserByStripeId,
   insertStripeEvent,
   insertSubscription,
   insertSubscriptionCycle,
+  sumUpCreditsLedger,
 } from '../billing_queries';
 
 export async function handlePaymentSucceeded(
   dbAdapter: DBAdapter,
   event: StripeEvent,
 ): Promise<Response> {
-  await insertStripeEvent(dbAdapter, event);
+  try {
+    await insertStripeEvent(dbAdapter, event);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('duplicate key value')
+    ) {
+      let stripeEvent = await getStripeEventById(dbAdapter, event.id);
+      if (stripeEvent?.is_processed) {
+        throw new Error('Stripe event already processed');
+      }
+    }
+    throw error;
+  }
+
   // TODO: this needs to be an idempotent background job
   // TODO: ideally do this in one DB transaction
-  // TODO: return early if stripe event is already processed
-  // TODO: implement renewals (billing_reason === 'subscription_cycle')
   // TODO: handle plan changes (going from smaller plan to bigger plan, or vice versa)
   // TODO: signal to frontend that subscription has been created and credits have been added
 
@@ -37,7 +53,10 @@ export async function handlePaymentSucceeded(
 
   if (!user) {
     // TODO: if user doesn't exist, we need to wait until the webhook that handles
-    // checkout.session.completed event is completed (which updates stripe customer id after user initially signs up for a plan)
+    // checkout.session.completed event (https://github.com/cardstack/boxel/pull/1720)
+    // is completed (which updates stripe customer id after user initially signs up for a plan)
+
+    // TODO: retry a couple of times spaced out by a couple of seconds
     throw new Error('User not found');
   }
 
@@ -59,7 +78,7 @@ export async function handlePaymentSucceeded(
       periodEnd: event.data.object.period_end,
     });
 
-    await addCreditsToUser(
+    await addToCreditsLedger(
       dbAdapter,
       user.id,
       plan.credits_included,
@@ -67,13 +86,46 @@ export async function handlePaymentSucceeded(
       subscriptionCycle.id,
     );
   } else if (billingReason === 'subscription_cycle') {
-    throw new Error('TODO');
+    let currentActiveSubscription = await getCurrentActiveSubscription(
+      dbAdapter,
+      user.id,
+    );
+
+    let currentSubscriptionCycle = await getMostRecentSubscriptionCycle(
+      dbAdapter,
+      currentActiveSubscription.id,
+    );
+
+    let creditsToExpire = await sumUpCreditsLedger(dbAdapter, {
+      creditType: ['plan_allowance', 'plan_allowance_used'],
+      subscriptionCycleId: currentSubscriptionCycle.id,
+    });
+
+    await addToCreditsLedger(
+      dbAdapter,
+      user.id,
+      -creditsToExpire,
+      'plan_allowance_expired',
+      currentSubscriptionCycle.id,
+    );
+
+    let newSubscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+      subscriptionId: currentActiveSubscription.id,
+      periodStart: event.data.object.period_start,
+      periodEnd: event.data.object.period_end,
+    });
+
+    await addToCreditsLedger(
+      dbAdapter,
+      user.id,
+      plan.credits_included,
+      'plan_allowance',
+      newSubscriptionCycle.id,
+    );
   }
 
   await query(dbAdapter, [
     `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
     param(event.id),
   ]);
-
-  return new Response('ok');
 }

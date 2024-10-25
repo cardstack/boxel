@@ -129,7 +129,7 @@ export async function insertSubscription(
   return result[0];
 }
 
-export async function addCreditsToUser(
+export async function addToCreditsLedger(
   dbAdapter: DBAdapter,
   user_id: string,
   credits: number,
@@ -147,4 +147,115 @@ export async function addCreditsToUser(
     `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES`,
     ...addExplicitParens(separatedByCommas(valueExpressions)),
   ] as Expression);
+}
+
+export async function getStripeEventById(
+  dbAdapter: DBAdapter,
+  stripeEventId: string,
+) {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM stripe_events WHERE stripe_event_id = `,
+    param(stripeEventId),
+  ]);
+
+  if (results.length !== 1) {
+    return null;
+  }
+
+  return results[0];
+}
+type CreditType =
+  | 'plan_allowance'
+  | 'extra_credit'
+  | 'plan_allowance_used'
+  | 'extra_credit_used'
+  | 'plan_allowance_expired';
+
+export async function sumUpCreditsLedger(
+  dbAdapter: DBAdapter,
+  params: {
+    creditType: CreditType | Array<CreditType>;
+    userId?: string;
+    subscriptionCycleId?: string;
+  },
+) {
+  let { creditType, userId, subscriptionCycleId } = params;
+
+  if (userId && subscriptionCycleId) {
+    throw new Error(
+      'It is redundant to specify both userId and subscriptionCycleId',
+    );
+  }
+
+  let creditTypes: CreditType[];
+  if (!creditType) {
+    creditTypes = [
+      'plan_allowance',
+      'extra_credit',
+      'plan_allowance_used',
+      'extra_credit_used',
+      'plan_allowance_expired',
+    ];
+  } else {
+    creditTypes = Array.isArray(creditType) ? creditType : [creditType];
+  }
+
+  let ledgerQuery = [
+    `SELECT SUM(credit_amount) FROM credits_ledger WHERE credit_type IN`,
+    ...(addExplicitParens(
+      separatedByCommas(creditTypes.map((c) => [param(c)])),
+    ) as Expression),
+  ];
+
+  if (subscriptionCycleId) {
+    ledgerQuery.push(
+      ` AND subscription_cycle_id = `,
+      param(subscriptionCycleId),
+    );
+  } else if (userId) {
+    ledgerQuery.push(` AND user_id = `, param(userId));
+  }
+
+  let results = await query(dbAdapter, ledgerQuery);
+
+  return results[0].sum as number;
+}
+
+export async function getCurrentActiveSubscription(
+  dbAdapter: DBAdapter,
+  userId: string,
+) {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM subscriptions WHERE user_id = `,
+    param(userId),
+    ` AND status = 'active'`,
+  ]);
+  if (results.length === 0) {
+    return null;
+  }
+
+  if (results.length !== 1) {
+    throw new Error(
+      `There must be only one active subscription for user: ${userId}, found ${results.length}`,
+    );
+  }
+
+  return results[0];
+}
+
+export async function getMostRecentSubscriptionCycle(
+  dbAdapter: DBAdapter,
+  subscriptionId: string,
+) {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM subscription_cycles WHERE subscription_id = `,
+    param(subscriptionId),
+    ` ORDER BY period_end DESC`,
+  ]);
+
+  if (results.length === 0) {
+    return null;
+  }
+
+  return results[0];
 }
