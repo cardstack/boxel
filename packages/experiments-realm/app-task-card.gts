@@ -36,7 +36,7 @@ import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
-  @tracked loadingColumnKey: string | undefined; //status for now
+  @tracked loadingColumnKey: string | undefined;
   @tracked isSheetOpen = false;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
@@ -334,9 +334,8 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       .column-data {
         position: relative;
         padding: var(--boxel-sp);
-
         height: 100%;
-        background-color: var(--dnd-kanban-drop-zone-bg, var(--boxel-600));
+        background-color: var(--boxel-600);
         z-index: 0;
         overflow-y: auto;
       }
@@ -483,7 +482,6 @@ function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
 }
 
-// TODO: move this to somewhere shared so ppl can use as utility to get card component within their templates
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
