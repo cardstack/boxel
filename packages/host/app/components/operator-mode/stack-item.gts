@@ -502,7 +502,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
               @onFinishEditing={{if this.isEditing (perform this.doneEditing)}}
-              @onClose={{unless this.isBuried (fn @close @item)}}
+              @onClose={{unless this.isBuried (perform this.closeItem)}}
               class='header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if
