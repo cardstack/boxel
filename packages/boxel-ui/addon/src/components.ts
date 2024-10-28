@@ -8,9 +8,8 @@ import CardContentContainer from './components/card-content-container/index.gts'
 import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import DndKanbanBoard, {
-  type DndKanbanBoardArgs,
-  Card as DndCard,
-  Column as DndColumn,
+  type DndItem,
+  DndColumn,
 } from './components/drag-and-drop/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
@@ -68,10 +67,9 @@ export {
   CardContentContainer,
   CardHeader,
   CircleSpinner,
-  DndCard,
+  DndItem,
   DndColumn,
   DndKanbanBoard,
-  DndKanbanBoardArgs,
   FieldContainer,
   Filter,
   FilterList,

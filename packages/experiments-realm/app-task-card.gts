@@ -2,7 +2,6 @@
 import {
   Component,
   realmURL,
-  CardContext,
   StringField,
   contains,
   field,
@@ -21,6 +20,8 @@ import {
   BoxelDropdown,
   Menu as BoxelMenu,
   CircleSpinner,
+  DndKanbanBoard,
+  DndColumn,
 } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
@@ -42,31 +43,17 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked taskDescription = '';
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
-  liveQuery = getCards(this.getTaskQuery, this.realms);
+  //consider which realms you are getting task from
+  liveQuery = getCards(this.getTaskQuery, [this.realmURL]);
 
-  get realms(): string[] {
-    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  get realmURL() {
+    return this.args.model[realmURL];
   }
 
   get assignedTaskCodeRef() {
     return {
       module: `${this.args.model[realmURL]?.href}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
       name: 'Task',
-    };
-  }
-
-  getQueryForStatus(status: string) {
-    return {
-      filter: {
-        on: this.assignedTaskCodeRef,
-        any: [
-          {
-            eq: {
-              'status.label': status,
-            },
-          },
-        ],
-      },
     };
   }
 
@@ -78,6 +65,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
+  //static statuses before query
   get statuses() {
     return TaskStatusField.values;
   }
@@ -88,6 +76,14 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     }
 
     return this.liveQuery?.instances as Task[];
+  }
+
+  get columns() {
+    return this.statuses?.map((status: LooseyGooseyData) => {
+      let statusLabel = status.label;
+      let cards = this.getTaskWithStatus(status.label);
+      return new DndColumn(statusLabel, cards);
+    });
   }
 
   @action getTaskWithStatus(status: string) {
@@ -114,11 +110,15 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     }
   }
 
-  get realmURL() {
-    return this.args.model[realmURL];
+  @action createNewTask(statusLabel: string) {
+    this.loadingColumnKey = statusLabel;
+    this._createNewTask.perform(statusLabel);
   }
 
-  _createNewTask = restartableTask(async (statusLabel: string) => {
+  @action isCreateNewTaskLoading(statusLabel: string) {
+    return this.loadingColumnKey === statusLabel;
+  }
+  private _createNewTask = restartableTask(async (statusLabel: string) => {
     if (this.realmURL === undefined) {
       return;
     }
@@ -185,13 +185,9 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     }
   });
 
-  @action createNewTask(statusLabel: string) {
-    this.loadingColumnKey = statusLabel;
-    this._createNewTask.perform(statusLabel);
-  }
-
-  @action isCreateNewTaskLoading(statusLabel: string) {
-    return this.loadingColumnKey === statusLabel;
+  @action async onMoveCardMutation(draggedCard: DndItem, newColumn: DndColumn) {
+    // This only updates the value of the card but doesn't commit to fileystem nor server
+    draggedCard.status.label = newColumn.title;
   }
 
   <template>
@@ -231,39 +227,36 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           Sheet
         </button>
       </div>
-
       <div class='columns-container'>
-        {{#each this.statuses as |status|}}
-          <div class='column'>
-            {{#let (this.getTaskWithStatus status.label) as |taskCards|}}
-              <ColumnHeader
-                @statusLabel={{status.label}}
-                @createNewTask={{this.createNewTask}}
-                @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
-              />
-              <div class='column-data'>
-                <ul class='cards' data-test-cards-grid-cards>
-                  {{#each taskCards as |card|}}
-                    <li
-                      {{@context.cardComponentModifier
-                        cardId=card.id
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
-                      data-test-cards-grid-item={{removeFileExtension card.id}}
-                      data-cards-grid-item={{removeFileExtension card.id}}
-                    >
-                      {{#let (getComponent card) as |CardComponent|}}
-                        <CardComponent />
-                      {{/let}}
-                    </li>
-                  {{/each}}
-                </ul>
+        <DndKanbanBoard
+          @columns={{this.columns}}
+          @onMove={{this.onMoveCardMutation}}
+        >
+          <:header as |column|>
+            <ColumnHeader
+              @statusLabel={{column.title}}
+              @createNewTask={{this.createNewTask}}
+              @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
+            />
+          </:header>
+          <:default as |card|>
+            {{#let (getComponent card) as |CardComponent|}}
+              <div
+                {{@context.cardComponentModifier
+                  cardId=card.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+                data-test-cards-grid-item={{removeFileExtension card.id}}
+                data-cards-grid-item={{removeFileExtension card.id}}
+              >
+                <CardComponent class='card' />
               </div>
             {{/let}}
-          </div>
-        {{/each}}
+
+          </:default>
+        </DndKanbanBoard>
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
         <h2>Sheet Content</h2>
@@ -280,7 +273,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         font: var(--boxel-font);
         overflow: hidden;
       }
-
       .filter-section {
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         display: flex;
@@ -288,7 +280,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         gap: var(--boxel-sp);
         align-items: center;
       }
-
       .sheet-toggle {
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         background-color: var(--boxel-purple);
@@ -297,54 +288,24 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         border-radius: var(--boxel-border-radius);
         cursor: pointer;
       }
-
       .columns-container {
         display: flex;
         overflow-x: auto;
         flex-grow: 1;
       }
-
-      .task-card {
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-light);
-      }
       .dropdown-filter-button {
         display: flex;
         align-items: center;
       }
-
       .dropdown-filter-text {
         margin-right: var(--boxel-sp-xxs);
       }
-
       .dropdown-arrow {
         display: inline-block;
       }
-      .column {
-        display: flex;
-        flex-direction: column;
-        flex: 0 0 var(--boxel-xs-container);
-        border-right: var(--boxel-border);
-        height: 100%;
-        transition: background-color 0.3s ease;
-      }
-
-      .column-data {
-        position: relative;
-        padding: var(--boxel-sp);
-        height: 100%;
-        background-color: var(--boxel-600);
-        z-index: 0;
-        overflow-y: auto;
-      }
-      .cards {
-        padding: 0;
-        list-style-type: none;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
+      /** Need to specify height because fitted field component has a default height**/
+      .card {
+        height: 150px !important;
       }
     </style>
   </template>
@@ -387,12 +348,10 @@ class Sheet extends GlimmerComponent<SheetSignature> {
         pointer-events: none;
         transition: background-color 0.3s ease-out;
       }
-
       .sheet-overlay.is-open {
         background-color: rgba(0, 0, 0, 0.5);
         pointer-events: auto;
       }
-
       .sheet-content {
         width: 300px;
         height: 100%;
@@ -403,11 +362,9 @@ class Sheet extends GlimmerComponent<SheetSignature> {
         transition: transform 0.3s ease-out;
         position: relative;
       }
-
       .sheet-content.is-open {
         transform: translateX(0);
       }
-
       .close-button {
         position: absolute;
         top: var(--boxel-sp-xs);
@@ -423,17 +380,6 @@ class Sheet extends GlimmerComponent<SheetSignature> {
   </template>
 }
 
-export class AppTaskCard extends AppCard {
-  static displayName = 'App Task';
-  static prefersWideFormat = true;
-  static isolated = AppTaskCardIsolated;
-  @field title = contains(StringField, {
-    computeVia: function (this: AppTaskCard) {
-      return 'App Task';
-    },
-  });
-}
-
 interface ColumnHeaderSignature {
   statusLabel: string;
   createNewTask: (statusLabel: string) => void;
@@ -442,12 +388,9 @@ interface ColumnHeaderSignature {
 
 class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
   <template>
-    <div class='column-header'>
+    <div class='column-header-content'>
       {{@statusLabel}}
-      <button
-        class='create-new-task-button'
-        {{on 'click' (fn @createNewTask @statusLabel)}}
-      >
+      <button class='create-new-task-button' {{on 'click' this.createNewTask}}>
         {{#let (@isCreateNewTaskLoading @statusLabel) as |isLoading|}}
           {{#if isLoading}}
             <LoadingIndicator class='loading' />
@@ -461,13 +404,10 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
       .loading {
         --boxel-loading-indicator-size: 14px;
       }
-      .column-header {
+      .column-header-content {
         display: flex;
         justify-content: space-between;
-        position: sticky;
-        top: 0;
-        background-color: var(--dnd-kanban-header-bg, var(--boxel-100));
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        gap: var(--boxel-sp-xxs);
         font: var(--boxel-font-sm);
       }
       .create-new-task-button {
@@ -476,6 +416,21 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
       }
     </style>
   </template>
+
+  @action createNewTask() {
+    this.args.createNewTask(this.args.statusLabel);
+  }
+}
+
+export class AppTaskCard extends AppCard {
+  static displayName = 'App Task';
+  static prefersWideFormat = true;
+  static isolated = AppTaskCardIsolated;
+  @field title = contains(StringField, {
+    computeVia: function (this: AppTaskCard) {
+      return 'App Task';
+    },
+  });
 }
 
 function removeFileExtension(cardUrl: string) {
