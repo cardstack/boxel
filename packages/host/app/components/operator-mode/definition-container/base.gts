@@ -175,9 +175,6 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
       gap: var(--boxel-sp-xxs);
       align-self: flex-start;
     }
-    .action-button:hover:not(:disabled) {
-      --icon-color: var(--boxel-highlight);
-    }
     .info-footer {
       margin-top: var(--boxel-sp-sm);
     }
