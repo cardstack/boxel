@@ -99,18 +99,40 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
 
   <template>
     <button
-      ...attributes
       class={{cn
         'add-card-to-neighbor-stack'
         this.triggerSideClass
-        (if
-          (eq @activeTrigger @triggerSide) 'add-card-to-neighbor-stack--active'
-        )
+        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
+      ...attributes
     >
       <Download width='19' height='19' />
     </button>
+    <style>
+      .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
+        width: var(--container-button-size);
+        height: var(--container-button-size);
+        padding: 0;
+        border-radius: 50%;
+        background-color: var(--boxel-light-100);
+        border-color: transparent;
+        box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--boxel-layer-floating-button);
+      }
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack--active {
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
+      }
+      .add-card-to-neighbor-stack--left {
+        margin-left: var(--operator-mode-spacing);
+      }
+      .add-card-to-neighbor-stack--right {
+        margin-right: var(--operator-mode-spacing);
+      }
+    </style>
   </template>
 }
 
@@ -700,7 +722,7 @@ export default class InteractSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
     >
-      <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+      <div class='interact-mode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='right'>
             <:trigger>
@@ -769,6 +791,7 @@ export default class InteractSubmode extends Component<Signature> {
           <Tooltip @placement='left'>
             <:trigger>
               <NeighborStackTriggerButton
+                class='neighbor-stack-trigger'
                 data-test-add-card-right-stack
                 @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
                 @activeTrigger={{this.searchSheetTrigger}}
@@ -795,7 +818,7 @@ export default class InteractSubmode extends Component<Signature> {
     </SubmodeLayout>
 
     <style scoped>
-      .operator-mode__main {
+      .interact-mode {
         display: flex;
         justify-content: center;
         align-items: center;
@@ -804,38 +827,16 @@ export default class InteractSubmode extends Component<Signature> {
         background-size: cover;
         height: 100%;
       }
-      .operator-mode__main .stacks {
+      .stacks {
         flex: 1;
         height: 100%;
         display: flex;
         justify-content: center;
         align-items: center;
       }
-      .operator-mode__main .add-card-to-neighbor-stack {
+      .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--boxel-sp);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--boxel-sp);
       }
     </style>
   </template>
