@@ -190,7 +190,7 @@ export default class CardHeader extends Component<Signature> {
           );
           --inner-boxel-card-header-card-type-icon-size: var(
             --boxel-card-header-card-type-icon-size,
-            1rem
+            var(--boxel-icon-sm)
           );
           position: relative;
           display: flex;

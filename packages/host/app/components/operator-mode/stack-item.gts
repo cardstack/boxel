@@ -645,7 +645,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-card-header-text-font: var(--boxel-font-size-xs);
         --boxel-card-header-realm-icon-size: var(--boxel-icon-sm);
         --boxel-card-header-border-radius: var(--boxel-border-radius-lg);
-        --boxel-card-header-card-type-icon-size: var(--boxel-icon-xxs);
+        --boxel-card-header-card-type-icon-size: var(--boxel-icon-xs);
       }
 
       .loading {
