@@ -282,7 +282,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   get availableRealms(): Record<string, RealmInfo> | undefined {
     let items: Record<string, RealmInfo> = {};
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsMeta)) {
+    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
       if (this.state == null || !this.state.availableRealmUrls.includes(url)) {
         continue;
       }

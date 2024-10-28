@@ -17,7 +17,6 @@ import type { Loader, Query } from '@cardstack/runtime-common';
 import Auth from '@cardstack/host/components/matrix/auth';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import RealmIndexingIndicator from '@cardstack/host/components/operator-mode/realm-indexing-indicator';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
@@ -137,11 +136,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         <InteractSubmode @write={{perform this.write}} />
       {{else}}
         <Auth />
-      {{/if}}
-
-      {{! TODO move this to its final home after we get designs !}}
-      {{#if this.matrixService.isLoggedIn}}
-        <RealmIndexingIndicator />
       {{/if}}
     </Modal>
 

@@ -15,7 +15,7 @@ interface Signature {
   Args: {
     value: string;
     onInput: (val: string) => void;
-    onSend: (val: string) => void;
+    onSend: () => void;
     canSend: boolean;
   };
 }
@@ -105,7 +105,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
     if (!this.args.canSend) {
       return;
     }
-    this.args.onSend(this.args.value);
+    this.args.onSend();
   }
 
   @action

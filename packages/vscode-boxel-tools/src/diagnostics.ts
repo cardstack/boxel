@@ -44,7 +44,7 @@ function extractErrorsFromMessage(message: string): vscode.Diagnostic[] {
     vscode.DiagnosticSeverity.Error, // Or Warning, Information, etc.
   );
 
-  diagnostic.source = 'boxelrealm';
+  diagnostic.source = 'boxel-tools';
 
   diagnostics.push(diagnostic);
 

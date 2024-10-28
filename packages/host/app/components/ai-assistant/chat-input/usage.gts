@@ -13,8 +13,8 @@ export default class AiAssistantChatInputUsage extends Component {
   @tracked value = '';
   @tracked canSend = true;
 
-  @action onSend(message: string) {
-    console.log(`message sent: ${message}`);
+  @action onSend() {
+    console.log(`message sent: ${this.value}`);
     this.mockSend.perform();
   }
 
