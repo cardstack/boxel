@@ -30,6 +30,19 @@ export async function insertStripeEvent(
   ] as Expression);
 }
 
+export async function updateUserStripeCustomerId(
+  dbAdapter: DBAdapter,
+  userId: string,
+  stripeCustomerId: string,
+) {
+  await query(dbAdapter, [
+    `UPDATE users SET stripe_customer_id = `,
+    param(stripeCustomerId),
+    ` WHERE matrix_user_id = `,
+    param(userId),
+  ]);
+}
+
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
