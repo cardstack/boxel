@@ -1,8 +1,9 @@
+import { type SafeString, htmlSafe } from '@ember/template';
+
 import Component from '@glimmer/component';
 
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
-import { type SafeString, htmlSafe } from '@ember/template';
 import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 interface Signature {
