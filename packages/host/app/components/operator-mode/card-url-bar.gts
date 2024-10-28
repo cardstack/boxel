@@ -123,9 +123,12 @@ export default class CardURLBar extends Component<Signature> {
 
         --icon-color: var(--boxel-light);
       }
-      .realm-icon img {
-        width: 20px;
-        height: 20px;
+      .realm-icon .realm-icon-img {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
+      }
+      .realm-icon .realm-icon-img::after {
+        border-radius: 0;
       }
       .input {
         display: flex;

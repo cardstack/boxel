@@ -536,7 +536,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     @realmInfo={{realmInfo}}
                     @canAnimate={{this.isTopCard}}
                     class='header-icon'
-                    style={{cssVar
+                    @style={{cssVar
                       realm-icon-background=(getContrastColor
                         @item.headerColor 'transparent'
                       )
