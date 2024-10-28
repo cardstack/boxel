@@ -86,16 +86,14 @@ export async function getPlanByStripeId(
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
-): Promise<User> {
+): Promise<User | null> {
   let results = await query(dbAdapter, [
     `SELECT * FROM users WHERE stripe_customer_id = `,
     param(stripeCustomerId),
   ]);
 
   if (results.length !== 1) {
-    throw new Error(
-      `No user found with stripe customer id: ${stripeCustomerId}`,
-    );
+    return null;
   }
 
   return {
@@ -133,25 +131,6 @@ export async function insertSubscriptionCycle(
   };
 }
 
-export async function getActiveSubscription(
-  dbAdapter: DBAdapter,
-  userId: string,
-): Promise<Subscription> {
-  let results = await query(dbAdapter, [
-    `SELECT * FROM subscriptions WHERE user_id = $1 AND status = 'active'`,
-    param(userId),
-  ]);
-
-  return {
-    id: results[0].id as string,
-    userId: results[0].user_id as string,
-    planId: results[0].plan_id as string,
-    startedAt: results[0].started_at as number,
-    status: results[0].status as string,
-    stripeSubscriptionId: results[0].stripe_subscription_id as string,
-  };
-}
-
 export async function insertSubscription(
   dbAdapter: DBAdapter,
   subscription: {
@@ -182,6 +161,7 @@ export async function insertSubscription(
     planId: result[0].plan_id as string,
     startedAt: result[0].started_at as number,
     status: result[0].status as string,
+    stripeSubscriptionId: result[0].stripe_subscription_id as string,
   };
 }
 
