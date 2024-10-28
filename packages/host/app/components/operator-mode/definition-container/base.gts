@@ -110,8 +110,9 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
-      .realm-info img {
+      .realm-info .realm-icon-img {
         width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
       }
       .realm-info .realm-name {
         letter-spacing: var(--boxel-lsp-xs);

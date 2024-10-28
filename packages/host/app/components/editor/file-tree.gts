@@ -107,8 +107,9 @@ export default class FileTree extends Component<Signature> {
         font: 600 var(--boxel-font-sm);
       }
 
-      .realm-info img {
-        width: 18px;
+      .realm-info .realm-icon-img {
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
       }
 
       .realm-title {
