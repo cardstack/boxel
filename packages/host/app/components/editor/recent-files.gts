@@ -3,9 +3,10 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { RealmIcon } from '@cardstack/boxel-ui/components';
+
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmService from '@cardstack/host/services/realm';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
 

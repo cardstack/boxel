@@ -1,44 +1,40 @@
-import { type SafeString, htmlSafe } from '@ember/template';
-
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
 
-import { sanitizeHtml } from '@cardstack/runtime-common';
-
-import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
-
+export type RealmDisplayInfo = {
+  iconURL: string | null;
+  isIndexing?: boolean;
+  name: string;
+};
 interface Signature {
   Args: {
-    realmInfo: EnhancedRealmInfo;
     canAnimate?: boolean;
-    style?: SafeString; // setting style as an arg so splattributes don't collide with our own style tag
+    realmInfo: RealmDisplayInfo;
   };
   Element: HTMLElement;
 }
+
+const setBackgroundImage = modifier(
+  (element: HTMLElement, [url]: [string | null]) => {
+    if (url) {
+      element.style.backgroundImage = `url(${url})`;
+    }
+  },
+);
 
 export default class RealmIcon extends Component<Signature> {
   private get showAnimation() {
     return this.args.canAnimate && this.args.realmInfo.isIndexing;
   }
-  private get style() {
-    return htmlSafe(
-      sanitizeHtml(
-        `${
-          this.args.realmInfo.iconURL
-            ? 'background-image: url("' + this.args.realmInfo.iconURL + '");'
-            : ''
-        } ${this.args.style ?? ''}`.trim(),
-      ),
-    );
-  }
   <template>
     <div
-      style={{this.style}}
       alt='Icon for workspace {{@realmInfo.name}}'
       class='realm-icon-img {{if this.showAnimation "indexing"}}'
       data-test-realm-indexing-indicator={{this.showAnimation}}
       data-test-realm-icon-url={{@realmInfo.iconURL}}
       {{! hide this from percy since it might be animating !}}
       data-test-percy-hide={{@canAnimate}}
+      {{setBackgroundImage @realmInfo.iconURL}}
       ...attributes
     />
 

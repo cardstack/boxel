@@ -1,4 +1,3 @@
-import { CheckMark, IconX } from '@cardstack/boxel-ui/icons';
 import { A } from '@ember/array';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -12,6 +11,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
+import { CheckMark, IconX } from '../../icons.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelField from '../field-container/index.gts';
 import {
