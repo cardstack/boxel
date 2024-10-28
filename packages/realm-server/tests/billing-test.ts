@@ -418,7 +418,7 @@ module('billing', function (hooks) {
     });
   });
 
-  module('checkout session completed', function (hooks) {
+  module('checkout session completed', function () {
     test('update user stripe customer id when checkout session completed', async function (assert) {
       // mock user
       await insertUser(dbAdapter, 'testuser', '');
@@ -443,8 +443,8 @@ module('billing', function (hooks) {
       );
 
       let stripeEvents = await fetchStripeEvents(dbAdapter);
-      assert.equal(stripeEvents.length, 1);
-      assert.equal(
+      assert.strictEqual(stripeEvents.length, 1);
+      assert.strictEqual(
         stripeEvents[0].stripe_event_id,
         stripeCheckoutSessionCompletedEvent.id,
       );
@@ -453,9 +453,9 @@ module('billing', function (hooks) {
         dbAdapter,
         'cus_123',
       );
-      assert.equal(updatedUser.length, 1);
-      assert.equal(updatedUser[0].stripe_customer_id, 'cus_123');
-      assert.equal(updatedUser[0].matrix_user_id, 'testuser');
+      assert.strictEqual(updatedUser.length, 1);
+      assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+      assert.strictEqual(updatedUser[0].matrix_user_id, 'testuser');
     });
   });
 });
