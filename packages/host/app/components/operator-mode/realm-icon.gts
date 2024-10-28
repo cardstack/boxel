@@ -52,6 +52,8 @@ export default class RealmIcon extends Component<Signature> {
       }
       .realm-icon-img {
         background-size: contain;
+        background-position: center;
+        background-repeat: no-repeat;
         height: 100%;
       }
       .indexing {

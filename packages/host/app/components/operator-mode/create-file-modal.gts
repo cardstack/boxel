@@ -794,13 +794,17 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
   <template>
     <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
       <:icon>
-        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
+        <RealmIcon @realmInfo={{this.realm.info @entry.id}} class='icon' />
       </:icon>
       <:default>
         {{@entry.title}}
       </:default>
     </Pill>
     <style scoped>
+      .icon {
+        min-height: 18px;
+        min-width: 18px;
+      }
       .selected-type {
         padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);

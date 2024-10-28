@@ -75,8 +75,8 @@ export default class RealmDropdown extends Component<Signature> {
     </BoxelDropdown>
     <style scoped>
       .icon {
-        width: 18px;
-        height: 18px;
+        min-width: 18px;
+        min-height: 18px;
       }
       .realm-dropdown-trigger {
         width: var(--realm-dropdown-width, auto);

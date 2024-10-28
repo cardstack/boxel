@@ -111,8 +111,8 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         gap: var(--boxel-sp-xxxs);
       }
       .realm-info .realm-icon-img {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
       }
       .realm-info .realm-name {
         letter-spacing: var(--boxel-lsp-xs);

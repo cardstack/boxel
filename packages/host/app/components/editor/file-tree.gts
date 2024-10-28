@@ -108,8 +108,8 @@ export default class FileTree extends Component<Signature> {
       }
 
       .realm-info .realm-icon-img {
-        width: 18px;
-        height: 18px;
+        min-width: 18px;
+        min-height: 18px;
       }
 
       .realm-title {

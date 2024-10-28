@@ -69,8 +69,8 @@ export default class CardPill extends Component<CardPillSignature> {
     </Pill>
     <style scoped>
       .icon {
-        width: 18px;
-        height: 18px;
+        min-width: 18px;
+        min-height: 18px;
       }
       .card-pill {
         --pill-icon-size: 18px;
