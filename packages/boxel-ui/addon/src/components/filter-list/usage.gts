@@ -100,7 +100,7 @@ export default class FilterListUsage extends Component {
       <:api as |Args|>
         <Args.Object
           @name='filters'
-          @description='An array of Filters, where the Filter interface requires only a \`displayName\` property.'
+          @description='An array of Filters, where the Filter interface requires only displayName and icon properties.'
           @value={{this.filters}}
         />
         <Args.Object
