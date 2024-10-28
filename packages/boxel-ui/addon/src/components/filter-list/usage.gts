@@ -1,9 +1,49 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import FilterList, { type Filter } from './index.gts';
+import FilterList, {
+  type Filter,
+  type FilterListIconSignature,
+} from './index.gts';
+
+const Captions: TemplateOnlyComponent<FilterListIconSignature> = <template>
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    class='lucide lucide-captions'
+    viewBox='0 0 24 24'
+    ...attributes
+  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
+      d='M7 15h4m4 0h2M7 11h2m4 0h4'
+    /></svg>
+</template>;
+
+const Stack2: TemplateOnlyComponent<FilterListIconSignature> = <template>
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    class='icon icon-tabler icons-tabler-outline icon-tabler-stack-2'
+    viewBox='0 0 24 24'
+    ...attributes
+  ><path stroke='none' d='M0 0h24v24H0z' /><path
+      d='M12 4 4 8l8 4 8-4-8-4M4 12l8 4 8-4M4 16l8 4 8-4'
+    /></svg>
+</template>;
 
 export default class FilterListUsage extends Component {
   private allItems = ['Author', 'BlogPost', 'Friend', 'Person', 'Pet'];
@@ -14,11 +54,13 @@ export default class FilterListUsage extends Component {
     let _filters = [
       {
         displayName: 'All Items',
+        icon: Stack2,
       },
     ];
     this.allItems.forEach((item) => {
       _filters.push({
         displayName: item,
+        icon: Captions,
       });
     });
 
