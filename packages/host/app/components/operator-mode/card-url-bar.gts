@@ -124,8 +124,8 @@ export default class CardURLBar extends Component<Signature> {
         --icon-color: var(--boxel-light);
       }
       .realm-icon .realm-icon-img {
-        min-width: 20px;
-        min-height: 20px;
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
       }
       .realm-icon .realm-icon-img::after {
         border-radius: 0;

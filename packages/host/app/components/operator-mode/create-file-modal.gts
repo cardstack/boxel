@@ -802,8 +802,8 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
     </Pill>
     <style scoped>
       .icon {
-        min-height: 18px;
-        min-width: 18px;
+        min-height: var(--boxel-icon-sm);
+        min-width: var(--boxel-icon-sm);
       }
       .selected-type {
         padding: var(--boxel-sp-xxxs);

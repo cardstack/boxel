@@ -223,8 +223,8 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .icon {
-        min-width: 18px;
-        min-height: 18px;
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
       }
 
       @keyframes pulse {
