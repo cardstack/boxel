@@ -454,7 +454,7 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
       >
         {{#let (@isCreateNewTaskLoading @statusLabel) as |isLoading|}}
           {{#if isLoading}}
-            <LoadingIndicator style='--boxel-loading-indicator-size:14px' />
+            <LoadingIndicator class='loading' />
           {{else}}
             <IconPlus width='12px' height='12px' />
           {{/if}}
@@ -462,6 +462,9 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
       </button>
     </div>
     <style scoped>
+      .loading {
+        --boxel-loading-indicator-size: 14px;
+      }
       .column-header {
         display: flex;
         justify-content: space-between;
