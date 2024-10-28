@@ -52,8 +52,8 @@ export default async function stripeWebhookHandler(
     throw new Error('No Stripe signature found in request headers');
   }
 
-  if (!process.env.REALM_SECRET_SEED) {
-    throw new Error('REALM_SECRET_SEED is not set');
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    throw new Error('STRIPE_WEBHOOK_SECRET is not set');
   }
 
   let event: StripeEvent;
@@ -62,7 +62,7 @@ export default async function stripeWebhookHandler(
     event = Stripe.webhooks.constructEvent(
       await request.text(),
       signature,
-      process.env.REALM_SECRET_SEED,
+      process.env.STRIPE_WEBHOOK_SECRET,
     ) as StripeEvent;
   } catch (error) {
     throw new Error(`Error verifying webhook signature: ${error}`);
