@@ -39,11 +39,7 @@ export default class CardPill extends Component<CardPillSignature> {
       ...attributes
     >
       <:icon>
-        <RealmIcon
-          @realmInfo={{this.realm.info @card.id}}
-          width='18'
-          height='18'
-        />
+        <RealmIcon @realmInfo={{this.realm.info @card.id}} class='icon' />
       </:icon>
       <:default>
         <div class='card-content' title={{@card.title}}>
@@ -72,6 +68,10 @@ export default class CardPill extends Component<CardPillSignature> {
       </:default>
     </Pill>
     <style scoped>
+      .icon {
+        width: 18px;
+        height: 18px;
+      }
       .card-pill {
         --pill-icon-size: 18px;
         border: 1px solid var(--boxel-400);
