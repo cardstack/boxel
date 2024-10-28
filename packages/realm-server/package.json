@@ -101,5 +101,8 @@
   },
   "volta": {
     "extends": "../../package.json"
+  },
+  "dependencies": {
+    "stripe": "^17.2.1"
   }
 }

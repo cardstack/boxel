@@ -1669,6 +1669,10 @@ importers:
         version: 5.1.6
 
   packages/realm-server:
+    dependencies:
+      stripe:
+        specifier: ^17.2.1
+        version: 17.2.1
     devDependencies:
       '@cardstack/boxel-icons':
         specifier: workspace:*
