@@ -6,7 +6,9 @@ import {
   StringField,
   contains,
   field,
+  BaseDef,
 } from 'https://cardstack.com/base/card-api';
+import { getCard, getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
@@ -70,6 +72,17 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
+  get getTaskQuery(): Query {
+    return {
+      filter: {
+        type: this.assignedTaskCodeRef,
+      },
+    };
+  }
+
+  // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
+  liveQuery = getCards(this.getTaskQuery, this.realms);
+
   columnData: ColumnData[] = [
     {
       status: {
@@ -126,6 +139,14 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       codeRef: this.assignedTaskCodeRef,
     };
   });
+
+  get tasks() {
+    if (!this.liveQuery) {
+      return;
+    }
+
+    return this.liveQuery.instances as Task[];
+  }
 
   @action
   updateFilter(type: string, value: string) {
@@ -424,6 +445,11 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
   });
 
   <template>
+    {{#each this.tasks as |task|}}
+      {{#let (getComponent task) as |TaskComponent|}}
+        <TaskComponent format='fitted' />
+      {{/let}}
+    {{/each}}
     <div class='column'>
       <div class='column-title'>
         <span>{{@column.status.label}}</span>
@@ -531,4 +557,9 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
 
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
+// TODO: move this to somewhere shared so ppl can use as utility to get card component within their templates
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }
