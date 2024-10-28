@@ -369,7 +369,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .ai-assistant-panel {
-        z-index: 2;
+        z-index: 4;
       }
 
       .top-left-menu {
