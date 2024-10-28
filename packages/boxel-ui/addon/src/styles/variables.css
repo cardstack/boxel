@@ -122,6 +122,7 @@
   /* Primary colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
+  --boxel-dark-hover: rgba(0, 0, 0, 0.1);
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
