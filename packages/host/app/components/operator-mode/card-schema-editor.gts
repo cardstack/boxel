@@ -222,6 +222,11 @@ export default class CardSchemaEditor extends Component<Signature> {
         border: 2px solid var(--boxel-highlight);
       }
 
+      .icon {
+        min-width: 18px;
+        min-height: 18px;
+      }
+
       @keyframes pulse {
         0% {
           transform: scale(1);
@@ -253,7 +258,10 @@ export default class CardSchemaEditor extends Component<Signature> {
                 data-test-card-schema-navigational-button
               >
                 <:icon>
-                  <RealmIcon @realmInfo={{this.realm.info @cardType.module}} />
+                  <RealmIcon
+                    @realmInfo={{this.realm.info @cardType.module}}
+                    class='icon'
+                  />
                 </:icon>
                 <:default>
                   {{@cardType.displayName}}
@@ -351,6 +359,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                               {{/if}}
                               <RealmIcon
                                 @realmInfo={{this.realm.info moduleUrl}}
+                                class='icon'
                               />
                             </:icon>
                             <:default>
