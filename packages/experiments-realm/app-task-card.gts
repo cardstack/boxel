@@ -33,16 +33,7 @@ import {
 } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
-
-interface ColumnData {
-  status: {
-    label: string;
-    index: number;
-  };
-  query: Query;
-  codeRef: ResolvedCodeRef;
-  card?: CardDef;
-}
+import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked loadingColumnKey: string | undefined; //status for now
@@ -87,29 +78,9 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
-  //maybe get all from task instance definition
   get statuses() {
-    return [
-      'Backlog',
-      'Next Sprint',
-      'Current Sprint',
-      'In Progress',
-      'In Review',
-      'Staged',
-      'Shipped',
-    ];
+    return TaskStatusField.values;
   }
-
-  columnData: ColumnData[] = this.statuses.map((status, index) => {
-    return {
-      status: {
-        label: status,
-        index,
-      },
-      query: this.getQueryForStatus(status),
-      codeRef: this.assignedTaskCodeRef,
-    };
-  });
 
   get tasks() {
     if (this.liveQuery === undefined) {
@@ -159,13 +130,20 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         return;
       }
 
+      let index = TaskStatusField.values.find((value) => {
+        return value.label === statusLabel;
+      })?.index;
+
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
           attributes: {
             taskName: null,
             taskDetail: null,
-            status: { label: statusLabel },
+            status: {
+              index,
+              label: statusLabel,
+            },
             priority: {
               index: null,
               label: null,
@@ -256,11 +234,11 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       </div>
 
       <div class='columns-container'>
-        {{#each this.statuses as |statusLabel index|}}
+        {{#each this.statuses as |status|}}
           <div class='column'>
-            {{#let (this.getTaskWithStatus statusLabel) as |taskCards|}}
+            {{#let (this.getTaskWithStatus status.label) as |taskCards|}}
               <ColumnHeader
-                @statusLabel={{statusLabel}}
+                @statusLabel={{status.label}}
                 @createNewTask={{this.createNewTask}}
                 @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
               />
