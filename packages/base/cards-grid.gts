@@ -42,7 +42,11 @@ import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import Captions from '@cardstack/boxel-icons/captions';
+import Stack2 from '@cardstack/boxel-icons/stack-2';
+import Star from '@cardstack/boxel-icons/star';
 
+type IconComponent = typeof Captions;
 interface SortOption {
   displayName: string;
   sort: Query['sort'];
@@ -319,31 +323,34 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  filters: { displayName: string; query: any }[] = new TrackedArray([
-    {
-      displayName: 'Favorites',
-      query: {
-        filter: {
-          any:
-            this.args.model.favorites?.map((card) => {
-              return { eq: { id: card.id } } ?? {};
-            }) ?? [],
+  filters: { displayName: string; icon: IconComponent; query: any }[] =
+    new TrackedArray([
+      {
+        displayName: 'Favorites',
+        icon: Star,
+        query: {
+          filter: {
+            any:
+              this.args.model.favorites?.map((card) => {
+                return { eq: { id: card.id } } ?? {};
+              }) ?? [],
+          },
         },
       },
-    },
-    {
-      displayName: 'All Cards',
-      query: {
-        filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
+      {
+        displayName: 'All Cards',
+        icon: Stack2,
+        query: {
+          filter: {
+            not: {
+              eq: {
+                _cardType: 'Cards Grid',
+              },
             },
           },
         },
       },
-    },
-  ]);
+    ]);
 
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
@@ -455,6 +462,7 @@ class Isolated extends Component<typeof CardsGrid> {
       const lastIndex = summary.id.lastIndexOf('/');
       this.filters.push({
         displayName: summary.attributes.displayName,
+        icon: Captions,
         query: {
           filter: {
             type: {

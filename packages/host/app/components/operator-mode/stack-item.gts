@@ -32,7 +32,7 @@ import {
   CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cn, cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
@@ -510,6 +510,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 )
                 boxel-card-header-actions-min-width=(if
                   this.isBuried '50px' '95px'
+                )
+                realm-icon-background=(getContrastColor
+                  @item.headerColor 'transparent'
                 )
               }}
               {{on

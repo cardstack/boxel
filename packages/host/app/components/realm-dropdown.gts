@@ -53,12 +53,7 @@ export default class RealmDropdown extends Component<Signature> {
           ...attributes
         >
           {{#if this.selectedRealm}}
-            <RealmIcon
-              class='icon'
-              width='18'
-              height='18'
-              @realmInfo={{this.selectedRealm}}
-            />
+            <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
             <div class='selected-item' data-test-selected-realm>
               {{this.selectedRealm.name}}
             </div>
@@ -82,6 +77,10 @@ export default class RealmDropdown extends Component<Signature> {
       </:content>
     </BoxelDropdown>
     <style scoped>
+      .icon {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
+      }
       .realm-dropdown-trigger {
         width: var(--realm-dropdown-width, auto);
         display: flex;

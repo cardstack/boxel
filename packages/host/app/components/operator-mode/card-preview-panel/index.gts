@@ -211,9 +211,9 @@ export default class CardPreviewPanel extends Component<Signature> {
         display: flex;
       }
 
-      .header-icon > img {
-        height: 25px;
-        width: 25px;
+      .header-icon > .realm-icon-img {
+        min-height: 25px;
+        min-width: 25px;
       }
 
       .header-icon {
