@@ -12,9 +12,10 @@ import {
   sumUpCreditsLedger,
 } from '../billing_queries';
 import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
+
+import PgAdapter from '../../pg-adapter';
 import { retry } from '../../lib/utils';
 import { TransactionManager } from '../../pg-transaction-manager';
-import PgAdapter from '../../pg-adapter';
 
 // TODOs that will be handled in a separated PRs:
 // - handle plan changes (going from smaller plan to bigger plan, or vice versa) - this will be handled in a separate ticket CS-7444
@@ -45,7 +46,7 @@ export async function handlePaymentSucceeded(
 
     let plan = await getPlanByStripeId(
       dbAdapter,
-      event.data.object.lines.data[0].plan.product,
+      event.data.object.lines.data[0].price.product,
     );
 
     // When user first signs up for a plan, our checkout.session.completed handler takes care of assigning the user a stripe customer id.

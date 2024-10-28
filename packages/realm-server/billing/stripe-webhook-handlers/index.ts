@@ -27,13 +27,8 @@ export type StripeInvoicePaymentSucceededWebhookEvent = StripeEvent & {
       subscription: string;
       customer: string;
       lines: {
-        object: 'list';
         data: Array<{
-          id: string;
-          object: 'line_item';
-          plan: {
-            id: string;
-            object: 'plan';
+          price: {
             product: string;
           };
         }>;
