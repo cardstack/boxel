@@ -101,8 +101,8 @@ class File extends Component<FileArgs> {
       }
 
       .icon {
-        width: 20px;
-        height: 20px;
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
         margin-right: var(--boxel-sp-xxxs);
       }
     </style>
