@@ -8,6 +8,7 @@ import { getContrastColor } from '../../helpers/contrast-color.ts';
 import { MenuItem } from '../../helpers/menu-item.ts';
 import { bool, or } from '../../helpers/truth-helpers.ts';
 import { IconPencil, IconX, ThreeDotsHorizontal } from '../../icons.gts';
+import setCssVar from '../../modifiers/set-css-var.ts';
 import BoxelDropdown from '../dropdown/index.gts';
 import IconButton from '../icon-button/index.gts';
 import Menu from '../menu/index.gts';
@@ -42,7 +43,7 @@ export default class CardHeader extends Component<Signature> {
     <header
       data-test-card-header
       class={{cn is-editing=(bool @onFinishEditing)}}
-      style={{cssVar
+      {{setCssVar
         boxel-card-header-background-color=@headerColor
         boxel-card-header-text-color=(getContrastColor @headerColor)
       }}
