@@ -191,7 +191,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   @action isCreateNewTaskLoading(statusLabel: string) {
-    debugger;
     return this.loadingColumnKey === statusLabel;
   }
 
@@ -323,8 +322,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       .dropdown-arrow {
         display: inline-block;
       }
-    </style>
-    <style scoped>
       .column {
         display: flex;
         flex-direction: column;
