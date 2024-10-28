@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
@@ -14,7 +12,6 @@ exports.up = (pgm) => {
     notNull: false,
   });
 
-  // alter period_start and period_end to type bigint
   pgm.alterColumn('subscriptions', 'started_at', {
     type: 'bigint',
     using: 'extract(epoch from started_at)::bigint',
