@@ -3,9 +3,12 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule } from '@ember/runloop';
+import { schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
+
+import { isTesting } from '@embroider/macros';
+
 import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
@@ -16,6 +19,7 @@ import {
   restartableTask,
   timeout,
   waitForProperty,
+  dropTask,
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
@@ -79,6 +83,7 @@ interface Signature {
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
+      doCloseAnimation: () => void,
     ) => void;
   };
 }
@@ -104,6 +109,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isSaving = false;
+  @tracked private isClosing = false;
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
@@ -111,6 +117,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
+  private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
   get permissions(): Permissions {
@@ -133,6 +140,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.clearSelections,
       this.doWithStableScroll.perform,
       this.scrollIntoView.perform,
+      this.doCloseAnimation.perform,
     );
   }
 
@@ -192,11 +200,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
+      transition: margin-top var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
-
-    if (this.args.item.isWideFormat) {
-      styles += 'transition: width var(--boxel-transition)';
-    }
 
     return htmlSafe(styles);
   }
@@ -215,6 +220,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       actions: this.args.publicAPI,
     };
   }
+
+  private closeItem = dropTask(async () => {
+    await this.doCloseAnimation.perform();
+    this.args.close(this.args.item);
+  });
 
   @action private toggleSelect(cardDefOrId: CardDefOrId) {
     let index = this.selectedCards.findIndex((c) => c === cardDefOrId);
@@ -402,6 +412,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
+  private doCloseAnimation = dropTask(async () => {
+    this.isClosing = true;
+    if (this.itemEl) {
+      await new Promise<void>((resolve) => {
+        scheduleOnce('afterRender', this, this.handleCloseAnimation, resolve);
+      });
+    }
+  });
+
+  private handleCloseAnimation(resolve: () => void) {
+    if (!this.itemEl) {
+      return;
+    }
+    const animations = this.itemEl.getAnimations() || [];
+    Promise.all(animations.map((animation) => animation.finished)).then(() =>
+      resolve(),
+    );
+  }
+
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
   };
@@ -420,15 +449,36 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried && this.args.item.format === 'edit';
   }
 
+  private setupItemEl = (el: HTMLElement) => {
+    this.itemEl = el;
+  };
+
+  private get doOpeningAnimation() {
+    return this.isTopCard;
+  }
+
+  private get doClosingAnimation() {
+    return this.isClosing;
+  }
+
+  private get isTesting() {
+    return isTesting();
+  }
+
   <template>
     <div
-      class='item {{if this.isBuried "buried"}}'
+      class='item
+        {{if this.isBuried "buried"}}
+        {{if this.doOpeningAnimation "opening-animation"}}
+        {{if this.doClosingAnimation "closing-animation"}}
+        {{if this.isTesting "testing"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
+      {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
         class={{cn 'card' edit=this.isEditing}}
@@ -498,6 +548,27 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --buried-operator-mode-header-height: 2.5rem;
       }
 
+      @keyframes scaleIn {
+        from {
+          transform: scale(0.1);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(100%);
+        }
+      }
+
       .header {
         --boxel-card-header-border-radius: var(--boxel-border-radius-xl);
         --boxel-card-header-background-color: var(--boxel-light);
@@ -520,6 +591,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
+      }
+      .item.opening-animation {
+        animation: scaleIn 0.2s forwards;
+      }
+      .item.closing-animation {
+        animation: fadeOut 0.2s forwards;
+      }
+      .item.opening-animation.testing {
+        animation-duration: 0s;
+      }
+      .item.closing-animation.testing {
+        animation-duration: 0s;
       }
 
       .card {
