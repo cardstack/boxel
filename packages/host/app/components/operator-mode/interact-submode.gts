@@ -753,13 +753,11 @@ export default class InteractSubmode extends Component<Signature> {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
-                  'operator-mode-stack'
-                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                  (if
-                    (and (gt stack.length 1) (lt stack.length 3))
-                    'medium-padding-top'
+                  stack-with-bg-image=backgroundImageURLSpecificToThisStack
+                  stack-medium-padding-top=(and
+                    (gt stack.length 1) (lt stack.length 3)
                   )
-                  (if (gt stack.length 2) 'small-padding-top')
+                  stack-small-padding-top=(gt stack.length 2)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -833,6 +831,25 @@ export default class InteractSubmode extends Component<Signature> {
         display: flex;
         justify-content: center;
         align-items: center;
+      }
+      .stack-with-bg-image:before {
+        content: ' ';
+        height: 100%;
+        width: 2px;
+        background-color: var(--boxel-dark);
+        display: block;
+        position: absolute;
+        top: 0;
+        left: -1px;
+      }
+      .stack-with-bg-image:first-child:before {
+        display: none;
+      }
+      .stack-medium-padding-top {
+        padding-top: var(--operator-mode-top-bar-item-height);
+      }
+      .stack-small-padding-top {
+        padding-top: var(--operator-mode-spacing);
       }
       .neighbor-stack-trigger {
         flex: 0;
