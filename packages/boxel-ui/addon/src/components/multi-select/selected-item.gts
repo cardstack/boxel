@@ -19,7 +19,7 @@ export interface SelectedItemSignature<ItemT> {
     };
   };
   Blocks: {
-    default: [any];
+    default: [];
   };
   Element: HTMLDivElement;
 }
@@ -43,6 +43,8 @@ export default class BoxelSelectedItem<ItemT> extends Component<
 
   <template>
     <div class='ember-power-select-multiple-option'>
+      {{! Unfortunately, there is no way to allow consumer specify content of this block higher up so we default to .name }}
+      {{! If you want to yield something custom, create your own selected component  }}
       {{@option.name}}
       <button
         type='button'
@@ -59,6 +61,7 @@ export default class BoxelSelectedItem<ItemT> extends Component<
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+        margin: 0px;
       }
       .boxel-multi-select__remove-button {
         all: unset;

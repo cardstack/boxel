@@ -44,11 +44,12 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
       .boxel-trigger {
         display: flex;
         gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxxs);
       }
       .boxel-trigger-content {
         display: flex;
         flex-wrap: wrap;
-        margin-left: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxxs);
       }
       .boxel-trigger-placeholder {
         color: var(--boxel-400);

@@ -113,7 +113,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         {{/let}}
 
         {{#if this.hasMoreItems}}
-          <span class='ember-power-select-multiple-option'>
+          <div class='ember-power-select-hasMore-item'>
             +
             {{this.remainingItemsCount}}
             more
@@ -121,7 +121,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
               {{on 'click' this.removeExcessItems}}
               class='boxel-select__icon boxel-multi-select__icon--remove'
             />
-          </span>
+          </div>
         {{/if}}
       </:default>
       <:icon>
@@ -158,18 +158,18 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
-      .ember-power-select-multiple-option {
-        padding: var(--boxel-sp-5xs);
+      .ember-power-select-hasMore-item {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
-        color: var(--boxel-multi-select-pill-color, var(--boxel-dark));
-        background-color: var(
-          --boxel-selected-pill-background-color,
-          var(--boxel-200)
-        );
-        margin: 0;
+        background-color: var(--boxel-700);
+        color: var(--boxel-light);
+        padding: 0 4px;
+        border: 1px solid gray;
+        border-radius: 4px;
+      }
+      .ember-power-select-hasMore-item > svg {
+        --icon-color: var(--boxel-light) !important;
       }
       .ember-power-select-multiple-remove-btn {
         display: none; /* We have to remove the default x button placed on selected items*/
