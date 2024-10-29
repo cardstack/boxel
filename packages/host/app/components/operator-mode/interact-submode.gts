@@ -722,7 +722,7 @@ export default class InteractSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
     >
-      <div class='interact-mode' style={{this.backgroundImageStyle}}>
+      <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='right'>
             <:trigger>
@@ -816,7 +816,7 @@ export default class InteractSubmode extends Component<Signature> {
     </SubmodeLayout>
 
     <style scoped>
-      .interact-mode {
+      .interact-submode {
         display: flex;
         justify-content: center;
         align-items: center;
