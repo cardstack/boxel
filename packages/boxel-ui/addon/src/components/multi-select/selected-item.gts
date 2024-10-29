@@ -19,7 +19,7 @@ export interface SelectedItemSignature<ItemT> {
     };
   };
   Blocks: {
-    default: [];
+    default: [ItemT, Select];
   };
   Element: HTMLDivElement;
 }
@@ -45,12 +45,12 @@ export default class BoxelSelectedItem<ItemT> extends Component<
     <div class='ember-power-select-multiple-option'>
       {{! Unfortunately, there is no way to allow consumer specify content of this block higher up so we default to .name }}
       {{! If you want to yield something custom, create your own selected component  }}
-      {{@option.name}}
+      {{yield @option @select}}
       <button
         type='button'
         class='boxel-multi-select__remove-button'
         {{on 'click' (fn this.remove @option)}}
-        aria-label='Remove {{@option.name}}'
+        aria-label='Remove item'
       >
         <IconX class='boxel-multi-select__icon--remove' />
       </button>

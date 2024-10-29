@@ -19,7 +19,7 @@ export interface TriggerComponentSignature<ItemT> {
     selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
   };
   Blocks: {
-    default: [];
+    default: [ItemT, Select];
   };
   Element: HTMLElement;
 }
@@ -108,7 +108,13 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
           as |SelectedComponent|
         }}
           {{#each this.visibleContent as |item|}}
-            <SelectedComponent @option={{item}} @select={{this.select}} />
+            <SelectedComponent
+              @option={{item}}
+              @select={{this.select}}
+              as |option select|
+            >
+              {{yield option select}}
+            </SelectedComponent>
           {{/each}}
         {{/let}}
 
