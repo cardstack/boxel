@@ -7,6 +7,7 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+import type { Select } from 'ember-power-select/components/power-select';
 import { includes } from 'lodash';
 import pluralize from 'pluralize';
 
@@ -15,7 +16,6 @@ import cssVar from '../../helpers/css-var.ts';
 import CheckMark from '../../icons/check-mark.gts';
 import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
 import BoxelSelectedItem from './selected-item.gts';
-import type { Select } from 'ember-power-select/components/power-select';
 
 export function getPlural(s: string, count?: number) {
   return pluralize(s, count);
@@ -90,8 +90,8 @@ class AssigneePill extends Component<AssigneePillArgs> {
         <div class='assignee-avatar'>{{@option.avatar}}</div>
         <div class='assignee-name'>{{@option.name}}</div>
       </div>
-      <div class='assignee-issues'>{{this.args.option.issues}}
-        {{getPlural 'issue' this.args.option.issues}}</div>
+      <div class='assignee-issues'>{{@option.issues}}
+        {{getPlural 'issue' @option.issues}}</div>
     </span>
 
     <style scoped>

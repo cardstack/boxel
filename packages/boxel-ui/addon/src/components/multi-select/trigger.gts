@@ -7,10 +7,10 @@ import type { Select } from 'ember-power-select/components/power-select';
 import CaretDown from '../../icons/caret-down.gts';
 import CaretUp from '../../icons/caret-up.gts';
 import IconX from '../../icons/icon-x.gts';
+import { BoxelTriggerWrapper } from '../select/trigger.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
-import { BoxelTriggerWrapper } from '../select/trigger.gts';
 
 export interface TriggerComponentSignature<ItemT> {
   Args: {

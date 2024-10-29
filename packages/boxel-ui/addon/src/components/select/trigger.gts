@@ -1,18 +1,19 @@
-import CaretDown from '../../icons/caret-down.gts';
-import CaretUp from '../../icons/caret-up.gts';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
+import CaretDown from '../../icons/caret-down.gts';
+import CaretUp from '../../icons/caret-up.gts';
+
 export interface TriggerSignature {
   Args: {
-    select: Select;
     placeholder?: string;
+    select: Select;
     selectedItemComponent?: any;
   };
   Blocks: {
-    placeholder: [];
     default: [Select['selected'], Select];
     icon: [];
+    placeholder: [];
   };
   Element: HTMLElement;
 }
