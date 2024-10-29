@@ -31,6 +31,7 @@ import {
   baseRealm,
   isCardInstance,
   SupportedMimeType,
+  subscribeToRealm,
   Query,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -45,6 +46,7 @@ import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import Captions from '@cardstack/boxel-icons/captions';
 import Stack2 from '@cardstack/boxel-icons/stack-2';
 import Star from '@cardstack/boxel-icons/star';
+import { registerDestructor } from '@ember/destroyable';
 
 type IconComponent = typeof Captions;
 interface SortOption {
@@ -355,6 +357,17 @@ class Isolated extends Component<typeof CardsGrid> {
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
   @tracked viewSize: 'grid' | 'strip' = 'grid';
+  private unsubscribe: () => void;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadFilterList.perform();
+    this.unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
+
+    registerDestructor(this, () => {
+      this.unsubscribe();
+    });
+  }
 
   @action setSelectedSortOption(option: SortOption) {
     this.selectedSortOption = option;
@@ -368,11 +381,6 @@ class Isolated extends Component<typeof CardsGrid> {
   @action
   createNew() {
     this.createCard.perform();
-  }
-
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadFilterList.perform();
   }
 
   private get sortMenuOptions() {
@@ -455,6 +463,8 @@ class Isolated extends Component<typeof CardsGrid> {
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
+
+    this.filters.splice(2, this.filters.length);
     cardTypeSummaries.forEach((summary) => {
       if (excludedCardTypeIds.includes(summary.id)) {
         return;
@@ -473,7 +483,18 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       });
     });
+
+    this.activeFilter =
+      this.filters.find(
+        (filter) => filter.displayName === this.activeFilter.displayName,
+      ) ?? this.filters[0];
   });
+
+  private refreshFilterList = (ev: MessageEvent) => {
+    if (ev.type === 'index') {
+      this.loadFilterList.perform();
+    }
+  };
 }
 
 export class CardsGrid extends CardDef {

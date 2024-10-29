@@ -17,7 +17,12 @@ import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  Deferred,
+  LooseSingleCardDocument,
+  Realm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -35,6 +40,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   lookupLoaderService,
+  TestContextWithSSE,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -46,6 +52,7 @@ module('Integration | operator-mode', function (hooks) {
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
+  let testRealm: Realm;
   let testRealmAdapter: TestRealmAdapter;
   let operatorModeStateService: OperatorModeStateService;
 
@@ -338,91 +345,92 @@ module('Integration | operator-mode', function (hooks) {
       );
     }
 
-    ({ adapter: testRealmAdapter } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'pet.gts': { Pet },
-        'shipping-info.gts': { ShippingInfo },
-        'address.gts': { Address },
-        'person.gts': { Person },
-        'boom-field.gts': { BoomField },
-        'boom-pet.gts': { BoomPet },
-        'blog-post.gts': { BlogPost },
-        'author.gts': { Author },
-        'friend.gts': { Friend },
-        'publishing-packet.gts': { PublishingPacket },
-        'pet-room.gts': { PetRoom },
-        'Pet/mango.json': petMango,
-        'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
-        'Pet/jackie.json': petJackie,
-        'Pet/woody.json': petWoody,
-        'Pet/buzz.json': petBuzz,
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          address: new Address({
-            city: 'Bandung',
-            country: 'Indonesia',
-            shippingInfo: new ShippingInfo({
-              preferredCarrier: 'DHL',
-              remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+    ({ adapter: testRealmAdapter, realm: testRealm } =
+      await setupIntegrationTestRealm({
+        loader,
+        contents: {
+          'pet.gts': { Pet },
+          'shipping-info.gts': { ShippingInfo },
+          'address.gts': { Address },
+          'person.gts': { Person },
+          'boom-field.gts': { BoomField },
+          'boom-pet.gts': { BoomPet },
+          'blog-post.gts': { BlogPost },
+          'author.gts': { Author },
+          'friend.gts': { Friend },
+          'publishing-packet.gts': { PublishingPacket },
+          'pet-room.gts': { PetRoom },
+          'Pet/mango.json': petMango,
+          'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
+          'Pet/jackie.json': petJackie,
+          'Pet/woody.json': petWoody,
+          'Pet/buzz.json': petBuzz,
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
+              country: 'Indonesia',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'DHL',
+                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              }),
             }),
+            pet: petMango,
           }),
-          pet: petMango,
-        }),
-        'Person/burcu.json': new Person({
-          firstName: 'Burcu',
-          friends: [petJackie, petWoody, petBuzz],
-        }),
-        'Friend/friend-b.json': friendB,
-        'Friend/friend-a.json': new Friend({
-          name: 'Friend A',
-          friend: friendB,
-        }),
-        'grid.json': new CardsGrid(),
-        'CatalogEntry/publishing-packet.json': new CatalogEntry({
-          title: 'Publishing Packet',
-          description: 'Catalog entry for PublishingPacket',
-          isField: false,
-          ref: {
-            module: `${testRealmURL}publishing-packet`,
-            name: 'PublishingPacket',
-          },
-        }),
-        'CatalogEntry/pet-room.json': new CatalogEntry({
-          title: 'General Pet Room',
-          description: 'Catalog entry for Pet Room Card',
-          isField: false,
-          ref: {
-            module: `${testRealmURL}pet-room`,
-            name: 'PetRoom',
-          },
-        }),
-        'CatalogEntry/pet-card.json': new CatalogEntry({
-          title: 'Pet',
-          description: 'Catalog entry for Pet',
-          ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Pet',
-          },
-          isField: false,
-        }),
-        'Author/1.json': author1,
-        'Author/2.json': new Author({ firstName: 'R2-D2' }),
-        'Author/mark.json': new Author({
-          firstName: 'Mark',
-          lastName: 'Jackson',
-        }),
-        'BlogPost/1.json': new BlogPost({
-          title: 'Outer Space Journey',
-          body: 'Hello world',
-          authorBio: author1,
-        }),
-        'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
-        'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
-        ...Object.fromEntries(personCards),
-      },
-    }));
+          'Person/burcu.json': new Person({
+            firstName: 'Burcu',
+            friends: [petJackie, petWoody, petBuzz],
+          }),
+          'Friend/friend-b.json': friendB,
+          'Friend/friend-a.json': new Friend({
+            name: 'Friend A',
+            friend: friendB,
+          }),
+          'grid.json': new CardsGrid(),
+          'CatalogEntry/publishing-packet.json': new CatalogEntry({
+            title: 'Publishing Packet',
+            description: 'Catalog entry for PublishingPacket',
+            isField: false,
+            ref: {
+              module: `${testRealmURL}publishing-packet`,
+              name: 'PublishingPacket',
+            },
+          }),
+          'CatalogEntry/pet-room.json': new CatalogEntry({
+            title: 'General Pet Room',
+            description: 'Catalog entry for Pet Room Card',
+            isField: false,
+            ref: {
+              module: `${testRealmURL}pet-room`,
+              name: 'PetRoom',
+            },
+          }),
+          'CatalogEntry/pet-card.json': new CatalogEntry({
+            title: 'Pet',
+            description: 'Catalog entry for Pet',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+            isField: false,
+          }),
+          'Author/1.json': author1,
+          'Author/2.json': new Author({ firstName: 'R2-D2' }),
+          'Author/mark.json': new Author({
+            firstName: 'Mark',
+            lastName: 'Jackson',
+          }),
+          'BlogPost/1.json': new BlogPost({
+            title: 'Outer Space Journey',
+            body: 'Hello world',
+            authorBio: author1,
+          }),
+          'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
+          'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+          ...Object.fromEntries(personCards),
+        },
+      }));
   });
 
   async function setCardInOperatorModeState(
@@ -2706,5 +2714,84 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
     assert.dom(`[data-test-boxel-filter-list-button="Person"]`).exists();
     assert.dom(`[data-test-boxel-filter-list-button="CardDef"]`).doesNotExist();
+  });
+
+  test<TestContextWithSSE>('updates filter list when there is indexing event', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
+      .exists();
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
+
+    await click('[data-test-create-new-card-button]');
+    await waitFor(`[data-test-card-catalog-item]`);
+    await fillIn(`[data-test-search-field]`, `Skill`);
+    await click(
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/skill-card"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-field="title"] input', 'New Skill');
+    await click('[data-test-close-button]');
+
+    await this.expectEvents({
+      assert,
+      realm: testRealm,
+      expectedNumberOfEvents: 1,
+      callback: async () => {
+        await testRealm.write(
+          'Skill/1.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'New Skill',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/fields/skill-card',
+                  name: 'SkillCard',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
+    assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
+
+    await click('[data-test-boxel-filter-list-button="Skill"]');
+    await triggerEvent(`[data-test-cards-grid-item]`, 'mouseenter');
+    await click(`[data-test-overlay-card] [data-test-overlay-more-options]`);
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await this.expectEvents({
+      assert,
+      realm: testRealm,
+      expectedNumberOfEvents: 1,
+      callback: async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    });
+
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
+    assert
+      .dom(`[data-test-boxel-filter-list-button="Favorites"]`)
+      .hasClass('selected');
   });
 });
