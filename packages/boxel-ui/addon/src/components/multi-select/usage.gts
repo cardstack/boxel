@@ -328,6 +328,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @searchField='name'
             @searchEnabled={{true}}
+            @closeOnSelect={{false}}
             @ariaLabel='Select assignees'
             as |option|
           >
@@ -352,6 +353,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @searchField='name'
             @searchEnabled={{true}}
+            @closeOnSelect={{false}}
             @ariaLabel='Select countries'
             @selectedItemComponent={{(component SelectedCountry)}}
             as |option|
@@ -371,6 +373,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @searchField='name'
             @searchEnabled={{true}}
+            @closeOnSelect={{false}}
             @onChange={{this.onSelectAssignees}}
             @ariaLabel='Select assignees'
             as |option|
