@@ -43,8 +43,6 @@ export default class BoxelSelectedItem<ItemT> extends Component<
 
   <template>
     <div class='ember-power-select-multiple-option'>
-      {{! Unfortunately, there is no way to allow consumer specify content of this block higher up so we default to .name }}
-      {{! If you want to yield something custom, create your own selected component  }}
       {{yield @option @select}}
       <button
         type='button'
