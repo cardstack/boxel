@@ -188,14 +188,12 @@ export default class PillMenu extends Component<Signature> {
         max-width: initial;
       }
       .add-button {
-        --icon-color: var(--boxel-highlight);
         width: max-content;
         margin: var(--button-outline);
         padding: var(--pill-menu-spacing);
         background: none;
         box-shadow: none;
         border-radius: var(--boxel-border-radius-xl);
-        color: var(--boxel-highlight);
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         transition: color var(--boxel-transition);
