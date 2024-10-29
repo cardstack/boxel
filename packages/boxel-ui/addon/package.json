@@ -34,6 +34,7 @@
     "test:ember": "ember test"
   },
   "dependencies": {
+    "@cardstack/boxel-icons": "workspace:*",
     "@ember/string": "^3.1.1",
     "@ember/test-waiters": "^3.0.2",
     "@embroider/addon-shim": "^1.8.9",

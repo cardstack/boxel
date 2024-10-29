@@ -113,7 +113,7 @@ export class RealmFS implements vscode.FileSystemProvider {
       createIfNone: true,
     });
     const serverUrl = vscode.workspace
-      .getConfiguration('boxelrealm')
+      .getConfiguration('boxel-tools')
       .get('matrixServer') as string;
     if (!serverUrl) {
       throw new Error('No matrix server url found, please check your settings');

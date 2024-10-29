@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import type { CardDef, Format } from '../card-api';
+import type { BaseDefConstructor, CardDef, Field, Format } from '../card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
@@ -13,7 +13,12 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   };
 }> {
   getFieldIcon = (key: string) => {
-    return getField(this.args.model.constructor, key)?.card?.icon;
+    const field: Field<BaseDefConstructor> | undefined = getField(
+      this.args.model.constructor,
+      key,
+    );
+    let fieldInstance = field?.card;
+    return fieldInstance?.icon;
   };
   <template>
     <div class={{cn 'default-card-template' @format}}>

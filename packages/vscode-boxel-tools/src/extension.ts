@@ -7,7 +7,7 @@ import { updateDiagnostics } from './diagnostics';
 
 export async function activate(context: vscode.ExtensionContext) {
   const diagnosticCollection =
-    vscode.languages.createDiagnosticCollection('boxelrealm');
+    vscode.languages.createDiagnosticCollection('boxel-tools');
 
   context.subscriptions.push(diagnosticCollection);
 
@@ -21,7 +21,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ),
   );
 
-  vscode.commands.registerCommand('boxelrealm.logout', async (_) => {
+  vscode.commands.registerCommand('boxel-tools.logout', async (_) => {
     await authProvider.clearAllSessions();
     vscode.workspace.updateWorkspaceFolders(
       0,
@@ -34,12 +34,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   console.log('Registering file system providers now');
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxelrealm', realmFs, {
-      isCaseSensitive: true,
-    }),
-  );
-  context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxelrealm+https', realmFs, {
+    vscode.workspace.registerFileSystemProvider('boxel-tools', realmFs, {
       isCaseSensitive: true,
     }),
   );
@@ -68,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   vscode.commands.registerCommand(
-    'boxelrealm.attachToBoxelWorkspaces',
+    'boxel-tools.attachToBoxelWorkspaces',
     async (_) => {
       if (
         !vscode.workspace.workspaceFolders ||
@@ -90,7 +85,7 @@ export async function activate(context: vscode.ExtensionContext) {
           ? vscode.workspace.workspaceFolders.length
           : 0,
         {
-          uri: vscode.Uri.parse(`boxelrealm://boxel-workspaces`),
+          uri: vscode.Uri.parse(`boxel-tools://boxel-workspaces`),
           name: `Boxel Workspaces`,
         },
       );

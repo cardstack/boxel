@@ -700,7 +700,8 @@ function assertURLEndsWithJSON(url: URL): URL {
 function unwrap(html: string): string {
   return html
     .trim()
-    .replace(/^<div ([^<]*\n)/, '')
+    .replace(/^<div ([^>]*>)/, '')
+    .trim()
     .replace(/^<!---->/, '')
     .replace(/<\/div>$/, '')
     .trim();
