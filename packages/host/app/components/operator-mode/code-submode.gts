@@ -1051,9 +1051,6 @@ export default class CodeSubmode extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
-      .empty-container > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
-      }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;
       }

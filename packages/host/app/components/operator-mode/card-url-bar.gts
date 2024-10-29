@@ -135,7 +135,7 @@ export default class CardURLBar extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         width: 100%;
 
-        --icon-color: var(--boxel-cyan);
+        --icon-color: var(--boxel-highlight);
       }
       .error .input {
         --icon-color: var(--boxel-error-200);

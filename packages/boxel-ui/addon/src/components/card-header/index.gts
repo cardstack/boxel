@@ -221,7 +221,7 @@ export default class CardHeader extends Component<Signature> {
         }
         header.is-editing {
           background-color: var(--boxel-highlight);
-          color: var(--boxel-light);
+          color: var(--boxel-dark);
         }
         header .card-type-display-name {
           max-width: var(
@@ -275,12 +275,7 @@ export default class CardHeader extends Component<Signature> {
           justify-content: right;
         }
         .is-editing .icon-button {
-          --icon-color: var(--boxel-light);
-        }
-
-        .is-editing .icon-button:hover {
-          --icon-color: var(--boxel-highlight);
-          --boxel-icon-button-background: var(--boxel-light);
+          --icon-color: var(--boxel-dark);
         }
 
         .icon-button,
@@ -297,12 +292,12 @@ export default class CardHeader extends Component<Signature> {
         }
 
         .icon-button {
-          --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
+          --icon-color: var(--boxel-header-text-color, var(--boxel-dark));
         }
 
         .icon-button:hover {
-          --icon-color: var(--boxel-light);
-          --boxel-icon-button-background: var(--boxel-highlight);
+          --icon-color: var(--boxel-dark);
+          --boxel-icon-button-background: var(--boxel-dark-hover);
         }
 
         header .icon-save {
