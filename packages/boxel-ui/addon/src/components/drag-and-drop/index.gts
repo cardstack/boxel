@@ -31,11 +31,11 @@ export class DndColumn {
 export interface DndKanbanBoardSignature<DndColumn> {
   Args: DndKanbanBoardArgs<DndColumn>;
   Blocks: {
+    card: [card?: DndItem, column?: DndColumn];
     // We yield the card and column back to the consumer so they can decide how to render it or use additional information
     // This rendering by the block will typically occur at the card of the kanaban
     // but with more sophistication u can use it somewhere else
     header: [column?: DndColumn];
-    default: [card?: DndItem, column?: DndColumn];
   };
 }
 
@@ -166,7 +166,7 @@ export default class DndKanbanBoard extends Component<
                 {{#if @isDisabled}}
                   <div class='draggable-card is-disabled'>
                     <div class='overlay'></div>
-                    {{yield card column to='default'}}
+                    {{yield card column to='card'}}
                   </div>
                 {{else}}
                   <div
@@ -181,7 +181,7 @@ export default class DndKanbanBoard extends Component<
                   >
                     {{#if (and @isLoading (eq card this.draggedCard))}}
                       <div class='overlay'></div>
-                      {{yield card column to='default'}}
+                      {{yield card column to='card'}}
                       <LoadingIndicator
                         width='18'
                         height='18'
@@ -189,7 +189,7 @@ export default class DndKanbanBoard extends Component<
                         class='loader'
                       />
                     {{else}}
-                      {{yield card column}}
+                      {{yield card column to='card'}}
                     {{/if}}
                   </div>
                 {{/if}}

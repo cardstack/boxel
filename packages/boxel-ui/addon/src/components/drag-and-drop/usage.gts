@@ -7,10 +7,10 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+import { get } from 'lodash';
 
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, { DndColumn } from './index.gts';
-import { get } from 'lodash';
 
 export default class DndUsage extends Component {
   @tracked columns = [
