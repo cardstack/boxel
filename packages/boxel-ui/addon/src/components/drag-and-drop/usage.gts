@@ -53,15 +53,16 @@ export default class DndUsage extends Component {
           @columns={{this.columns}}
           @isLoading={{this.isLoading}}
           @isDisabled={{this.isDisabled}}
-          as |card column|
         >
-          <div class='custom-card'>
-            <Pill @kind='default' class='column-info'>
-              {{column.title}}
-            </Pill>
-            <h3>{{get card 'assignee'}}</h3>
-            <p>{{get card 'task'}}</p>
-          </div>
+          <:card as |card column|>
+            <div class='custom-card'>
+              <Pill @kind='default' class='column-info'>
+                {{column.title}}
+              </Pill>
+              <h3>{{get card 'assignee'}}</h3>
+              <p>{{get card 'task'}}</p>
+            </div>
+          </:card>
         </DndKanbanBoard>
       </:example>
       <:api as |Args|>
