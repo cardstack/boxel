@@ -212,7 +212,6 @@ export default class DndKanbanBoard extends Component<
         border: 2px solid var(--boxel-100);
         border-radius: var(--boxel-border-radius);
         background: var(--boxel-light);
-        overflow: hidden;
         transition:
           all 0.3s ease,
           filter 0.3s ease;
