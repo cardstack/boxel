@@ -115,8 +115,8 @@ async function fetchSubscriptionCyclesBySubscriptionId(
   return results.map((result) => ({
     id: result.id as string,
     subscriptionId: result.subscription_id as string,
-    periodStart: result.period_start as number,
-    periodEnd: result.period_end as number,
+    periodStart: parseInt(result.period_start as string),
+    periodEnd: parseInt(result.period_end as string),
   }));
 }
 
@@ -156,7 +156,7 @@ module('billing', function (hooks) {
         let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
         let plan = await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_123');
 
-        // Omitted version of a real stripe invoice.paid event
+        // Omitted version of a real stripe invoice.payment_succeeded event
         let stripeInvoicePaymentSucceededEvent = {
           id: 'evt_1234567890',
           object: 'event',
@@ -174,7 +174,7 @@ module('billing', function (hooks) {
               lines: {
                 data: [
                   {
-                    plan: { product: 'prod_123' },
+                    price: { product: 'prod_123' },
                   },
                 ],
               },
@@ -325,7 +325,7 @@ module('billing', function (hooks) {
               lines: {
                 data: [
                   {
-                    plan: { product: 'prod_creator' },
+                    price: { product: 'prod_creator' },
                   },
                 ],
               },

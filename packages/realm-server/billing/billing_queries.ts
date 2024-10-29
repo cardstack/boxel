@@ -259,7 +259,7 @@ export async function sumUpCreditsLedger(
 
   let results = await query(dbAdapter, ledgerQuery);
 
-  return results[0].sum as number;
+  return parseInt(results[0].sum as string);
 }
 
 export async function getCurrentActiveSubscription(
