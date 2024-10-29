@@ -34,7 +34,7 @@ export interface DndKanbanBoardSignature<DndColumn> {
     card: [card?: DndItem, column?: DndColumn];
     // We yield the card and column back to the consumer so they can decide how to render it or use additional information
     // This rendering by the block will typically occur at the card of the kanaban
-    // but with more sophistication u can use it somewhere else
+    // but with more sophistication you can use it somewhere else
     header: [column?: DndColumn];
   };
 }
@@ -209,7 +209,6 @@ export default class DndKanbanBoard extends Component<
         height: 100vh;
       }
       .draggable-card {
-        /** TODO **/
         border: 2px solid var(--boxel-100);
         border-radius: var(--boxel-border-radius);
         background: var(--boxel-light);

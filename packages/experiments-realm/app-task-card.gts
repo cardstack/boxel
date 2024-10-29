@@ -239,7 +239,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
               @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
             />
           </:header>
-          <:default as |card|>
+          <:card as |card|>
             {{#let (getComponent card) as |CardComponent|}}
               <div
                 {{@context.cardComponentModifier
@@ -255,7 +255,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
               </div>
             {{/let}}
 
-          </:default>
+          </:card>
         </DndKanbanBoard>
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>

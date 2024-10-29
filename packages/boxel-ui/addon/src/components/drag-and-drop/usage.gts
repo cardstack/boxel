@@ -54,6 +54,10 @@ export default class DndUsage extends Component {
           @isLoading={{this.isLoading}}
           @isDisabled={{this.isDisabled}}
         >
+          <:header as |column|>
+            Usage
+            {{column.title}}
+          </:header>
           <:card as |card column|>
             <div class='custom-card'>
               <Pill @kind='default' class='column-info'>
