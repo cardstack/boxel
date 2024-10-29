@@ -7,11 +7,10 @@ import type { Select } from 'ember-power-select/components/power-select';
 import IconX from '../../icons/icon-x.gts';
 
 // Inside the trigger component, the selected item component is called within in ember-power-select
-// It only passes option, select and extra as arguments
+// It only passes option, select
 // We follow the same convention when defining our own selected item component
 export interface SelectedItemSignature<ItemT> {
   Args: {
-    extra?: any;
     option: any;
     select: Select & {
       actions: {
@@ -51,9 +50,7 @@ export default class BoxelSelectedItem<ItemT> extends Component<
         {{on 'click' (fn this.remove @option)}}
         aria-label='Remove {{@option.name}}'
       >
-        <IconX
-          class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-        />
+        <IconX class='boxel-multi-select__icon--remove' />
       </button>
     </div>
 

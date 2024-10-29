@@ -5,10 +5,12 @@ import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import CaretDown from '../../icons/caret-down.gts';
+import CaretUp from '../../icons/caret-up.gts';
 import IconX from '../../icons/icon-x.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
+import { BoxelTriggerWrapper } from '../select/trigger.gts';
 
 export interface TriggerComponentSignature<ItemT> {
   Args: {
@@ -28,7 +30,7 @@ type ExtendedSelect = Select & {
   } & Select['actions'];
 };
 
-export default class BoxelTrigger<ItemT> extends Component<
+export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   TriggerComponentSignature<ItemT>
 > {
   get showPlaceholder() {
@@ -80,73 +82,67 @@ export default class BoxelTrigger<ItemT> extends Component<
     };
   }
 
+  get hasNonZeroSelected() {
+    return this.args.select.selected && this.args.select.selected.length > 0;
+  }
+
   @action
   onClearAll() {
     this.args.select.actions.select([]);
   }
 
   <template>
-    <div class='boxel-trigger'>
+    <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{this.select}}>
+      <:placeholder>
+        {{#if this.showPlaceholder}}
+          {{@placeholder}}
+        {{/if}}
+      </:placeholder>
+      <:default>
+        {{#let
+          (if
+            @selectedItemComponent
+            (component @selectedItemComponent)
+            (component BoxelSelectedItem)
+          )
+          as |SelectedComponent|
+        }}
+          {{#each this.visibleContent as |item|}}
+            <SelectedComponent @option={{item}} @select={{this.select}} />
+          {{/each}}
+        {{/let}}
 
-      {{#if this.showPlaceholder}}
-        <div class='boxel-trigger-placeholder'>{{@placeholder}}</div>
-      {{/if}}
-
-      {{#let
-        (if
-          @selectedItemComponent
-          (component @selectedItemComponent)
-          (component BoxelSelectedItem)
-        )
-        as |SelectedComponent|
-      }}
-        {{#each this.visibleContent as |item|}}
-          <SelectedComponent @option={{item}} @select={{this.select}} />
-        {{/each}}
-      {{/let}}
-
-      {{#if this.hasMoreItems}}
-        <span class='ember-power-select-multiple-option'>
-          +
-          {{this.remainingItemsCount}}
-          more
-          <IconX
-            {{on 'click' this.removeExcessItems}}
-            class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-          />
-        </span>
-      {{/if}}
-      <div
-        class='boxel-multi-select__icons-wrapper
-          {{if @select.selected.length "has-selections"}}'
-      >
-        {{#if @select.selected.length}}
-          <span class='boxel-multi-select__clear-icon-wrapper'>
+        {{#if this.hasMoreItems}}
+          <span class='ember-power-select-multiple-option'>
+            +
+            {{this.remainingItemsCount}}
+            more
+            <IconX
+              {{on 'click' this.removeExcessItems}}
+              class='boxel-select__icon boxel-multi-select__icon--remove'
+            />
+          </span>
+        {{/if}}
+      </:default>
+      <:icon>
+        {{#if this.hasNonZeroSelected}}
+          <div class='has-selections'>
             <IconX
               class='boxel-multi-select__icon'
               {{on 'click' this.onClearAll}}
             />
-          </span>
+          </div>
         {{else}}
-          <span class='boxel-multi-select__icon-wrapper' aria-hidden='true'>
-            <CaretDown class='boxel-multi-select__icon' />
-          </span>
+          {{#if @select.isOpen}}
+            <CaretUp />
+          {{else}}
+            <CaretDown />
+          {{/if}}
         {{/if}}
-      </div>
-    </div>
+      </:icon>
+    </BoxelTriggerWrapper>
 
     <style scoped>
-      .boxel-trigger {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xs);
-      }
-      .boxel-trigger-placeholder {
-        color: var(--boxel-400);
-      }
-      .error-message {
-        color: var(--boxel-red);
-      }
       .boxel-multi-select__icon {
         display: flex;
         justify-content: center;
@@ -161,38 +157,6 @@ export default class BoxelTrigger<ItemT> extends Component<
         height: 10px;
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
-      }
-      .boxel-multi-select__icons-wrapper.has-selections {
-        pointer-events: auto;
-      }
-      .boxel-multi-select__icon-wrapper {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: absolute;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
-        width: 40px;
-        pointer-events: none;
-      }
-      .boxel-multi-select__clear-icon-wrapper {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: absolute;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
-        width: 40px;
       }
       .ember-power-select-multiple-option {
         padding: var(--boxel-sp-5xs);

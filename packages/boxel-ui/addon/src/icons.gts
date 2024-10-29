@@ -9,6 +9,7 @@ import ArrowTopLeft from './icons/arrow-top-left.gts';
 import BoxelIcon from './icons/boxel-icon.gts';
 import CardbotLg from './icons/cardbot-lg.gts';
 import CaretDown from './icons/caret-down.gts';
+import CaretUp from './icons/caret-up.gts';
 import CheckMark from './icons/check-mark.gts';
 import Copy from './icons/copy.gts';
 import DiagonalArrowLeftUp from './icons/diagonal-arrow-left-up.gts';
@@ -59,6 +60,7 @@ export const ALL_ICON_COMPONENTS = [
   BoxelIcon,
   CardbotLg,
   CaretDown,
+  CaretUp,
   CheckMark,
   Copy,
   DiagonalArrowLeftUp,
@@ -110,6 +112,7 @@ export {
   BoxelIcon,
   CardbotLg,
   CaretDown,
+  CaretUp,
   CheckMark,
   Copy,
   DiagonalArrowLeftUp,

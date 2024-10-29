@@ -46,6 +46,9 @@ import BoxelSelect from './components/select/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
+import BoxelMultiSelect, {
+  BoxelMultiSelectBasic,
+} from './components/multi-select/index.gts';
 
 export {
   Accordion,
@@ -93,4 +96,6 @@ export {
   Switch,
   TabbedHeader,
   Tooltip,
+  BoxelMultiSelect,
+  BoxelMultiSelectBasic,
 };
