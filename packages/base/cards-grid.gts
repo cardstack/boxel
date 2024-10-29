@@ -41,9 +41,9 @@ import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
-import Stack2 from '@cardstack/boxel-icons/stack-2';
+import CardsIcon from '@cardstack/boxel-icons/cards';
 import Star from '@cardstack/boxel-icons/star';
 
 type IconComponent = typeof Captions;
@@ -339,7 +339,7 @@ class Isolated extends Component<typeof CardsGrid> {
       },
       {
         displayName: 'All Cards',
-        icon: Stack2,
+        icon: CardsIcon,
         query: {
           filter: {
             not: {
@@ -478,7 +478,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
 export class CardsGrid extends CardDef {
   static displayName = 'Cards Grid';
-  static icon = LayoutGridIcon;
+  static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
   @field realmName = contains(StringField, {

@@ -11,6 +11,7 @@ import { Pet } from './pet';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 import { Address } from './address';
 import { Trips } from './trips';
+import UserSquareRoundedIcon from '@cardstack/boxel-icons/user-square-rounded';
 
 class FittedTemplate extends Component<typeof Person> {
   <template>
@@ -119,6 +120,8 @@ class FittedTemplate extends Component<typeof Person> {
 
 export class Person extends CardDef {
   static displayName = 'Person';
+  static icon = UserSquareRoundedIcon;
+
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   @field isCool = contains(BooleanCard);

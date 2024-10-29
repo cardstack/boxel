@@ -7,6 +7,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
+import Link from '@cardstack/boxel-icons/link';
 
 let CHAIN_IDS: Record<string, number> = {
   'Ethereum Mainnet': 1,
@@ -21,6 +22,7 @@ let BLOCK_EXPLORER_URLS: Record<number, string> = {
 
 export class Chain extends CardDef {
   static displayName = 'Chain';
+  static icon = Link;
   @field name = contains(StringCard); // dropdown
   @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
