@@ -727,6 +727,9 @@ importers:
 
   packages/boxel-ui/addon:
     dependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../../boxel-icons
       '@ember/string':
         specifier: ^3.1.1
         version: 3.1.1

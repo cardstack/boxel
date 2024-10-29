@@ -2,13 +2,12 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, RealmIcon } from '@cardstack/boxel-ui/components';
 
 import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
@@ -136,7 +135,7 @@ export default class CardURLBar extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         width: 100%;
 
-        --icon-color: var(--boxel-cyan);
+        --icon-color: var(--boxel-highlight);
       }
       .error .input {
         --icon-color: var(--boxel-error-200);

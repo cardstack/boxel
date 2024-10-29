@@ -279,7 +279,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('General Card');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasAttribute('style', `background-image: url("${baseRealmIconURL}");`);
+        .hasStyle({ backgroundImage: `url("${baseRealmIconURL}")` });
 
       // card type selection
       await click('[data-test-select-card-type]');
@@ -291,10 +291,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('Person');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasAttribute(
-          'style',
-          `background-image: url("${testRealmAIconURL}");`,
-        );
+        .hasStyle({ backgroundImage: `url("${testRealmAIconURL}")` });
 
       let deferred = new Deferred<void>();
       let fileID = '';

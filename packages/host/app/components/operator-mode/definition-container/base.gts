@@ -9,11 +9,11 @@ import {
   CardContainer,
   Header,
   Label,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import type RealmService from '@cardstack/host/services/realm';
 
 interface Action {
@@ -96,7 +96,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
 
       .header.active {
         --boxel-header-background-color: var(--boxel-highlight);
-        --boxel-header-text-color: var(--boxel-light);
+        --boxel-header-text-color: var(--boxel-dark);
       }
       .content {
         display: flex;
@@ -172,13 +172,9 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
     }
     .action-button {
       --boxel-button-padding: 0 var(--boxel-sp-4xs);
-      --icon-color: var(--boxel-highlight);
       justify-content: flex-start;
       gap: var(--boxel-sp-xxs);
       align-self: flex-start;
-    }
-    .action-button:hover:not(:disabled) {
-      --icon-color: var(--boxel-highlight-hover);
     }
     .info-footer {
       margin-top: var(--boxel-sp-sm);

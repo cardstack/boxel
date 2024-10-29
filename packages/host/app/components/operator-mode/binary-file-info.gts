@@ -71,7 +71,6 @@ export default class BinaryFileInfo extends Component<Signature> {
         text-transform: uppercase;
       }
       .file-icon {
-        --icon-color: var(--boxel-highlight);
         width: 100%;
       }
     </style>
