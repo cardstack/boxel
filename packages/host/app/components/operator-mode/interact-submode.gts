@@ -109,7 +109,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
     >
       <Download width='19' height='19' />
     </button>
-    <style>
+    <style scoped>
       .add-card-to-neighbor-stack {
         --icon-color: var(--boxel-highlight-hover);
         width: var(--container-button-size);
