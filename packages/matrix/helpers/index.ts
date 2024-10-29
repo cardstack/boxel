@@ -334,7 +334,7 @@ export async function getRoomId(page: Page) {
 }
 
 export async function isInRoom(page: Page, roomId: string) {
-  await expect(page.locator(`[data-test-room="${roomId}"]`));
+  await page.locator(`[data-test-room="${roomId}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
