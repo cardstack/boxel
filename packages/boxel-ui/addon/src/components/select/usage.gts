@@ -55,7 +55,6 @@ export default class BoxelSelectUsage extends Component {
     </style>
     <FreestyleUsage @name='Select'>
       <:example>
-
         <BoxelSelect
           @placeholder={{this.placeholder}}
           @searchEnabled={{this.searchEnabled}}

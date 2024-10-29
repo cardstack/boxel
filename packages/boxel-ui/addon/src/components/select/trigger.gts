@@ -1,96 +1,88 @@
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
-
-import CaretDown from '../../icons/caret-down.gts';
-import CaretUp from '../../icons/caret-up.gts';
+import ChevronDown from '@cardstack/boxel-icons/chevron-down';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 export interface TriggerSignature {
   Args: {
     placeholder?: string;
     select: Select;
-    selectedItemComponent?: any;
+    selectedItemComponent?: ComponentLike<any>;
   };
   Blocks: {
     default: [Select['selected'], Select];
-    icon: [];
-    placeholder: [];
+    placeholder?: [];
   };
   Element: HTMLElement;
 }
 
 // This component is used to provide a consistent boxel style to trigger components
 // Abstain from using this component with many data customizations
-export class BoxelTriggerWrapper extends Component<TriggerSignature> {
+export default class BoxelTriggerWrapper extends Component<TriggerSignature> {
   <template>
-    <div class='boxel-trigger'>
-      <div class='boxel-trigger-content'>
-        {{#if (has-block 'placeholder')}}
-          <div class='boxel-trigger-placeholder'>
-            {{yield to='placeholder'}}
-          </div>
+    <div class='boxel-select-trigger'>
+      {{! Yield the selected item and the select component to allow ember power select consumers to specify the selected item to be displayed after selection}}
+      {{! This is how ember-power-select does it inside of their default component }}
+      {{#if @select.selected}}
+        {{#if @selectedItemComponent}}
+          <@selectedItemComponent
+            @option={{@select.selected}}
+            @select={{@select}}
+          />
+        {{else}}
+          {{yield @select.selected @select}}
         {{/if}}
-        {{! Yield the selected item and the select component to allow ember power select consumers to specify the selected item to be displayed after selection}}
-        {{! This is how ember-power-select does it inside of their default component }}
-        {{yield @select.selected @select}}
-      </div>
-      {{#if (has-block 'icon')}}
-        <span class='boxel-select__icon-wrapper' aria-hidden='true'>
-          <div class='boxel-select__icon'>
-            {{yield to='icon'}}
-          </div>
-        </span>
+      {{else}}
+        <div class='boxel-select-trigger-placeholder'>
+          {{#if (has-block 'placeholder')}}
+            {{yield to='placeholder'}}
+          {{else if @placeholder}}
+            {{@placeholder}}
+          {{else}}
+            Please Select
+          {{/if}}
+        </div>
       {{/if}}
+      <ChevronDown
+        class={{cn 'boxel-select-dropdown-icon' is-open=@select.isOpen}}
+        width='24'
+        height='24'
+        role='presentation'
+      />
     </div>
     <style scoped>
-      .boxel-trigger {
+      .boxel-select-trigger {
         display: flex;
+        align-items: center;
+        justify-content: space-between;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xxxs);
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        padding: var(--boxel-trigger-padding, var(--boxel-sp-xxxs));
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
-      .boxel-trigger-content {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxxs);
-      }
-      .boxel-trigger-placeholder {
+      .boxel-select-trigger-placeholder {
         color: var(--boxel-400);
       }
-      .boxel-select__icon {
-        display: flex;
-        justify-content: center;
-        width: 10px;
-        height: 10px;
-        cursor: pointer;
+      .boxel-select-dropdown-icon {
+        transition: transform 0.1s ease;
       }
-      .boxel-select__icon-wrapper {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: absolute;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
-        width: 40px;
+      .boxel-select-dropdown-icon.is-open {
+        transform: rotate(180deg);
       }
     </style>
   </template>
 }
 
-export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
+export class BoxelSelectTrigger extends Component<TriggerSignature> {
   get showPlaceholder() {
     return this.args.placeholder && this.args.select?.selected === undefined;
   }
   <template>
     <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{@select}}>
-      <:placeholder>
-        {{#if this.showPlaceholder}}
-          {{@placeholder}}
-        {{/if}}
-      </:placeholder>
       <:default>
         {{#if @selectedItemComponent}}
           <@selectedItemComponent
@@ -101,13 +93,6 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
           {{yield @select.selected @select}}
         {{/if}}
       </:default>
-      <:icon>
-        {{#if @select.isOpen}}
-          <CaretUp />
-        {{else}}
-          <CaretDown />
-        {{/if}}
-      </:icon>
     </BoxelTriggerWrapper>
     <style scoped></style>
   </template>

@@ -4,10 +4,8 @@ import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import CaretDown from '../../icons/caret-down.gts';
-import CaretUp from '../../icons/caret-up.gts';
 import IconX from '../../icons/icon-x.gts';
-import { BoxelTriggerWrapper } from '../select/trigger.gts';
+import BoxelSelectTrigger from '../select/trigger.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
@@ -92,63 +90,59 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   <template>
-    <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{this.select}}>
-      <:placeholder>
-        {{#if this.showPlaceholder}}
-          {{@placeholder}}
-        {{/if}}
-      </:placeholder>
+    <BoxelSelectTrigger @placeholder={{@placeholder}} @select={{this.select}}>
       <:default>
-        {{#let
-          (if
-            @selectedItemComponent
-            (component @selectedItemComponent)
-            (component BoxelSelectedItem)
-          )
-          as |SelectedComponent|
-        }}
-          {{#each this.visibleContent as |item|}}
-            <SelectedComponent
-              @option={{item}}
-              @select={{this.select}}
-              as |option select|
-            >
-              {{yield option select}}
-            </SelectedComponent>
-          {{/each}}
-        {{/let}}
+        <div class='boxel-multi-select-trigger'>
+          {{#let
+            (if
+              @selectedItemComponent
+              (component @selectedItemComponent)
+              (component BoxelSelectedItem)
+            )
+            as |SelectedComponent|
+          }}
+            {{#each this.visibleContent as |item|}}
+              <SelectedComponent
+                @option={{item}}
+                @select={{this.select}}
+                as |option select|
+              >
+                {{yield option select}}
+              </SelectedComponent>
+            {{/each}}
+          {{/let}}
 
-        {{#if this.hasMoreItems}}
-          <div class='ember-power-select-hasMore-item'>
-            +
-            {{this.remainingItemsCount}}
-            more
-            <IconX
-              {{on 'click' this.removeExcessItems}}
-              class='boxel-select__icon boxel-multi-select__icon--remove'
-            />
-          </div>
-        {{/if}}
-      </:default>
-      <:icon>
-        {{#if this.hasNonZeroSelected}}
-          <div class='has-selections'>
-            <IconX
-              class='boxel-multi-select__icon'
-              {{on 'click' this.onClearAll}}
-            />
-          </div>
-        {{else}}
-          {{#if @select.isOpen}}
-            <CaretUp />
-          {{else}}
-            <CaretDown />
+          {{#if this.hasMoreItems}}
+            <div class='ember-power-select-hasMore-item'>
+              +
+              {{this.remainingItemsCount}}
+              more
+              <IconX
+                width='10'
+                height='10'
+                {{on 'click' this.removeExcessItems}}
+                class='boxel-multi-select__remove-icon'
+              />
+            </div>
           {{/if}}
-        {{/if}}
-      </:icon>
-    </BoxelTriggerWrapper>
+          {{#if this.hasNonZeroSelected}}
+            <div class='has-selections'>
+              <IconX
+                class='boxel-multi-select__icon'
+                width='10'
+                height='10'
+                {{on 'click' this.onClearAll}}
+              />
+            </div>
+          {{/if}}
+        </div>
+      </:default>
+    </BoxelSelectTrigger>
 
     <style scoped>
+      .boxel-multi-select-trigger {
+        display: flex;
+      }
       .boxel-multi-select__icon {
         display: flex;
         justify-content: center;
@@ -156,13 +150,13 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         height: 10px;
         cursor: pointer;
       }
-      .boxel-multi-select__icon--remove {
+      .boxel-multi-select__remove-icon {
+        --icon-color: var(--boxel-multi-select-pill-color);
         display: flex;
         justify-content: center;
         width: 10px;
         height: 10px;
         cursor: pointer;
-        --icon-color: var(--boxel-multi-select-pill-color);
       }
       .ember-power-select-hasMore-item {
         display: flex;

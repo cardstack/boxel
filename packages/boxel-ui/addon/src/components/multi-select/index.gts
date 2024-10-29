@@ -116,12 +116,15 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
     <style scoped>
       .boxel-multi-select {
         position: relative;
-        display: flex;
-        align-items: stretch;
-        flex-grow: 1;
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius-sm);
+      }
+      .boxel-multi-select:not([aria-disabled='true']):hover {
+        cursor: pointer;
+      }
+      .boxel-multi-select.ember-power-select-trigger {
+        padding: 0;
       }
       .ember-power-select-trigger:after {
         margin-left: 10px;
@@ -156,7 +159,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @registerAPI={{@registerAPI}}
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}
-      {{! Do not remove eventType argument 
+      {{! Do not remove eventType argument
     This is to ensure that the click event from selected item does not bubble up to the trigger
      and cause the dropdown to close
        do not remove eventType argument }}

@@ -5,7 +5,7 @@ import PowerSelect, {
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
 import cn from '../../helpers/cn.ts';
-import { BoxelSelectDefaultTrigger } from './trigger.gts';
+import BoxelSelectTrigger from './trigger.gts';
 
 export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
   options: ItemT[];
@@ -36,7 +36,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     {{! We can avoid providing arguments to the triggerComponent as long as they are specified here https://github.com/cibernox/ember-power-select/blob/913c85ec82d5c6aeb80a7a3b9d9c21ca9613e900/ember-power-select/src/components/power-select.hbs#L79-L106 }}
     {{! Even the custom BoxelTriggerWrapper will receive these arguments }}
     @triggerComponent={{(if
-      @triggerComponent @triggerComponent (component BoxelSelectDefaultTrigger)
+      @triggerComponent @triggerComponent (component BoxelSelectTrigger)
     )}}
     @disabled={{@disabled}}
     @matchTriggerWidth={{@matchTriggerWidth}}
@@ -48,22 +48,28 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   >
     {{yield item}}
   </PowerSelect>
-
   <style scoped>
     .boxel-select {
       position: relative;
-      display: flex;
-      align-items: stretch;
-      flex-grow: 1;
+      height: var(--boxel-select-height, var(--boxel-form-control-height));
+      width: var(--boxel-select-width, 100%);
+      max-width: 100%;
+      border: var(--boxel-border);
+      border-radius: var(--boxel-border-radius);
       overflow: hidden;
-      border: 1px solid var(--boxel-border-color);
-      border-radius: var(--boxel-border-radius-sm);
+    }
+    .boxel-select:not([aria-disabled='true']):hover {
+      cursor: pointer;
+    }
+    .boxel-select.ember-power-select-trigger {
+      padding: 0;
     }
   </style>
   {{! template-lint-disable require-scoped-style }}
   <style>
     .boxel-select__dropdown {
       box-shadow: var(--boxel-box-shadow);
+      border: var(--boxel-border);
       border-radius: var(--boxel-form-control-border-radius);
     }
     .boxel-select__dropdown ul {
@@ -88,6 +94,10 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     }
     .boxel-select__dropdown .ember-power-select-option--no-matches-message {
       padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+    }
+    .boxel-select__dropdown.ember-power-select-dropdown.ember-basic-dropdown-content--below,
+    .boxel-select__dropdown.ember-power-select-dropdown.ember-basic-dropdown-content--in-place {
+      border-bottom: none;
     }
   </style>
 </template>;
