@@ -9,11 +9,11 @@ import {
   CardContainer,
   Header,
   Label,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import type RealmService from '@cardstack/host/services/realm';
 
 interface Action {
@@ -110,8 +110,9 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
-      .realm-info img {
-        width: var(--boxel-icon-sm);
+      .realm-info .realm-icon-img {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
       }
       .realm-info .realm-name {
         letter-spacing: var(--boxel-lsp-xs);
