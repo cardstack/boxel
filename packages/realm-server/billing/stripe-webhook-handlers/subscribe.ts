@@ -3,11 +3,11 @@ import {
   insertStripeEvent,
   updateUserStripeCustomerId,
 } from '../billing_queries';
-import { StripeEvent } from './';
+import { StripeCheckoutSessionCompletedWebhookEvent } from './';
 
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,
-  event: StripeEvent,
+  event: StripeCheckoutSessionCompletedWebhookEvent,
 ): Promise<Response> {
   await insertStripeEvent(dbAdapter, event);
 

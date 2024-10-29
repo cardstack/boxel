@@ -62,6 +62,19 @@ export type StripeSubscriptionDeletedWebhookEvent = StripeEvent & {
   };
 };
 
+export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
+  object: 'event';
+  type: 'checkout.session.completed';
+  data: {
+    object: {
+      id: string;
+      object: 'checkout.session';
+      client_reference_id: string;
+      customer: string;
+    };
+  };
+};
+
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,
   request: Request,
@@ -107,7 +120,10 @@ export default async function stripeWebhookHandler(
         event as StripeSubscriptionDeletedWebhookEvent,
       );
     case 'checkout.session.completed':
-      await handleCheckoutSessionCompleted(dbAdapter, event);
+      await handleCheckoutSessionCompleted(
+        dbAdapter,
+        event as StripeCheckoutSessionCompletedWebhookEvent,
+      );
       break;
   }
 

@@ -20,6 +20,7 @@ import {
 import {
   StripeInvoicePaymentSucceededWebhookEvent,
   StripeSubscriptionDeletedWebhookEvent,
+  StripeCheckoutSessionCompletedWebhookEvent,
 } from '../billing/stripe-webhook-handlers';
 
 async function insertUser(
@@ -435,7 +436,7 @@ module('billing', function (hooks) {
           },
         },
         type: 'checkout.session.completed',
-      };
+      } as StripeCheckoutSessionCompletedWebhookEvent;
 
       await handleCheckoutSessionCompleted(
         dbAdapter,
