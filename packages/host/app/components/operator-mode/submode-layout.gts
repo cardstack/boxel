@@ -365,11 +365,11 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-right: 0;
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
-        z-index: calc(var(--boxel-modal-z-index) - 2);
+        z-index: var(--host-ai-panel-button-z-index);
       }
 
       .ai-assistant-panel {
-        z-index: 4;
+        z-index: var(--host-ai-panel-z-index);
       }
 
       .top-left-menu {
@@ -378,7 +378,7 @@ export default class SubmodeLayout extends Component<Signature> {
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
-        z-index: 4;
+        z-index: var(--host-top-left-menu-z-index);
 
         display: flex;
         align-items: center;
@@ -397,7 +397,7 @@ export default class SubmodeLayout extends Component<Signature> {
         height: var(--search-sheet-closed-height);
         border-radius: 50px;
         margin-left: var(--boxel-sp);
-        z-index: 3;
+        z-index: var(--host-profile-z-index);
       }
 
       .profile-icon-button {
