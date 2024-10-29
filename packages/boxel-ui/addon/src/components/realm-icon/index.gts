@@ -51,7 +51,6 @@ export default class RealmIcon extends Component<Signature> {
         background-size: contain;
         background-position: center;
         background-repeat: no-repeat;
-        height: 100%;
       }
       .indexing {
         animation: pulse-border 2.5s linear infinite;
