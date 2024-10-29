@@ -71,10 +71,6 @@ export default class DndUsage extends Component {
           @description='Array of Column objects representing the kanban board columns'
           @required={{true}}
         />
-        <Args.Component
-          @name='columnHeader'
-          @description='Custom component for rendering column headers'
-        />
         <Args.Bool
           @name='isLoading'
           @description='Indicates if the card is in a loading state. You can also use onMove arguments to experiment with the loading state, allowing for dynamic updates during card movements.'
