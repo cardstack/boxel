@@ -61,7 +61,14 @@ export async function activate(context: vscode.ExtensionContext) {
       diagnosticCollection.delete(document.uri);
     }),
   );
-
+  
+  // In the current implementation, we need to store the selected realms in global state
+  // because adding the root folder "Boxel Workspaces" 
+  // will reactivate the extension, causing realmFs to be reinitialized.
+  // If we don't make the state persistent, no realms will open after the user selects them.
+  // An alternative approach is to add the root folder first 
+  // and retrigger the attachToBoxelWorkspaces command upon the second reactivation,
+  // allowing the user to select realms after the root folder exists. However, this approach may be more confusing.
   vscode.commands.registerCommand(
     'boxel-tools.attachToBoxelWorkspaces',
     async (_) => {
@@ -77,7 +84,10 @@ export async function activate(context: vscode.ExtensionContext) {
         canPickMany: false,
         placeHolder: 'Select a realm to open',
       });
-      realmFs.addSelectedRealms(selectedRealm!);
+      if (!selectedRealm) {
+        return;
+      }
+      realmFs.addSelectedRealms(selectedRealm);
       console.log('Selected realm', selectedRealm);
       vscode.workspace.updateWorkspaceFolders(
         0,

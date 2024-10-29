@@ -77,6 +77,7 @@ export class RealmFS implements vscode.FileSystemProvider {
 
   addSelectedRealms(realmURL: string) {
     this.selectedRealms.add(realmURL);
+    // Using globalState because workspaceState will be reset when the extension is reactivated.
     this.context.globalState.update(
       selectedRealmKey,
       Array.from(this.selectedRealms).join(','),
