@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
+import pluralize from 'pluralize';
+
 import { Button } from '@cardstack/boxel-ui/components';
 
 import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
@@ -98,13 +100,19 @@ export default class CardCatalog extends Component<Signature> {
               @size='small'
               data-test-show-more-cards
             >
-              Show
-              {{this.pageSize}}
-              more cards ({{subtract
-                realmData.cardsTotal
-                realmData.displayedCardsCount
+              {{#let
+                (subtract realmData.cardsTotal realmData.displayedCardsCount)
+                as |remainingResults|
               }}
-              not shown)
+                {{#let (min this.pageSize remainingResults) as |nextPageSize|}}
+                  Show
+                  {{nextPageSize}}
+                  more
+                  {{pluralize 'card' nextPageSize}}
+                  ({{remainingResults}}
+                  not shown)
+                {{/let}}
+              {{/let}}
             </Button>
           {{/if}}
         </section>
@@ -179,7 +187,7 @@ export default class CardCatalog extends Component<Signature> {
     </style>
   </template>
 
-  get groupedCardsByRealm(): Record<
+  private get groupedCardsByRealm(): Record<
     string,
     {
       cards: PrerenderedCard[];
@@ -230,12 +238,16 @@ export default class CardCatalog extends Component<Signature> {
   }
 
   // do not paginate if there's pre-selected card (because we scroll to it)
-  pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
+  private pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
 
   @action
-  handleEnterKey(cardUrl: string, event: KeyboardEvent) {
+  private handleEnterKey(cardUrl: string, event: KeyboardEvent) {
     if (event.key === 'Enter') {
       this.args.select(cardUrl, event);
     }
   }
+}
+
+function min(a: number, b: number) {
+  return Math.min(a, b);
 }
