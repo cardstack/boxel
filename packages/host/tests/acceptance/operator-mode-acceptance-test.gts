@@ -890,6 +890,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-profile-popover]').exists();
     assert.dom('[data-test-membership-tier]').hasText('Free');
     assert.dom('[data-test-monthly-credit]').hasText('0 of 100 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
     assert.dom('[data-test-change-plan-button]').doesNotExist();
     assert.dom('[data-test-out-of-credit]').exists();
   });

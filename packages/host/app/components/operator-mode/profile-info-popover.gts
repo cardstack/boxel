@@ -8,7 +8,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import { cn, eq, cssVar } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -42,7 +42,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         bottom: 68px;
         left: 20px;
         z-index: 3;
-        background: white;
+        background: var(--boxel-100);
         padding: var(--boxel-sp);
         flex-direction: column;
         border-radius: var(--boxel-border-radius);
@@ -60,9 +60,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         align-items: center;
       }
 
-      .header .label {
-        color: var(--boxel-dark);
-        text-transform: uppercase;
+      .header button {
+        --boxel-button-font: 600 var(--boxel-font-xs);
       }
 
       .credit-info {
@@ -80,17 +79,20 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         flex-direction: column;
         gap: var(--boxel-sp-xxs);
       }
-      .info-group .label {
+      .label {
         color: var(--boxel-dark);
+        font: var(--boxel-font-xs);
+      }
+      .out-of-credit-info {
         font: var(--boxel-font-sm);
+      }
+      .info-group .value.out-of-credit {
+        color: #ff3838;
       }
       .info-group .value {
         color: var(--boxel-dark);
         font: 700 var(--boxel-font-sm);
         font-style: capitalize;
-      }
-      .credit-info__top .change-plan {
-        align-items: flex-end;
       }
     </style>
 
@@ -136,17 +138,13 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         <div class='info-group'>
           <span class='label'>Monthly Credit</span>
           <span
-            class='value'
+            class={{cn 'value' out-of-credit=this.isOutOfCredit}}
             data-test-monthly-credit
           >{{this.monthlyCredit}}</span>
         </div>
-        {{#if
-          (eq
-            this.creditsUsedInPlanAllowance this.creditsIncludedInPlanAllowance
-          )
-        }}
-          <span class='label' data-test-out-of-credit>You have used all of
-            credits from the free trial, please upgrade your plan.</span>
+        {{#if this.isOutOfCredit}}
+          <span class='out-of-credit-info' data-test-out-of-credit>You have used
+            all of credits from the free trial, please upgrade your plan.</span>
         {{/if}}
         <div class='info-group'>
           <span class='label'>Additional Credit</span>
@@ -160,7 +158,11 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       {{#if this.isFreePlan}}
         <BoxelButton
           {{on 'click' @toggleProfileSettings}}
-          style={{cssVar boxel-button-text-color='var(--boxel-dark)'}}
+          style={{cssVar
+            boxel-button-text-color='var(--boxel-dark)'
+            boxel-button-color='var(--boxel-teal)'
+            boxel-button-border='1px solid var(--boxel-teal)'
+          }}
           @kind='primary'
           data-test-choose-plan-button
         >
@@ -199,6 +201,13 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
           this.creditsIncludedInPlanAllowance - this.creditsUsedInPlanAllowance
         } of ${this.creditsIncludedInPlanAllowance} left`
       : '';
+  }
+
+  private get isOutOfCredit() {
+    return (
+      this.isFreePlan &&
+      this.creditsUsedInPlanAllowance === this.creditsIncludedInPlanAllowance
+    );
   }
 
   private get isFreePlan() {
