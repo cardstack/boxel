@@ -99,18 +99,40 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
 
   <template>
     <button
-      ...attributes
       class={{cn
         'add-card-to-neighbor-stack'
         this.triggerSideClass
-        (if
-          (eq @activeTrigger @triggerSide) 'add-card-to-neighbor-stack--active'
-        )
+        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
+      ...attributes
     >
       <Download width='19' height='19' />
     </button>
+    <style scoped>
+      .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
+        width: var(--container-button-size);
+        height: var(--container-button-size);
+        padding: 0;
+        border-radius: 50%;
+        background-color: var(--boxel-light-100);
+        border-color: transparent;
+        box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--boxel-layer-floating-button);
+      }
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack--active {
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
+      }
+      .add-card-to-neighbor-stack--left {
+        margin-left: var(--operator-mode-spacing);
+      }
+      .add-card-to-neighbor-stack--right {
+        margin-right: var(--operator-mode-spacing);
+      }
+    </style>
   </template>
 }
 
@@ -700,7 +722,7 @@ export default class InteractSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
     >
-      <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+      <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='right'>
             <:trigger>
@@ -731,13 +753,11 @@ export default class InteractSubmode extends Component<Signature> {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
-                  'operator-mode-stack'
-                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                  (if
-                    (and (gt stack.length 1) (lt stack.length 3))
-                    'medium-padding-top'
+                  stack-with-bg-image=backgroundImageURLSpecificToThisStack
+                  stack-medium-padding-top=(and
+                    (gt stack.length 1) (lt stack.length 3)
                   )
-                  (if (gt stack.length 2) 'small-padding-top')
+                  stack-small-padding-top=(gt stack.length 2)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -769,6 +789,7 @@ export default class InteractSubmode extends Component<Signature> {
           <Tooltip @placement='left'>
             <:trigger>
               <NeighborStackTriggerButton
+                class='neighbor-stack-trigger'
                 data-test-add-card-right-stack
                 @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
                 @activeTrigger={{this.searchSheetTrigger}}
@@ -795,7 +816,7 @@ export default class InteractSubmode extends Component<Signature> {
     </SubmodeLayout>
 
     <style scoped>
-      .operator-mode__main {
+      .interact-submode {
         display: flex;
         justify-content: center;
         align-items: center;
@@ -804,38 +825,35 @@ export default class InteractSubmode extends Component<Signature> {
         background-size: cover;
         height: 100%;
       }
-      .operator-mode__main .stacks {
+      .stacks {
         flex: 1;
         height: 100%;
         display: flex;
         justify-content: center;
         align-items: center;
       }
-      .operator-mode__main .add-card-to-neighbor-stack {
+      .stack-with-bg-image:before {
+        content: ' ';
+        height: 100%;
+        width: 2px;
+        background-color: var(--boxel-dark);
+        display: block;
+        position: absolute;
+        top: 0;
+        left: -1px;
+      }
+      .stack-with-bg-image:first-child:before {
+        display: none;
+      }
+      .stack-medium-padding-top {
+        padding-top: var(--operator-mode-top-bar-item-height);
+      }
+      .stack-small-padding-top {
+        padding-top: var(--operator-mode-spacing);
+      }
+      .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--boxel-sp);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--boxel-sp);
       }
     </style>
   </template>
