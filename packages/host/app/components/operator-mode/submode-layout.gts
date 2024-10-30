@@ -273,15 +273,13 @@ export default class SubmodeLayout extends Component<Signature> {
               openSearchToResults=this.openSearchAndShowResults
             )
           }}
-          <div class='profile-icon-container'>
-            <button
-              class='profile-icon-button'
-              {{on 'click' this.toggleProfileSummary}}
-              data-test-profile-icon-button
-            >
-              <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
-            </button>
-          </div>
+          <button
+            class='profile-icon-button'
+            {{on 'click' this.toggleProfileSummary}}
+            data-test-profile-icon-button
+          >
+            <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+          </button>
           <SearchSheet
             @mode={{this.searchSheetMode}}
             @onSetup={{this.setupSearch}}
@@ -360,9 +358,8 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .chat-btn {
         position: absolute;
-        bottom: var(--boxel-sp);
-        right: var(--boxel-sp);
-        margin-right: 0;
+        bottom: var(--operator-mode-spacing);
+        right: var(--operator-mode-spacing);
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--host-ai-panel-button-z-index);
@@ -377,7 +374,7 @@ export default class SubmodeLayout extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        padding: var(--boxel-sp);
+        padding: var(--operator-mode-spacing);
         z-index: var(--host-top-left-menu-z-index);
 
         display: flex;
@@ -390,31 +387,30 @@ export default class SubmodeLayout extends Component<Signature> {
         letter-spacing: 3px;
       }
 
-      .profile-icon-container {
-        bottom: 0;
+      .profile-icon-button {
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
         position: absolute;
-        width: var(--search-sheet-closed-height);
-        height: var(--search-sheet-closed-height);
+        bottom: var(--operator-mode-spacing);
+        left: var(--operator-mode-spacing);
+        padding: 0;
+        background: none;
+        border: none;
         border-radius: 50px;
-        margin-left: var(--boxel-sp);
         z-index: var(--host-profile-z-index);
       }
 
-      .profile-icon-button {
-        border: 0;
-        padding: 0;
-        background: transparent;
-      }
-
       .workspace-button {
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
         border: none;
         outline: var(--boxel-border-flexible);
-        margin-right: var(--boxel-sp);
+        margin-right: var(--operator-mode-spacing);
         border-radius: var(--boxel-border-radius);
       }
       .dark-icon {
         --icon-bg-opacity: 1;
-        --icon-color: black;
+        --icon-color: var(--boxel-dark);
       }
     </style>
   </template>

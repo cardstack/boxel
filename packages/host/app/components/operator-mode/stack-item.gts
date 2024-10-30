@@ -183,7 +183,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     if (numberOfCards > 1) {
       if (isLastCard) {
-        marginTopPx = numberOfCards === 2 ? 30 : 55;
+        marginTopPx = numberOfCards === 2 ? 25 : 50;
       } else if (isSecondLastCard && numberOfCards > 2) {
         marginTopPx = 25;
       }

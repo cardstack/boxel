@@ -22,6 +22,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import PackageIcon from '@cardstack/boxel-icons/package';
 
 export function expectedArrivalDescription(
   leadTimeDays: number,
@@ -323,6 +324,7 @@ class Isolated extends Component<typeof Product> {
 
 export class Product extends CardDef {
   static displayName = 'Product';
+  static icon = PackageIcon;
 
   // use title field for product title
 

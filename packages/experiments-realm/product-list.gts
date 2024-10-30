@@ -12,6 +12,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import ListIcon from '@cardstack/boxel-icons/list';
 
 interface FeaturedProductComponentSignature {
   Args: {
@@ -198,6 +199,7 @@ class Isolated extends Component<typeof ProductList> {
 export class ProductList extends CardDef {
   @field products = linksToMany(ProductCard);
   static displayName = 'Product List';
+  static icon = ListIcon;
 
   static isolated = Isolated;
 
@@ -214,6 +216,7 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

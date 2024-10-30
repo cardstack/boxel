@@ -24,6 +24,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 import { AppCard, AppCardTemplate, CardsGrid } from './app-card';
+import CPU from '@cardstack/boxel-icons/cpu';
 
 const getCardTypeQuery = (cardRef: CodeRef, excludedId?: string): Query => {
   let filter: Query['filter'];
@@ -569,6 +570,7 @@ class Isolated extends Component<typeof AiAppGenerator> {
 
 export class AiAppGenerator extends AppCard {
   static displayName = 'AI App Generator';
+  static icon = CPU;
   static prefersWideFormat = true;
   static headerColor = '#ffeb00';
   static isolated = Isolated;
