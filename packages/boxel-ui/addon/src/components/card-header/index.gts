@@ -292,11 +292,11 @@ export default class CardHeader extends Component<Signature> {
         }
 
         .icon-button {
-          --icon-color: var(--boxel-header-text-color, var(--boxel-dark));
+          --icon-color: var(--boxel-card-header-text-color, var(--boxel-dark));
         }
 
         .icon-button:hover {
-          --icon-color: var(--boxel-dark);
+          --icon-color: var(--boxel-card-header-text-color, var(--boxel-dark));
           --boxel-icon-button-background: var(--boxel-dark-hover);
         }
 
@@ -306,7 +306,7 @@ export default class CardHeader extends Component<Signature> {
         }
 
         header .icon-save:hover {
-          --icon-color: var(--boxel-highlight);
+          --icon-color: var(--boxel-dark);
         }
       }
     </style>
