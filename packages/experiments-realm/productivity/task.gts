@@ -326,6 +326,11 @@ class Fitted extends Component<typeof Task> {
         font-weight: bold;
         color: #333;
         margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .avatar {
         --profile-avatar-icon-size: 25px;
