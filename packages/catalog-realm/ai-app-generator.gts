@@ -26,6 +26,8 @@ import {
 import { AppCard, AppCardTemplate, CardsGrid } from './app-card';
 import CPU from '@cardstack/boxel-icons/cpu';
 
+import './AiAppGenerator/ai-assist-icon@2x.webp';
+
 const getCardTypeQuery = (cardRef: CodeRef, excludedId?: string): Query => {
   let filter: Query['filter'];
   if (excludedId) {
@@ -101,7 +103,8 @@ class HowToSidebar extends GlimmerComponent {
       .logo {
         width: 40px;
         height: 40px;
-        background: url('./ai-assist-icon@2x.webp') no-repeat center;
+        background: url('./AiAppGenerator/ai-assist-icon@2x.webp') no-repeat
+          center;
         background-size: contain;
         margin-bottom: var(--boxel-sp);
       }
