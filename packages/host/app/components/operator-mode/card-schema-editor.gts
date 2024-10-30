@@ -8,7 +8,12 @@ import { tracked } from '@glimmer/tracking';
 
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
-import { Tooltip, Pill, RealmIcon } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  Tooltip,
+  Pill,
+  RealmIcon,
+} from '@cardstack/boxel-ui/components';
 import { and, bool, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
@@ -61,8 +66,8 @@ interface Signature {
 export default class CardSchemaEditor extends Component<Signature> {
   <template>
     <style scoped>
-      .schema-editor-container {
-        margin-top: var(--boxel-sp);
+      .schema-editor-container > * + * {
+        margin-top: var(--boxel-sp-xs);
       }
 
       .schema-editor-container:first-child {
@@ -80,29 +85,36 @@ export default class CardSchemaEditor extends Component<Signature> {
         align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
-        margin-bottom: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xxs);
+        border: 2px solid transparent;
+        border-radius: var(--code-mode-container-border-radius);
         background-color: var(--boxel-light);
+        overflow: hidden;
+      }
+      .card-field + .card-field {
+        margin-top: var(--boxel-sp-xxs);
       }
 
       .card-field--with-context-menu-button {
         padding-right: 0;
       }
 
-      .card-fields {
-        margin-top: var(--boxel-sp);
-      }
-
       .left {
         display: flex;
         flex-direction: column;
+        max-width: 100%;
       }
-
       .right {
         display: flex;
         align-items: center;
+        max-width: 100%;
+      }
+      .right > * {
+        flex-shrink: 0;
+      }
+      .right > :deep(.trigger) {
+        max-width: 100%;
       }
 
       .computed-icon {
@@ -115,24 +127,53 @@ export default class CardSchemaEditor extends Component<Signature> {
         border-bottom-left-radius: var(--boxel-border-radius-sm);
         margin-bottom: calc(var(--boxel-sp-5xs) * -2);
         transform: translate(
-          calc(var(--boxel-sp-5xs) * -1),
+          calc(var(--boxel-sp-xxxs) * -1),
           calc(var(--boxel-sp-5xs) * -1)
         );
         height: 100%;
       }
 
       .linked-icon {
-        --icon-color: var(--boxel-highlight);
         display: flex;
         align-items: center;
         height: 20px;
-
         margin-right: var(--boxel-sp-5xs);
       }
 
+      .field-pill {
+        --pill-gap: var(--boxel-sp-xxxs);
+        --pill-icon-size: var(--code-mode-realm-icon-size);
+        height: 1.625rem;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .field-pill > * {
+        display: inline-block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .realm-icon {
+        --boxel-realm-icon-border: none;
+        --boxel-realm-icon-border-radius: var(
+          --code-mode-realm-icon-border-radius
+        );
+        flex-shrink: 0;
+        min-width: var(--code-mode-realm-icon-size);
+        min-height: var(--code-mode-realm-icon-size);
+      }
+
+      .display-name {
+        display: contents;
+      }
+
       .field-name {
-        font: 500 var(--boxel-font-sm);
+        font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .overridden-field {
@@ -140,16 +181,16 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .overridden-field-link {
-        --icon-color: var(--boxel-highlight);
-        display: inline-flex;
-        align-items: center;
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        color: var(--boxel-highlight);
-        cursor: pointer;
-        border: none;
-        background: none;
-        padding: 0;
+        --boxel-button-min-height: 1.5rem;
+        --boxel-button-padding: var(--boxel-sp-4xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        justify-content: flex-start;
+        gap: var(--boxel-sp-4xs);
+        align-self: flex-start;
+      }
+
+      .jump-icon {
+        flex-shrink: 0;
       }
 
       .field-types {
@@ -162,55 +203,20 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-4xs);
       }
 
       .total-fields {
-        display: flex;
-        align-items: baseline;
-        gap: var(--boxel-sp-xxxs);
-        margin-left: auto;
-      }
-
-      .total-fields > * {
-        margin: 0;
-      }
-
-      .total-fields-value {
-        font: 600 var(--boxel-font);
-      }
-
-      .total-fields-label {
-        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
+        text-transform: uppercase;
       }
 
       .add-field-button {
-        --icon-color: var(--boxel-highlight);
-        background-color: transparent;
-        color: var(--boxel-highlight);
-        font-size: var(--boxel-font-sm);
-        font-weight: 600;
-        width: 100%;
-        height: 56px;
-        padding: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        border: 1px solid var(--boxel-500);
-        margin: auto;
-        align-items: center;
-        justify-content: center;
-        display: flex;
-      }
-
-      .add-field-button > span {
-        margin-top: 1px;
-      }
-
-      .add-field-button > svg {
-        margin-right: var(--boxel-sp-xxxs);
-      }
-
-      .add-field-button:hover {
-        border: 1px solid var(--boxel-highlight);
-        background-color: var(--boxel-100);
+        --boxel-button-padding: 0 var(--boxel-sp-4xs);
+        gap: var(--boxel-sp-xxs);
       }
 
       .card-field--overriding {
@@ -219,11 +225,6 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .show-overriding-field-border {
         border: 2px solid var(--boxel-highlight);
-      }
-
-      .icon {
-        min-width: var(--boxel-icon-sm);
-        min-height: var(--boxel-icon-sm);
       }
 
       @keyframes pulse {
@@ -252,6 +253,7 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
+                class='field-pill'
                 @kind='button'
                 {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
@@ -259,7 +261,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                 <:icon>
                   <RealmIcon
                     @realmInfo={{this.realm.info @cardType.module}}
-                    class='icon'
+                    class='realm-icon'
                   />
                 </:icon>
                 <:default>
@@ -278,13 +280,11 @@ export default class CardSchemaEditor extends Component<Signature> {
           </Tooltip>
           <div class='total-fields' data-test-total-fields>
             {{#if (gt this.totalOwnFields 0)}}
-              <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
-              <span class='total-fields-label'>{{getPlural
-                  'Field'
-                  this.totalOwnFields
-                }}</span>
+              +
+              {{this.totalOwnFields}}
+              {{getPlural 'Field' this.totalOwnFields}}
             {{else}}
-              <span class='total-fields-label'>No Fields</span>
+              No Fields
             {{/if}}
           </div>
         </div>
@@ -321,20 +321,26 @@ export default class CardSchemaEditor extends Component<Signature> {
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
                   {{#let (getCodeRef field) as |codeRef|}}
                     {{#if (this.isOverridden field)}}
-                      <button
+                      <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
                         class='overridden-field-link'
                         data-test-overridden-field-link
                         {{on 'click' (fn this.scrollIntoOveridingField field)}}
-                      >Jump to active field definition
-                        <span><ArrowTopLeft
-                            width='20px'
-                            height='20px'
-                            role='presentation'
-                          /></span></button>
+                      >
+                        Jump to active field definition
+                        <ArrowTopLeft
+                          class='jump-icon'
+                          width='13'
+                          height='13'
+                          role='presentation'
+                        />
+                      </BoxelButton>
                     {{else}}
                       <Tooltip @placement='bottom'>
                         <:trigger>
                           <Pill
+                            class='field-pill'
                             @kind='button'
                             {{on
                               'click'
@@ -358,7 +364,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                               {{/if}}
                               <RealmIcon
                                 @realmInfo={{this.realm.info moduleUrl}}
-                                class='icon'
+                                class='realm-icon'
                               />
                             </:icon>
                             <:default>
@@ -367,8 +373,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                                 as |cardDisplayName|
                               }}
                                 <span
+                                  class='display-name'
                                   data-test-card-display-name={{cardDisplayName}}
-                                >{{cardDisplayName}}</span>
+                                >
+                                  {{cardDisplayName}}
+                                </span>
                               {{/let}}
                             </:default>
                           </Pill>
@@ -401,16 +410,16 @@ export default class CardSchemaEditor extends Component<Signature> {
       </div>
 
       {{#if @allowFieldManipulation}}
-        <button
+        <BoxelButton
+          @kind='text-only'
+          @size='small'
           class='add-field-button'
-          data-test-add-field-button
           {{on 'click' (fn this.toggleEditFieldModal undefined)}}
+          data-test-add-field-button
         >
-          <IconPlus width='20px' height='20px' role='presentation' />
-          <span>
-            Add a field
-          </span>
-        </button>
+          <IconPlus width='13px' height='13px' role='presentation' />
+          Add a field
+        </BoxelButton>
 
         {{#if this.editFieldModalShown}}
           <ToElsewhere
