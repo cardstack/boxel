@@ -157,10 +157,6 @@ export default class CardHeaderUsage extends Component {
             @description='realm information'
             @value={{this.realmInfo}}
           />
-          <Args.Yield
-            @name='actions'
-            @description='This named block is rendered on the right side of the component.'
-          />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic

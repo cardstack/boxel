@@ -29,9 +29,6 @@ interface Signature {
     onFinishEditing?: () => void;
     realmInfo?: RealmDisplayInfo;
   };
-  Blocks: {
-    actions: [];
-  };
   Element: HTMLElement;
 }
 
