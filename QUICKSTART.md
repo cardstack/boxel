@@ -17,11 +17,11 @@ To build the entire repository and run the application, follow these steps:
 3. Install the package dependencies:
 
    ```zsh
-   echo 'export VOLTA_FEATURE_PNPM=1"' >> ~/.profile && source ~/.profile
+   echo 'export VOLTA_FEATURE_PNPM=1' >> ~/.profile && source ~/.profile
    pnpm install
    ```
 
-4. Build the boxel-ui and boxl-motion addons:
+4. Build the boxel-ui and boxel-motion addons:
 
    ```zsh
    cd ./packages/boxel-ui/addon
@@ -31,14 +31,21 @@ To build the entire repository and run the application, follow these steps:
    pnpm build
    ```
 
-5. Build the host:
+5. Build the boxel-icons:
+
+   ```zsh
+   cd ./packages/boxel-icons
+   pnpm build
+   ```
+
+6. Build the host:
 
    ```zsh
    cd ./packages/host
    pnpm start
    ```
 
-6. Run the realm server:
+7. Run the realm server:
 
    ```zsh
    cd ./packages/realm-server
@@ -55,14 +62,14 @@ To build the entire repository and run the application, follow these steps:
    })
    ```
 
-7. Register ALL:
+8. Register ALL:
 
    ```zsh
    cd ./packages/matrix
    pnpm register-all
    ```
 
-8. Verify registration:
+9. Verify registration:
 
    ```zsh
    cd ./packages/matrix
@@ -71,23 +78,23 @@ To build the entire repository and run the application, follow these steps:
 
    Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
-9. Host App
-	- Visit http://localhost:4201/
-	-  Enter the registration flow and create a Boxel Account
-	- When prompted for an authentication token, type in "dev-token"
+10. Host App
 
-10. Validate email for login
-	- Visit SMTP UI at http://localhost:5001/
-	- Validate email
-	- Go back to Host and login
+    - Visit http://localhost:4201/
+    - Enter the registration flow and create a Boxel Account
+    - When prompted for an authentication token, type in "dev-token"
 
 11. Validate email for login
-	- Visit SMTP UI at http://localhost:5001/
-	- Validate email
-	- Go back to Host http://localhost:4201/ and login 
 
-12. Trigger interact mode
-   - After you see a list of cards, Ctrl+ . OR Ctrl +, to "interact" with them 
+    - Visit SMTP UI at http://localhost:5001/
+    - Validate email
+    - Go back to Host and login
+
+12. Validate email for login
+
+    - Visit SMTP UI at http://localhost:5001/
+    - Validate email
+    - Go back to Host http://localhost:4201/ and login
 
 13. Run ai bot (Optional):
 

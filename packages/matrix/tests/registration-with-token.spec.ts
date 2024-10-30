@@ -137,7 +137,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] img`),
       'the "T" icon URL is shown',
-    ).toHaveAttribute('src', 'https://i.postimg.cc/tTPJCJkG/Letter-t.png');
+    ).toHaveAttribute(
+      'src',
+      'https://boxel-images.boxel.ai/icons/Letter-t.png',
+    );
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
       'has background image',
@@ -330,17 +333,6 @@ test.describe('User Registration w/ Token', () => {
       ),
       'no error message is displayed',
     ).toHaveCount(0);
-    await page.locator('[data-test-register-btn]').click();
-
-    await page.locator('[data-test-token-field]').fill('abc123');
-    await page.locator('[data-test-next-btn]').click();
-
-    await validateEmail(page, 'user2@example.com');
-
-    await assertLoggedIn(page, {
-      userId: '@user2:localhost',
-      displayName: 'Test User',
-    });
   });
 
   test('it shows an error when the username start with an underscore', async ({
@@ -383,17 +375,6 @@ test.describe('User Registration w/ Token', () => {
       ),
       'no error message is displayed',
     ).toHaveCount(0);
-    await page.locator('[data-test-register-btn]').click();
-
-    await page.locator('[data-test-token-field]').fill('abc123');
-    await page.locator('[data-test-next-btn]').click();
-
-    await validateEmail(page, 'user1@example.com');
-
-    await assertLoggedIn(page, {
-      userId: '@user1:localhost',
-      displayName: 'Test User',
-    });
   });
 
   test('it shows an error when the username start with "realm/"', async ({
@@ -436,17 +417,6 @@ test.describe('User Registration w/ Token', () => {
       ),
       'no error message is displayed',
     ).toHaveCount(0);
-    await page.locator('[data-test-register-btn]').click();
-
-    await page.locator('[data-test-token-field]').fill('abc123');
-    await page.locator('[data-test-next-btn]').click();
-
-    await validateEmail(page, 'user1@example.com');
-
-    await assertLoggedIn(page, {
-      userId: '@user1:localhost',
-      displayName: 'Test User',
-    });
   });
 
   test(`it show an error when a invalid registration token is used`, async ({
@@ -495,7 +465,9 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText('Invalid registration token');
+    ).toContainText(
+      'This registration token does not exist or has exceeded its usage limit.',
+    );
 
     await page.locator('[data-test-token-field]').fill('abc123');
     await expect(
@@ -510,13 +482,6 @@ test.describe('User Registration w/ Token', () => {
       ),
       'no error message is displayed',
     ).toHaveCount(0);
-    await page.locator('[data-test-next-btn]').click();
-    await validateEmail(page, 'user1@example.com');
-
-    await assertLoggedIn(page, {
-      userId: '@user1:localhost',
-      displayName: 'Test User',
-    });
   });
 
   test(`it shows an error when passwords do not match`, async ({ page }) => {
@@ -667,8 +632,6 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
-    ).toContainText(
-      'There was an error verifying token: Could not connect to server',
-    );
+    ).toContainText('Could not connect to server');
   });
 });

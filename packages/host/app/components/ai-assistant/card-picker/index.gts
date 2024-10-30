@@ -96,13 +96,11 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         padding: var(--boxel-sp-xxs);
       }
       .attach-button {
-        --icon-color: var(--boxel-highlight);
         --boxel-add-button-pill-font: var(--boxel-font-sm);
         height: var(--pill-height);
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs) var(--boxel-sp-4xs)
           var(--boxel-sp-5xs);
         background: none;
-        color: var(--boxel-highlight);
         transition: color var(--boxel-transition);
         outline: 0;
       }
@@ -111,8 +109,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
-        color: var(--boxel-highlight-hover);
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
         background: none;
         box-shadow: none;
       }

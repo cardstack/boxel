@@ -4,6 +4,7 @@ import { fn } from '@ember/helper';
 import {
   BaseDef,
   CardContext,
+  realmURL,
   type Box,
   type BoxComponent,
   type CardDef,
@@ -97,7 +98,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
-        offerToCreate: { ref: type, relativeTo: undefined },
+        offerToCreate: {
+          ref: type,
+          relativeTo: undefined,
+          realmURL: this.args.model.value[realmURL],
+        },
         multiSelect: true,
         createNewCard: this.cardContext?.actions?.createCard,
       },
@@ -216,13 +221,15 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .remove {
         --icon-color: var(--boxel-light);
+        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-dark);
         align-self: auto;
         outline: 0;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-dark);
-        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--boxel-highlight);
       }
       .remove:focus + :deep(.boxel-card-container.fitted-format),
       .remove:hover + :deep(.boxel-card-container.fitted-format) {

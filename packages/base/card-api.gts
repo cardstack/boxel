@@ -55,6 +55,13 @@ import MissingEmbeddedTemplate from './default-templates/missing-embedded';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
+import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+
+interface CardorFieldTypeIconSignature {
+  Element: Element;
+}
+
+type CardorFieldTypeIcon = ComponentLike<CardorFieldTypeIconSignature>;
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -1646,9 +1653,7 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
-  static icon: ComponentLike<{
-    Element: Element;
-  }>;
+  static icon: CardorFieldTypeIcon;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
@@ -1829,6 +1834,7 @@ export class ReadOnlyField extends FieldDef {
 
 export class StringField extends FieldDef {
   static displayName = 'String';
+  static icon = LetterCaseIcon;
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {

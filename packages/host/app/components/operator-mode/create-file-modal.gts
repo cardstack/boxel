@@ -19,6 +19,7 @@ import {
   BoxelInput,
   LoadingIndicator,
   Pill,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -48,8 +49,6 @@ import ModalContainer from '../modal-container';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
-
-import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
@@ -794,13 +793,17 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
   <template>
     <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
       <:icon>
-        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
+        <RealmIcon @realmInfo={{this.realm.info @entry.id}} class='icon' />
       </:icon>
       <:default>
         {{@entry.title}}
       </:default>
     </Pill>
     <style scoped>
+      .icon {
+        min-height: var(--boxel-icon-sm);
+        min-width: var(--boxel-icon-sm);
+      }
       .selected-type {
         padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);

@@ -1,5 +1,6 @@
-import { cn, element, eq } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { cn, element, eq } from '../../helpers.ts';
 
 export type BoxelPillKind = 'button' | 'default';
 
@@ -39,7 +40,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         );
         background-color: var(--pill-background-color, var(--boxel-light));
         color: var(--pill-font-color, var(--boxel-dark));
-        border: 1px solid var(--boxel-400);
+        border: 1px solid var(--pill-border-color, var(--boxel-400));
         border-radius: var(--boxel-border-radius-sm);
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

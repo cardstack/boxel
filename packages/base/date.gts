@@ -12,6 +12,7 @@ import { parse, format } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import CalendarIcon from '@cardstack/boxel-icons/calendar';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -36,6 +37,7 @@ class View extends Component<typeof DateField> {
 }
 
 export default class DateField extends FieldDef {
+  static icons = CalendarIcon;
   static [primitive]: Date;
   static [serialize](date: Date) {
     return format(date, dateFormat);

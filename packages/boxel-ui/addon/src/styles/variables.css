@@ -51,6 +51,8 @@
   --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 66.6px */
 
   /* common icon sizes */
+  --boxel-icon-xxs: 0.75rem; /* 12px */
+  --boxel-icon-xs: 1rem; /* 16px */
   --boxel-icon-sm: 1.25rem; /* 20px */
   --boxel-icon-med: 1.875rem; /* 30px */
   --boxel-icon-lg: 2.5rem; /* 40px */
@@ -100,8 +102,8 @@
   --boxel-700: #272330;
 
   --boxel-cyan: #00ebe5;
-  --boxel-teal: #03c4bf;
-  --boxel-dark-teal: #03b0ac;
+  --boxel-teal: #00ffba;
+  --boxel-dark-teal: #00ebac;
   --boxel-red: #ff5050;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
@@ -121,6 +123,7 @@
   /* Primary colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
+  --boxel-dark-hover: rgba(0, 0, 0, 0.1);
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);

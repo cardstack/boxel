@@ -266,7 +266,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
-      const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+      const baseRealmIconURL =
+        'https://boxel-images.boxel.ai/icons/cardstack.png';
       assert.expect(13);
       await visitOperatorMode();
       await openNewFileModal('Card Instance');
@@ -278,7 +279,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('General Card');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasAttribute('src', baseRealmIconURL);
+        .hasStyle({ backgroundImage: `url("${baseRealmIconURL}")` });
 
       // card type selection
       await click('[data-test-select-card-type]');
@@ -290,7 +291,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('Person');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasAttribute('src', testRealmAIconURL);
+        .hasStyle({ backgroundImage: `url("${testRealmAIconURL}")` });
 
       let deferred = new Deferred<void>();
       let fileID = '';
@@ -414,7 +415,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         '[data-test-code-mode-card-preview-header][data-test-card-resource-loaded]',
       );
       assert
-        .dom('[data-test-code-mode-card-preview-header] img')
+        .dom(
+          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+        )
         .hasAttribute('alt', 'Icon for workspace Test Workspace A');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
       assert.dom('[data-test-field="title"] input').hasValue('');
@@ -471,7 +474,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-create-file-modal]', { count: 0 });
       await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
       assert
-        .dom('[data-test-code-mode-card-preview-header] img')
+        .dom(
+          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+        )
         .hasAttribute('alt', 'Icon for workspace Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
       assert.dom('[data-test-field="title"] input').hasValue('');
@@ -535,7 +540,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-create-file-modal]', { count: 0 });
       await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
       assert
-        .dom('[data-test-code-mode-card-preview-header] img')
+        .dom(
+          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+        )
         .hasAttribute('alt', 'Icon for workspace Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Person');
       assert.dom('[data-test-field="firstName"] input').hasValue('');

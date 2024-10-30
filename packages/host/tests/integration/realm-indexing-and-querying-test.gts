@@ -3306,6 +3306,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       [
         'http://localhost:4202/test/person',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/contains-many-component',

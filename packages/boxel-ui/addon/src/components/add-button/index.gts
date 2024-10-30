@@ -62,7 +62,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     .add-button {
       --icon-bg: var(--boxel-light-100);
       --icon-border: var(--icon-bg);
-      --icon-color: var(--boxel-highlight);
+      --icon-color: var(--boxel-dark);
 
       border-radius: 100px;
       border: none;
@@ -73,7 +73,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .add-button--full-width {
-      --icon-color: var(--boxel-highlight);
+      --icon-color: var(--boxel-dark);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -85,7 +85,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-100);
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
-      color: var(--boxel-highlight);
+      color: var(--boxel-dark);
       font: 600 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
       transition:
@@ -99,7 +99,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .add-button--pill {
-      --icon-color: var(--boxel-light);
+      --icon-color: var(--boxel-dark);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -109,7 +109,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-highlight);
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
-      color: var(--boxel-light);
+      color: var(--boxel-dark);
       font: 600 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xs);
       transition:

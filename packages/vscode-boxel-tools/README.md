@@ -17,7 +17,7 @@ You can also build it [locally](#development).
 
 ## Usage
 
-Open a new window and in the command palette select "boxelrealm: Setup Workspace".
+Open a new window and in the command palette select "Boxel Tools: Attach to Boxel Workspaces".
 
 You will be prompted for your username and password for production. If you want to use another environment, alter the Matrix Server in VS Code settings.
 
