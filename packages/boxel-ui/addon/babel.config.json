@@ -18,6 +18,10 @@
         "transforms": ["glimmer-scoped-css/ast-transform"]
       }
     ],
+    [
+      "module:decorator-transforms",
+      { "runtime": { "import": "decorator-transforms/runtime" } }
+    ],
     ["@babel/plugin-proposal-decorators", { "version": "legacy" }],
     "@babel/plugin-transform-class-properties"
   ]

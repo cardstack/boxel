@@ -27,17 +27,6 @@ export default {
     // package names.
     addon.dependencies(),
 
-    // This babel config should *not* apply presets or compile away ES modules.
-    // It exists only to provide development niceties for you, like automatic
-    // template colocation.
-    //
-    // By default, this will load the actual babel config from the file
-    // babel.config.json.
-    babel({
-      babelHelpers: 'bundled',
-      extensions: ['.js', '.gjs', '.ts', '.gts'],
-    }),
-
     // Ensure that standalone .hbs files are properly integrated as Javascript.
     addon.hbs(),
 
@@ -53,6 +42,17 @@ export default {
         { src: '../README.md', dest: '.' },
         { src: '../LICENSE.md', dest: '.' },
       ],
+    }),
+
+    // This babel config should *not* apply presets or compile away ES modules.
+    // It exists only to provide development niceties for you, like automatic
+    // template colocation.
+    //
+    // By default, this will load the actual babel config from the file
+    // babel.config.json.
+    babel({
+      babelHelpers: 'bundled',
+      extensions: ['.js', '.gjs', '.ts', '.gts'],
     }),
   ],
 
