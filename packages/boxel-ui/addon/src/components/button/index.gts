@@ -1,3 +1,5 @@
+import './1.webp';
+
 import { array, concat, hash } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
@@ -112,6 +114,7 @@ export default class ButtonComponent extends Component<Signature> {
           border: var(--boxel-button-border, var(--boxel-border));
           color: var(--boxel-button-text-color, black);
           background-color: var(--boxel-button-color, transparent);
+          background-image: url('./1.webp');
 
           /* size variants */
           font: var(--boxel-button-font, var(--boxel-font-sm));
