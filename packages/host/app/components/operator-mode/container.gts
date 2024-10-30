@@ -143,9 +143,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
-        --container-button-size: var(--boxel-icon-lg);
+        --container-button-size: 2.5rem;
         --operator-mode-min-width: 20.5rem;
-        --operator-mode-left-column: 16rem;
+        --operator-mode-left-column: 15rem;
+        --operator-mode-spacing: var(--boxel-sp-sm);
+        --operator-mode-top-bar-item-height: var(--container-button-size);
+        --operator-mode-bottom-bar-item-height: var(--container-button-size);
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
