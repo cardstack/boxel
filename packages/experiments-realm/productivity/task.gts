@@ -326,6 +326,11 @@ class Fitted extends Component<typeof Task> {
         font-weight: bold;
         color: #333;
         margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .avatar {
         --profile-avatar-icon-size: 25px;
@@ -767,17 +772,35 @@ export class Task extends CardDef {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <span class='short-id'>{{@model.shortId}}</span>
-      {{@model.taskName}}
-      <Avatar
-        @userId={{@model.assignee.id}}
-        @displayName={{@model.assignee.name}}
-        @isReady={{true}}
-      />
+      <div class='task-atom'>
+        {{#if @model.assignee}}
+          <div class='avatar-wrapper'>
+            <Avatar
+              @userId={{@model.assignee.id}}
+              @displayName={{@model.assignee.name}}
+              @isReady={{true}}
+              class='avatar'
+            />
+          </div>
+        {{/if}}
+        <div class='task-title'>{{@model.taskName}}</div>
+      </div>
       <style scoped>
-        .short-id {
-          color: var(--boxel-purple);
-          font-size: var(--boxel-font-size-sm);
+        .task-atom {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .avatar-wrapper {
+          display: inline-block;
+        }
+        .avatar {
+          --profile-avatar-icon-size: 20px;
+        }
+        .task-title {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       </style>
     </template>
