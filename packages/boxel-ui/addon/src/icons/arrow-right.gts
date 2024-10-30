@@ -13,12 +13,12 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
   ><g data-name='Group 168'><path
         d='M5 12h14'
         data-name='Path 47'
-        style='fill:none;stroke:#fff;stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px'
+        style='fill:none;stroke:var(--icon-color, #000);stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px'
         transform='translate(-3.75 -3.232)'
       /><path
         d='m12 5 7 7-7 7'
         data-name='Path 48'
-        style='fill:none;stroke:#fff;stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px'
+        style='fill:none;stroke:var(--icon-color, #000);stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px'
         transform='translate(-3.75 -3.232)'
       /></g></svg>
 </template>;

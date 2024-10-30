@@ -1,5 +1,4 @@
-import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -16,9 +15,30 @@ import { IconLink } from '../../icons.gts';
 import CardContainer from '../card-container/index.gts';
 import CardHeader from './index.gts';
 
+interface CardTypeIconSignature {
+  Element: SVGElement;
+}
+const Captions: TemplateOnlyComponent<CardTypeIconSignature> = <template>
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    class='lucide lucide-captions'
+    viewBox='0 0 24 24'
+    ...attributes
+  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
+      d='M7 15h4m4 0h2M7 11h2m4 0h4'
+    /></svg>
+</template>;
+
 export default class CardHeaderUsage extends Component {
   @tracked cardTypeDisplayName = 'My Card Type';
-  @tracked cardTypeIcon: ComponentLike<{ Element: Element }> = CaptionsIcon;
+  @tracked cardTypeIcon: ComponentLike<CardTypeIconSignature> = Captions;
   @tracked detail = undefined;
   @tracked size: 'large' | undefined = 'large';
   @tracked hasBackground = true;
@@ -106,7 +126,7 @@ export default class CardHeaderUsage extends Component {
             @name='cardTypeIcon'
             @description='The card type icon. Shown next to the card type display name.'
             @value={{this.cardTypeIcon}}
-            @options={{array CaptionsIcon LayoutGridIcon}}
+            @options={{array Captions}}
             @onChange={{fn (mut this.cardTypeIcon)}}
           />
           <Args.String
