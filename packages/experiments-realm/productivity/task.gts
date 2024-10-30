@@ -23,6 +23,11 @@ import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
+import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
+import TagIcon from '@cardstack/boxel-icons/tag';
+import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
+import UsersIcon from '@cardstack/boxel-icons/users';
+import UserIcon from '@cardstack/boxel-icons/user';
 
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -194,6 +199,7 @@ export class User extends CardDef {
 
 export class Team extends CardDef {
   static displayName = 'Team';
+  static icon = UsersIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Team) {
@@ -220,11 +226,13 @@ export class Team extends CardDef {
 
 export class TeamMember extends User {
   static displayName = 'Team Member';
+  static icon = UserIcon;
   @field team = linksTo(Team);
 }
 
 export class Project extends CardDef {
   static displayName = 'Project';
+  static icon = FolderGitIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
@@ -413,6 +421,7 @@ class Fitted extends Component<typeof Task> {
 
 export class Tag extends CardDef {
   static displayName = 'Tag';
+  static icon = TagIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Tag) {
@@ -735,6 +744,7 @@ class TaskIsolated extends Component<typeof Task> {
 
 export class Task extends CardDef {
   static displayName = 'Task';
+  static icon = CheckboxIcon;
   @field shortId = contains(StringField, {
     computeVia: function (this: Task) {
       if (this.id) {

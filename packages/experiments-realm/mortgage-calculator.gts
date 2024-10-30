@@ -8,6 +8,7 @@ import {
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
+import CalculatorIcon from '@cardstack/boxel-icons/calculator';
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -262,6 +263,7 @@ export class MortgageCalculator extends CardDef {
   });
 
   static displayName = 'Mortgage Calculator';
+  static icon = CalculatorIcon;
 
   static isolated = class Isolated extends Component<typeof this> {
     get chartData(): DonutSectionData[] {
@@ -596,6 +598,7 @@ export class MortgageCalculator extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
   */

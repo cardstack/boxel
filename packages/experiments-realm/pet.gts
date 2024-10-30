@@ -8,6 +8,7 @@ import BooleanCard from 'https://cardstack.com/base/boolean';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { GridContainer } from '@cardstack/boxel-ui/components';
+import PawPrintIcon from '@cardstack/boxel-icons/paw-print';
 
 class FittedTemplate extends Component<typeof Pet> {
   <template>
@@ -137,6 +138,7 @@ class FittedTemplate extends Component<typeof Pet> {
 
 export class Pet extends CardDef {
   static displayName = 'Pet';
+  static icon = PawPrintIcon;
   @field firstName = contains(StringCard);
   @field favoriteToy = contains(StringCard);
   @field favoriteTreat = contains(StringCard);

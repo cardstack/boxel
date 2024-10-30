@@ -1134,6 +1134,9 @@ importers:
 
   packages/catalog-realm:
     devDependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon
@@ -1166,6 +1169,9 @@ importers:
 
   packages/experiments-realm:
     devDependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon

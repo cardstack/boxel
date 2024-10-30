@@ -8,9 +8,11 @@ import {
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { GridContainer } from '@cardstack/boxel-ui/components';
+import UserPlus from '@cardstack/boxel-icons/user-plus';
 
 export class Friend extends CardDef {
   static displayName = 'Friend';
+  static icon = UserPlus;
   @field firstName = contains(StringCard);
   @field friend = linksTo(() => Friend);
   @field test = contains(NumberCard, {

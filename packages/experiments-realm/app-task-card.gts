@@ -35,6 +35,7 @@ import {
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
+import Checklist from '@cardstack/boxel-icons/checklist';
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked loadingColumnKey: string | undefined;
@@ -424,6 +425,7 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
 
 export class AppTaskCard extends AppCard {
   static displayName = 'App Task';
+  static icon = Checklist;
   static prefersWideFormat = true;
   static isolated = AppTaskCardIsolated;
   @field title = contains(StringField, {
