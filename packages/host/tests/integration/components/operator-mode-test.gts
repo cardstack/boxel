@@ -17,12 +17,7 @@ import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import {
-  baseRealm,
-  Deferred,
-  LooseSingleCardDocument,
-  Realm,
-} from '@cardstack/runtime-common';
+import { baseRealm, Deferred, Realm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -2745,31 +2740,14 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-card-catalog-item="https://cardstack.com/base/fields/skill-card"]',
     );
     await click('[data-test-card-catalog-go-button]');
-    await fillIn('[data-test-field="title"] input', 'New Skill');
-    await click('[data-test-close-button]');
 
     await this.expectEvents({
       assert,
       realm: testRealm,
-      expectedNumberOfEvents: 1,
+      expectedNumberOfEvents: 2,
       callback: async () => {
-        await testRealm.write(
-          'Skill/1.json',
-          JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                title: 'New Skill',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/fields/skill-card',
-                  name: 'SkillCard',
-                },
-              },
-            },
-          } as LooseSingleCardDocument),
-        );
+        await fillIn('[data-test-field="title"] input', 'New Skill');
+        await click('[data-test-close-button]');
       },
     });
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
@@ -2782,7 +2760,7 @@ module('Integration | operator-mode', function (hooks) {
     await this.expectEvents({
       assert,
       realm: testRealm,
-      expectedNumberOfEvents: 1,
+      expectedNumberOfEvents: 2,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');
       },

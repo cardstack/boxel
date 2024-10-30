@@ -357,16 +357,13 @@ class Isolated extends Component<typeof CardsGrid> {
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
   @tracked viewSize: 'grid' | 'strip' = 'grid';
-  private unsubscribe: () => void;
 
   constructor(owner: any, args: any) {
     super(owner, args);
     this.loadFilterList.perform();
-    this.unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
+    let unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
 
-    registerDestructor(this, () => {
-      this.unsubscribe();
-    });
+    registerDestructor(this, unsubscribe);
   }
 
   @action setSelectedSortOption(option: SortOption) {
@@ -491,7 +488,8 @@ class Isolated extends Component<typeof CardsGrid> {
   });
 
   private refreshFilterList = (ev: MessageEvent) => {
-    if (ev.type === 'index') {
+    let data = JSON.parse(ev.data);
+    if (ev.type === 'index' && data.type === 'incremental') {
       this.loadFilterList.perform();
     }
   };
