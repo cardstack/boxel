@@ -1097,7 +1097,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-past-sessions-button]');
     assert.dom('[data-test-past-sessions]').exists();
     assert.dom('[data-test-joined-room]').exists({ count: 1 });
-    await click('.operator-mode__main');
+    await click('.interact-submode'); // outside click
     assert.dom('[data-test-past-sessions]').doesNotExist();
 
     await click('[data-test-past-sessions-button]');
