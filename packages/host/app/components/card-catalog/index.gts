@@ -4,9 +4,11 @@ import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
+import pluralize from 'pluralize';
+
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq, gt, lt } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
@@ -34,6 +36,13 @@ interface Signature {
     hasPreselectedCard?: boolean;
     realmInfos: Record<string, RealmInfo>;
   };
+}
+
+interface RealmData {
+  cards: PrerenderedCard[];
+  cardsTotal: number;
+  displayedCardsCount: number;
+  realmInfo: RealmInfo;
 }
 
 export default class CardCatalog extends Component<Signature> {
@@ -99,11 +108,10 @@ export default class CardCatalog extends Component<Signature> {
               data-test-show-more-cards
             >
               Show
-              {{this.pageSize}}
-              more cards ({{subtract
-                realmData.cardsTotal
-                realmData.displayedCardsCount
-              }}
+              {{this.nextPageCount realmData}}
+              more
+              {{pluralize 'card' (this.nextPageCount realmData)}}
+              ({{this.remainingCards realmData}}
               not shown)
             </Button>
           {{/if}}
@@ -179,15 +187,7 @@ export default class CardCatalog extends Component<Signature> {
     </style>
   </template>
 
-  get groupedCardsByRealm(): Record<
-    string,
-    {
-      cards: PrerenderedCard[];
-      cardsTotal: number;
-      displayedCardsCount: number;
-      realmInfo: RealmInfo;
-    }
-  > {
+  private get groupedCardsByRealm(): Record<string, RealmData> {
     let cards = this.args.cards;
     let pageSize = this.pageSize;
 
@@ -230,10 +230,20 @@ export default class CardCatalog extends Component<Signature> {
   }
 
   // do not paginate if there's pre-selected card (because we scroll to it)
-  pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
+  private pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
 
   @action
-  handleEnterKey(cardUrl: string, event: KeyboardEvent) {
+  private remainingCards(realmData: RealmData) {
+    return realmData.cardsTotal - realmData.displayedCardsCount;
+  }
+
+  @action
+  private nextPageCount(realmData: RealmData) {
+    return Math.min(this.pageSize, this.remainingCards(realmData));
+  }
+
+  @action
+  private handleEnterKey(cardUrl: string, event: KeyboardEvent) {
     if (event.key === 'Enter') {
       this.args.select(cardUrl, event);
     }

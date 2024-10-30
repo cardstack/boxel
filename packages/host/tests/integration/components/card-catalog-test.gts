@@ -67,6 +67,22 @@ module('Integration | card-catalog', function (hooks) {
       @field lastName = contains(StringField);
     }
 
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+    }
+
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+    }
+
+    class Tree extends CardDef {
+      static displayName = 'Tree';
+      @field species = contains(StringField);
+    }
+
     class BlogPost extends CardDef {
       static displayName = 'Blog Post';
       @field title = contains(StringField);
@@ -93,6 +109,9 @@ module('Integration | card-catalog', function (hooks) {
         'blog-post.gts': { BlogPost },
         'address.gts': { Address },
         'author.gts': { Author },
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+        'tree.gts': { Tree },
         'publishing-packet.gts': { PublishingPacket },
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
@@ -112,6 +131,33 @@ module('Integration | card-catalog', function (hooks) {
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
+          },
+        }),
+        'CatalogEntry/person.json': new CatalogEntry({
+          title: 'Person',
+          description: 'Catalog entry for Person',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
+        }),
+        'CatalogEntry/pet.json': new CatalogEntry({
+          title: 'Pet',
+          description: 'Catalog entry for Pet',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        }),
+        'CatalogEntry/tree.json': new CatalogEntry({
+          title: 'Tree',
+          description: 'Catalog entry for Tree',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}tree`,
+            name: 'Tree',
           },
         }),
         'CatalogEntry/blog-post.json': new CatalogEntry({
@@ -168,10 +214,10 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-realm]').exists({ count: 2 });
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)
-        .hasText('3 results');
+        .hasText('6 results');
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-        .exists({ count: 3 });
+        .exists({ count: 5 });
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
         .hasText(`${baseRealmCardCount} results`);
@@ -190,6 +236,8 @@ module('Integration | card-catalog', function (hooks) {
       assert.deepEqual(localResults, [
         'http://test-realm/test/CatalogEntry/author',
         'http://test-realm/test/CatalogEntry/blog-post',
+        'http://test-realm/test/CatalogEntry/person',
+        'http://test-realm/test/CatalogEntry/pet',
         'http://test-realm/test/CatalogEntry/publishing-packet',
       ]);
     });
@@ -220,6 +268,41 @@ module('Integration | card-catalog', function (hooks) {
       assert
         .dom('[data-test-boxel-menu-item-selected]')
         .hasText('Base Workspace');
+    });
+
+    test('can paginate results from a realm', async function (assert) {
+      assert
+        .dom(`[data-test-realm="Base Workspace"] [data-test-show-more-cards]`)
+        .doesNotExist("don't show pagination button for base realm");
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+        .exists('show pagination button for test realm');
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+        .containsText('Show 1 more card (1 not shown)');
+
+      await click(
+        `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
+      );
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+        .doesNotExist("don't show pagination button for test realm");
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .exists({ count: 6 });
+      let localResults = [
+        ...document.querySelectorAll(
+          '[data-test-realm="Local Workspace"] [data-test-card-catalog-item]',
+        ),
+      ].map((n) => n.getAttribute('data-test-card-catalog-item'));
+      assert.deepEqual(localResults, [
+        'http://test-realm/test/CatalogEntry/author',
+        'http://test-realm/test/CatalogEntry/blog-post',
+        'http://test-realm/test/CatalogEntry/person',
+        'http://test-realm/test/CatalogEntry/pet',
+        'http://test-realm/test/CatalogEntry/publishing-packet',
+        'http://test-realm/test/CatalogEntry/tree',
+      ]);
     });
   });
 
