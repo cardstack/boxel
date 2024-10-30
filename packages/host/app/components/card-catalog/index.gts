@@ -8,7 +8,7 @@ import pluralize from 'pluralize';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { add, cn, eq, gt, lt } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
@@ -36,13 +36,6 @@ interface Signature {
     hasPreselectedCard?: boolean;
     realmInfos: Record<string, RealmInfo>;
   };
-}
-
-interface RealmData {
-  cards: PrerenderedCard[];
-  cardsTotal: number;
-  displayedCardsCount: number;
-  realmInfo: RealmInfo;
 }
 
 export default class CardCatalog extends Component<Signature> {
@@ -107,12 +100,19 @@ export default class CardCatalog extends Component<Signature> {
               @size='small'
               data-test-show-more-cards
             >
-              Show
-              {{this.nextPageCount realmData}}
-              more
-              {{pluralize 'card' (this.nextPageCount realmData)}}
-              ({{this.remainingCards realmData}}
-              not shown)
+              {{#let
+                (subtract realmData.cardsTotal realmData.displayedCardsCount)
+                as |remainingResults|
+              }}
+                {{#let (min this.pageSize remainingResults) as |nextPageSize|}}
+                  Show
+                  {{nextPageSize}}
+                  more
+                  {{pluralize 'card' nextPageSize}}
+                  ({{remainingResults}}
+                  not shown)
+                {{/let}}
+              {{/let}}
             </Button>
           {{/if}}
         </section>
@@ -187,7 +187,15 @@ export default class CardCatalog extends Component<Signature> {
     </style>
   </template>
 
-  private get groupedCardsByRealm(): Record<string, RealmData> {
+  private get groupedCardsByRealm(): Record<
+    string,
+    {
+      cards: PrerenderedCard[];
+      cardsTotal: number;
+      displayedCardsCount: number;
+      realmInfo: RealmInfo;
+    }
+  > {
     let cards = this.args.cards;
     let pageSize = this.pageSize;
 
@@ -233,19 +241,13 @@ export default class CardCatalog extends Component<Signature> {
   private pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
 
   @action
-  private remainingCards(realmData: RealmData) {
-    return realmData.cardsTotal - realmData.displayedCardsCount;
-  }
-
-  @action
-  private nextPageCount(realmData: RealmData) {
-    return Math.min(this.pageSize, this.remainingCards(realmData));
-  }
-
-  @action
   private handleEnterKey(cardUrl: string, event: KeyboardEvent) {
     if (event.key === 'Enter') {
       this.args.select(cardUrl, event);
     }
   }
+}
+
+function min(a: number, b: number) {
+  return Math.min(a, b);
 }
