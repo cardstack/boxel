@@ -17,8 +17,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm } from '@cardstack/runtime-common';
 import { AppCard } from './app-card';
+import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
   <template>
@@ -361,6 +361,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
 
 export class ProductRequirementDocument extends CardDef {
   static displayName = 'Product Requirements';
+  static icon = ClipboardListIcon;
   @field appTitle = contains(StringField);
   @field shortDescription = contains(TextAreaField);
   @field thumbnail = contains(Base64ImageField);

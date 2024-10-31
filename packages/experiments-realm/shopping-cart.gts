@@ -13,6 +13,7 @@ import { Product as ProductCard } from './product';
 import { MonetaryAmount, MonetaryAmountEmbedded } from './monetary-amount';
 import { Currency } from './asset';
 import { ExchangeRate } from './exchange-rate';
+import ShoppingCardIcon from '@cardstack/boxel-icons/shopping-cart';
 
 class LineItemEmbedded extends Component<typeof LineItem> {
   <template>
@@ -212,6 +213,7 @@ class ShoppingCartIsolated extends Component<typeof ShoppingCart> {
 
 export class ShoppingCart extends CardDef {
   static displayName = 'Shopping Cart';
+  static icon = ShoppingCardIcon;
   static isolated = ShoppingCartIsolated;
 
   @field lineItems = containsMany(LineItem);

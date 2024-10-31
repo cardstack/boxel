@@ -3,11 +3,14 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { IconButton, Pill, Switch } from '@cardstack/boxel-ui/components';
+import {
+  IconButton,
+  Pill,
+  RealmIcon,
+  Switch,
+} from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -39,11 +42,7 @@ export default class CardPill extends Component<CardPillSignature> {
       ...attributes
     >
       <:icon>
-        <RealmIcon
-          @realmInfo={{this.realm.info @card.id}}
-          width='18'
-          height='18'
-        />
+        <RealmIcon @realmInfo={{this.realm.info @card.id}} class='icon' />
       </:icon>
       <:default>
         <div class='card-content' title={{@card.title}}>
@@ -72,6 +71,10 @@ export default class CardPill extends Component<CardPillSignature> {
       </:default>
     </Pill>
     <style scoped>
+      .icon {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
+      }
       .card-pill {
         --pill-icon-size: 18px;
         border: 1px solid var(--boxel-400);

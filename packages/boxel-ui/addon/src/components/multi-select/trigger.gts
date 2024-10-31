@@ -1,10 +1,11 @@
-import { CaretDown, IconX } from '@cardstack/boxel-ui/icons';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
+import CaretDown from '../../icons/caret-down.gts';
+import IconX from '../../icons/icon-x.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
@@ -20,6 +21,12 @@ export interface TriggerComponentSignature<ItemT> {
   };
   Element: HTMLElement;
 }
+
+type ExtendedSelect = Select & {
+  actions: {
+    remove: (item: any, event?: MouseEvent) => void;
+  } & Select['actions'];
+};
 
 export default class BoxelTrigger<ItemT> extends Component<
   TriggerComponentSignature<ItemT>
@@ -63,7 +70,7 @@ export default class BoxelTrigger<ItemT> extends Component<
     this.args.select.actions.select(newSelected);
   }
 
-  get select() {
+  get select(): ExtendedSelect {
     return {
       ...this.args.select,
       actions: {

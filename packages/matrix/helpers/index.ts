@@ -289,7 +289,7 @@ export async function enterWorkspace(
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
   await expect(
     page.locator(
-      `[data-test-stack-card-index="0"] [data-test-boxel-header-title]`,
+      `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
     ),
   ).toContainText(workspace);
 }

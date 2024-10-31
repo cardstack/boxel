@@ -10,6 +10,7 @@ import {
 import { Author } from './author';
 import { markdownToHtml } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
+import FileStack from '@cardstack/boxel-icons/file-stack';
 
 class FittedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -162,6 +163,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
 
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
+  static icon = FileStack;
   @field title = contains(StringCard);
   @field slug = contains(StringCard);
   @field body = contains(MarkdownCard);

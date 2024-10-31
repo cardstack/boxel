@@ -24,35 +24,18 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
-  BoxelDropdown,
-  Menu as BoxelMenu,
   CardContainer,
-  Header,
-  IconButton,
-  Tooltip,
+  CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  cn,
-  cssVar,
-  eq,
-  optional,
-  getContrastColor,
-} from '@cardstack/boxel-ui/helpers';
+import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
-import {
-  IconPencil,
-  IconX,
-  IconTrash,
-  IconLink,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
@@ -60,9 +43,8 @@ import {
   PermissionsContextName,
   type Permissions,
   Deferred,
+  cardTypeIcon,
 } from '@cardstack/runtime-common';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import config from '@cardstack/host/config/environment';
 
@@ -126,7 +108,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
-  @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
   @tracked private isClosing = false;
   @tracked private hasUnsavedChanges = false;
@@ -202,7 +183,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     if (numberOfCards > 1) {
       if (isLastCard) {
-        marginTopPx = numberOfCards === 2 ? 30 : 55;
+        marginTopPx = numberOfCards === 2 ? 25 : 50;
       } else if (isSecondLastCard && numberOfCards > 2) {
         marginTopPx = 25;
       }
@@ -269,35 +250,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
     await navigator.clipboard.writeText(this.card.id);
   });
 
-  private fetchRealmInfo = trackedFunction(
-    this,
-    async () => await this.cardService.getRealmInfo(this.card),
-  );
-
   private clearSelections = () => {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
-
-  private get realmName() {
-    return this.fetchRealmInfo.value?.name;
-  }
 
   private get cardIdentifier() {
     return this.args.item.url?.href;
   }
 
-  @action
-  private hoverOnRealmIcon() {
-    this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
-  }
-
   private get headerTitle() {
-    return this.isHoverOnRealmIcon && this.realmName
-      ? `In ${this.realmName}`
-      : cardTypeDisplayName(this.card);
+    return cardTypeDisplayName(this.card);
   }
 
   private get moreOptionsMenuItems() {
+    if (this.isBuried) {
+      return undefined;
+    }
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () => this.copyToClipboard.perform(),
@@ -471,6 +439,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private get canEdit() {
+    return (
+      !this.isBuried && !this.isEditing && this.realm.canWrite(this.card.id)
+    );
+  }
+
+  private get isEditing() {
+    return !this.isBuried && this.args.item.format === 'edit';
+  }
+
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
   };
@@ -503,7 +481,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
-        class={{cn 'card' edit=(eq @item.format 'edit')}}
+        class={{cn 'card' edit=this.isEditing}}
         {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if this.loadCard.isRunning}}
@@ -512,137 +490,40 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <span class='loading__message'>Loading card...</span>
           </div>
         {{else}}
-          <Header
-            @size='large'
-            @title={{this.headerTitle}}
-            @hasBackground={{true}}
-            class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
-            style={{cssVar
-              boxel-header-background-color=@item.headerColor
-              boxel-header-text-color=(getContrastColor @item.headerColor)
-            }}
-            {{on
-              'click'
-              (optional
-                (if this.isBuried (fn @dismissStackedCardsAbove @index))
-              )
-            }}
-            data-test-stack-card-header
-          >
-            <:icon>
-              {{#let (this.realm.info this.card.id) as |realmInfo|}}
-                {{#if realmInfo.iconURL}}
-                  <RealmIcon
-                    @realmInfo={{realmInfo}}
-                    @canAnimate={{this.isTopCard}}
-                    class='header-icon'
-                    style={{cssVar
-                      realm-icon-background=(getContrastColor
-                        @item.headerColor 'transparent'
-                      )
-                    }}
-                    data-test-boxel-header-icon={{realmInfo.iconURL}}
-                    {{on 'mouseenter' this.hoverOnRealmIcon}}
-                    {{on 'mouseleave' this.hoverOnRealmIcon}}
-                  />
-                {{/if}}
-              {{/let}}
-            </:icon>
-            <:actions>
-              {{#if (this.realm.canWrite this.card.id)}}
-                {{#if (eq @item.format 'isolated')}}
-                  <Tooltip @placement='top'>
-                    <:trigger>
-                      <IconButton
-                        @icon={{IconPencil}}
-                        @width='20px'
-                        @height='20px'
-                        class='icon-button'
-                        aria-label='Edit'
-                        {{on 'click' (fn @publicAPI.editCard this.card)}}
-                        data-test-edit-button
-                      />
-                    </:trigger>
-                    <:content>
-                      Edit
-                    </:content>
-                  </Tooltip>
-                {{else}}
-                  <Tooltip @placement='top'>
-                    <:trigger>
-                      <IconButton
-                        @icon={{IconPencil}}
-                        @width='20px'
-                        @height='20px'
-                        class='icon-save'
-                        aria-label='Finish Editing'
-                        {{on 'click' (perform this.doneEditing)}}
-                        data-test-edit-button
-                      />
-                    </:trigger>
-                    <:content>
-                      Finish Editing
-                    </:content>
-                  </Tooltip>
-                {{/if}}
-              {{/if}}
-              <div>
-                <BoxelDropdown>
-                  <:trigger as |bindings|>
-                    <Tooltip @placement='top'>
-                      <:trigger>
-                        <IconButton
-                          @icon={{ThreeDotsHorizontal}}
-                          @width='20px'
-                          @height='20px'
-                          class='icon-button'
-                          aria-label='Options'
-                          data-test-more-options-button
-                          {{bindings}}
-                        />
-                      </:trigger>
-                      <:content>
-                        More Options
-                      </:content>
-                    </Tooltip>
-                  </:trigger>
-                  <:content as |dd|>
-                    <BoxelMenu
-                      @closeMenu={{dd.close}}
-                      @items={{this.moreOptionsMenuItems}}
-                    />
-                  </:content>
-                </BoxelDropdown>
-              </div>
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <IconButton
-                    @icon={{IconX}}
-                    @width='16px'
-                    @height='16px'
-                    class='icon-button'
-                    aria-label='Close'
-                    {{on 'click' (perform this.closeItem)}}
-                    data-test-close-button
-                  />
-                </:trigger>
-                <:content>
-                  Close
-                </:content>
-              </Tooltip>
-            </:actions>
-            <:detail>
-              <div class='save-indicator' data-test-auto-save-indicator>
-                {{#if this.isSaving}}
-                  Saving…
-                {{else if this.lastSavedMsg}}
-                  <div data-test-last-saved>
-                    {{this.lastSavedMsg}}
-                  </div>
-                {{/if}}
-              </div>
-            </:detail>
-          </Header>
+          {{#let (this.realm.info this.card.id) as |realmInfo|}}
+            <CardHeader
+              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeIcon={{cardTypeIcon @item.card}}
+              @headerColor={{@item.headerColor}}
+              @isSaving={{this.isSaving}}
+              @isTopCard={{this.isTopCard}}
+              @lastSavedMessage={{this.lastSavedMsg}}
+              @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              @realmInfo={{realmInfo}}
+              @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
+              @onFinishEditing={{if this.isEditing (perform this.doneEditing)}}
+              @onClose={{unless this.isBuried (perform this.closeItem)}}
+              class='header'
+              style={{cssVar
+                boxel-card-header-icon-container-min-width=(if
+                  this.isBuried '50px' '95px'
+                )
+                boxel-card-header-actions-min-width=(if
+                  this.isBuried '50px' '95px'
+                )
+                realm-icon-background=(getContrastColor
+                  @item.headerColor 'transparent'
+                )
+              }}
+              {{on
+                'click'
+                (optional
+                  (if this.isBuried (fn @dismissStackedCardsAbove @index))
+                )
+              }}
+              data-test-stack-card-header
+            />
+          {{/let}}
           <div
             class='content'
             {{ContentElement onSetup=this.setupContentEl}}
@@ -692,12 +573,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header {
-        --boxel-header-icon-width: var(--boxel-icon-med);
-        --boxel-header-icon-height: var(--boxel-icon-med);
-        --boxel-header-padding: var(--boxel-sp-sm);
-        --boxel-header-text-font: var(--boxel-font-med);
-        --boxel-header-border-radius: var(--boxel-border-radius-xl);
-        --boxel-header-background-color: var(--boxel-light);
+        --boxel-card-header-border-radius: var(--boxel-border-radius-xl);
+        --boxel-card-header-background-color: var(--boxel-light);
         z-index: 1;
         max-width: max-content;
         height: fit-content;
@@ -705,30 +582,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
         gap: var(--boxel-sp-xxs);
       }
 
-      .header:not(.edit .header) {
-        --boxel-header-detail-max-width: none;
-      }
-
-      .header-icon {
-        background-color: var(--realm-icon-background);
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 7px;
-      }
-
-      .edit .header-icon {
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-light);
-      }
-
-      .header--icon-hovered {
-        --boxel-header-text-color: var(--boxel-highlight);
-        --boxel-header-text-font: var(--boxel-font);
-      }
-
       .save-indicator {
-        font: var(--boxel-font-sm);
-        padding-top: 0.4rem;
-        padding-left: 0.5rem;
+        font: var(--boxel-font-xs);
         opacity: 0.6;
       }
 
@@ -785,69 +640,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: none;
       }
 
-      .buried .header .icon-button {
-        display: none;
-      }
-
       .buried .header {
         cursor: pointer;
-        font: 600 var(--boxel-font);
+        font: 600 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxxs);
-        --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-font: var(--boxel-font-size);
-        --boxel-header-icon-width: var(--boxel-icon-sm);
-        --boxel-header-icon-height: var(--boxel-icon-sm);
-        --boxel-header-border-radius: var(--boxel-border-radius-lg);
-      }
-
-      .edit .header {
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-light);
-      }
-
-      .edit .icon-button {
-        --icon-color: var(--boxel-light);
-      }
-
-      .edit .icon-button:hover {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
-      }
-
-      .icon-button,
-      .icon-save {
-        --boxel-icon-button-width: 26px;
-        --boxel-icon-button-height: 26px;
-        border-radius: 4px;
-
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font: var(--boxel-font-sm);
-        z-index: 1;
-      }
-
-      .icon-button {
-        --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
-      }
-
-      .icon-button:hover {
-        --icon-color: var(--boxel-light);
-        background-color: var(--boxel-highlight);
-      }
-
-      .icon-save {
-        --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-light);
-      }
-
-      .icon-save:hover {
-        --icon-color: var(--boxel-highlight);
-      }
-
-      .header-icon {
-        width: var(--boxel-header-icon-width);
-        height: var(--boxel-header-icon-height);
+        --boxel-card-header-padding: var(--boxel-sp-xs);
+        --boxel-card-header-text-font: var(--boxel-font-size-xs);
+        --boxel-card-header-realm-icon-size: var(--boxel-icon-sm);
+        --boxel-card-header-border-radius: var(--boxel-border-radius-lg);
+        --boxel-card-header-card-type-icon-size: var(--boxel-icon-xs);
       }
 
       .loading {
