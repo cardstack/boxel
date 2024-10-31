@@ -101,3 +101,7 @@
     white-space: nowrap;
   }
 }
+
+#ember-basic-dropdown-wormhole .boxel-dropdown__content.ember-basic-dropdown-content {
+  z-index: calc(var(--boxel-layer-modal-urgent) + 1);
+}

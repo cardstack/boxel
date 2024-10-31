@@ -130,11 +130,6 @@ class BoxelDropdown extends Component<Signature> {
         }
       }
     </style>
-    <style>
-      .boxel-dropdown__content.ember-basic-dropdown-content {
-        z-index: calc(var(--boxel-layer-modal-urgent) + 1);
-      }
-    </style>
   </template>
 
   dropdownModifier = createModifier<DropdownTriggerSignature>(function (
