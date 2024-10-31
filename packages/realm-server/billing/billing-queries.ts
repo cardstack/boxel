@@ -4,6 +4,7 @@ import {
   addExplicitParens,
   asExpressions,
   every,
+  insert,
   param,
   query,
   separatedByCommas,
@@ -62,12 +63,10 @@ export async function insertStripeEvent(
     event_type: event.type,
     event_data: event.data,
   });
-  await query(dbAdapter, [
-    `INSERT INTO stripe_events`,
-    ...addExplicitParens(separatedByCommas(nameExpressions)),
-    ` VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-  ] as Expression);
+  await query(
+    dbAdapter,
+    insert('stripe_events', nameExpressions, valueExpressions),
+  );
 }
 
 export async function getPlanByStripeId(
@@ -125,13 +124,10 @@ export async function insertSubscriptionCycle(
     period_end: subscriptionCycle.periodEnd,
   });
 
-  let result = await query(dbAdapter, [
-    `INSERT INTO subscription_cycles`,
-    ...addExplicitParens(separatedByCommas(nameExpressions)),
-    ` VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` RETURNING *`,
-  ] as Expression);
+  let result = await query(
+    dbAdapter,
+    insert('subscription_cycles', nameExpressions, valueExpressions),
+  );
 
   return {
     id: result[0].id,
@@ -159,13 +155,10 @@ export async function insertSubscription(
     stripe_subscription_id: subscription.stripe_subscription_id,
   });
 
-  let result = await query(dbAdapter, [
-    `INSERT INTO subscriptions`,
-    ...addExplicitParens(separatedByCommas(nameExpressions)),
-    ` VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` RETURNING *`,
-  ] as Expression);
+  let result = await query(
+    dbAdapter,
+    insert('subscriptions', nameExpressions, valueExpressions),
+  );
 
   return {
     id: result[0].id,
@@ -188,12 +181,10 @@ export async function addToCreditsLedger(
     subscription_cycle_id: ledgerEntry.subscriptionCycleId,
   });
 
-  await query(dbAdapter, [
-    `INSERT INTO credits_ledger`,
-    ...addExplicitParens(separatedByCommas(nameExpressions)),
-    ` VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-  ] as Expression);
+  await query(
+    dbAdapter,
+    insert('credits_ledger', nameExpressions, valueExpressions),
+  );
 }
 
 export async function getStripeEventById(

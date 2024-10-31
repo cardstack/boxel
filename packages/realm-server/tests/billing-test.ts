@@ -2,6 +2,7 @@ import {
   Expression,
   addExplicitParens,
   asExpressions,
+  insert,
   param,
   query,
   separatedByCommas,
@@ -33,13 +34,10 @@ async function insertUser(
     matrix_user_id: matrixUserId,
     stripe_customer_id: stripeCustomerId,
   });
-  let result = await query(dbAdapter, [
-    `INSERT INTO users`,
-    ...addExplicitParens(separatedByCommas(nameExpressions)),
-    ` VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` RETURNING *`,
-  ] as Expression);
+  let result = await query(
+    dbAdapter,
+    insert('users', nameExpressions, valueExpressions),
+  );
 
   return {
     id: result[0].id,
@@ -61,14 +59,10 @@ async function insertPlan(
     credits_included: creditsIncluded,
     stripe_plan_id: stripePlanId,
   });
-  let result = await query(dbAdapter, [
-    `INSERT INTO plans`,
-    ...addExplicitParens(separatedByCommas(nameExpressions)),
-    ` VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` RETURNING *`,
-  ] as Expression);
-
+  let result = await query(
+    dbAdapter,
+    insert('plans', nameExpressions, valueExpressions),
+  );
   return {
     id: result[0].id,
     name: result[0].name,
