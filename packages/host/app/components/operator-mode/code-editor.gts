@@ -262,7 +262,11 @@ export default class CodeEditor extends Component<Signature> {
     }
 
     // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
-    return file.write(content, true);
+    let fileExtension = file.name.split('.').pop();
+    let flushLoader =
+      fileExtension != null &&
+      ['js', 'ts', 'gjs', 'gts'].includes(fileExtension);
+    return file.write(content, flushLoader);
   }
 
   private safeJSONParse(content: string) {
