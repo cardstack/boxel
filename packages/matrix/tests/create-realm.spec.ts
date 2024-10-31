@@ -47,11 +47,20 @@ test.describe('Create Realm via Dashboard', () => {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
-    await createRealm(page, 'new-workspace', 'New Workspace');
-    await page.locator('[data-test-workspace="New Workspace"]').click();
+    await createRealm(page, 'new-workspace', '1New Workspace');
+    await page.locator('[data-test-workspace="1New Workspace"]').click();
     let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
+
+    await page.locator(`[data-test-workspace-chooser-toggle]`).click();
+    await expect(
+      page.locator(`[data-test-workspace="1New Workspace"] img`),
+      'the "N" icon URL is shown',
+    ).toHaveAttribute(
+      'src',
+      'https://boxel-images.boxel.ai/icons/Letter-n.png',
+    );
   });
 });

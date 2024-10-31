@@ -265,6 +265,21 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .exists();
     });
 
+    test('filename is auto-populated from display name', async function (assert) {
+      await visitOperatorMode();
+      await openNewFileModal('Card Definition');
+      await fillIn('[data-test-display-name-field]', 'Très test card 😀');
+      assert.dom('[data-test-file-name-field]').hasValue('tres_test_card');
+    });
+
+    test('filename stops auto-populating after user edits it', async function (assert) {
+      await visitOperatorMode();
+      await openNewFileModal('Card Definition');
+      await fillIn('[data-test-file-name-field]', 'test_card');
+      await fillIn('[data-test-display-name-field]', 'Très test card 😀');
+      assert.dom('[data-test-file-name-field]').hasValue('test_card');
+    });
+
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
       const baseRealmIconURL =
         'https://boxel-images.boxel.ai/icons/cardstack.png';
@@ -593,7 +608,7 @@ export class TrèsTestCard extends CardDef {
         .hasText('Inherits From');
       assert
         .dom('[data-test-create-definition]')
-        .isDisabled('create button is disabled');
+        .isEnabled('create button is enabled');
       await fillIn('[data-test-file-name-field]', 'très-test-card');
       assert
         .dom('[data-test-create-definition]')
