@@ -134,7 +134,7 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
       height: 40px;
       border-radius: var(--boxel-border-radius-lg);
       justify-content: center;
-      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      padding: var(--boxel-sp-xs) var(--boxel-sp);
       column-gap: var(--boxel-sp-xs);
       flex-wrap: nowrap;
     }
