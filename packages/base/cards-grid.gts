@@ -261,6 +261,9 @@ class Isolated extends Component<typeof CardsGrid> {
         top: var(--cards-grid-padding-top);
         padding-right: var(--boxel-sp-sm);
         height: 100%;
+        overflow-y: hidden;
+      }
+      :deep(.filter-list:hover) {
         overflow-y: auto;
       }
       :deep(.filter-list__button:first-child) {

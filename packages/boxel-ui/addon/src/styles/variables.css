@@ -162,9 +162,9 @@
   --boxel-success-300: var(--boxel-dark-green);
 
   /* z-index layers */
-  --boxel-layer-floating-button: 10;
-  --boxel-layer-modal-default: 15;
-  --boxel-layer-modal-urgent: 20;
+  --boxel-layer-floating-button: 1000;
+  --boxel-layer-modal-default: 1500;
+  --boxel-layer-modal-urgent: 2000;
 
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */
