@@ -55,7 +55,8 @@ interface ButtonSignature {
     cardRefName: string | undefined;
   };
 }
-let ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
+
+const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
   {{#if @card}}
     <button
       class='catalog-item {{if @isSelected "selected"}}'
