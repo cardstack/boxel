@@ -30,9 +30,9 @@ exports.up = (pgm) => {
   for (let { table, columns } of timestampColumns) {
     for (let column of columns) {
       pgm.alterColumn(table, column, {
-        type: 'bigint',
+        type: 'integer',
         notNull: column !== 'ended_at',
-        using: 'extract(epoch from ' + column + ')::bigint',
+        using: 'extract(epoch from ' + column + ')::integer',
       });
     }
   }
@@ -46,7 +46,7 @@ exports.up = (pgm) => {
   ];
   for (let table of tablesWithCreatedAt) {
     pgm.alterColumn(table, 'created_at', {
-      default: pgm.func('EXTRACT(epoch FROM CURRENT_TIMESTAMP)::bigint'),
+      default: pgm.func('EXTRACT(epoch FROM CURRENT_TIMESTAMP)::integer'),
     });
   }
 };
