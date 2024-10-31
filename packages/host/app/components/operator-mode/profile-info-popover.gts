@@ -108,7 +108,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      {{#if this.isCreditInfoDisplayed}}
+      {{! TODO: Remove config.APP.creditInfoEnabled once the API integration for credit info is completed. }}
+      {{#if config.APP.creditInfoEnabled}}
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
             <span class='label'>Membership Tier</span>
@@ -164,9 +165,6 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       {{/if}}
     </div>
   </template>
-
-  // TODO: Remove this property once the API integration for credit info is completed.
-  private isCreditInfoDisplayed = config.environment === 'test';
 
   @service private declare realmServer: RealmServerService;
   @service declare matrixService: MatrixService;
