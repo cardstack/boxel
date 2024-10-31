@@ -1,3 +1,4 @@
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -54,104 +55,102 @@ interface ButtonSignature {
     cardRefName: string | undefined;
   };
 }
-class ItemButton extends Component<ButtonSignature> {
-  <template>
-    {{#if @card}}
-      <button
-        class='catalog-item {{if @isSelected "selected"}}'
-        {{on 'click' (fn @select @card.url)}}
-        {{on 'dblclick' (fn @select @card.url)}}
-        {{on 'keydown' (fn @handleEnterKey @card.url)}}
-        data-test-select={{removeFileExtension @card.url}}
-        aria-label='Select'
-        data-test-card-catalog-item={{removeFileExtension @card.url}}
-        data-test-card-catalog-item-selected={{@isSelected}}
-        {{scrollIntoViewModifier
-          @isSelected
-          container='card-catalog'
-          key=@card.url
-        }}
-      >
-        {{@card.component}}
-      </button>
-    {{else if @newCard}}
-      <button
-        class='create-card catalog-item {{if @isSelected "selected"}}'
-        {{on 'click' (fn @select @newCard)}}
-        {{on 'dblclick' (fn @select @newCard)}}
-        {{on 'keydown' (fn @handleEnterKey @newCard)}}
-        data-test-select={{@newCardKey @newCard.realmURL}}
-        aria-label='Select'
-        data-test-card-catalog-item={{@newCardKey @newCard.realmURL}}
-        data-test-card-catalog-item-selected={{@isSelected}}
-        {{scrollIntoViewModifier
-          @isSelected
-          container='card-catalog'
-          key=(@newCardKey @newCard.realmURL)
-        }}
-      >
-        <div class='add-icon'>
-          <IconPlus width='20' height='20' role='presentation' />
-        </div>
-        <div class='create-new-text'>
-          Create New
-          {{@cardRefName}}
-        </div>
-      </button>
-    {{/if}}
-    <style scoped>
-      .catalog-item {
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-border-radius-xl);
-        background-color: var(--boxel-light);
-        width: 100%;
-        height: 63px;
-        overflow: hidden;
-        cursor: pointer;
-        container-name: fitted-card;
-        container-type: size;
-        display: flex;
-        text-align: left;
-        margin: auto;
-      }
+let ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
+  {{#if @card}}
+    <button
+      class='catalog-item {{if @isSelected "selected"}}'
+      {{on 'click' (fn @select @card.url)}}
+      {{on 'dblclick' (fn @select @card.url)}}
+      {{on 'keydown' (fn @handleEnterKey @card.url)}}
+      data-test-select={{removeFileExtension @card.url}}
+      aria-label='Select'
+      data-test-card-catalog-item={{removeFileExtension @card.url}}
+      data-test-card-catalog-item-selected={{@isSelected}}
+      {{scrollIntoViewModifier
+        @isSelected
+        container='card-catalog'
+        key=@card.url
+      }}
+    >
+      {{@card.component}}
+    </button>
+  {{else if @newCard}}
+    <button
+      class='create-card catalog-item {{if @isSelected "selected"}}'
+      {{on 'click' (fn @select @newCard)}}
+      {{on 'dblclick' (fn @select @newCard)}}
+      {{on 'keydown' (fn @handleEnterKey @newCard)}}
+      data-test-select={{@newCardKey @newCard.realmURL}}
+      aria-label='Select'
+      data-test-card-catalog-item={{@newCardKey @newCard.realmURL}}
+      data-test-card-catalog-item-selected={{@isSelected}}
+      {{scrollIntoViewModifier
+        @isSelected
+        container='card-catalog'
+        key=(@newCardKey @newCard.realmURL)
+      }}
+    >
+      <div class='add-icon'>
+        <IconPlus width='20' height='20' role='presentation' />
+      </div>
+      <div class='create-new-text'>
+        Create New
+        {{@cardRefName}}
+      </div>
+    </button>
+  {{/if}}
+  <style scoped>
+    .catalog-item {
+      border: 1px solid var(--boxel-200);
+      border-radius: var(--boxel-border-radius-xl);
+      background-color: var(--boxel-light);
+      width: 100%;
+      height: 63px;
+      overflow: hidden;
+      cursor: pointer;
+      container-name: fitted-card;
+      container-type: size;
+      display: flex;
+      text-align: left;
+      margin: auto;
+    }
 
-      .catalog-item.selected {
-        border-color: var(--boxel-highlight);
-        box-shadow: 0 0 0 1px var(--boxel-highlight);
-      }
+    .catalog-item.selected {
+      border-color: var(--boxel-highlight);
+      box-shadow: 0 0 0 1px var(--boxel-highlight);
+    }
 
-      .catalog-item:hover {
-        border-color: var(--boxel-darker-hover);
-      }
+    .catalog-item:hover {
+      border-color: var(--boxel-darker-hover);
+    }
 
-      .catalog-item.selected:hover {
-        border-color: var(--boxel-highlight);
-      }
+    .catalog-item.selected:hover {
+      border-color: var(--boxel-highlight);
+    }
 
-      .create-card.catalog-item {
-        display: flex;
-        height: 40px;
-        border-radius: var(--boxel-border-radius-lg);
-        justify-content: center;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        column-gap: var(--boxel-sp-xs);
-        flex-wrap: nowrap;
-      }
-      .create-card .add-icon {
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        max-width: 41px;
-      }
-      .create-card .create-new-text {
-        flex: 4;
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-        line-height: 1.5;
-      }
-    </style>
-  </template>
-}
+    .create-card.catalog-item {
+      display: flex;
+      height: 40px;
+      border-radius: var(--boxel-border-radius-lg);
+      justify-content: center;
+      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      column-gap: var(--boxel-sp-xs);
+      flex-wrap: nowrap;
+    }
+    .create-card .add-icon {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      max-width: 41px;
+    }
+    .create-card .create-new-text {
+      flex: 4;
+      font: 600 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp);
+      line-height: 1.5;
+    }
+  </style>
+</template>;
 
 interface Signature {
   Args: {
