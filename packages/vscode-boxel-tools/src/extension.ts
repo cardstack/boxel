@@ -42,7 +42,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage('Logged out of synapse');
   });
 
-  const realmFs = new RealmFS(realmAuth);
+  const realmFs = new RealmFS(realmAuth, skillsProvider);
 
   console.log('Registering file system providers now');
   context.subscriptions.push(

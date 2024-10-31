@@ -7,6 +7,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 import { RealmAuth } from './realm-auth';
+import { SkillsProvider } from './skills';
+
 function getUrl(uri: vscode.Uri) {
   let scheme = uri.scheme.split('+')[1];
   let auth = uri.authority;
@@ -56,7 +58,10 @@ export type Entry = File | Directory;
 export class RealmFS implements vscode.FileSystemProvider {
   root = new Directory('');
 
-  constructor(private realmAuth: RealmAuth) {}
+  constructor(
+    private realmAuth: RealmAuth,
+    private skillsProvider: SkillsProvider,
+  ) {}
 
   async getJWT(url: string) {
     return await this.realmAuth.getJWT(url);
@@ -279,7 +284,11 @@ export class RealmFS implements vscode.FileSystemProvider {
     const file = new File('.cursorrules');
     // here we're just going to go through the already cached skills
     // we're not re-reading them each time
-    file.data = new TextEncoder().encode(`Talk like a pirate`);
+    let combinedText = '';
+    for (const skill of this.skillsProvider.getSelectedSkills()) {
+      combinedText += `${skill.instructions}\n`;
+    }
+    file.data = new TextEncoder().encode(combinedText);
     file.mtime = Date.now();
     file.size = file.data.byteLength;
     return file;

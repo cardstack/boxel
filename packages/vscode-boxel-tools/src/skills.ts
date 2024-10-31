@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { RealmAuth } from './realm-auth';
 
+function formatSkillKey(skillId: string): string {
+  return `boxel.skill.content.${skillId}`;
+}
+
 export class SkillsProvider
   implements vscode.TreeDataProvider<vscode.TreeItem>
 {
@@ -15,9 +19,32 @@ export class SkillsProvider
 
   constructor(private realmAuth: RealmAuth) {}
 
+  getSkillInstructions(skillId: string): string | undefined {
+    for (const skillList of this.skillLists) {
+      const skill = skillList.skills.find((s) => s.id === skillId);
+      if (skill) {
+        return skill.instructions;
+      }
+    }
+    return undefined;
+  }
+
+  getSelectedSkills(): Skill[] {
+    const allSkills = this.skillLists.flatMap((skillList) => skillList.skills);
+    const selectedSkills = allSkills.filter(
+      (skill) => skill.checkboxState === vscode.TreeItemCheckboxState.Checked,
+    );
+    return selectedSkills;
+  }
+
   async refresh(): Promise<void> {
     const realmUrls = await this.realmAuth.getRealmUrls();
-    this.skillLists = realmUrls.map((url) => new SkillList(url, url));
+    this.skillLists = [
+      new SkillList('Base', 'https://app.boxel.ai/base/', true),
+      new SkillList('Catalog', 'https://app.boxel.ai/catalog/', true),
+    ];
+    this.skillLists.push(...realmUrls.map((url) => new SkillList(url, url)));
+
     const loadingPromises = this.skillLists.map((skillList) => {
       return skillList.loadSkills(this.realmAuth);
     });
@@ -43,7 +70,7 @@ export class SkillsProvider
 class Skill extends vscode.TreeItem {
   constructor(
     public readonly label: string,
-    public readonly skillContent: string,
+    public readonly instructions: string,
     public readonly id: string,
   ) {
     super(label);
@@ -60,6 +87,7 @@ class SkillList extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly realmUrl: string,
+    public readonly readOnly: boolean = false,
   ) {
     super(label);
     this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
@@ -70,7 +98,13 @@ class SkillList extends vscode.TreeItem {
   }
 
   async loadSkills(realmAuth: RealmAuth): Promise<void> {
-    const jwt = await realmAuth.getJWT(this.realmUrl);
+    let headers: Record<string, string> = {
+      Accept: 'application/vnd.card+json',
+    };
+    if (!this.readOnly) {
+      headers['Authorization'] = `${await realmAuth.getJWT(this.realmUrl)}`;
+    }
+
     const searchUrl = new URL('./_search', this.realmUrl);
 
     // Update search parameters to match the example URL
@@ -86,14 +120,9 @@ class SkillList extends vscode.TreeItem {
     );
     searchUrl.searchParams.set('filter[type][name]', 'SkillCard');
 
-    console.log('Search URL:', searchUrl);
     const response = await fetch(searchUrl, {
-      headers: {
-        Accept: 'application/vnd.card+json',
-        Authorization: `${jwt}`,
-      },
+      headers,
     });
-    console.log('Response!');
 
     if (!response.ok) {
       console.log(
@@ -105,9 +134,8 @@ class SkillList extends vscode.TreeItem {
     }
 
     const data: any = await response.json();
-    console.log('Response data:', data);
+    console.log('Skill search data:', data);
 
-    //const skills = await this.realmAuth.getSkills(jwt);
     this.skills = data.data.map((skill: any) => {
       return new Skill(
         skill.attributes.title,
