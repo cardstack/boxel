@@ -18,9 +18,10 @@ import {
   User,
   insertSubscriptionCycle,
   sumUpCreditsLedger,
-} from '../billing/billing_queries';
-import { insertSubscription } from '../billing/billing_queries';
-import { addToCreditsLedger } from '../billing/billing_queries';
+  addToCreditsLedger,
+  insertSubscription,
+} from '../billing/billing-queries';
+
 import { StripeInvoicePaymentSucceededWebhookEvent } from '../billing/stripe-webhook-handlers';
 
 async function insertUser(

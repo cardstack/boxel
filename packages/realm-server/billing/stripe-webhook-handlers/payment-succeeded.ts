@@ -11,7 +11,7 @@ import {
   insertSubscriptionCycle,
   markStripeEventAsProcessed,
   sumUpCreditsLedger,
-} from '../billing_queries';
+} from '../billing-queries';
 import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
 
 import PgAdapter from '../../pg-adapter';
