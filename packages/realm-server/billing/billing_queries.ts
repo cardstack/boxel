@@ -205,6 +205,7 @@ export async function getStripeEventById(
 
   return results[0];
 }
+
 type CreditType =
   | 'plan_allowance'
   | 'extra_credit'
@@ -228,33 +229,36 @@ export async function sumUpCreditsLedger(
     );
   }
 
-  let creditTypes: CreditType[];
-  if (!creditType) {
-    creditTypes = [
-      'plan_allowance',
-      'extra_credit',
-      'plan_allowance_used',
-      'extra_credit_used',
-      'plan_allowance_expired',
-    ];
-  } else {
-    creditTypes = Array.isArray(creditType) ? creditType : [creditType];
-  }
-
-  let ledgerQuery = [
-    `SELECT SUM(credit_amount) FROM credits_ledger WHERE credit_type IN`,
-    ...(addExplicitParens(
-      separatedByCommas(creditTypes.map((c) => [param(c)])),
-    ) as Expression),
+  let ledgerQuery: Expression = [
+    `SELECT SUM(credit_amount) FROM credits_ledger`,
   ];
 
-  if (subscriptionCycleId) {
-    ledgerQuery.push(
-      ` AND subscription_cycle_id = `,
-      param(subscriptionCycleId),
+  let conditions: Expression[] = [];
+
+  if (creditType) {
+    let creditTypes = Array.isArray(creditType) ? creditType : [creditType];
+    conditions.push(
+      `credit_type IN`,
+      ...(addExplicitParens(
+        separatedByCommas(creditTypes.map((c) => [param(c)])),
+      ) as Expression),
     );
+  }
+
+  if (subscriptionCycleId) {
+    if (conditions.length > 0) {
+      conditions.push(` AND `);
+    }
+    conditions.push(`subscription_cycle_id = `, param(subscriptionCycleId));
   } else if (userId) {
-    ledgerQuery.push(` AND user_id = `, param(userId));
+    if (conditions.length > 0) {
+      conditions.push(` AND `);
+    }
+    conditions.push(`user_id = `, param(userId));
+  }
+
+  if (conditions.length > 0) {
+    ledgerQuery.push(` WHERE `, ...conditions);
   }
 
   let results = await query(dbAdapter, ledgerQuery);
@@ -282,13 +286,13 @@ export async function getCurrentActiveSubscription(
   }
 
   return {
-    id: results[0].id as string,
-    userId: results[0].user_id as string,
-    planId: results[0].plan_id as string,
-    startedAt: results[0].started_at as number,
-    status: results[0].status as string,
-    stripeSubscriptionId: results[0].stripe_subscription_id as string,
-  };
+    id: results[0].id,
+    userId: results[0].user_id,
+    planId: results[0].plan_id,
+    startedAt: results[0].started_at,
+    status: results[0].status,
+    stripeSubscriptionId: results[0].stripe_subscription_id,
+  } as Subscription;
 }
 
 export async function getMostRecentSubscriptionCycle(
@@ -306,9 +310,19 @@ export async function getMostRecentSubscriptionCycle(
   }
 
   return {
-    id: results[0].id as string,
-    subscriptionId: results[0].subscription_id as string,
-    periodStart: results[0].period_start as number,
-    periodEnd: results[0].period_end as number,
-  };
+    id: results[0].id,
+    subscriptionId: results[0].subscription_id,
+    periodStart: results[0].period_start,
+    periodEnd: results[0].period_end,
+  } as SubscriptionCycle;
+}
+
+export async function markStripeEventAsProcessed(
+  dbAdapter: DBAdapter,
+  stripeEventId: string,
+) {
+  await query(dbAdapter, [
+    `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
+    param(stripeEventId),
+  ]);
 }
