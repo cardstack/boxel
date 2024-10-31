@@ -1,4 +1,4 @@
-import { DBAdapter, param, query } from '@cardstack/runtime-common';
+import { DBAdapter } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getCurrentActiveSubscription,
@@ -9,6 +9,7 @@ import {
   insertStripeEvent,
   insertSubscription,
   insertSubscriptionCycle,
+  markStripeEventAsProcessed,
   sumUpCreditsLedger,
 } from '../billing_queries';
 import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
@@ -69,80 +70,93 @@ export async function handlePaymentSucceeded(
       event.data.object.billing_reason;
 
     if (billingReason === 'subscription_create') {
-      let subscription = await insertSubscription(dbAdapter, {
-        user_id: user.id,
-        plan_id: plan.id,
-        started_at: event.data.object.period_start,
-        status: 'active',
-        stripe_subscription_id: event.data.object.subscription,
-      });
-
-      let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
-        subscriptionId: subscription.id,
-        periodStart: event.data.object.period_start,
-        periodEnd: event.data.object.period_end,
-      });
-
-      await addToCreditsLedger(
-        dbAdapter,
-        user.id,
-        plan.creditsIncluded,
-        'plan_allowance',
-        subscriptionCycle.id,
-      );
+      await createSubscription(dbAdapter, user, plan, event);
     } else if (billingReason === 'subscription_cycle') {
-      let currentActiveSubscription = await getCurrentActiveSubscription(
-        dbAdapter,
-        user.id,
-      );
-
-      if (!currentActiveSubscription) {
-        throw new Error(
-          'Should never get here: no active subscription found when renewing',
-        );
-      }
-
-      let currentSubscriptionCycle = await getMostRecentSubscriptionCycle(
-        dbAdapter,
-        currentActiveSubscription.id,
-      );
-
-      if (!currentSubscriptionCycle) {
-        throw new Error(
-          'Should never get here: no current subscription cycle found when renewing',
-        );
-      }
-
-      let creditsToExpire = await sumUpCreditsLedger(dbAdapter, {
-        creditType: ['plan_allowance', 'plan_allowance_used'],
-        subscriptionCycleId: currentSubscriptionCycle.id,
-      });
-
-      await addToCreditsLedger(
-        dbAdapter,
-        user.id,
-        -creditsToExpire,
-        'plan_allowance_expired',
-        currentSubscriptionCycle.id,
-      );
-
-      let newSubscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
-        subscriptionId: currentActiveSubscription.id,
-        periodStart: event.data.object.period_start,
-        periodEnd: event.data.object.period_end,
-      });
-
-      await addToCreditsLedger(
-        dbAdapter,
-        user.id,
-        plan.creditsIncluded,
-        'plan_allowance',
-        newSubscriptionCycle.id,
-      );
+      await createSubscriptionCycle(dbAdapter, user, plan, event);
     }
-    await query(dbAdapter, [
-      `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
-      param(event.id),
-    ]);
+
+    await markStripeEventAsProcessed(dbAdapter, event.id);
+  });
+}
+
+async function createSubscription(
+  dbAdapter: DBAdapter,
+  user: { id: string },
+  plan: { id: string; creditsIncluded: number },
+  event: StripeInvoicePaymentSucceededWebhookEvent,
+) {
+  let subscription = await insertSubscription(dbAdapter, {
+    user_id: user.id,
+    plan_id: plan.id,
+    started_at: event.data.object.period_start,
+    status: 'active',
+    stripe_subscription_id: event.data.object.subscription,
+  });
+
+  let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+    subscriptionId: subscription.id,
+    periodStart: event.data.object.period_start,
+    periodEnd: event.data.object.period_end,
+  });
+
+  await addToCreditsLedger(dbAdapter, {
+    userId: user.id,
+    creditAmount: plan.creditsIncluded,
+    creditType: 'plan_allowance',
+    subscriptionCycleId: subscriptionCycle.id,
+  });
+}
+
+async function createSubscriptionCycle(
+  dbAdapter: DBAdapter,
+  user: { id: string },
+  plan: { creditsIncluded: number },
+  event: StripeInvoicePaymentSucceededWebhookEvent,
+) {
+  let currentActiveSubscription = await getCurrentActiveSubscription(
+    dbAdapter,
+    user.id,
+  );
+
+  if (!currentActiveSubscription) {
+    throw new Error(
+      'Should never get here: no active subscription found when renewing',
+    );
+  }
+
+  let currentSubscriptionCycle = await getMostRecentSubscriptionCycle(
+    dbAdapter,
+    currentActiveSubscription.id,
+  );
+
+  if (!currentSubscriptionCycle) {
+    throw new Error(
+      'Should never get here: no current subscription cycle found when renewing',
+    );
+  }
+
+  let creditsToExpire = await sumUpCreditsLedger(dbAdapter, {
+    creditType: ['plan_allowance', 'plan_allowance_used'],
+    subscriptionCycleId: currentSubscriptionCycle.id,
+  });
+
+  await addToCreditsLedger(dbAdapter, {
+    userId: user.id,
+    creditAmount: -creditsToExpire,
+    creditType: 'plan_allowance_expired',
+    subscriptionCycleId: currentSubscriptionCycle.id,
+  });
+
+  let newSubscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+    subscriptionId: currentActiveSubscription.id,
+    periodStart: event.data.object.period_start,
+    periodEnd: event.data.object.period_end,
+  });
+
+  await addToCreditsLedger(dbAdapter, {
+    userId: user.id,
+    creditAmount: plan.creditsIncluded,
+    creditType: 'plan_allowance',
+    subscriptionCycleId: newSubscriptionCycle.id,
   });
 }

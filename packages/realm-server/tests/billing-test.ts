@@ -28,21 +28,23 @@ async function insertUser(
   matrixUserId: string,
   stripeCustomerId: string,
 ): Promise<User> {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     matrix_user_id: matrixUserId,
     stripe_customer_id: stripeCustomerId,
   });
   let result = await query(dbAdapter, [
-    `INSERT INTO users (matrix_user_id, stripe_customer_id) VALUES`,
+    `INSERT INTO users`,
+    ...addExplicitParens(separatedByCommas(nameExpressions)),
+    ` VALUES`,
     ...addExplicitParens(separatedByCommas(valueExpressions)),
     ` RETURNING *`,
   ] as Expression);
 
   return {
-    id: result[0].id as string,
-    matrixUserId: result[0].matrix_user_id as string,
-    stripeCustomerId: result[0].stripe_customer_id as string,
-  };
+    id: result[0].id,
+    matrixUserId: result[0].matrix_user_id,
+    stripeCustomerId: result[0].stripe_customer_id,
+  } as User;
 }
 
 async function insertPlan(
@@ -52,24 +54,27 @@ async function insertPlan(
   creditsIncluded: number,
   stripePlanId: string,
 ): Promise<Plan> {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
     name,
     monthly_price: monthlyPrice,
     credits_included: creditsIncluded,
     stripe_plan_id: stripePlanId,
   });
   let result = await query(dbAdapter, [
-    `INSERT INTO plans (name, monthly_price, credits_included, stripe_plan_id) VALUES`,
+    `INSERT INTO plans`,
+    ...addExplicitParens(separatedByCommas(nameExpressions)),
+    ` VALUES`,
     ...addExplicitParens(separatedByCommas(valueExpressions)),
     ` RETURNING *`,
   ] as Expression);
 
   return {
-    id: result[0].id as string,
-    name: result[0].name as string,
-    monthlyPrice: result[0].monthly_price as number,
-    creditsIncluded: result[0].credits_included as number,
-  };
+    id: result[0].id,
+    name: result[0].name,
+    monthlyPrice: result[0].monthly_price,
+    creditsIncluded: result[0].credits_included,
+    stripePlanId: result[0].stripe_plan_id,
+  } as Plan;
 }
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
@@ -129,13 +134,16 @@ async function fetchCreditsLedgerByUser(
     param(userId),
   ]);
 
-  return results.map((result) => ({
-    id: result.id as string,
-    userId: result.user_id as string,
-    creditAmount: result.credit_amount as number,
-    creditType: result.credit_type as string,
-    subscriptionCycleId: result.subscription_cycle_id as string,
-  }));
+  return results.map(
+    (result) =>
+      ({
+        id: result.id,
+        userId: result.user_id,
+        creditAmount: result.credit_amount,
+        creditType: result.credit_type,
+        subscriptionCycleId: result.subscription_cycle_id,
+      }) as LedgerEntry,
+  );
 }
 
 module('billing', function (hooks) {
@@ -273,39 +281,35 @@ module('billing', function (hooks) {
           periodEnd: 2,
         });
 
-        await addToCreditsLedger(
-          dbAdapter,
-          user.id,
-          plan.creditsIncluded,
-          'plan_allowance',
-          subscriptionCycle.id,
-        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: plan.creditsIncluded,
+          creditType: 'plan_allowance',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
 
         // User spent 2000 credits in this cycle (from his plan allowance, which is 2500 credits)
-        await addToCreditsLedger(
-          dbAdapter,
-          user.id,
-          -1000,
-          'plan_allowance_used',
-          subscriptionCycle.id,
-        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: -1000,
+          creditType: 'plan_allowance_used',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
 
-        await addToCreditsLedger(
-          dbAdapter,
-          user.id,
-          -1000,
-          'plan_allowance_used',
-          subscriptionCycle.id,
-        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: -1000,
+          creditType: 'plan_allowance_used',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
 
         // User added 100 additional credits in this cycle (even though user has some plan allowance left but for the sake of a more thorough test we want to simulate a purchase of extra credits)
-        await addToCreditsLedger(
-          dbAdapter,
-          user.id,
-          100,
-          'extra_credit',
-          subscriptionCycle.id,
-        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 100,
+          creditType: 'extra_credit',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
 
         // Next cycle
         let stripeInvoicePaymentSucceededEvent = {
