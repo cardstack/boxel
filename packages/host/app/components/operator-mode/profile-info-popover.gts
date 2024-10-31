@@ -8,9 +8,10 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, or } from '@cardstack/boxel-ui/helpers';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
+import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -27,17 +28,10 @@ interface ProfileInfoSignature {
 }
 
 export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSignature> {
-  @service declare matrixService: MatrixService;
-
-  @action logout() {
-    this.matrixService.logout();
-  }
-
   <template>
     <style scoped>
       .profile-popover {
         width: 300px;
-        height: 363px;
         position: absolute;
         bottom: 68px;
         left: 20px;
@@ -49,9 +43,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         box-shadow: var(--boxel-deep-box-shadow);
         display: flex;
       }
-
-      .display-choose-plan-button {
-        height: 425px;
+      :deep(.profile-popover-body) {
+        padding: var(--boxel-sp-xl) 0;
       }
 
       .header {
@@ -70,7 +63,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         align-items: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-lg);
-        margin-bottom: auto;
+        margin-bottom: var(--boxel-sp);
         padding-top: var(--boxel-sp-lg);
         border-top: 1px solid var(--boxel-dark);
       }
@@ -83,11 +76,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         color: var(--boxel-dark);
         font: var(--boxel-font-xs);
       }
-      .out-of-credit-info {
+      .out-of-credit {
         font: var(--boxel-font-sm);
-      }
-      .info-group .value.out-of-credit {
-        color: #ff3838;
       }
       .info-group .value {
         color: var(--boxel-dark);
@@ -96,11 +86,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       }
     </style>
 
-    <div
-      class={{cn 'profile-popover' display-choose-plan-button=this.isFreePlan}}
-      data-test-profile-popover
-      ...attributes
-    >
+    <div class='profile-popover' data-test-profile-popover ...attributes>
       <header class='header'>
         <BoxelButton
           @kind='secondary-light'
@@ -122,57 +108,72 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      <div class='credit-info' data-test-credit-info>
-        <div class='info-group'>
-          <span class='label'>Membership Tier</span>
-          <span class='value' data-test-membership-tier>{{this.plan}}</span>
+      {{#if this.isCreditInfoDisplayed}}
+        <div class='credit-info' data-test-credit-info>
+          <div class='info-group'>
+            <span class='label'>Membership Tier</span>
+            <span
+              class='value'
+              data-test-membership-tier
+            >{{this.plan.name}}</span>
+          </div>
+          {{#if this.isChangePlanDisplayed}}
+            <BoxelButton
+              @kind='secondary-light'
+              @size='small'
+              data-test-change-plan-button
+              {{on 'click' @toggleProfileSettings}}
+            >Change plan</BoxelButton>
+          {{/if}}
+          <div class='info-group'>
+            <span class='label'>Monthly Credit</span>
+            <span
+              class='value'
+              style={{if this.isOutOfPlanCreditAllowance 'color:#ff3838'}}
+              data-test-monthly-credit
+            >{{this.monthlyCreditText}}</span>
+          </div>
+          {{#if this.isOutOfCredit}}
+            <span class='out-of-credit' data-test-out-of-credit>You have used
+              all your credits from your monthly plan. Please upgrade your plan
+              or buy additional credit to continue.</span>
+          {{/if}}
+          <div class='info-group'>
+            <span class='label'>Additional Credit</span>
+            <span class='value' data-test-additional-balance>{{if
+                this.isFreePlan
+                'Upgrade to Enable'
+                this.extraCreditsAvailableInBalance
+              }}</span>
+          </div>
         </div>
-        {{#if this.isChangePlanDisplayed}}
+        {{#if (or this.isFreePlan this.isOutOfCredit)}}
           <BoxelButton
-            @kind='secondary-light'
-            @size='small'
-            data-test-change-plan-button
             {{on 'click' @toggleProfileSettings}}
-          >Change plan</BoxelButton>
+            style={{cssVar
+              boxel-button-text-color='var(--boxel-dark)'
+              boxel-button-color='var(--boxel-teal)'
+              boxel-button-border='1px solid var(--boxel-teal)'
+            }}
+            @kind='primary'
+            data-test-choose-plan-button
+          >
+            Choose Plan
+          </BoxelButton>
         {{/if}}
-        <div class='info-group'>
-          <span class='label'>Monthly Credit</span>
-          <span
-            class={{cn 'value' out-of-credit=this.isOutOfCredit}}
-            data-test-monthly-credit
-          >{{this.monthlyCredit}}</span>
-        </div>
-        {{#if this.isOutOfCredit}}
-          <span class='out-of-credit-info' data-test-out-of-credit>You have used
-            all of credits from the free trial, please upgrade your plan.</span>
-        {{/if}}
-        <div class='info-group'>
-          <span class='label'>Additional Credit</span>
-          <span class='value' data-test-additional-balance>{{if
-              this.isFreePlan
-              'Upgrade to Enable'
-              this.creditsAvailableInBalance
-            }}</span>
-        </div>
-      </div>
-      {{#if this.isFreePlan}}
-        <BoxelButton
-          {{on 'click' @toggleProfileSettings}}
-          style={{cssVar
-            boxel-button-text-color='var(--boxel-dark)'
-            boxel-button-color='var(--boxel-teal)'
-            boxel-button-border='1px solid var(--boxel-teal)'
-          }}
-          @kind='primary'
-          data-test-choose-plan-button
-        >
-          Choose Plan
-        </BoxelButton>
       {{/if}}
     </div>
   </template>
 
+  // TODO: Remove this property once the API integration for credit info is completed.
+  private isCreditInfoDisplayed = config.environment === 'test';
+
   @service private declare realmServer: RealmServerService;
+  @service declare matrixService: MatrixService;
+
+  @action private logout() {
+    this.matrixService.logout();
+  }
 
   private fetchCreditInfo = trackedFunction(this, async () => {
     return await this.realmServer.fetchCreditInfo();
@@ -190,11 +191,11 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     return this.fetchCreditInfo.value?.creditsUsedInPlanAllowance;
   }
 
-  private get creditsAvailableInBalance() {
-    return this.fetchCreditInfo.value?.creditsAvailableInBalance;
+  private get extraCreditsAvailableInBalance() {
+    return this.fetchCreditInfo.value?.extraCreditsAvailableInBalance;
   }
 
-  private get monthlyCredit() {
+  private get monthlyCreditText() {
     return this.creditsUsedInPlanAllowance != undefined &&
       this.creditsIncludedInPlanAllowance != undefined
       ? `${
@@ -205,17 +206,25 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
 
   private get isOutOfCredit() {
     return (
-      this.isFreePlan &&
-      this.creditsUsedInPlanAllowance === this.creditsIncludedInPlanAllowance
+      this.isOutOfPlanCreditAllowance &&
+      this.extraCreditsAvailableInBalance == 0
+    );
+  }
+
+  private get isOutOfPlanCreditAllowance() {
+    return (
+      this.creditsUsedInPlanAllowance &&
+      this.creditsIncludedInPlanAllowance &&
+      this.creditsUsedInPlanAllowance >= this.creditsIncludedInPlanAllowance
     );
   }
 
   private get isFreePlan() {
-    return this.plan?.toLowerCase() === 'free';
+    return this.plan && this.plan.monthlyPrice == 0;
   }
 
   private get isChangePlanDisplayed() {
-    return this.plan && !this.isFreePlan;
+    return this.plan && !this.isFreePlan && !this.isOutOfCredit;
   }
 }
 

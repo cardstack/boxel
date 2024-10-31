@@ -46,10 +46,13 @@ interface AvailableRealm {
 }
 
 interface CreditInfo {
-  plan: string;
+  plan: {
+    name: string;
+    monthlyPrice: number;
+  };
   creditsIncludedInPlanAllowance: number;
   creditsUsedInPlanAllowance: number;
-  creditsAvailableInBalance: number;
+  extraCreditsAvailableInBalance: number;
 }
 
 export default class RealmServerService extends Service {
@@ -184,13 +187,16 @@ export default class RealmServerService extends Service {
     let plan = json.included.find((i: { type: string }) => i.type === 'plan');
     let creditsUsedInPlanAllowance =
       json.data.attributes.creditsUsedInPlanAllowance;
-    let creditsAvailableInBalance =
-      json.data.attributes.creditsAvailableInBalance;
+    let extraCreditsAvailableInBalance =
+      json.data.attributes.extraCreditsAvailableInBalance;
     return {
-      plan: plan.attributes.name,
+      plan: {
+        name: plan.attributes.name,
+        monthlyPrice: plan.attributes.monthlyPrice,
+      },
       creditsIncludedInPlanAllowance: plan.attributes.creditsIncluded,
       creditsUsedInPlanAllowance,
-      creditsAvailableInBalance,
+      extraCreditsAvailableInBalance,
     };
   }
 
