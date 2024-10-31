@@ -45,10 +45,12 @@ export default class CardHeaderUsage extends Component {
   @tracked hasBottomBorder = false;
   @tracked headerColor: string | undefined;
   @tracked isSaving: boolean = false;
+  @tracked isTopCard: boolean = false;
   @tracked lastSavedMessage = 'Saved one minute ago';
   @tracked realmInfo = {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-j.png',
     name: "John's Workspace",
+    isIndexing: true,
   };
   @tracked moreOptionsMenuItems: MenuItem[] = [
     new MenuItem('Copy Card URL', 'action', {
@@ -106,6 +108,7 @@ export default class CardHeaderUsage extends Component {
               @cardTypeIcon={{this.cardTypeIcon}}
               @headerColor={{this.headerColor}}
               @isSaving={{this.isSaving}}
+              @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.lastSavedMessage}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{this.realmInfo}}
@@ -141,6 +144,12 @@ export default class CardHeaderUsage extends Component {
             @value={{this.isSaving}}
             @onInput={{fn (mut this.isSaving)}}
           />
+          <Args.Bool
+            @name='isTopCard'
+            @description='whether the card is the top card -- affects whether realm icon will animate while indexing is occurring'
+            @value={{this.isTopCard}}
+            @onInput={{fn (mut this.isTopCard)}}
+          />
           <Args.String
             @name='lastSavedMessage'
             @description='message to show when the card was last saved'
@@ -156,10 +165,6 @@ export default class CardHeaderUsage extends Component {
             @name='realmInfo'
             @description='realm information'
             @value={{this.realmInfo}}
-          />
-          <Args.Yield
-            @name='actions'
-            @description='This named block is rendered on the right side of the component.'
           />
         </:api>
         <:cssVars as |Css|>
