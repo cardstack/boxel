@@ -13,7 +13,7 @@ import { Position } from 'monaco-editor';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { logger } from '@cardstack/runtime-common';
+import { hasExecutableExtension, logger } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -262,11 +262,7 @@ export default class CodeEditor extends Component<Signature> {
     }
 
     // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
-    let fileExtension = file.name.split('.').pop();
-    let flushLoader =
-      fileExtension != null &&
-      ['js', 'ts', 'gjs', 'gts'].includes(fileExtension);
-    return file.write(content, flushLoader);
+    return file.write(content, hasExecutableExtension(file.name));
   }
 
   private safeJSONParse(content: string) {
