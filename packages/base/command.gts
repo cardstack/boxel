@@ -5,9 +5,11 @@ import {
   StringField,
   contains,
   field,
+  linksTo,
   primitive,
   queryableValue,
 } from './card-api';
+import CodeRefField from './code-ref';
 
 export type CommandStatus = 'applied' | 'ready';
 
@@ -48,4 +50,34 @@ export class CommandCard extends CardDef {
   @field payload = contains(CommandObjectField); //arguments of toolCall. Its not called arguments due to lint
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
+}
+
+export class SaveCardInput extends CardDef {
+  @field realm = contains(StringField);
+  @field card = linksTo(CardDef);
+}
+
+export class PatchCommandInput extends CardDef {
+  @field card = linksTo(CardDef);
+  @field patch = contains(FieldDef); //TODO: JSONField ?
+}
+
+export class ShowCardInput extends CardDef {
+  @field cardToShow = linksTo(CardDef);
+  @field placement = contains(StringField); // TODO: nicer if enum, likely need to specify stackIndex too?
+}
+
+export class CreateModuleInput extends CardDef {
+  @field code = contains(StringField);
+  @field realm = contains(StringField);
+  @field modulePath = contains(StringField);
+}
+
+export class ModuleCard extends CardDef {
+  @field module = contains(CodeRefField);
+}
+
+export class CreateInstanceInput extends CardDef {
+  @field module = contains(CodeRefField);
+  @field realm = contains(StringField);
 }
