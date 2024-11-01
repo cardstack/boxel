@@ -123,9 +123,6 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius-sm);
       }
-      .ember-power-select-trigger:after {
-        margin-left: 10px;
-      }
       .ember-power-select-multiple-options {
         list-style: none;
         gap: var(--boxel-sp-xxxs);

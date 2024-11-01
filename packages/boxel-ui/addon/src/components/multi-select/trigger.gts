@@ -5,13 +5,13 @@ import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import CaretDown from '../../icons/caret-down.gts';
-import CaretUp from '../../icons/caret-up.gts';
 import IconX from '../../icons/icon-x.gts';
 import { BoxelTriggerWrapper } from '../select/trigger.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
 import Pill from '../pill/index.gts';
+import { cn } from '../../helpers.ts';
 
 export interface TriggerComponentSignature<ItemT> {
   Args: {
@@ -137,23 +137,23 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         {{#if this.hasSelectedItems}}
           <div class='has-selections'>
             {{! TODO: Replace with icon button }}
-            <IconX
-              class='boxel-multi-select__icon'
+            <button
+              class='boxel-multi-select__remove-button'
               {{on 'click' this.onClearAll}}
-            />
+            >
+              <IconX class='boxel-multi-select__remove' />
+            </button>
           </div>
         {{else}}
-          {{#if @select.isOpen}}
-            <CaretUp />
-          {{else}}
-            <CaretDown />
-          {{/if}}
+          <CaretDown class={{cn 'icon' (if @select.isOpen 'is-open')}} />
         {{/if}}
       </:icon>
     </BoxelTriggerWrapper>
 
     <style scoped>
       .boxel-multi-select__remove-button {
+        --boxel-multi-select-width: 10px;
+        --boxel-multi-select-height: 10px;
         all: unset;
         display: flex;
         justify-content: center;
@@ -161,12 +161,12 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         cursor: pointer;
         border-radius: 50%;
         transition: background-color 0.2s ease;
-        width: 10px;
-        height: 10px;
+        width: var(--boxel-multi-select-width);
+        height: var(--boxel-multi-select-height);
       }
       .boxel-multi-select__icon--remove {
-        width: 10px;
-        height: 10px;
+        width: var(--boxel-multi-select-width);
+        height: var(--boxel-multi-select-height);
         --icon-color: var(--boxel-light);
       }
       .ember-power-select-multiple-remove-btn {
@@ -176,6 +176,13 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         --pill-gap: var(--boxel-sp-xxs);
         --pill-background-color: var(--boxel-700);
         --pill-font-color: var(--boxel-light);
+      }
+      .icon {
+        width: 10px;
+        height: 10px;
+      }
+      .is-open {
+        transform: rotate(180deg);
       }
     </style>
   </template>
