@@ -42,6 +42,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
+const testRealm3URL = `http://test-realm/test3/`;
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -52,7 +53,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupOnSave(hooks);
   let { setRealmPermissions, setActiveRealms } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL, testRealm2URL],
+    activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
   });
 
   hooks.beforeEach(async function () {
@@ -356,6 +357,18 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
           friends: [mangoPet],
         }),
+      },
+    });
+    await setupAcceptanceTestRealm({
+      realmURL: testRealm3URL,
+      contents: {
+        'index.json': new CardsGrid(),
+        '.realm.json': {
+          name: 'Test Workspace C',
+          backgroundURL:
+            'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+        },
       },
     });
   });
@@ -983,7 +996,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
     });
 
-    test<TestContextWithSave>('new card is created in the current realm', async function (assert) {
+    test<TestContextWithSave>('new card is created in the selected realm', async function (assert) {
       assert.expect(1);
       await visitOperatorMode({
         stacks: [
@@ -999,12 +1012,44 @@ module('Acceptance | interact submode tests', function (hooks) {
         if (url.href.includes('Pet')) {
           assert.ok(
             url.href.startsWith(testRealmURL),
-            `The pet card is saved in the current realm ${testRealmURL}`,
+            `The pet card is saved in the selected realm ${testRealmURL}`,
           );
         }
       });
       await click('[data-test-add-new]');
-      await click('[data-test-card-catalog-create-new-button]');
+      await click(
+        `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
+      );
+      await click(`[data-test-card-catalog-go-button]`);
+    });
+
+    test<TestContextWithSave>('new card is created in the realm that has no results from card chooser', async function (assert) {
+      assert.expect(2);
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+      this.onSave((url) => {
+        if (url.href.includes('Pet')) {
+          assert.ok(
+            url.href.startsWith(testRealm3URL),
+            `The pet card is saved in the selected realm ${testRealm3URL}`,
+          );
+        }
+      });
+      await click('[data-test-add-new]');
+      assert
+        .dom(`[data-test-realm="Test Workspace C"] header`)
+        .containsText('Test Workspace C No results');
+      await click(
+        `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
+      );
       await click(`[data-test-card-catalog-go-button]`);
     });
   });
