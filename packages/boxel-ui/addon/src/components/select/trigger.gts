@@ -13,7 +13,6 @@ export interface TriggerSignature {
   Blocks: {
     default: [Select['selected'], Select];
     icon: [];
-    placeholder: [];
   };
   Element: HTMLElement;
 }
@@ -21,12 +20,19 @@ export interface TriggerSignature {
 // This component is used to provide a consistent boxel style to trigger components
 // Abstain from using this component with many data customizations
 export class BoxelTriggerWrapper extends Component<TriggerSignature> {
+  get showPlaceholder() {
+    return (
+      this.args.placeholder &&
+      (this.args.select?.selected === undefined || //undefined check is for single-select
+        this.args.select?.selected.length === 0) //length check is for multi-select
+    );
+  }
   <template>
     <div class='boxel-trigger'>
       <div class='boxel-trigger-content'>
-        {{#if (has-block 'placeholder')}}
+        {{#if this.showPlaceholder}}
           <div class='boxel-trigger-placeholder'>
-            {{yield to='placeholder'}}
+            {{@placeholder}}
           </div>
         {{/if}}
         {{! Yield the selected item and the select component to allow ember power select consumers to specify the selected item to be displayed after selection}}
@@ -81,16 +87,8 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
 }
 
 export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
-  get showPlaceholder() {
-    return this.args.placeholder && this.args.select?.selected === undefined;
-  }
   <template>
     <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{@select}}>
-      <:placeholder>
-        {{#if this.showPlaceholder}}
-          {{@placeholder}}
-        {{/if}}
-      </:placeholder>
       <:default>
         {{#if @selectedItemComponent}}
           <@selectedItemComponent
@@ -109,6 +107,5 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
         {{/if}}
       </:icon>
     </BoxelTriggerWrapper>
-    <style scoped></style>
   </template>
 }

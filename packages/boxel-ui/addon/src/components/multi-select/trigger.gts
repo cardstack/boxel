@@ -93,11 +93,6 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
 
   <template>
     <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{this.select}}>
-      <:placeholder>
-        {{#if this.showPlaceholder}}
-          {{@placeholder}}
-        {{/if}}
-      </:placeholder>
       <:default>
         {{#let
           (if
