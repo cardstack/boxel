@@ -2318,8 +2318,7 @@ module('Realm Server', function (hooks) {
     });
   });
 
-  // eslint-disable-next-line qunit/no-only
-  module.only('_info GET request', function (_hooks) {
+  module('_info GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
       setupPermissionedRealm(hooks, {
         '*': ['read'],
