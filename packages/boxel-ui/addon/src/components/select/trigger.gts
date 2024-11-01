@@ -34,10 +34,11 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
           <div class='boxel-trigger-placeholder'>
             {{@placeholder}}
           </div>
+        {{else}}
+          {{! Yield the selected item and the select component to allow ember power select consumers to specify the selected item to be displayed after selection}}
+          {{! This is how ember-power-select does it inside of their default component }}
+          {{yield @select.selected @select}}
         {{/if}}
-        {{! Yield the selected item and the select component to allow ember power select consumers to specify the selected item to be displayed after selection}}
-        {{! This is how ember-power-select does it inside of their default component }}
-        {{yield @select.selected @select}}
       </div>
       {{#if (has-block 'icon')}}
         <span class='boxel-select__icon-wrapper' aria-hidden='true'>
