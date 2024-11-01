@@ -2,7 +2,6 @@ import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
 import cn from '../../helpers/cn.ts';
 import type { Icon } from '../../icons/types.ts';
 
@@ -31,6 +30,10 @@ class IconButton extends Component<Signature> {
     this.isHoverOnButton = false;
   };
 
+  get hasCustomSizeAttributes() {
+    return this.args.width || this.args.height;
+  }
+
   <template>
     <button
       class={{cn (if @variant (concat @variant)) @class}}
@@ -44,7 +47,7 @@ class IconButton extends Component<Signature> {
         <@icon
           width={{if @width @width '16px'}}
           height={{if @height @height '16px'}}
-          style='margin: auto;'
+          class={{unless this.hasCustomSizeAttributes 'svg-icon'}}
         />
       {{/if}}
     </button>
@@ -52,13 +55,16 @@ class IconButton extends Component<Signature> {
       button {
         --inner-boxel-icon-button-width: var(--boxel-icon-button-width, 40px);
         --inner-boxel-icon-button-height: var(--boxel-icon-button-height, 40px);
-
         width: var(--inner-boxel-icon-button-width);
         height: var(--inner-boxel-icon-button-height);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         padding: 0;
         background: var(--boxel-icon-button-background, none);
         border: 1px solid transparent;
         z-index: 0;
+        overflow: hidden;
       }
 
       button:hover {
@@ -76,7 +82,6 @@ class IconButton extends Component<Signature> {
 
       .secondary {
         --icon-color: var(--boxel-highlight);
-
         border: 1px solid rgb(255 255 255 / 35%);
         border-radius: 100px;
         background-color: #41404d;
@@ -84,6 +89,13 @@ class IconButton extends Component<Signature> {
 
       .secondary:hover {
         background-color: var(--boxel-purple-800);
+      }
+
+      .svg-icon {
+        --icon-width: var(--inner-boxel-icon-button-width);
+        --icon-height: var(--inner-boxel-icon-button-width);
+        width: var(--icon-width);
+        height: var(--icon-height);
       }
     </style>
   </template>
