@@ -95,7 +95,7 @@ export type RealmInfo = {
   iconURL: string | null;
   showAsCatalog: boolean | null;
   visibility: RealmVisibility;
-  realmUserId: string;
+  realmUserId?: string;
 };
 
 export interface FileRef {
