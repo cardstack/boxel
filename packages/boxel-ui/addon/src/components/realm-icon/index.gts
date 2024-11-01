@@ -39,6 +39,14 @@ export default class RealmIcon extends Component<Signature> {
     />
 
     <style scoped>
+      .realm-icon-img {
+        background-size: contain;
+        background-position: center;
+        background-repeat: no-repeat;
+        border-radius: var(--boxel-realm-icon-border-radius, 0);
+        background-color: var(--boxel-realm-icon-background-color, transparent);
+        border: var(--boxel-realm-icon-border, 1px solid transparent);
+      }
       .realm-icon-img::after {
         content: '';
         background-color: black;
@@ -46,12 +54,6 @@ export default class RealmIcon extends Component<Signature> {
         display: block;
         height: 100%;
         border-radius: 6px;
-      }
-      .realm-icon-img {
-        background-size: contain;
-        background-position: center;
-        background-repeat: no-repeat;
-        height: 100%;
       }
       .indexing {
         animation: pulse-border 2.5s linear infinite;

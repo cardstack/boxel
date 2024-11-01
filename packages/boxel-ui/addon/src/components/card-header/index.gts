@@ -1,3 +1,4 @@
+import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -29,9 +30,6 @@ interface Signature {
     onFinishEditing?: () => void;
     realmInfo?: RealmDisplayInfo;
   };
-  Blocks: {
-    actions: [];
-  };
   Element: HTMLElement;
 }
 
@@ -39,17 +37,36 @@ export default class CardHeader extends Component<Signature> {
   get safeMoreOptionsMenuItems() {
     return this.args.moreOptionsMenuItems || [];
   }
+  get headerColor() {
+    return (
+      this.args.headerColor ||
+      getComputedStyle(document.documentElement).getPropertyValue(
+        '--boxel-light',
+      )
+    );
+  }
   <template>
     <header
       data-test-card-header
       class={{cn is-editing=(bool @onFinishEditing)}}
       {{setCssVar
-        boxel-card-header-background-color=@headerColor
-        boxel-card-header-text-color=(getContrastColor @headerColor)
+        boxel-card-header-background-color=this.headerColor
+        boxel-card-header-text-color=(getContrastColor this.headerColor)
       }}
       ...attributes
     >
-      <div class='realm-icon-container'>
+      <div
+        class='realm-icon-container'
+        style={{cssVar
+          boxel-realm-icon-background-color=(getContrastColor
+            this.headerColor 'transparent'
+          )
+          boxel-realm-icon-border=(concat
+            '1px solid '
+            (getContrastColor this.headerColor 'rgba(0, 0, 0, 0.15)')
+          )
+        }}
+      >
         {{#if @realmInfo.iconURL}}
           <Tooltip @placement='right'>
             <:trigger>
@@ -57,11 +74,6 @@ export default class CardHeader extends Component<Signature> {
                 @canAnimate={{@isTopCard}}
                 @realmInfo={{@realmInfo}}
                 class='realm-icon'
-                style={{cssVar
-                  realm-icon-background=(getContrastColor
-                    @headerColor 'transparent'
-                  )
-                }}
                 data-test-card-header-realm-icon={{@realmInfo.iconURL}}
               />
             </:trigger>
@@ -221,7 +233,7 @@ export default class CardHeader extends Component<Signature> {
         }
         header.is-editing {
           background-color: var(--boxel-highlight);
-          color: var(--boxel-light);
+          color: var(--boxel-dark);
         }
         header .card-type-display-name {
           max-width: var(
@@ -252,18 +264,17 @@ export default class CardHeader extends Component<Signature> {
           align-items: center;
           min-width: var(--boxel-card-header-icon-container-min-width);
           justify-content: left;
+          --boxel-realm-icon-background-color: var(--boxel-light);
+          --boxel-realm-icon-border-radius: 7px;
         }
+        .is-editing .realm-icon-container {
+          --boxel-realm-icon-background-color: var(--boxel-light);
+          --boxel-realm-icon-border: 1px solid var(--boxel-light);
+        }
+
         .realm-icon {
           width: var(--inner-boxel-card-header-realm-icon-size);
           height: var(--inner-boxel-card-header-realm-icon-size);
-          background-color: var(--realm-icon-background);
-          border: 1px solid rgba(0, 0, 0, 0.15);
-          border-radius: 7px;
-        }
-
-        .is-editing .realm-icon {
-          background: var(--boxel-light);
-          border: 1px solid var(--boxel-light);
         }
 
         .actions {
@@ -275,12 +286,7 @@ export default class CardHeader extends Component<Signature> {
           justify-content: right;
         }
         .is-editing .icon-button {
-          --icon-color: var(--boxel-light);
-        }
-
-        .is-editing .icon-button:hover {
-          --icon-color: var(--boxel-highlight);
-          --boxel-icon-button-background: var(--boxel-light);
+          --icon-color: var(--boxel-dark);
         }
 
         .icon-button,
@@ -297,12 +303,12 @@ export default class CardHeader extends Component<Signature> {
         }
 
         .icon-button {
-          --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
+          --icon-color: var(--boxel-card-header-text-color, var(--boxel-dark));
         }
 
         .icon-button:hover {
-          --icon-color: var(--boxel-light);
-          --boxel-icon-button-background: var(--boxel-highlight);
+          --icon-color: var(--boxel-card-header-text-color, var(--boxel-dark));
+          --boxel-icon-button-background: var(--boxel-dark-hover);
         }
 
         header .icon-save {
@@ -311,7 +317,7 @@ export default class CardHeader extends Component<Signature> {
         }
 
         header .icon-save:hover {
-          --icon-color: var(--boxel-highlight);
+          --icon-color: var(--boxel-dark);
         }
       }
     </style>

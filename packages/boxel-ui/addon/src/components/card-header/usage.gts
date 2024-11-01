@@ -1,5 +1,4 @@
-import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -16,19 +15,42 @@ import { IconLink } from '../../icons.gts';
 import CardContainer from '../card-container/index.gts';
 import CardHeader from './index.gts';
 
+interface CardTypeIconSignature {
+  Element: SVGElement;
+}
+const Captions: TemplateOnlyComponent<CardTypeIconSignature> = <template>
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    class='lucide lucide-captions'
+    viewBox='0 0 24 24'
+    ...attributes
+  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
+      d='M7 15h4m4 0h2M7 11h2m4 0h4'
+    /></svg>
+</template>;
+
 export default class CardHeaderUsage extends Component {
   @tracked cardTypeDisplayName = 'My Card Type';
-  @tracked cardTypeIcon: ComponentLike<{ Element: Element }> = CaptionsIcon;
+  @tracked cardTypeIcon: ComponentLike<CardTypeIconSignature> = Captions;
   @tracked detail = undefined;
   @tracked size: 'large' | undefined = 'large';
   @tracked hasBackground = true;
   @tracked hasBottomBorder = false;
   @tracked headerColor: string | undefined;
   @tracked isSaving: boolean = false;
+  @tracked isTopCard: boolean = false;
   @tracked lastSavedMessage = 'Saved one minute ago';
   @tracked realmInfo = {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-j.png',
     name: "John's Workspace",
+    isIndexing: true,
   };
   @tracked moreOptionsMenuItems: MenuItem[] = [
     new MenuItem('Copy Card URL', 'action', {
@@ -86,6 +108,7 @@ export default class CardHeaderUsage extends Component {
               @cardTypeIcon={{this.cardTypeIcon}}
               @headerColor={{this.headerColor}}
               @isSaving={{this.isSaving}}
+              @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.lastSavedMessage}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{this.realmInfo}}
@@ -106,7 +129,7 @@ export default class CardHeaderUsage extends Component {
             @name='cardTypeIcon'
             @description='The card type icon. Shown next to the card type display name.'
             @value={{this.cardTypeIcon}}
-            @options={{array CaptionsIcon LayoutGridIcon}}
+            @options={{array Captions}}
             @onChange={{fn (mut this.cardTypeIcon)}}
           />
           <Args.String
@@ -120,6 +143,12 @@ export default class CardHeaderUsage extends Component {
             @description='whether the card is currently saving'
             @value={{this.isSaving}}
             @onInput={{fn (mut this.isSaving)}}
+          />
+          <Args.Bool
+            @name='isTopCard'
+            @description='whether the card is the top card -- affects whether realm icon will animate while indexing is occurring'
+            @value={{this.isTopCard}}
+            @onInput={{fn (mut this.isTopCard)}}
           />
           <Args.String
             @name='lastSavedMessage'
@@ -136,10 +165,6 @@ export default class CardHeaderUsage extends Component {
             @name='realmInfo'
             @description='realm information'
             @value={{this.realmInfo}}
-          />
-          <Args.Yield
-            @name='actions'
-            @description='This named block is rendered on the right side of the component.'
           />
         </:api>
         <:cssVars as |Css|>

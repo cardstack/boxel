@@ -31,6 +31,7 @@ import {
   baseRealm,
   isCardInstance,
   SupportedMimeType,
+  subscribeToRealm,
   Query,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -41,10 +42,11 @@ import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
-import Stack2 from '@cardstack/boxel-icons/stack-2';
+import CardsIcon from '@cardstack/boxel-icons/cards';
 import Star from '@cardstack/boxel-icons/star';
+import { registerDestructor } from '@ember/destroyable';
 
 type IconComponent = typeof Captions;
 interface SortOption {
@@ -259,6 +261,9 @@ class Isolated extends Component<typeof CardsGrid> {
         top: var(--cards-grid-padding-top);
         padding-right: var(--boxel-sp-sm);
         height: 100%;
+        overflow-y: hidden;
+      }
+      :deep(.filter-list:hover) {
         overflow-y: auto;
       }
       :deep(.filter-list__button:first-child) {
@@ -339,7 +344,7 @@ class Isolated extends Component<typeof CardsGrid> {
       },
       {
         displayName: 'All Cards',
-        icon: Stack2,
+        icon: CardsIcon,
         query: {
           filter: {
             not: {
@@ -356,6 +361,14 @@ class Isolated extends Component<typeof CardsGrid> {
   @tracked activeFilter = this.filters[0];
   @tracked viewSize: 'grid' | 'strip' = 'grid';
 
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadFilterList.perform();
+    let unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
+
+    registerDestructor(this, unsubscribe);
+  }
+
   @action setSelectedSortOption(option: SortOption) {
     this.selectedSortOption = option;
     this.activeFilter = this.activeFilter;
@@ -368,11 +381,6 @@ class Isolated extends Component<typeof CardsGrid> {
   @action
   createNew() {
     this.createCard.perform();
-  }
-
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadFilterList.perform();
   }
 
   private get sortMenuOptions() {
@@ -455,6 +463,8 @@ class Isolated extends Component<typeof CardsGrid> {
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
+
+    this.filters.splice(2, this.filters.length);
     cardTypeSummaries.forEach((summary) => {
       if (excludedCardTypeIds.includes(summary.id)) {
         return;
@@ -473,12 +483,24 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       });
     });
+
+    this.activeFilter =
+      this.filters.find(
+        (filter) => filter.displayName === this.activeFilter.displayName,
+      ) ?? this.filters[0];
   });
+
+  private refreshFilterList = (ev: MessageEvent) => {
+    let data = JSON.parse(ev.data);
+    if (ev.type === 'index' && data.type === 'incremental') {
+      this.loadFilterList.perform();
+    }
+  };
 }
 
 export class CardsGrid extends CardDef {
   static displayName = 'Cards Grid';
-  static icon = LayoutGridIcon;
+  static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
   @field realmName = contains(StringField, {

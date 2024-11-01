@@ -7,6 +7,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import MoodSmileBeamIcon from '@cardstack/boxel-icons/mood-smile-beam';
 
 export class HelloWorld extends CardDef {
   @field fullName = contains(StringCard);
@@ -15,6 +16,7 @@ export class HelloWorld extends CardDef {
   @field bio = contains(MarkdownCard);
   @field quote = contains(TextAreaCard);
   static displayName = 'Hello World';
+  static icon = MoodSmileBeamIcon;
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

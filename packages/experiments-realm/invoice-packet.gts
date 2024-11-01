@@ -18,6 +18,7 @@ import { FieldContainer, Label, Message } from '@cardstack/boxel-ui/components';
 
 import { TokenField, CurrencyField } from './asset';
 import GlimmerComponent from '@glimmer/component';
+import ReceiptIcon from '@cardstack/boxel-icons/receipt';
 
 class Details extends FieldDef {
   static displayName = 'Details';
@@ -498,6 +499,7 @@ class BalanceDue extends GlimmerComponent<BalanceDueSignature> {
 
 export class InvoicePacket extends CardDef {
   static displayName = 'Invoice Packet';
+  static icon = ReceiptIcon;
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);

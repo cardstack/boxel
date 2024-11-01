@@ -30,16 +30,11 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage('Logged out of synapse');
   });
 
-  const realmFs = new RealmFS();
+  const realmFs = new RealmFS(context);
 
   console.log('Registering file system providers now');
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxel-tools+http', realmFs, {
-      isCaseSensitive: true,
-    }),
-  );
-  context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider('boxel-tools+https', realmFs, {
+    vscode.workspace.registerFileSystemProvider('boxel-tools', realmFs, {
       isCaseSensitive: true,
     }),
   );
@@ -67,14 +62,32 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
   );
 
+  // In the current implementation, we need to store the selected realms in global state
+  // because adding the root folder "Boxel Workspaces"
+  // will reactivate the extension, causing realmFs to be reinitialized.
+  // If we don't make the state persistent, no realms will open after the user selects them.
+  // An alternative approach is to add the root folder first
+  // and retrigger the attachToBoxelWorkspaces command upon the second reactivation,
+  // allowing the user to select realms after the root folder exists. However, this approach may be more confusing.
   vscode.commands.registerCommand(
     'boxel-tools.attachToBoxelWorkspaces',
     async (_) => {
+      if (
+        !vscode.workspace.workspaceFolders ||
+        vscode.workspace.workspaceFolders?.length == 0
+      ) {
+        realmFs.resetSelectedRealms();
+      }
+
       const realmUrls = await realmFs.getRealmUrls();
       const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
         canPickMany: false,
         placeHolder: 'Select a realm to open',
       });
+      if (!selectedRealm) {
+        return;
+      }
+      realmFs.addSelectedRealms(selectedRealm);
       console.log('Selected realm', selectedRealm);
       vscode.workspace.updateWorkspaceFolders(
         0,
@@ -82,11 +95,13 @@ export async function activate(context: vscode.ExtensionContext) {
           ? vscode.workspace.workspaceFolders.length
           : 0,
         {
-          uri: vscode.Uri.parse(`boxel-tools+${selectedRealm}`),
-          name: `Workspace ${selectedRealm}`,
+          uri: vscode.Uri.parse(`boxel-tools://boxel-workspaces`),
+          name: `Boxel Workspaces`,
         },
       );
-      await vscode.commands.executeCommand('workbench.view.explorer');
+      await vscode.commands.executeCommand(
+        'workbench.files.action.refreshFilesExplorer',
+      );
     },
   );
 }

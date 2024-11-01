@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { RatingsSummary as RatingsSummaryField } from './ratings-summary';
 import { MonetaryAmountAtom } from './monetary-amount';
+import VideoIcon from '@cardstack/boxel-icons/video';
 
 class Isolated extends Component<typeof VideoProduct> {
   @tracked activeImage = this.args.model.images?.[0];
@@ -130,6 +131,8 @@ class Isolated extends Component<typeof VideoProduct> {
 // @ts-ignore
 export class VideoProduct extends Product {
   static displayName = 'Video Product';
+  static icon = VideoIcon;
+
   @field videoUrl = contains(StringField);
   @field ratingsSummary = contains(RatingsSummaryField, {
     computeVia(this: VideoProduct) {
