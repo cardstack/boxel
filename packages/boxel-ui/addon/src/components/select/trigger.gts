@@ -1,8 +1,8 @@
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import CaretDown from '../../icons/caret-down.gts';
 import { cn } from '../../helpers.ts';
+import CaretDown from '../../icons/caret-down.gts';
 
 export interface TriggerSignature {
   Args: {
@@ -63,7 +63,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
         color: var(--boxel-400);
       }
     </style>
-    <style>
+    <style scoped>
       /*Ember power select has a right padding to the trigger element*/
       .ember-power-select-trigger {
         padding: 0px;

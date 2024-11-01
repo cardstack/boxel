@@ -16,22 +16,22 @@ import BoxelMultiSelectDefaultTrigger, {
 } from './trigger.gts';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
+  ariaLabel?: string;
+  closeOnSelect?: boolean;
+  disabled?: boolean;
+  extra?: any;
+  matchTriggerWidth?: boolean;
+  onBlur?: (select: Select, e: Event) => boolean | undefined;
+  onClose?: (select: Select, e: Event) => boolean | undefined;
+  onOpen?: (select: Select, e: Event) => boolean | undefined;
   options: ItemT[];
+  placeholder?: string;
+  renderInPlace?: boolean;
+  searchEnabled?: boolean;
+  searchField?: string;
   selected: ItemT[];
   selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
   triggerComponent?: ComponentLike<TriggerComponentSignature<ItemT>>;
-  searchField?: string;
-  searchEnabled?: boolean;
-  closeOnSelect?: boolean;
-  ariaLabel?: string;
-  placeholder?: string;
-  disabled?: boolean;
-  renderInPlace?: boolean;
-  matchTriggerWidth?: boolean;
-  extra?: any;
-  onOpen?: (select: Select, e: Event) => boolean | undefined;
-  onClose?: (select: Select, e: Event) => boolean | undefined;
-  onBlur?: (select: Select, e: Event) => boolean | undefined;
 }
 
 export interface Signature<ItemT> {

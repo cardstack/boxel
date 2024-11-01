@@ -4,14 +4,14 @@ import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
+import { cn } from '../../helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
 import IconX from '../../icons/icon-x.gts';
+import Pill from '../pill/index.gts';
 import { BoxelTriggerWrapper } from '../select/trigger.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
-import Pill from '../pill/index.gts';
-import { cn } from '../../helpers.ts';
 
 export interface TriggerComponentSignature<ItemT> {
   Args: {
