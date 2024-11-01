@@ -156,6 +156,8 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         justify-content: center;
         width: 10px;
         height: 10px;
+        min-width: 10px;
+        min-height: 10px;
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
