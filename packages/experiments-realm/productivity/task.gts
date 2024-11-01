@@ -23,6 +23,11 @@ import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
+import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
+import TagIcon from '@cardstack/boxel-icons/tag';
+import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
+import UsersIcon from '@cardstack/boxel-icons/users';
+import UserIcon from '@cardstack/boxel-icons/user';
 
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -194,6 +199,7 @@ export class User extends CardDef {
 
 export class Team extends CardDef {
   static displayName = 'Team';
+  static icon = UsersIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Team) {
@@ -220,11 +226,13 @@ export class Team extends CardDef {
 
 export class TeamMember extends User {
   static displayName = 'Team Member';
+  static icon = UserIcon;
   @field team = linksTo(Team);
 }
 
 export class Project extends CardDef {
   static displayName = 'Project';
+  static icon = FolderGitIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
@@ -413,6 +421,7 @@ class Fitted extends Component<typeof Task> {
 
 export class Tag extends CardDef {
   static displayName = 'Tag';
+  static icon = TagIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Tag) {
@@ -735,6 +744,7 @@ class TaskIsolated extends Component<typeof Task> {
 
 export class Task extends CardDef {
   static displayName = 'Task';
+  static icon = CheckboxIcon;
   @field shortId = contains(StringField, {
     computeVia: function (this: Task) {
       if (this.id) {
@@ -772,17 +782,35 @@ export class Task extends CardDef {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <span class='short-id'>{{@model.shortId}}</span>
-      {{@model.taskName}}
-      <Avatar
-        @userId={{@model.assignee.id}}
-        @displayName={{@model.assignee.name}}
-        @isReady={{true}}
-      />
+      <div class='task-atom'>
+        {{#if @model.assignee}}
+          <div class='avatar-wrapper'>
+            <Avatar
+              @userId={{@model.assignee.id}}
+              @displayName={{@model.assignee.name}}
+              @isReady={{true}}
+              class='avatar'
+            />
+          </div>
+        {{/if}}
+        <div class='task-title'>{{@model.taskName}}</div>
+      </div>
       <style scoped>
-        .short-id {
-          color: var(--boxel-purple);
-          font-size: var(--boxel-font-size-sm);
+        .task-atom {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .avatar-wrapper {
+          display: inline-block;
+        }
+        .avatar {
+          --profile-avatar-icon-size: 20px;
+        }
+        .task-title {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       </style>
     </template>

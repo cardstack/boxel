@@ -67,7 +67,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         width: 100%;
         padding: 5.5rem 0 5.5rem 11.5rem;
         animation: fadeIn 0.5s ease-in forwards;
-        z-index: 3;
+        z-index: var(--host-workspace-chooser-z-index);
       }
       .workspace-chooser__content {
         display: flex;
