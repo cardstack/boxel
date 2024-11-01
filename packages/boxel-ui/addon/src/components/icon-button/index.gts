@@ -2,6 +2,7 @@ import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import cn from '../../helpers/cn.ts';
 import type { Icon } from '../../icons/types.ts';
 
@@ -84,7 +85,7 @@ class IconButton extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         border: 1px solid rgb(255 255 255 / 35%);
         border-radius: 100px;
-        background-color: #41404d;
+        background-color: var(--boxel-icon-button-background, #41404d);
       }
 
       .secondary:hover {
@@ -92,10 +93,8 @@ class IconButton extends Component<Signature> {
       }
 
       .svg-icon {
-        --icon-width: var(--inner-boxel-icon-button-width);
-        --icon-height: var(--inner-boxel-icon-button-width);
-        width: var(--icon-width);
-        height: var(--icon-height);
+        width: var(--inner-boxel-icon-button-widt);
+        height: var(--inner-boxel-icon-button-width);
       }
     </style>
   </template>

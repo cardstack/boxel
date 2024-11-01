@@ -18,8 +18,8 @@ import BoxelIconButton from './index.gts';
 export default class IconButtonUsage extends Component {
   @tracked icon: Icon = IconPlusCircle;
   @tracked variant?: string;
-  @tracked width = '40px';
-  @tracked height = '40px';
+  @tracked width = '16px';
+  @tracked height = '16px';
 
   @tracked showIconBorders = false;
   @tracked hideIconOverflow = false;
@@ -27,6 +27,7 @@ export default class IconButtonUsage extends Component {
   cssClassName = 'boxel-icon-button';
   @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
   @cssVariable declare boxelIconButtonHeight: CSSVariableInfo;
+  @cssVariable declare boxelIconButtonBackground: CSSVariableInfo;
 
   @action log(message: string): void {
     // eslint-disable-next-line no-console
@@ -54,6 +55,7 @@ export default class IconButtonUsage extends Component {
           style={{cssVar
             boxel-icon-button-width=this.boxelIconButtonWidth.value
             boxel-icon-button-height=this.boxelIconButtonHeight.value
+            boxel-icon-button-background=this.boxelIconButtonBackground.value
           }}
         />
       </:example>
@@ -106,6 +108,14 @@ export default class IconButtonUsage extends Component {
           @defaultValue={{this.boxelIconButtonHeight.defaults}}
           @value={{this.boxelIconButtonHeight.value}}
           @onInput={{this.boxelIconButtonHeight.update}}
+        />
+        <Css.Basic
+          @name='boxel-icon-button-background'
+          @type='color'
+          @description='Background color of the icon button'
+          @defaultValue={{this.boxelIconButtonBackground.defaults}}
+          @value={{this.boxelIconButtonBackground.value}}
+          @onInput={{this.boxelIconButtonBackground.update}}
         />
       </:cssVars>
     </FreestyleUsage>
