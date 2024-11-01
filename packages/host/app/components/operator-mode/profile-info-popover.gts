@@ -91,6 +91,10 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .info-group.additional-credit {
         align-items: flex-end;
       }
+
+      .info-group button {
+        margin-top: var(--boxel-sp-xs);
+      }
     </style>
 
     <div class='profile-popover' data-test-profile-popover ...attributes>
