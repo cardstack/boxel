@@ -22,8 +22,8 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
-      creditInfoEnabled:
-        process.env.CREDIT_INFO_ENABLED === 'true' ? true : false,
+      stripeBillingEnabled:
+        process.env.STRIPE_BILLING_ENABLED === 'true' ? true : false,
       experimentalAIEnabled:
         process.env.EXPERIMENTAL_AI_ENABLED === 'true' ? true : false,
     },

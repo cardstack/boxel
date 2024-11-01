@@ -42,7 +42,7 @@ let userResponseBody = {
       matrixUserId: '@testuser:staging',
       stripeCustomerId: 'stripe-id-1',
       creditsUsedInPlanAllowance: 0,
-      extraCreditsAvailableInBalance: 0,
+      extraCreditsAvailableInBalance: 100,
     },
     relationships: {
       subscription: {
@@ -77,7 +77,7 @@ let userResponseBody = {
       attributes: {
         name: 'Free',
         monthlyPrice: 0,
-        creditsIncluded: 100,
+        creditsIncluded: 1000,
       },
     },
   ],
@@ -781,147 +781,70 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  module('displays credit info in account popover', function () {
-    test(`free plan credit info`, async function (assert) {
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          return null;
-        },
-        { prepend: true },
-      );
+  test(`displays credit info in account popover`, async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        if (req.url.includes('_user')) {
+          return new Response(JSON.stringify(userResponseBody));
+        }
+        return null;
+      },
+      { prepend: true },
+    );
 
-      await visitOperatorMode({
-        submode: 'interact',
-        codePath: `${testRealmURL}employee.gts`,
-      });
-
-      await waitFor('[data-test-profile-icon-button]');
-      assert.dom('[data-test-profile-icon]').hasText('T');
-      assert
-        .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
-
-      assert.dom('[data-test-profile-popover]').doesNotExist();
-
-      await click('[data-test-profile-icon-button]');
-
-      assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('100 of 100 left');
-      assert.dom('[data-test-additional-balance]').hasText('Upgrade to Enable');
-      assert.dom('[data-test-change-plan-button]').doesNotExist();
-      assert.dom('[data-test-choose-plan-button]').exists();
-
-      await click('[data-test-choose-plan-button]');
-      assert.dom('[data-test-profile-popover]').doesNotExist();
-      assert
-        .dom('[data-test-boxel-card-container]')
-        .hasClass('profile-settings');
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}employee.gts`,
     });
 
-    test(`non-free plan credit info`, async function (assert) {
-      userResponseBody.included[1].attributes.name = 'Creator';
-      userResponseBody.included[1].attributes.monthlyPrice = 1000;
-      userResponseBody.data.attributes.extraCreditsAvailableInBalance = 100;
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          return null;
-        },
-        { prepend: true },
-      );
+    await waitFor('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
 
-      await visitOperatorMode({
-        submode: 'interact',
-        codePath: `${testRealmURL}employee.gts`,
-      });
+    assert.dom('[data-test-profile-popover]').doesNotExist();
 
-      await waitFor('[data-test-profile-icon-button]');
-      assert.dom('[data-test-profile-icon]').hasText('T');
-      assert
-        .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
+    await click('[data-test-profile-icon-button]');
 
-      assert.dom('[data-test-profile-popover]').doesNotExist();
-      await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-popover]').exists();
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('100');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-upgrade-plan-button]').exists();
+    assert.dom('[data-test-buy-more-credits-button]').exists();
 
-      assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-membership-tier]').hasText('Creator');
-      assert.dom('[data-test-monthly-credit]').hasText('100 of 100 left');
-      assert.dom('[data-test-additional-balance]').hasText('100');
-      assert.dom('[data-test-choose-plan-button]').doesNotExist();
-      assert.dom('[data-test-change-plan-button]').exists();
+    await click('[data-test-upgrade-plan-button]');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
 
-      await click('[data-test-change-plan-button]');
-      assert.dom('[data-test-profile-popover]').doesNotExist();
-      assert
-        .dom('[data-test-boxel-card-container]')
-        .hasClass('profile-settings');
-    });
+    await click('[aria-label="close modal"]');
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-popover]').exists();
+    await click('[data-test-buy-more-credits-button]');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
 
-    test(`out of credit`, async function (assert) {
-      userResponseBody.included[1].attributes.name = 'Creator';
-      userResponseBody.included[1].attributes.monthlyPrice = 1000;
-      userResponseBody.data.attributes.creditsUsedInPlanAllowance = 100;
-      userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          return null;
-        },
-        { prepend: true },
-      );
+    //out of credit
+    await click('[aria-label="close modal"]');
 
-      await visitOperatorMode({
-        submode: 'interact',
-        codePath: `${testRealmURL}employee.gts`,
-      });
+    userResponseBody.data.attributes.creditsUsedInPlanAllowance = 1000;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('100');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    await click('[data-test-profile-icon-button]');
 
-      await waitFor('[data-test-profile-icon-button]');
-      assert.dom('[data-test-profile-icon]').hasText('T');
-      assert
-        .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
-
-      assert.dom('[data-test-profile-popover]').doesNotExist();
-
-      await click('[data-test-profile-icon-button]');
-
-      assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-membership-tier]').hasText('Creator');
-      assert.dom('[data-test-monthly-credit]').hasText('0 of 100 left');
-      assert
-        .dom('[data-test-monthly-credit]')
-        .hasStyle({ color: 'rgb(255, 56, 56)' });
-      assert.dom('[data-test-additional-balance]').hasText('0');
-      assert.dom('[data-test-change-plan-button]').doesNotExist();
-      assert.dom('[data-test-choose-plan-button]').exists();
-      assert.dom('[data-test-out-of-credit]').exists();
-
-      await click('[data-test-profile-icon-button]');
-      userResponseBody.included[1].attributes.name = 'Creator';
-      userResponseBody.included[1].attributes.monthlyPrice = 1000;
-      userResponseBody.data.attributes.creditsUsedInPlanAllowance = 100;
-      userResponseBody.data.attributes.extraCreditsAvailableInBalance = 100;
-
-      await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-membership-tier]').hasText('Creator');
-      assert.dom('[data-test-monthly-credit]').hasText('0 of 100 left');
-      assert
-        .dom('[data-test-monthly-credit]')
-        .hasStyle({ color: 'rgb(255, 56, 56)' });
-      assert.dom('[data-test-additional-balance]').hasText('100');
-      assert.dom('[data-test-change-plan-button]').exists();
-      assert.dom('[data-test-choose-plan-button]').doesNotExist();
-      assert.dom('[data-test-out-of-credit]').doesNotExist();
-    });
+    userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('0');
+    assert.dom('[data-test-additional-credit]').hasClass('out-of-credit');
   });
 });

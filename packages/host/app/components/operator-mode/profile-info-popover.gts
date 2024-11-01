@@ -7,8 +7,8 @@ import Component from '@glimmer/component';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-
-import { cssVar, or } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import config from '@cardstack/host/config/environment';
@@ -31,7 +31,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   <template>
     <style scoped>
       .profile-popover {
-        width: 300px;
+        width: 320px;
         position: absolute;
         bottom: 68px;
         left: 20px;
@@ -60,7 +60,6 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .credit-info {
         display: flex;
         justify-content: space-between;
-        align-items: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-lg);
         margin-bottom: var(--boxel-sp);
@@ -76,13 +75,21 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         color: var(--boxel-dark);
         font: var(--boxel-font-xs);
       }
-      .out-of-credit {
-        font: var(--boxel-font-sm);
-      }
       .info-group .value {
         color: var(--boxel-dark);
         font: 700 var(--boxel-font-sm);
-        font-style: capitalize;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+
+        --icon-color: var(--boxel-teal);
+      }
+      .info-group .value.out-of-credit {
+        --icon-color: #ff0000;
+        color: #ff0000;
+      }
+      .info-group.additional-credit {
+        align-items: flex-end;
       }
     </style>
 
@@ -108,8 +115,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      {{! TODO: Remove config.APP.creditInfoEnabled once the API integration for credit info is completed. }}
-      {{#if config.APP.creditInfoEnabled}}
+      {{! TODO: Remove config.APP.stripeBillingEnabled once the API integration for credit info is completed. }}
+      {{#if config.APP.stripeBillingEnabled}}
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
             <span class='label'>Membership Tier</span>
@@ -118,50 +125,38 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               data-test-membership-tier
             >{{this.plan.name}}</span>
           </div>
-          {{#if this.isChangePlanDisplayed}}
-            <BoxelButton
-              @kind='secondary-light'
-              @size='small'
-              data-test-change-plan-button
-              {{on 'click' @toggleProfileSettings}}
-            >Change plan</BoxelButton>
-          {{/if}}
+          <BoxelButton
+            @kind='secondary-light'
+            @size='small'
+            data-test-upgrade-plan-button
+            {{on 'click' @toggleProfileSettings}}
+          >Upgrade Plan</BoxelButton>
           <div class='info-group'>
             <span class='label'>Monthly Credit</span>
             <span
-              class='value'
-              style={{if this.isOutOfPlanCreditAllowance 'color:#ff3838'}}
+              class={{cn 'value' out-of-credit=this.isOutOfPlanCreditAllowance}}
               data-test-monthly-credit
-            >{{this.monthlyCreditText}}</span>
+            ><IconHexagon width='16px' height='16px' />
+              {{this.monthlyCreditText}}</span>
           </div>
-          {{#if this.isOutOfCredit}}
-            <span class='out-of-credit' data-test-out-of-credit>You have used
-              all your credits from your monthly plan. Please upgrade your plan
-              or buy additional credit to continue.</span>
-          {{/if}}
-          <div class='info-group'>
+          <div class='info-group additional-credit'>
             <span class='label'>Additional Credit</span>
-            <span class='value' data-test-additional-balance>{{if
-                this.isFreePlan
-                'Upgrade to Enable'
-                this.extraCreditsAvailableInBalance
-              }}</span>
+            <span
+              class={{cn
+                'value'
+                out-of-credit=(eq this.extraCreditsAvailableInBalance 0)
+              }}
+              data-test-additional-credit
+            ><IconHexagon width='16px' height='16px' />
+              {{this.extraCreditsAvailableInBalance}}</span>
+            <BoxelButton
+              @kind='secondary-light'
+              @size='small'
+              data-test-buy-more-credits-button
+              {{on 'click' @toggleProfileSettings}}
+            >Buy more credits</BoxelButton>
           </div>
         </div>
-        {{#if (or this.isFreePlan this.isOutOfCredit)}}
-          <BoxelButton
-            {{on 'click' @toggleProfileSettings}}
-            style={{cssVar
-              boxel-button-text-color='var(--boxel-dark)'
-              boxel-button-color='var(--boxel-teal)'
-              boxel-button-border='1px solid var(--boxel-teal)'
-            }}
-            @kind='primary'
-            data-test-choose-plan-button
-          >
-            Choose Plan
-          </BoxelButton>
-        {{/if}}
       {{/if}}
     </div>
   </template>
@@ -202,27 +197,12 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       : '';
   }
 
-  private get isOutOfCredit() {
-    return (
-      this.isOutOfPlanCreditAllowance &&
-      this.extraCreditsAvailableInBalance == 0
-    );
-  }
-
   private get isOutOfPlanCreditAllowance() {
     return (
       this.creditsUsedInPlanAllowance &&
       this.creditsIncludedInPlanAllowance &&
       this.creditsUsedInPlanAllowance >= this.creditsIncludedInPlanAllowance
     );
-  }
-
-  private get isFreePlan() {
-    return this.plan && this.plan.monthlyPrice == 0;
-  }
-
-  private get isChangePlanDisplayed() {
-    return this.plan && !this.isFreePlan && !this.isOutOfCredit;
   }
 }
 

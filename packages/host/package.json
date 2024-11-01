@@ -21,7 +21,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "start": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/experiments/ CREDIT_INFO_ENABLED=true ember serve",
+    "start": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/experiments/ STRIPE_BILLING_ENABLED=true ember serve",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
