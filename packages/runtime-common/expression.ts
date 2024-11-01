@@ -270,6 +270,21 @@ export function upsert(
   ] as Expression;
 }
 
+export function insert(
+  table: string,
+  nameExpressions: string[][],
+  valueExpressions: Expression[],
+) {
+  return [
+    'INSERT INTO',
+    table,
+    ...addExplicitParens(separatedByCommas(nameExpressions)),
+    'VALUES',
+    ...addExplicitParens(separatedByCommas(valueExpressions)),
+    'RETURNING *',
+  ] as Expression;
+}
+
 export const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
 
 export async function query(

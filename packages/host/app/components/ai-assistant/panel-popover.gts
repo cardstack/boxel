@@ -25,7 +25,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-xl);
       color: var(--boxel-dark);
       box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
-      z-index: 20;
+      z-index: var(--host-ai-panel-popover-z-index);
       display: flex;
       flex-direction: column;
     }

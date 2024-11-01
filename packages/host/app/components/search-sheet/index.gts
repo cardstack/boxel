@@ -296,7 +296,7 @@ export default class SearchSheet extends Component<Signature> {
             var(--search-sheet-right-offset)
         );
         position: absolute;
-        z-index: 3;
+        z-index: var(--host-search-sheet-z-index);
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);
