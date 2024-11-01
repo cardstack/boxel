@@ -11,6 +11,7 @@ import { BoxelTriggerWrapper } from '../select/trigger.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
+import Pill from '../pill/index.gts';
 
 export interface TriggerComponentSignature<ItemT> {
   Args: {
@@ -114,20 +115,28 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         {{/let}}
 
         {{#if this.hasMoreItems}}
-          <div class='ember-power-select-has-more-item'>
-            +
-            {{this.remainingItemsCount}}
-            more
-            <IconX
-              {{on 'click' this.removeExcessItems}}
-              class='boxel-select__icon boxel-multi-select__icon--remove'
-            />
-          </div>
+          <Pill class='boxel-multi-select-has-more-item'>
+            <:default>
+              +
+              {{this.remainingItemsCount}}
+              more
+            </:default>
+            <:iconRight>
+              {{! TODO: Replace with icon button }}
+              <button
+                class='boxel-multi-select__remove-button'
+                {{on 'click' this.removeExcessItems}}
+              >
+                <IconX class='boxel-multi-select__icon--remove' />
+              </button>
+            </:iconRight>
+          </Pill>
         {{/if}}
       </:default>
       <:icon>
         {{#if this.hasSelectedItems}}
           <div class='has-selections'>
+            {{! TODO: Replace with icon button }}
             <IconX
               class='boxel-multi-select__icon'
               {{on 'click' this.onClearAll}}
@@ -144,38 +153,29 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
     </BoxelTriggerWrapper>
 
     <style scoped>
-      .boxel-multi-select__icon {
+      .boxel-multi-select__remove-button {
+        all: unset;
         display: flex;
         justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
         width: 10px;
         height: 10px;
-        cursor: pointer;
       }
       .boxel-multi-select__icon--remove {
-        display: flex;
-        justify-content: center;
         width: 10px;
         height: 10px;
-        min-width: 10px;
-        min-height: 10px;
-        cursor: pointer;
-        --icon-color: var(--boxel-multi-select-pill-color);
-      }
-      .ember-power-select-has-more-item {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        background-color: var(--boxel-700);
-        color: var(--boxel-light);
-        padding: 0 4px;
-        border: 1px solid gray;
-        border-radius: 4px;
-      }
-      .ember-power-select-has-more-item > svg {
-        --icon-color: var(--boxel-light) !important;
+        --icon-color: var(--boxel-light);
       }
       .ember-power-select-multiple-remove-btn {
         display: none; /* We have to remove the default x button placed on selected items*/
+      }
+      .boxel-multi-select-has-more-item {
+        --pill-gap: var(--boxel-sp-xxs);
+        --pill-background-color: var(--boxel-700);
+        --pill-font-color: var(--boxel-light);
       }
     </style>
   </template>
