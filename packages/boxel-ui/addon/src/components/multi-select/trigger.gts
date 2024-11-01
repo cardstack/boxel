@@ -82,7 +82,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
     };
   }
 
-  get hasNonZeroSelected() {
+  get hasSelectedItems() {
     return this.args.select.selected && this.args.select.selected.length > 0;
   }
 
@@ -126,7 +126,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         {{/if}}
       </:default>
       <:icon>
-        {{#if this.hasNonZeroSelected}}
+        {{#if this.hasSelectedItems}}
           <div class='has-selections'>
             <IconX
               class='boxel-multi-select__icon'
