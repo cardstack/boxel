@@ -25,6 +25,10 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   disabled?: boolean;
   renderInPlace?: boolean;
   matchTriggerWidth?: boolean;
+  extra?: any;
+  onOpen?: (select: Select, e: Event) => boolean | undefined;
+  onClose?: (select: Select, e: Event) => boolean | undefined;
+  onBlur?: (select: Select, e: Event) => boolean | undefined;
 }
 
 export interface Signature<ItemT> {
