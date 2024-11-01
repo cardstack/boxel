@@ -83,7 +83,7 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
       {{on 'keydown' (fn @handleEnterKey @newCard)}}
       data-test-select={{@newCardKey @newCard.realmURL}}
       aria-label='Select'
-      data-test-card-catalog-item={{@newCardKey @newCard.realmURL}}
+      data-test-card-catalog-create-new-button={{@newCard.realmURL}}
       data-test-card-catalog-item-selected={{@isSelected}}
       {{scrollIntoViewModifier
         @isSelected

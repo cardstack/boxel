@@ -1005,6 +1005,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       await click('[data-test-add-new]');
       await click('[data-test-card-catalog-create-new-button]');
+      await click(`[data-test-card-catalog-go-button]`);
     });
   });
 

@@ -757,6 +757,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
+    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
@@ -776,6 +777,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
+    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="3"]`);
 
@@ -925,6 +927,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
+    await click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     assert
@@ -1131,6 +1134,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-catalog-create-new-button]')
       .hasText('Create New Pet');
     await click('[data-test-card-catalog-create-new-button]');
+    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -1172,6 +1176,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-catalog-create-new-button]')
       .hasText('Create New Pet');
     await click('[data-test-card-catalog-create-new-button]');
+    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -2420,6 +2425,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-modal]`);
     await waitFor(`[data-test-card-catalog-create-new-button]`);
     await click(`[data-test-card-catalog-create-new-button]`);
+    await click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     let ids = Array.from(savedCards);
@@ -2469,6 +2475,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
+    await click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
