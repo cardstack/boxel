@@ -185,7 +185,9 @@ export class RealmIndexUpdater {
       owners.length === 1
         ? owners[0]
         : owners.find((userId) => userId.startsWith('@realm/'));
-    if (realmUserId) {
+    // real matrix user ID's always start with an '@', if it doesn't that
+    // means we are testing
+    if (realmUserId?.startsWith('@')) {
       return getMatrixUsername(realmUserId);
     }
 
