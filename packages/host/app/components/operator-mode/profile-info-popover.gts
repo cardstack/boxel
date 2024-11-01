@@ -7,7 +7,7 @@ import Component from '@glimmer/component';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
@@ -95,6 +95,21 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .info-group button {
         margin-top: var(--boxel-sp-xs);
       }
+
+      .buy-more-credits {
+        display: flex;
+        justify-content: flex-end;
+        width: 100%;
+        margin-top: calc(-1 * var(--boxel-sp-sm));
+      }
+      .buy-more-credits.out-of-credit {
+        justify-content: center;
+        margin-top: var(--boxel-sp-sm);
+        --boxel-button-min-width: 100%;
+      }
+      :deep(.buy-more-credits.out-of-credit .size-base) {
+        --boxel-button-min-height: 39px;
+      }
     </style>
 
     <div class='profile-popover' data-test-profile-popover ...attributes>
@@ -146,17 +161,18 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
           <div class='info-group additional-credit'>
             <span class='label'>Additional Credit</span>
             <span
-              class={{cn
-                'value'
-                out-of-credit=(eq this.extraCreditsAvailableInBalance 0)
-              }}
+              class={{cn 'value' out-of-credit=this.isOutOfCredit}}
               data-test-additional-credit
             ><IconHexagon width='16px' height='16px' />
               {{this.extraCreditsAvailableInBalance}}</span>
+          </div>
+          <div
+            class={{cn 'buy-more-credits' out-of-credit=this.isOutOfCredit}}
+            data-test-buy-more-credits
+          >
             <BoxelButton
-              @kind='secondary-light'
-              @size='small'
-              data-test-buy-more-credits-button
+              @kind={{if this.isOutOfCredit 'primary' 'secondary-light'}}
+              @size={{if this.isOutOfCredit 'base' 'small'}}
               {{on 'click' @toggleProfileSettings}}
             >Buy more credits</BoxelButton>
           </div>
@@ -199,6 +215,13 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
           this.creditsIncludedInPlanAllowance - this.creditsUsedInPlanAllowance
         } of ${this.creditsIncludedInPlanAllowance} left`
       : '';
+  }
+
+  private get isOutOfCredit() {
+    return (
+      this.isOutOfPlanCreditAllowance &&
+      this.extraCreditsAvailableInBalance == 0
+    );
   }
 
   private get isOutOfPlanCreditAllowance() {
