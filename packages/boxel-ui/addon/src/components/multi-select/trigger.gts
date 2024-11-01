@@ -114,7 +114,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         {{/let}}
 
         {{#if this.hasMoreItems}}
-          <div class='ember-power-select-hasMore-item'>
+          <div class='ember-power-select-has-more-item'>
             +
             {{this.remainingItemsCount}}
             more
@@ -159,7 +159,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
-      .ember-power-select-hasMore-item {
+      .ember-power-select-has-more-item {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
@@ -169,7 +169,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         border: 1px solid gray;
         border-radius: 4px;
       }
-      .ember-power-select-hasMore-item > svg {
+      .ember-power-select-has-more-item > svg {
         --icon-color: var(--boxel-light) !important;
       }
       .ember-power-select-multiple-remove-btn {
