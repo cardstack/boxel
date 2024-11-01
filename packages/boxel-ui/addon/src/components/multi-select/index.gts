@@ -1,6 +1,9 @@
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type { PowerSelectArgs } from 'ember-power-select/components/power-select';
+import type {
+  PowerSelectArgs,
+  Select,
+} from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 
