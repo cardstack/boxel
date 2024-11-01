@@ -2,18 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {},
-    "relationships": {
-      "favorites.0": {
-        "links": {
-          "self": "./Friend/1"
-        }
-      },
-      "favorites.1": {
-        "links": {
-          "self": "./Person/1"
-        }
-      }
-    },
+    "relationships": {},
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/cards-grid",
