@@ -17,6 +17,14 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   selected: ItemT[];
   selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
   triggerComponent?: ComponentLike<TriggerComponentSignature<ItemT>>;
+  searchField?: string;
+  searchEnabled?: boolean;
+  closeOnSelect?: boolean;
+  ariaLabel?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  renderInPlace?: boolean;
+  matchTriggerWidth?: boolean;
 }
 
 export interface Signature<ItemT> {
