@@ -58,7 +58,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { assertQuery } from './query';
+import { assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -75,7 +75,6 @@ import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 
-import qs from 'qs';
 import {
   MatrixBackendAuthentication,
   Utils,
@@ -1531,7 +1530,7 @@ export class Realm {
       request.headers.get('X-Boxel-Building-Index'),
     );
 
-    let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
+    let cardsQuery = parseQuery(new URL(request.url).search.slice(1));
     assertQuery(cardsQuery);
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
@@ -1555,7 +1554,8 @@ export class Realm {
       request.headers.get('X-Boxel-Building-Index'),
     );
 
-    let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
+    let href = new URL(request.url).search.slice(1);
+    let parsedQueryString = parseQuery(href);
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
     let cardUrls = parsedQueryString.cardUrls as string[];
 
