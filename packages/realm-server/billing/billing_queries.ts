@@ -312,3 +312,45 @@ export async function getMostRecentSubscriptionCycle(
     periodEnd: results[0].period_end as number,
   };
 }
+
+export async function getSubscriptionByStripeSubscriptionId(
+  dbAdapter: DBAdapter,
+  stripeSubscriptionId: string,
+): Promise<Subscription | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM subscriptions WHERE stripe_subscription_id = `,
+    param(stripeSubscriptionId),
+  ]);
+
+  if (results.length === 0) {
+    return null;
+  }
+
+  return {
+    id: results[0].id as string,
+    userId: results[0].user_id as string,
+    planId: results[0].plan_id as string,
+    status: results[0].status as string,
+  } as Subscription;
+}
+
+export async function updateSubscription(
+  dbAdapter: DBAdapter,
+  subscriptionId: string,
+  params: {
+    status: string;
+    endedAt?: number;
+  },
+) {
+  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+    status: params.status,
+    ended_at: params.endedAt,
+  });
+
+  await query(dbAdapter, [
+    `UPDATE subscriptions SET (status, ended_at) = `,
+    ...addExplicitParens(separatedByCommas(valueExpressions)),
+    ` WHERE id = `,
+    param(subscriptionId),
+  ] as Expression);
+}

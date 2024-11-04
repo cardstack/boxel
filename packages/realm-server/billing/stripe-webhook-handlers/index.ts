@@ -1,6 +1,7 @@
 import { DBAdapter } from '@cardstack/runtime-common';
 import { handlePaymentSucceeded } from './payment-succeeded';
 import Stripe from 'stripe';
+import { handleSubscriptionDeleted } from './subscription-deleted';
 
 export type StripeEvent = {
   id: string;
@@ -32,6 +33,28 @@ export type StripeInvoicePaymentSucceededWebhookEvent = StripeEvent & {
             product: string;
           };
         }>;
+      };
+    };
+  };
+};
+
+export type StripeSubscriptionDeletedWebhookEvent = StripeEvent & {
+  object: 'event';
+  type: 'customer.subscription.deleted';
+  data: {
+    object: {
+      id: string; // stripe subscription id
+      canceled_at: number;
+      current_period_end: number;
+      current_period_start: number;
+      customer: string;
+      cancellation_details: {
+        comment: string | null;
+        feedback: string;
+        reason:
+          | 'cancellation_requested'
+          | 'payment_failure'
+          | 'payment_disputed';
       };
     };
   };
@@ -73,6 +96,12 @@ export default async function stripeWebhookHandler(
       await handlePaymentSucceeded(
         dbAdapter,
         event as StripeInvoicePaymentSucceededWebhookEvent,
+      );
+      break;
+    case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure
+      await handleSubscriptionDeleted(
+        dbAdapter,
+        event as StripeSubscriptionDeletedWebhookEvent,
       );
   }
 
