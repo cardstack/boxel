@@ -33,6 +33,7 @@ interface Signature {
 
 export default class OperatorModeStack extends Component<Signature> {
   private closeAnimation = new WeakMap<StackItem, () => void>();
+  private moveForwardAnimation = new WeakMap<StackItem, () => void>();
 
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
@@ -48,6 +49,13 @@ export default class OperatorModeStack extends Component<Signature> {
     }
 
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
+
+    // move forward animation on next top item
+    const nextTopItem = this.args.stackItems[itemIndex];
+    const moveForwardAnimation = this.moveForwardAnimation.get(nextTopItem);
+    if (moveForwardAnimation) {
+      await moveForwardAnimation();
+    }
   });
 
   private setupStackItem = (
@@ -56,6 +64,7 @@ export default class OperatorModeStack extends Component<Signature> {
     doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
     doScrollIntoView: (selector: string) => void,
     doCloseAnimation: () => void,
+    doMoveForwardAnimation: () => void,
   ) => {
     this.args.setupStackItem(
       item,
@@ -64,6 +73,7 @@ export default class OperatorModeStack extends Component<Signature> {
       doScrollIntoView,
     );
     this.closeAnimation.set(item, doCloseAnimation);
+    this.moveForwardAnimation.set(item, doMoveForwardAnimation);
   };
 
   <template>

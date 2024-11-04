@@ -84,6 +84,7 @@ interface Signature {
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
       doCloseAnimation: () => void,
+      doMoveForwardAnimation: () => void,
     ) => void;
   };
 }
@@ -110,6 +111,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isSaving = false;
   @tracked private isClosing = false;
+  @tracked private isMovingForward = false;
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
@@ -141,6 +143,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.doWithStableScroll.perform,
       this.scrollIntoView.perform,
       this.doCloseAnimation.perform,
+      this.doMoveForwardAnimation.perform,
     );
   }
 
@@ -200,7 +203,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
-      transition: margin-top var(--boxel-transition);
+      transition: margin-top var(--boxel-transition), width var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     return htmlSafe(styles);
@@ -412,16 +415,29 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
+  private async startAnimation(animationFlag: 'isClosing' | 'isMovingForward') {
+    this[animationFlag] = true;
+    if (!this.itemEl) return;
+
+    return new Promise<void>((resolve) => {
+      scheduleOnce(
+        'afterRender',
+        this,
+        this.handleAnimationCompletion,
+        resolve,
+      );
+    });
+  }
+
   private doCloseAnimation = dropTask(async () => {
-    this.isClosing = true;
-    if (this.itemEl) {
-      await new Promise<void>((resolve) => {
-        scheduleOnce('afterRender', this, this.handleCloseAnimation, resolve);
-      });
-    }
+    await this.startAnimation('isClosing');
   });
 
-  private handleCloseAnimation(resolve: () => void) {
+  private doMoveForwardAnimation = dropTask(async () => {
+    await this.startAnimation('isMovingForward');
+  });
+
+  private handleAnimationCompletion(resolve: () => void) {
     if (!this.itemEl) {
       return;
     }
@@ -471,6 +487,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{if this.isBuried "buried"}}
         {{if this.doOpeningAnimation "opening-animation"}}
         {{if this.doClosingAnimation "closing-animation"}}
+        {{if this.isMovingForward "move-forward-animation"}}
         {{if this.isTesting "testing"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
@@ -572,6 +589,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }
       }
 
+      @keyframes moveForward {
+        from {
+          transform: translateY(20%);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
       .header {
         --boxel-card-header-border-radius: var(--boxel-border-radius-xl);
         --boxel-card-header-background-color: var(--boxel-light);
@@ -597,14 +625,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
       .item.opening-animation {
         animation: scaleIn 0.2s forwards;
+        transition: margin-top var(--boxel-transition);
       }
       .item.closing-animation {
         animation: fadeOut 0.2s forwards;
+      }
+      .item.move-forward-animation {
+        animation: moveForward 0.2s forwards;
       }
       .item.opening-animation.testing {
         animation-duration: 0s;
       }
       .item.closing-animation.testing {
+        animation-duration: 0s;
+      }
+      .item.move-forward-animation.testing {
         animation-duration: 0s;
       }
 
