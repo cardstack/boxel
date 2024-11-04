@@ -57,7 +57,7 @@ export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
 }
 
-export class PatchCommandInput extends CardDef {
+export class PatchCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field patch = contains(FieldDef); //TODO: JSONField ?
 }

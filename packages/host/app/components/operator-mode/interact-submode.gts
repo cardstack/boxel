@@ -1,6 +1,7 @@
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { getOwner } from '@ember/owner';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -32,6 +33,8 @@ import {
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
+  Command,
+  CommandContext,
 } from '@cardstack/runtime-common';
 
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
@@ -40,7 +43,11 @@ import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgr
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -53,6 +60,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type Realm from '../../services/realm';
 
 import type { Submode } from '../submode-switcher';
+import { setOwner } from '@ember/owner';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -708,11 +716,52 @@ export default class InteractSubmode extends Component<Signature> {
     openSearchCallback();
   }
 
+  lookupCommand = <
+    CardInputType extends CardDef | undefined,
+    CardResultType extends CardDef | undefined,
+    CommandConfiguration,
+  >(
+    name: string,
+  ): Command<CardInputType, CardResultType, CommandConfiguration> => {
+    let owner = getOwner(this)!;
+    let commandFactory = owner.factoryFor(`command:${name}`);
+    if (!commandFactory) {
+      throw new Error(`Could not find command "${name}"`);
+    }
+    let CommandClass = commandFactory.class as unknown as {
+      new (
+        commandContext: CommandContext,
+      ): Command<CardInputType, CardResultType, CommandConfiguration>;
+    };
+    let instance = new CommandClass(this.commandContext) as Command<
+      CardInputType,
+      CardResultType,
+      CommandConfiguration
+    >;
+    setOwner(instance, owner);
+    return instance;
+  };
+
+  private get commandContext() {
+    return {
+      lookupCommand: this.lookupCommand,
+      sendAiAssistantMessage: this.matrixService.sendAiAssistantMessage,
+    };
+  }
+
   @provide(CardContextName)
   // @ts-ignore "cardContext is declared but not used"
-  private get cardContext() {
+  private get cardContext(): Omit<
+    CardContext,
+    'prerenderedCardSearchComponent'
+  > {
     return {
       actions: this.publicAPI(this, 0),
+      // TODO: should we include this here??
+      commandContext: {
+        lookupCommand: this.lookupCommand,
+        sendAiAssistantMessage: this.matrixService.sendAiAssistantMessage,
+      },
     };
   }
 
@@ -772,6 +821,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
+                @commandContext={{this.commandContext}}
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}

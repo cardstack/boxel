@@ -196,7 +196,7 @@ export interface CardMessageContent {
     context: {
       openCardIds?: string[];
       tools: Tool[];
-      submode: string | undefined;
+      submode?: string;
     };
   };
 }

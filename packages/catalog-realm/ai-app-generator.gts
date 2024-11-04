@@ -358,10 +358,11 @@ class DashboardTab extends GlimmerComponent<{
   }
 
   generateProductRequirementsDoc = async () => {
-    let command = new CreateBoxelApp(
-      this.args.context.commandContext,
-      undefined,
-    );
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    let command = new CreateBoxelApp(commandContext, undefined);
     this.isGenerating = true;
     try {
       await command.execute(

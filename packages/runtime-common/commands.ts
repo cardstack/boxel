@@ -1,7 +1,12 @@
 import { Deferred } from './deferred';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
-// import { Schema } from './helpers/ai';
+import {
+  Schema,
+  generateJsonSchemaForCardType,
+  RelationshipsSchema,
+} from './helpers/ai';
 
 export interface CommandContext {
   lookupCommand<
@@ -13,8 +18,8 @@ export interface CommandContext {
   ): Command<CardInputType, CardResultType, CommandConfiguration>;
 
   sendAiAssistantMessage: (params: {
-    sessionId?: string; // if falsy we create a new session
-    show?: boolean; // if truthy, ensure the side panel to the session
+    roomId?: string; // if falsy we create a new room
+    show?: boolean; // if truthy, ensure the side panel to the room
     prompt: string;
     attachedCards?: CardDef[];
     skillCards?: SkillCard[];
@@ -54,7 +59,7 @@ export abstract class Command<
   CommandConfiguration extends any | undefined = undefined,
 > {
   // Is this actually type checking ?
-  abstract inputType: new () => NonNullable<CardInputType>;
+  abstract getInputType(): Promise<typeof CardDef>;
 
   invocations: CommandInvocation<CardInputType, CardResultType>[] = [];
 
@@ -99,8 +104,17 @@ export abstract class Command<
     return this.nextCompletionDeferred.promise;
   }
 
-  //TODO: figure out how to do this, and if here is the right place
-  // async getInputJsonSchema(): Promise<Schema> {
-  //   return await getJSONSchema(this.inputType);
-  // }
+  async getInputJsonSchema(
+    cardApi: typeof CardAPI,
+    mappings: Map<typeof CardAPI.FieldDef, Schema>,
+  ): Promise<{
+    attributes: Schema;
+    relationships: RelationshipsSchema;
+  }> {
+    return generateJsonSchemaForCardType(
+      await this.getInputType(),
+      cardApi,
+      mappings,
+    );
+  }
 }

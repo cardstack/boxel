@@ -10,7 +10,7 @@ import {
   CreateInstanceInput,
   CreateModuleInput,
   ModuleCard,
-  PatchCommandInput,
+  PatchCardInput,
   SaveCardInput,
   ShowCardInput,
 } from 'https://cardstack.com/base/command';
@@ -27,7 +27,7 @@ export class CreateProductRequirementsInput extends CardDef {
 
 export class CreateProductRequirementsResult extends CardDef {
   @field productRequirements = linksTo(ProductRequirementDocument);
-  @field sessionId = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class CreateProductRequirementsInstance extends Command<
@@ -59,21 +59,21 @@ export class CreateProductRequirementsInstance extends Command<
     let saveCardCommand = this.commandContext.lookupCommand<
       SaveCardInput,
       undefined
-    >('saveCard'); // lookupCommand creates the instance and passes in the context
+    >('save-card'); // lookupCommand creates the instance and passes in the context
 
-    // todo: use real carddef so we can do this in the constructor
-    let saveCardInput = new SaveCardInput();
-    saveCardInput.realm = input.realm;
-    saveCardInput.card = prdCard;
-
-    await saveCardCommand.execute(saveCardInput);
+    await saveCardCommand.execute(
+      new SaveCardInput({
+        realm: input.realm,
+        card: prdCard,
+      }),
+    );
 
     // Get patch command, this takes the card and returns a command that can be used to patch the card
     let patchPRDCommand = this.commandContext.lookupCommand<
-      PatchCommandInput,
+      PatchCardInput,
       undefined,
       ProductRequirementDocument
-    >('patchCard');
+    >('patch-card');
 
     // This should return a session ID so that we can potentially send followup messages
     // This should delegate to a matrix service method. Besides actually sending the message,
@@ -84,7 +84,7 @@ export class CreateProductRequirementsInstance extends Command<
     // Auto execute commands are commands that should be executed automatically if they are returned
     // as tool calls from the AI.
 
-    let { sessionId } = await this.commandContext.sendAiAssistantMessage({
+    let { roomId } = await this.commandContext.sendAiAssistantMessage({
       show: true, // maybe? open the side panel
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
@@ -96,7 +96,7 @@ export class CreateProductRequirementsInstance extends Command<
     await patchPRDCommand.waitForNextCompletion();
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;
-    result.sessionId = sessionId;
+    result.roomId = roomId;
     return result;
   }
 }
@@ -104,12 +104,12 @@ export class CreateProductRequirementsInstance extends Command<
 export class GenerateAppInput extends CardDef {
   @field productRequirements = linksTo(ProductRequirementDocument);
   @field realm = contains(StringField);
-  @field sessionId = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 class GenerateCodeFromPRDResult extends CardDef {
   @field module = contains(CodeRefField);
-  @field sessionId = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class GenerateCodeFromPRDCommand extends Command<
@@ -143,8 +143,8 @@ export class GenerateCodeFromPRDCommand extends Command<
     >('createModule');
 
     // Send message to AI assistant with the PRD card and wait for it to generate code
-    let { sessionId } = await this.commandContext.sendAiAssistantMessage({
-      sessionId: input.sessionId,
+    let { roomId } = await this.commandContext.sendAiAssistantMessage({
+      roomId: input.roomId,
       show: true,
       prompt: this.createPrompt(input.productRequirements),
       attachedCards: [input.productRequirements],
@@ -157,7 +157,7 @@ export class GenerateCodeFromPRDCommand extends Command<
 
     let result = new GenerateCodeFromPRDResult();
     result.module = moduleCard.module;
-    result.sessionId = sessionId;
+    result.roomId = roomId;
     return result;
   }
 }
@@ -174,7 +174,7 @@ export class CreateBoxelApp extends Command<
       this.commandContext,
       undefined,
     );
-    let { productRequirements: prdCard, sessionId } =
+    let { productRequirements: prdCard, roomId } =
       await createPRDCommand.execute(input);
     let showCardCommand = this.commandContext.lookupCommand<
       ShowCardInput,
@@ -192,7 +192,7 @@ export class CreateBoxelApp extends Command<
     let generateAppInput = new GenerateAppInput();
     generateAppInput.productRequirements = prdCard;
     generateAppInput.realm = input.realm;
-    generateAppInput.sessionId = sessionId;
+    generateAppInput.roomId = roomId;
     let { module: moduleCard } = await generateAppCommand.execute(
       generateAppInput,
     );

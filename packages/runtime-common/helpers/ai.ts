@@ -180,7 +180,7 @@ function getPrimitiveType(
  * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
  */
-function generatePatchCallSpecification(
+function generateJsonSchemaForContainsFields(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
@@ -212,7 +212,7 @@ function generatePatchCallSpecification(
       continue;
     }
 
-    let fieldSchemaForSingleItem = generatePatchCallSpecification(
+    let fieldSchemaForSingleItem = generateJsonSchemaForContainsFields(
       field.card,
       cardApi,
       mappings,
@@ -244,7 +244,7 @@ type RelationshipFieldInfo = {
   description?: string;
 };
 
-function generatePatchCallRelationshipsSpecification(
+function generateJsonSchemaForLinksToFields(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
 ): RelationshipsSchema | undefined {
@@ -335,14 +335,12 @@ function generateRelationshipFieldsInfo(
  * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
  */
-export function generateCardPatchCallSpecification(
+export function generateJsonSchemaForCardType(
   def: typeof CardAPI.CardDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-):
-  | { attributes: Schema }
-  | { attributes: Schema; relationships: RelationshipsSchema } {
-  let schema = generatePatchCallSpecification(def, cardApi, mappings) as
+): { attributes: Schema; relationships: RelationshipsSchema } {
+  let schema = generateJsonSchemaForContainsFields(def, cardApi, mappings) as
     | Schema
     | undefined;
   if (schema == undefined) {
@@ -351,18 +349,23 @@ export function generateCardPatchCallSpecification(
         type: 'object',
         properties: {},
       },
+      relationships: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
     };
   } else {
-    let relationships = generatePatchCallRelationshipsSpecification(
-      def,
-      cardApi,
-    );
+    let relationships = generateJsonSchemaForLinksToFields(def, cardApi);
     if (
       !relationships ||
       !('required' in relationships) ||
       !relationships.required.length
     ) {
-      return { attributes: schema };
+      return {
+        attributes: schema,
+        relationships: { type: 'object', properties: {}, required: [] },
+      };
     }
     return {
       attributes: schema,

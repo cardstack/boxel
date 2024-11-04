@@ -31,10 +31,11 @@ import {
   loaderFor,
   LooseCardResource,
   ResolvedCodeRef,
+  Command,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
-  generateCardPatchCallSpecification,
+  generateJsonSchemaForCardType,
   getSearchTool,
   getGenerateAppModuleTool,
 } from '@cardstack/runtime-common/helpers/ai';
@@ -577,7 +578,7 @@ export default class MatrixService extends Service {
       );
       // Generate tool calls for patching currently open cards permitted for modification
       for (let attachedOpenCard of attachedOpenCards) {
-        let patchSpec = generateCardPatchCallSpecification(
+        let patchSpec = generateJsonSchemaForCardType(
           attachedOpenCard.constructor as typeof CardDef,
           this.cardAPI,
           mappings,
@@ -619,6 +620,63 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
+  }
+
+  public async sendAiAssistantMessage(params: {
+    roomId?: string; // if falsy we create a new room
+    show?: boolean; // if truthy, ensure the side panel to the room
+    prompt: string;
+    attachedCards?: CardDef[];
+    skillCards?: SkillCard[];
+    autoExecuteCommands?: Command<any, any, any>[];
+  }): Promise<{ roomId: string }> {
+    let roomId = params.roomId;
+    if (!roomId) {
+      roomId = await this.createRoom('AI Assistant', [aiBotUsername]);
+    }
+
+    let html = markdownToHtml(params.prompt);
+    let mappings = await basicMappings(this.loaderService.loader);
+    let tools = [];
+    for (let command of params.autoExecuteCommands ?? []) {
+      tools.push({
+        type: 'function',
+        function: {
+          name: command.name,
+          description: command.description,
+          parameters: await command.getInputJsonSchema(this.cardAPI, mappings),
+        },
+      });
+    }
+
+    let attachedCardsEventIds = await this.getCardEventIds(
+      params.attachedCards ?? [],
+      roomId,
+      this.cardHashes,
+      { maybeRelativeURL: null },
+    );
+    let attachedSkillEventIds = await this.getCardEventIds(
+      params.skillCards ?? [],
+      roomId,
+      this.skillCardHashes,
+      { includeComputeds: true, maybeRelativeURL: null },
+    );
+
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.message',
+      body: params.prompt || '',
+      format: 'org.matrix.custom.html',
+      formatted_body: html,
+      clientGeneratedId,
+      data: {
+        attachedCardsEventIds,
+        attachedSkillEventIds,
+        context: {
+          tools,
+        },
+      },
+    } as CardMessageContent);
+    return { roomId };
   }
 
   private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
