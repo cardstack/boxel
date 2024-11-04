@@ -179,7 +179,7 @@ export class RealmIndexUpdater {
       this.realmURL,
     );
     let owners = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions.includes('realm-owner'))
+      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
       .map(([userId]) => userId);
     let realmUserId =
       owners.length === 1
