@@ -98,7 +98,7 @@ export default async function stripeWebhookHandler(
         event as StripeInvoicePaymentSucceededWebhookEvent,
       );
       break;
-    case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure
+    case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure, or payment dispute
       await handleSubscriptionDeleted(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
