@@ -312,7 +312,7 @@ module('Realm Server', function (hooks) {
       );
     });
 
-    test('remove permissions from PATCH /_permissions', async function (assert) {
+    test('remove permissions from PATCH /_permissions using empty array', async function (assert) {
       let response = await request
         .patch('/_permissions')
         .set('Accept', 'application/vnd.api+json')
@@ -331,6 +331,41 @@ module('Realm Server', function (hooks) {
             attributes: {
               permissions: {
                 bob: [],
+              },
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+      let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+      assert.deepEqual(
+        permissions,
+        {
+          mary: ['read', 'write', 'realm-owner'],
+        },
+        'permissions are correct',
+      );
+    });
+
+    test('remove permissions from PATCH /_permissions using null', async function (assert) {
+      let response = await request
+        .patch('/_permissions')
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'mary', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        )
+        .send({
+          data: {
+            id: testRealmHref,
+            type: 'permissions',
+            attributes: {
+              permissions: {
+                bob: null,
               },
             },
           },
@@ -402,6 +437,70 @@ module('Realm Server', function (hooks) {
             attributes: {
               permissions: {
                 mango: ['realm-owner', 'write', 'read'],
+              },
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+      assert.deepEqual(
+        permissions,
+        {
+          mary: ['read', 'write', 'realm-owner'],
+          bob: ['read', 'write'],
+        },
+        'permissions are correct',
+      );
+    });
+
+    test('receive 400 error on invalid JSON API', async function (assert) {
+      let response = await request
+        .patch('/_permissions')
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'mary', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        )
+        .send({
+          data: { nothing: null },
+        });
+
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+      assert.deepEqual(
+        permissions,
+        {
+          mary: ['read', 'write', 'realm-owner'],
+          bob: ['read', 'write'],
+        },
+        'permissions are correct',
+      );
+    });
+
+    test('receive 400 error on invalid permissions shape', async function (assert) {
+      let response = await request
+        .patch('/_permissions')
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'mary', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        )
+        .send({
+          data: {
+            id: testRealmHref,
+            type: 'permissions',
+            attributes: {
+              permissions: {
+                larry: { read: true },
               },
             },
           },

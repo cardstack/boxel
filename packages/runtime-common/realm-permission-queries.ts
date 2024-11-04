@@ -55,7 +55,7 @@ export async function insertPermissions(
 ) {
   let insertPromises = Object.entries(permissions).map(
     ([user, userPermissions]) => {
-      if (userPermissions.length === 0) {
+      if (userPermissions == null || userPermissions.length === 0) {
         return removePermissions(dbAdapter, realmURL, user);
       }
 

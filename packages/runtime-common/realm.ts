@@ -110,11 +110,11 @@ export interface FileRef {
 export interface TokenClaims {
   user: string;
   realm: string;
-  permissions: ('read' | 'write' | 'realm-owner')[];
+  permissions: RealmPermissions['user'];
 }
 
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write' | 'realm-owner')[];
+  [username: string]: ('read' | 'write' | 'realm-owner')[] | null;
 }
 
 export interface RealmAdapter {
@@ -926,7 +926,7 @@ export class Realm {
 
       let userPermissions = await realmPermissionChecker.for(token.user);
       if (
-        JSON.stringify(token.permissions.sort()) !==
+        JSON.stringify(token.permissions?.sort()) !==
         JSON.stringify(userPermissions.sort())
       ) {
         throw new AuthenticationError(
@@ -1675,6 +1675,14 @@ export class Realm {
         requestContext,
       );
     }
+    try {
+      assertRealmPermissions(patch);
+    } catch (e: any) {
+      return badRequest(
+        `The request body does not specify realm permissions correctly: ${e.message}`,
+        requestContext,
+      );
+    }
 
     let currentPermissions = await fetchUserPermissions(
       this.#dbAdapter,
@@ -1687,7 +1695,7 @@ export class Realm {
           requestContext,
         );
       }
-      if (permissions.includes('realm-owner')) {
+      if (permissions?.includes('realm-owner')) {
         return badRequest(
           `cannot create new realm owner ${user}`,
           requestContext,
@@ -2005,4 +2013,27 @@ function sseToChunkData(type: string, data: string, id?: string): string {
     info.push(`id: ${id}`);
   }
   return info.join('\n') + '\n\n';
+}
+
+function assertRealmPermissions(
+  realmPermissions: any,
+): asserts realmPermissions is RealmPermissions {
+  if (typeof realmPermissions !== 'object') {
+    throw new Error(`permissions must be an object`);
+  }
+  for (let [user, permissions] of Object.entries(realmPermissions)) {
+    if (typeof user !== 'string') {
+      throw new Error(`user ${user} must be a string`); // could be a symbol
+    }
+    if (!Array.isArray(permissions) && permissions !== null) {
+      throw new Error(`permissions must be an array or null`);
+    }
+    if (permissions && permissions.length > 0) {
+      for (let permission of permissions) {
+        if (!['read', 'write', 'realm-owner'].includes(permission)) {
+          throw new Error(`'${permission}' is not a valid permission`);
+        }
+      }
+    }
+  }
 }
