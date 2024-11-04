@@ -344,10 +344,10 @@ export async function getSubscriptionByStripeSubscriptionId(
   }
 
   return {
-    id: results[0].id as string,
-    userId: results[0].user_id as string,
-    planId: results[0].plan_id as string,
-    status: results[0].status as string,
+    id: results[0].id,
+    userId: results[0].user_id,
+    planId: results[0].plan_id,
+    status: results[0].status,
   } as Subscription;
 }
 
