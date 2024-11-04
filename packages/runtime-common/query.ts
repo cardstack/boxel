@@ -307,9 +307,9 @@ function assertEveryFilter(
       `${pointer.join('/') || '/'}: every must be an array of Filters`,
     );
   } else {
-    filter.every.every((value: any, index: number) =>
-      assertFilter(value, pointer.concat(`[${index}]`)),
-    );
+    filter.every.forEach((value: any, index: number) => {
+      assertFilter(value, pointer.concat(`[${index}]`));
+    });
   }
 }
 
@@ -348,9 +348,10 @@ function assertEqFilter(
   if (typeof filter.eq !== 'object' || filter.eq == null) {
     throw new Error(`${pointer.join('/') || '/'}: eq must be an object`);
   }
-  Object.entries(filter.eq).every(([key, value]) =>
-    assertJSONValue(value, pointer.concat(key)),
-  );
+  Object.entries(filter.eq).forEach(([key, value]) => {
+    assertKey(key, pointer);
+    assertJSONValue(value, pointer.concat(key));
+  });
 }
 
 function assertContainsFilter(
@@ -371,9 +372,10 @@ function assertContainsFilter(
   if (typeof filter.contains !== 'object' || filter.contains == null) {
     throw new Error(`${pointer.join('/') || '/'}: contains must be an object`);
   }
-  Object.entries(filter.contains).every(([key, value]) =>
-    assertJSONValue(value, pointer.concat(key)),
-  );
+  Object.entries(filter.contains).forEach(([key, value]) => {
+    assertKey(key, pointer);
+    assertJSONValue(value, pointer.concat(key));
+  });
 }
 
 function assertRangeFilter(
@@ -418,6 +420,14 @@ function assertRangeFilter(
       }
     });
   });
+}
+
+export function assertKey(key: string, pointer: string[]) {
+  if (key.startsWith('[') && key.endsWith(']')) {
+    throw new Error(
+      `${pointer.join('/')}: field names cannot be wrapped in brackets: ${key}`,
+    );
+  }
 }
 
 const removeBrackets = (obj: any): any => {
