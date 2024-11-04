@@ -9,6 +9,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
+import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 let imageURL = new URL('./logo.png', import.meta.url).href;
 
@@ -37,6 +38,7 @@ class VeryBasicCard extends BasicCard {
 
 export class Post extends CardDef {
   static displayName = 'Post';
+  static icon = FileTextIcon;
   @field author = linksTo(Person);
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);

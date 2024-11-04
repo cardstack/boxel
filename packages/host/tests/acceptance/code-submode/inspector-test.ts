@@ -1833,7 +1833,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-create-definition]').isDisabled();
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
-    assert.dom('[data-test-create-definition]').isDisabled();
+    assert.dom('[data-test-create-definition]').isEnabled();
     await fillIn('[data-test-file-name-field]', '/test-card');
     assert.dom('[data-test-create-definition]').isEnabled();
 

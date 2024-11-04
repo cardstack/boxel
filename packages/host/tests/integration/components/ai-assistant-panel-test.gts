@@ -72,18 +72,22 @@ module('Integration | ai-assistant-panel', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  let { createAndJoinRoom, simulateRemoteMessage, getRoomEvents } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
-      activeRealms: [testRealmURL],
-      autostart: true,
-      now: (() => {
-        // deterministic clock so that, for example, screenshots
-        // have consistent content
-        let clock = new Date(2024, 8, 19).getTime();
-        return () => (clock += 10);
-      })(),
-    });
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    getRoomEvents,
+    setReadReceipt,
+  } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+    now: (() => {
+      // deterministic clock so that, for example, screenshots
+      // have consistent content
+      let clock = new Date(2024, 8, 19).getTime();
+      return () => (clock += 10);
+    })(),
+  });
 
   let noop = () => {};
 
@@ -302,13 +306,79 @@ module('Integration | ai-assistant-panel', function (hooks) {
     return roomId;
   }
 
+  async function scrollAiAssistantToBottom() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    conversationElement.scrollTop =
+      conversationElement.scrollHeight - conversationElement.clientHeight;
+    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
+  }
+
+  async function scrollAiAssistantToTop() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    conversationElement.scrollTop = 0;
+    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
+  }
+
+  function isAiAssistantScrolledToBottom() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+
+    return (
+      Math.abs(
+        conversationElement.scrollHeight -
+          conversationElement.clientHeight -
+          conversationElement.scrollTop,
+        // we'll use a 20px threshold for considering the ai assistant scrolled
+        // all the way to the bottom
+      ) < 20
+    );
+  }
+  function isAiAssistantScrolledToTop() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+
+    return conversationElement.scrollTop === 0;
+  }
+
+  function fillRoomWithReadMessages(
+    roomId: string,
+    messagesHaveBeenRead = true,
+  ) {
+    for (let i = 0; i < 20; i++) {
+      simulateRemoteMessage(roomId, '@testuser:staging', {
+        body: `question #${i + 1}`,
+        msgtype: 'org.boxel.message',
+        formatted_body: `question #${i + 1}`,
+        format: 'org.matrix.custom.html',
+      });
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: `answer #${i + 1}`,
+        msgtype: 'm.text',
+        formatted_body: `answer #${i + 1}`,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      if (messagesHaveBeenRead) {
+        setReadReceipt(roomId, eventId, '@testuser:staging');
+      }
+    }
+  }
+
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
     assert.expect(4);
 
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -476,7 +546,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     let otherCardID = `${testRealmURL}Person/burcu`;
@@ -1027,7 +1097,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-past-sessions-button]');
     assert.dom('[data-test-past-sessions]').exists();
     assert.dom('[data-test-joined-room]').exists({ count: 1 });
-    await click('.operator-mode__main');
+    await click('.interact-submode'); // outside click
     assert.dom('[data-test-past-sessions]').doesNotExist();
 
     await click('[data-test-past-sessions-button]');
@@ -1282,6 +1352,127 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .doesNotContainText('Updated');
   });
 
+  test('it shows unread message indicator when new message received and not scrolled to bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when all messages have been read',
+      );
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .exists('unread messages button exists when there are unread messages');
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .containsText('1 unread message');
+  });
+
+  test('clicking on unread message indicator scrolls to unread message', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when all messages have been read',
+      );
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    await click('[data-test-unread-messages-button]');
+    await new Promise((r) => setTimeout(r, 2000)); // wait for animated scroll to complete
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
+  test('it does not show unread message indicator when new message received and scrolled to bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+    await scrollAiAssistantToBottom();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when scrolled to the bottom',
+      );
+  });
+
+  test('it scrolls to first unread message when opening a room with unread messages', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId, false);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToTop(),
+      'AI assistant is scrolled to top (where the first unread message is)',
+    );
+  });
+
+  test('it scrolls to last message when opening a room with no unread messages', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -1329,6 +1520,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-has-active-sessions]');
     await click('[data-test-past-sessions-button]');
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
+    await waitFor('[data-test-message-idx="0"]');
 
     let matrixService = this.owner.lookup(
       'service:matrix-service',
@@ -2043,7 +2235,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-command-result] [data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
-      .dom(`${rightStackItem} [data-test-boxel-header-title]`)
+      .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
       .hasText('Command Result');
 
     const savedCardId = document
@@ -2118,7 +2310,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-command-result] [data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
-      .dom(`${stackItem} [data-test-boxel-header-title]`)
+      .dom(`${stackItem} [data-test-boxel-card-header-title]`)
       .hasText('Command Result');
 
     const savedCardId = document

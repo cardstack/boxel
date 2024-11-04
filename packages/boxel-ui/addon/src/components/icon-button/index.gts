@@ -50,13 +50,13 @@ class IconButton extends Component<Signature> {
     </button>
     <style scoped>
       button {
-        --boxel-icon-button-width: 40px;
-        --boxel-icon-button-height: 40px;
+        --inner-boxel-icon-button-width: var(--boxel-icon-button-width, 40px);
+        --inner-boxel-icon-button-height: var(--boxel-icon-button-height, 40px);
 
-        width: var(--boxel-icon-button-width);
-        height: var(--boxel-icon-button-height);
+        width: var(--inner-boxel-icon-button-width);
+        height: var(--inner-boxel-icon-button-height);
         padding: 0;
-        background: none;
+        background: var(--boxel-icon-button-background, none);
         border: 1px solid transparent;
         z-index: 0;
       }

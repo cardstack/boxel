@@ -959,10 +959,12 @@ export default class CodeSubmode extends Component<Signature> {
     <style scoped>
       :global(:root) {
         --code-mode-padding-top: calc(
-          var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
+          var(--operator-mode-top-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
         --code-mode-padding-bottom: calc(
-          var(--search-sheet-closed-height) + (var(--boxel-sp))
+          var(--operator-mode-bottom-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
       }
 
@@ -971,7 +973,7 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        padding: var(--code-mode-padding-top) var(--boxel-sp)
+        padding: var(--code-mode-padding-top) var(--operator-mode-spacing)
           var(--code-mode-padding-bottom);
         overflow: auto;
         flex: 1;
@@ -1015,14 +1017,14 @@ export default class CodeSubmode extends Component<Signature> {
 
       .code-mode-top-bar {
         --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--boxel-sp)
-        );
+          var(--operator-mode-left-column) - var(--operator-mode-spacing)
+        ); /* subtract additional padding */
 
         position: absolute;
         top: 0;
         right: 0;
         left: var(--code-mode-top-bar-left-offset);
-        padding: var(--boxel-sp);
+        padding: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
       }
@@ -1048,9 +1050,6 @@ export default class CodeSubmode extends Component<Signature> {
         background-color: var(--boxel-light-100);
         align-items: center;
         justify-content: center;
-      }
-      .empty-container > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
       }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;

@@ -19,6 +19,7 @@ import {
   BoxelInput,
   LoadingIndicator,
   Pill,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -43,13 +44,13 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import { cleanseString } from '../../lib/utils';
+
 import ModalContainer from '../modal-container';
 
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
-
-import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
@@ -327,6 +328,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
+  @tracked private hasUserEditedFileName = false;
   @tracked private fileNameError: string | undefined;
   @tracked private saveError: string | undefined;
   @tracked private currentRequest:
@@ -399,6 +401,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.fileNameError = undefined;
     this.displayName = '';
     this.fileName = '';
+    this.hasUserEditedFileName = false;
     this.clearSaveError();
   }
 
@@ -428,9 +431,14 @@ export default class CreateFileModal extends Component<Signature> {
   @action private setDisplayName(name: string) {
     this.clearSaveError();
     this.displayName = name;
+    if (!this.hasUserEditedFileName) {
+      // if the user starts typing in the filename field, then stop helping them
+      this.fileName = cleanseString(name);
+    }
   }
 
   @action private setFileName(name: string) {
+    this.hasUserEditedFileName = true;
     this.clearSaveError();
     this.fileNameError = undefined;
     this.fileName = name;
@@ -794,13 +802,17 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
   <template>
     <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
       <:icon>
-        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
+        <RealmIcon @realmInfo={{this.realm.info @entry.id}} class='icon' />
       </:icon>
       <:default>
         {{@entry.title}}
       </:default>
     </Pill>
     <style scoped>
+      .icon {
+        min-height: var(--boxel-icon-sm);
+        min-width: var(--boxel-icon-sm);
+      }
       .selected-type {
         padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);

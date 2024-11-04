@@ -1,3 +1,5 @@
+import deburr from 'lodash/deburr';
+
 export function stripFileExtension(path: string): string {
   return path.replace(/\.[^/.]+$/, '');
 }
@@ -26,12 +28,19 @@ export function stringToColor(string: string | null) {
   return color;
 }
 
+export function cleanseString(value: string, separator = '_') {
+  return deburr(value.toLocaleLowerCase())
+    .replace(/[^a-z0-9-_]+/g, separator)
+    .replace(/^[^a-z0-9]/, '')
+    .replace(/[^a-z0-9]$/, '');
+}
+
 export function iconURLFor(word: string) {
   if (!word) {
     return undefined;
   }
-
-  return iconURLs[word.toLocaleLowerCase().charAt(0)];
+  let cleansedWord = cleanseString(word).replace(/^[0-9]+/, '');
+  return iconURLs[cleansedWord.charAt(0)];
 }
 
 export function getRandomBackgroundURL() {

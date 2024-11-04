@@ -3,6 +3,8 @@ import {
   Expression,
   addExplicitParens,
   asExpressions,
+  every,
+  insert,
   param,
   query,
   separatedByCommas,
@@ -43,7 +45,12 @@ export interface LedgerEntry {
   id: string;
   userId: string;
   creditAmount: number;
-  creditType: string;
+  creditType:
+    | 'plan_allowance'
+    | 'extra_credit'
+    | 'plan_allowance_used'
+    | 'extra_credit_used'
+    | 'plan_allowance_expired';
   subscriptionCycleId: string;
 }
 
@@ -51,15 +58,15 @@ export async function insertStripeEvent(
   dbAdapter: DBAdapter,
   event: StripeEvent,
 ) {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     stripe_event_id: event.id,
     event_type: event.type,
     event_data: event.data,
   });
-  await query(dbAdapter, [
-    `INSERT INTO stripe_events (stripe_event_id, event_type, event_data) VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-  ] as Expression);
+  await query(
+    dbAdapter,
+    insert('stripe_events', nameExpressions, valueExpressions),
+  );
 }
 
 export async function getPlanByStripeId(
@@ -76,11 +83,11 @@ export async function getPlanByStripeId(
   }
 
   return {
-    id: results[0].id as string,
-    name: results[0].name as string,
-    monthlyPrice: results[0].monthly_price as number,
-    creditsIncluded: results[0].credits_included as number,
-  };
+    id: results[0].id,
+    name: results[0].name,
+    monthlyPrice: results[0].monthly_price,
+    creditsIncluded: results[0].credits_included,
+  } as Plan;
 }
 
 export async function getUserByStripeId(
@@ -97,10 +104,10 @@ export async function getUserByStripeId(
   }
 
   return {
-    id: results[0].id as string,
-    matrixUserId: results[0].matrix_user_id as string,
-    stripeCustomerId: results[0].stripe_customer_id as string,
-  };
+    id: results[0].id,
+    matrixUserId: results[0].matrix_user_id,
+    stripeCustomerId: results[0].stripe_customer_id,
+  } as User;
 }
 
 export async function insertSubscriptionCycle(
@@ -111,24 +118,23 @@ export async function insertSubscriptionCycle(
     periodEnd: number;
   },
 ): Promise<SubscriptionCycle> {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     subscription_id: subscriptionCycle.subscriptionId,
     period_start: subscriptionCycle.periodStart,
     period_end: subscriptionCycle.periodEnd,
   });
 
-  let result = await query(dbAdapter, [
-    `INSERT INTO subscription_cycles (subscription_id, period_start, period_end) VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` RETURNING *`,
-  ] as Expression);
+  let result = await query(
+    dbAdapter,
+    insert('subscription_cycles', nameExpressions, valueExpressions),
+  );
 
   return {
-    id: result[0].id as string,
-    subscriptionId: result[0].subscription_id as string,
-    periodStart: result[0].period_start as number,
-    periodEnd: result[0].period_end as number,
-  };
+    id: result[0].id,
+    subscriptionId: result[0].subscription_id,
+    periodStart: result[0].period_start,
+    periodEnd: result[0].period_end,
+  } as SubscriptionCycle;
 }
 
 export async function insertSubscription(
@@ -141,7 +147,7 @@ export async function insertSubscription(
     stripe_subscription_id: string;
   },
 ): Promise<Subscription> {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     user_id: subscription.user_id,
     plan_id: subscription.plan_id,
     started_at: subscription.started_at,
@@ -149,45 +155,36 @@ export async function insertSubscription(
     stripe_subscription_id: subscription.stripe_subscription_id,
   });
 
-  let result = await query(dbAdapter, [
-    `INSERT INTO subscriptions (user_id, plan_id, started_at, status, stripe_subscription_id) VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` RETURNING *`,
-  ] as Expression);
+  let result = await query(
+    dbAdapter,
+    insert('subscriptions', nameExpressions, valueExpressions),
+  );
 
   return {
-    id: result[0].id as string,
-    userId: result[0].user_id as string,
-    planId: result[0].plan_id as string,
-    startedAt: result[0].started_at as number,
-    status: result[0].status as string,
-    stripeSubscriptionId: result[0].stripe_subscription_id as string,
-  };
+    id: result[0].id,
+    userId: result[0].user_id,
+    planId: result[0].plan_id,
+    startedAt: result[0].started_at,
+    status: result[0].status,
+    stripeSubscriptionId: result[0].stripe_subscription_id,
+  } as Subscription;
 }
 
 export async function addToCreditsLedger(
   dbAdapter: DBAdapter,
-  user_id: string,
-  credits: number,
-  creditType:
-    | 'plan_allowance'
-    | 'extra_credit'
-    | 'plan_allowance_used'
-    | 'extra_credit_used'
-    | 'plan_allowance_expired',
-  subscriptionCycleId: string,
+  ledgerEntry: Omit<LedgerEntry, 'id'>,
 ) {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
-    user_id: user_id,
-    credit_amount: credits,
-    credit_type: creditType,
-    subscription_cycle_id: subscriptionCycleId,
+  let { valueExpressions, nameExpressions } = asExpressions({
+    user_id: ledgerEntry.userId,
+    credit_amount: ledgerEntry.creditAmount,
+    credit_type: ledgerEntry.creditType,
+    subscription_cycle_id: ledgerEntry.subscriptionCycleId,
   });
 
-  await query(dbAdapter, [
-    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES`,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-  ] as Expression);
+  await query(
+    dbAdapter,
+    insert('credits_ledger', nameExpressions, valueExpressions),
+  );
 }
 
 export async function getStripeEventById(
@@ -205,6 +202,7 @@ export async function getStripeEventById(
 
   return results[0];
 }
+
 type CreditType =
   | 'plan_allowance'
   | 'extra_credit'
@@ -228,34 +226,30 @@ export async function sumUpCreditsLedger(
     );
   }
 
-  let creditTypes: CreditType[];
-  if (!creditType) {
-    creditTypes = [
-      'plan_allowance',
-      'extra_credit',
-      'plan_allowance_used',
-      'extra_credit_used',
-      'plan_allowance_expired',
-    ];
-  } else {
-    creditTypes = Array.isArray(creditType) ? creditType : [creditType];
-  }
+  let conditions: Expression[] = [];
 
-  let ledgerQuery = [
-    `SELECT SUM(credit_amount) FROM credits_ledger WHERE credit_type IN`,
-    ...(addExplicitParens(
-      separatedByCommas(creditTypes.map((c) => [param(c)])),
-    ) as Expression),
-  ];
+  if (creditType) {
+    let creditTypes = Array.isArray(creditType) ? creditType : [creditType];
+    conditions.push([
+      `credit_type IN`,
+      ...(addExplicitParens(
+        separatedByCommas(creditTypes.map((c) => [param(c)])),
+      ) as Expression),
+    ]);
+  }
 
   if (subscriptionCycleId) {
-    ledgerQuery.push(
-      ` AND subscription_cycle_id = `,
-      param(subscriptionCycleId),
-    );
+    conditions.push([`subscription_cycle_id = `, param(subscriptionCycleId)]);
   } else if (userId) {
-    ledgerQuery.push(` AND user_id = `, param(userId));
+    conditions.push([`user_id = `, param(userId)]);
   }
+
+  let everyCondition = every(conditions);
+
+  let ledgerQuery: Expression = [
+    `SELECT SUM(credit_amount) FROM credits_ledger WHERE`,
+    ...(everyCondition as Expression),
+  ];
 
   let results = await query(dbAdapter, ledgerQuery);
 
@@ -282,13 +276,13 @@ export async function getCurrentActiveSubscription(
   }
 
   return {
-    id: results[0].id as string,
-    userId: results[0].user_id as string,
-    planId: results[0].plan_id as string,
-    startedAt: results[0].started_at as number,
-    status: results[0].status as string,
-    stripeSubscriptionId: results[0].stripe_subscription_id as string,
-  };
+    id: results[0].id,
+    userId: results[0].user_id,
+    planId: results[0].plan_id,
+    startedAt: results[0].started_at,
+    status: results[0].status,
+    stripeSubscriptionId: results[0].stripe_subscription_id,
+  } as Subscription;
 }
 
 export async function getMostRecentSubscriptionCycle(
@@ -306,11 +300,21 @@ export async function getMostRecentSubscriptionCycle(
   }
 
   return {
-    id: results[0].id as string,
-    subscriptionId: results[0].subscription_id as string,
-    periodStart: results[0].period_start as number,
-    periodEnd: results[0].period_end as number,
-  };
+    id: results[0].id,
+    subscriptionId: results[0].subscription_id,
+    periodStart: results[0].period_start,
+    periodEnd: results[0].period_end,
+  } as SubscriptionCycle;
+}
+
+export async function markStripeEventAsProcessed(
+  dbAdapter: DBAdapter,
+  stripeEventId: string,
+) {
+  await query(dbAdapter, [
+    `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
+    param(stripeEventId),
+  ]);
 }
 
 export async function getSubscriptionByStripeSubscriptionId(

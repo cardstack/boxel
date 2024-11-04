@@ -727,6 +727,9 @@ importers:
 
   packages/boxel-ui/addon:
     dependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../../boxel-icons
       '@ember/string':
         specifier: ^3.1.1
         version: 3.1.1
@@ -1131,6 +1134,9 @@ importers:
 
   packages/catalog-realm:
     devDependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon
@@ -1163,6 +1169,9 @@ importers:
 
   packages/experiments-realm:
     devDependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon
@@ -1304,6 +1313,9 @@ importers:
       '@types/ms':
         specifier: ^0.7.34
         version: 0.7.34
+      '@types/pluralize':
+        specifier: ^0.0.30
+        version: 0.0.30
       '@types/qs':
         specifier: ^6.9.14
         version: 6.9.14
@@ -1568,6 +1580,9 @@ importers:
       path-browserify:
         specifier: ^1.0.1
         version: 1.0.1
+      pluralize:
+        specifier: ^8.0.0
+        version: 8.0.0
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
@@ -1654,10 +1669,6 @@ importers:
         version: 5.1.6
 
   packages/realm-server:
-    dependencies:
-      stripe:
-        specifier: ^17.2.1
-        version: 17.2.1
     devDependencies:
       '@cardstack/boxel-icons':
         specifier: workspace:*
@@ -1818,6 +1829,9 @@ importers:
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0
+      stripe:
+        specifier: ^17.2.1
+        version: 17.2.1
       supertest:
         specifier: ^6.2.4
         version: 6.2.4
@@ -7183,7 +7197,6 @@ packages:
 
   /@types/pluralize@0.0.30:
     resolution: {integrity: sha512-kVww6xZrW/db5BR9OqiT71J9huRdQ+z/r+LbDuT7/EK50mCmj5FoaIARnVv0rvjUS/YpDox0cDU9lpQT011VBA==}
-    dev: false
 
   /@types/qs@6.9.14:
     resolution: {integrity: sha512-5khscbd3SwWMhFqylJBLQ0zIu7c1K6Vz0uBIt915BI3zV0q1nfjRQD3RqSBcPaO6PHEF4ov/t9y89fSiyThlPA==}
@@ -21258,7 +21271,6 @@ packages:
   /pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
-    dev: false
 
   /portfinder@1.0.32:
     resolution: {integrity: sha512-on2ZJVVDXRADWE6jnQaX0ioEylzgBpQk8r55NE4wjXW1ZxO+BgDlY6DXwj20i0V8eB4SenDQ00WEaxfiIQPcxg==}
@@ -23473,7 +23485,7 @@ packages:
     dependencies:
       '@types/node': 18.19.54
       qs: 6.12.3
-    dev: false
+    dev: true
 
   /style-loader@2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.89.0):
     resolution: {integrity: sha512-Z0gYUJmzZ6ZdRUqpg1r8GsaFKypE+3xAzuFeMuoHgjc9KZv3wMyCRjQIWEbhoFSq7+7yoHXySDJyyWQaPajeiQ==}

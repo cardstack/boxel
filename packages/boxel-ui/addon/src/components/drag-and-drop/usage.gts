@@ -1,6 +1,5 @@
 import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { action } from '@ember/object';
-import { get } from '@ember/object';
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -8,39 +7,30 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+import { get } from 'lodash';
 
 import Pill from '../pill/index.gts';
-import DndKanbanBoard, {
-  type ColumnHeaderArgs,
-  Card,
-  Column,
-} from './index.gts';
+import DndKanbanBoard, { DndColumn } from './index.gts';
 
 export default class DndUsage extends Component {
   @tracked columns = [
-    new Column('Todo', [
-      new Card({ assignee: 'Justin', task: 'Implement a Todo App' }),
-      new Card({ assignee: 'Lucas', task: 'Create Boxel UI Component' }),
-      new Card({ assignee: 'Richard', task: 'Design a Chess App' }),
-      new Card({ assignee: 'Chuan', task: 'Research on Bug' }),
+    new DndColumn('Todo', [
+      { assignee: 'Justin', task: 'Implement a Todo App' },
+      { assignee: 'Lucas', task: 'Create Boxel UI Component' },
+      { assignee: 'Richard', task: 'Design a Chess App' },
+      { assignee: 'Chuan', task: 'Research on Bug' },
     ]),
-    new Column('In progress', []),
-    new Column('Done', []),
+    new DndColumn('In progress', []),
+    new DndColumn('Done', []),
   ];
+  @tracked isLoading = false;
+  @tracked isDisabled = false;
 
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanHeaderBg: CSSVariableInfo;
 
   @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
   declare dndKanbanDropZoneBg: CSSVariableInfo;
-
-  @action handleColumnMove(newColumns: Column[]) {
-    this.columns = newColumns;
-  }
-
-  @action handleCardMove(newColumns: Column[]) {
-    this.columns = newColumns;
-  }
 
   <template>
     <FreestyleUsage
@@ -61,16 +51,22 @@ export default class DndUsage extends Component {
       <:example>
         <DndKanbanBoard
           @columns={{this.columns}}
-          @columnHeader={{ColumnHeader}}
-          as |card column|
+          @isLoading={{this.isLoading}}
+          @isDisabled={{this.isDisabled}}
         >
-          <div class='custom-card'>
-            <Pill @kind='default' class='column-info'>
-              {{column.title}}
-            </Pill>
-            <h3>{{get card 'assignee'}}</h3>
-            <p>{{get card 'task'}}</p>
-          </div>
+          <:header as |column|>
+            Usage
+            {{column.title}}
+          </:header>
+          <:card as |card column|>
+            <div class='custom-card'>
+              <Pill @kind='default' class='column-info'>
+                {{column.title}}
+              </Pill>
+              <h3>{{get card 'assignee'}}</h3>
+              <p>{{get card 'task'}}</p>
+            </div>
+          </:card>
         </DndKanbanBoard>
       </:example>
       <:api as |Args|>
@@ -78,6 +74,24 @@ export default class DndUsage extends Component {
           @name='columns'
           @description='Array of Column objects representing the kanban board columns'
           @required={{true}}
+        />
+        <Args.Bool
+          @name='isLoading'
+          @description='Indicates if the card is in a loading state. You can also use onMove arguments to experiment with the loading state, allowing for dynamic updates during card movements.'
+          @optional={{true}}
+          @onInput={{fn (mut this.isLoading)}}
+          @value={{this.isLoading}}
+        />
+        <Args.Bool
+          @name='isDisabled'
+          @description='Disables all drag and drop features on the DndKanban board'
+          @optional={{true}}
+          @onInput={{fn (mut this.isDisabled)}}
+          @value={{this.isDisabled}}
+        />
+        <Args.Action
+          @name='onMove'
+          @description='Custom callback function triggered when a card is moved'
         />
       </:api>
       <:cssVars as |Css|>
@@ -99,25 +113,13 @@ export default class DndUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-
     <style scoped>
+      .custom-card {
+        padding: var(--boxel-sp);
+      }
       .column-info {
         display: table;
         margin-left: auto;
-      }
-    </style>
-  </template>
-}
-
-class ColumnHeader extends Component<ColumnHeaderArgs> {
-  <template>
-    <div class='custom-header'>
-      {{@title}}
-    </div>
-    <style scoped>
-      .custom-header {
-        display: flex;
-        justify-content: space-between;
       }
     </style>
   </template>

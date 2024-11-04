@@ -1,5 +1,3 @@
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -12,7 +10,9 @@ import {
 import { includes } from 'lodash';
 import pluralize from 'pluralize';
 
+import cn from '../../helpers/cn.ts';
 import cssVar from '../../helpers/css-var.ts';
+import CheckMark from '../../icons/check-mark.gts';
 import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
 import BoxelSelectedItem from './selected-item.gts';
 
