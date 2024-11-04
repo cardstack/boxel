@@ -4,7 +4,6 @@ import {
   getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
   getPlanByStripeId,
-  getStripeEventById,
   getUserByStripeId,
   insertStripeEvent,
   insertSubscription,
@@ -30,20 +29,7 @@ export async function handlePaymentSucceeded(
   let txManager = new TransactionManager(dbAdapter as PgAdapter);
 
   await txManager.withTransaction(async () => {
-    try {
-      await insertStripeEvent(dbAdapter, event);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('duplicate key value')
-      ) {
-        let stripeEvent = await getStripeEventById(dbAdapter, event.id);
-        if (stripeEvent?.is_processed) {
-          throw new Error('Stripe event already processed');
-        }
-      }
-      throw error;
-    }
+    await insertStripeEvent(dbAdapter, event);
 
     let plan = await getPlanByStripeId(
       dbAdapter,

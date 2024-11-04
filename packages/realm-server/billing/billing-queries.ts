@@ -58,15 +58,28 @@ export async function insertStripeEvent(
   dbAdapter: DBAdapter,
   event: StripeEvent,
 ) {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    stripe_event_id: event.id,
-    event_type: event.type,
-    event_data: event.data,
-  });
-  await query(
-    dbAdapter,
-    insert('stripe_events', nameExpressions, valueExpressions),
-  );
+  try {
+    let { valueExpressions, nameExpressions } = asExpressions({
+      stripe_event_id: event.id,
+      event_type: event.type,
+      event_data: event.data,
+    });
+    await query(
+      dbAdapter,
+      insert('stripe_events', nameExpressions, valueExpressions),
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('duplicate key value')
+    ) {
+      let stripeEvent = await getStripeEventById(dbAdapter, event.id);
+      if (stripeEvent?.is_processed) {
+        throw new Error('Stripe event already processed');
+      }
+    }
+    throw error;
+  }
 }
 
 export async function getPlanByStripeId(
