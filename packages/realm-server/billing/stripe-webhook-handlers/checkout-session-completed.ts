@@ -2,8 +2,8 @@ import { DBAdapter } from '@cardstack/runtime-common';
 import {
   insertStripeEvent,
   updateUserStripeCustomerId,
-} from '../billing_queries';
-import { StripeCheckoutSessionCompletedWebhookEvent } from './';
+} from '../billing-queries';
+import { StripeCheckoutSessionCompletedWebhookEvent } from '.';
 
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,

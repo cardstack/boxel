@@ -4,7 +4,7 @@ import { prepareTestDB } from './helpers';
 import PgAdapter from '../pg-adapter';
 import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
-import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/subscribe';
+import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/checkout-session-completed';
 import {
   LedgerEntry,
   Plan,
