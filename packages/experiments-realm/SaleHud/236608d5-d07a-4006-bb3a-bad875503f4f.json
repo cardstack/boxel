@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "targetPage": "Lead Form",
+      "scheduledTask": [
+        {
+          "taskForm": {
+            "taskId": "0",
+            "subject": "task a",
+            "dueDate": "2024-07-06",
+            "comments": null,
+            "isCompleted": false
+          }
+        },
+        {
+          "taskForm": {
+            "taskId": "1",
+            "subject": "task b",
+            "dueDate": "2024-07-05",
+            "comments": null,
+            "isCompleted": false
+          }
+        },
+        {
+          "taskForm": {
+            "taskId": "2",
+            "subject": "task c",
+            "dueDate": "2024-06-06",
+            "comments": "testing",
+            "isCompleted": false
+          }
+        }
+      ],
+      "convertedStatus": "",
+      "isLeadFormConverted": false,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "leadForm": {
+        "links": {
+          "self": "../LeadForm/ad388806-9aa7-485b-90ed-66331a6da6bb"
+        }
+      },
+      "accountForm": {
+        "links": {
+          "self": "../CrmAccount/a9289420-798a-49cf-b746-9aece2295d70"
+        }
+      },
+      "contactForm": {
+        "links": {
+          "self": "../ContactForm/24fad614-e49b-44cf-9bf4-f9ead589ffa5"
+        }
+      },
+      "opportunityForm": {
+        "links": {
+          "self": "../OpportunityForm/187ec912-522a-44dc-b17c-4fe19ac3066d"
+        }
+      },
+      "scheduledTask.0.taskForm.relatedTo": {
+        "links": {
+          "self": "http://localhost:4201/experiments/CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      },
+      "scheduledTask.1.taskForm.relatedTo": {
+        "links": {
+          "self": "http://localhost:4201/experiments/CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
+        }
+      },
+      "scheduledTask.2.taskForm.relatedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "recordOwner": {
+        "links": {
+          "self": "../MatrixUser/ca9dbfad-633a-4911-bc09-7fe3ebcb60c1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sale-hud",
+        "name": "SaleHud"
+      }
+    }
+  }
+}

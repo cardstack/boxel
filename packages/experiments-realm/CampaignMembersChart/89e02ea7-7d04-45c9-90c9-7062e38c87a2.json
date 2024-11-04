@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Email July 2024",
+      "chartType": "Vertical Bar",
+      "contactMembers": [
+        {
+          "responseStatus": "Sent"
+        },
+        {
+          "responseStatus": "Responded"
+        }
+      ],
+      "leadMembers": [
+        {
+          "responseStatus": "Responded"
+        }
+      ],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "contactMembers.0.contactForm": {
+        "links": {
+          "self": "../ContactForm/24fad614-e49b-44cf-9bf4-f9ead589ffa5"
+        }
+      },
+      "contactMembers.1.contactForm": {
+        "links": {
+          "self": "../ContactForm/24fad614-e49b-44cf-9bf4-f9ead589ffa5"
+        }
+      },
+      "leadMembers.0.leadForm": {
+        "links": {
+          "self": "../LeadForm/ad388806-9aa7-485b-90ed-66331a6da6bb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../campaign-members-chart",
+        "name": "CampaignMembersChart"
+      }
+    }
+  }
+}
