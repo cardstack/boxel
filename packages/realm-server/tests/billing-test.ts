@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 import PgAdapter from '../pg-adapter';
 import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
+import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
 import {
   LedgerEntry,
   Plan,
@@ -15,7 +16,10 @@ import {
   insertSubscription,
 } from '../billing/billing-queries';
 
-import { StripeInvoicePaymentSucceededWebhookEvent } from '../billing/stripe-webhook-handlers';
+import {
+  StripeInvoicePaymentSucceededWebhookEvent,
+  StripeSubscriptionDeletedWebhookEvent,
+} from '../billing/stripe-webhook-handlers';
 
 async function insertUser(
   dbAdapter: PgAdapter,
@@ -90,6 +94,7 @@ async function fetchSubscriptionsByUserId(
     userId: result.user_id,
     planId: result.plan_id,
     startedAt: result.started_at,
+    endedAt: result.ended_at,
     status: result.status,
     stripeSubscriptionId: result.stripe_subscription_id,
   }));
@@ -353,6 +358,52 @@ module('billing', function (hooks) {
         });
         assert.strictEqual(availableCredits, plan.creditsIncluded + 100); // Remaining credits from the previous cycle expired, new credits added, plus 100 from the extra credit
       });
+    });
+  });
+
+  module('subscription deleted', function () {
+    test('handles subscription cancellation and expiration', async function (assert) {
+      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let plan = await insertPlan(
+        dbAdapter,
+        'Creator',
+        12,
+        2500,
+        'prod_creator',
+      );
+
+      await insertSubscription(dbAdapter, {
+        user_id: user.id,
+        plan_id: plan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567890',
+      });
+
+      let stripeSubscriptionDeletedEvent = {
+        id: 'evt_sub_deleted_1',
+        object: 'event',
+        type: 'customer.subscription.deleted',
+        data: {
+          object: {
+            id: 'sub_1234567890',
+            canceled_at: 2,
+            cancellation_details: {
+              reason: 'cancellation_requested',
+            },
+          },
+        },
+      } as StripeSubscriptionDeletedWebhookEvent;
+
+      await handleSubscriptionDeleted(
+        dbAdapter,
+        stripeSubscriptionDeletedEvent,
+      );
+
+      let subscriptions = await fetchSubscriptionsByUserId(dbAdapter, user.id);
+      assert.strictEqual(subscriptions.length, 1);
+      assert.strictEqual(subscriptions[0].status, 'canceled');
+      assert.strictEqual(subscriptions[0].endedAt, 2);
     });
   });
 });

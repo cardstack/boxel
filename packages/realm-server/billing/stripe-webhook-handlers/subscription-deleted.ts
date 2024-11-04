@@ -1,14 +1,14 @@
 import { DBAdapter } from '@cardstack/runtime-common';
 import { StripeSubscriptionDeletedWebhookEvent } from '.';
 import {
-  getStripeEventById,
   insertStripeEvent,
   updateSubscription,
-} from '../billing_queries';
-import { getSubscriptionByStripeSubscriptionId } from '../billing_queries';
+  markStripeEventAsProcessed,
+  getSubscriptionByStripeSubscriptionId,
+} from '../billing-queries';
+
 import { TransactionManager } from '../../pg-transaction-manager';
 import PgAdapter from '../../pg-adapter';
-import { markStripeEventAsProcessed } from '../billing_queries';
 
 export async function handleSubscriptionDeleted(
   dbAdapter: DBAdapter,
@@ -17,20 +17,7 @@ export async function handleSubscriptionDeleted(
   let txManager = new TransactionManager(dbAdapter as PgAdapter);
 
   await txManager.withTransaction(async () => {
-    try {
-      await insertStripeEvent(dbAdapter, event);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('duplicate key value')
-      ) {
-        let stripeEvent = await getStripeEventById(dbAdapter, event.id);
-        if (stripeEvent?.is_processed) {
-          throw new Error('Stripe event already processed');
-        }
-      }
-      throw error;
-    }
+    await insertStripeEvent(dbAdapter, event);
 
     let subscription = await getSubscriptionByStripeSubscriptionId(
       dbAdapter,
@@ -52,6 +39,11 @@ export async function handleSubscriptionDeleted(
       status: newStatus,
       endedAt: event.data.object.canceled_at,
     });
+
+    // This happens when the payment method fails for a couple of times and then Stripe subscription gets expired.
+    if (newStatus === 'expired') {
+      // TODO: Put the user back on the free plan (by calling Stripe API). Will be handled in CS-7466
+    }
 
     await markStripeEventAsProcessed(dbAdapter, event.id);
   });
