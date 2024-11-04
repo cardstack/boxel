@@ -1,20 +1,33 @@
 import { DBAdapter } from '@cardstack/runtime-common';
 import {
   insertStripeEvent,
+  markStripeEventAsProcessed,
   updateUserStripeCustomerId,
 } from '../billing-queries';
 import { StripeCheckoutSessionCompletedWebhookEvent } from '.';
+
+import PgAdapter from '../../pg-adapter';
+import { TransactionManager } from '../../pg-transaction-manager';
 
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,
   event: StripeCheckoutSessionCompletedWebhookEvent,
 ): Promise<Response> {
-  await insertStripeEvent(dbAdapter, event);
+  let txManager = new TransactionManager(dbAdapter as PgAdapter);
 
-  const stripeCustomerId = event.data.object.customer;
-  const matrixUserName = event.data.object.client_reference_id;
+  await txManager.withTransaction(async () => {
+    await insertStripeEvent(dbAdapter, event);
 
-  await updateUserStripeCustomerId(dbAdapter, matrixUserName, stripeCustomerId);
+    const stripeCustomerId = event.data.object.customer;
+    const matrixUserName = event.data.object.client_reference_id;
+
+    await updateUserStripeCustomerId(
+      dbAdapter,
+      matrixUserName,
+      stripeCustomerId,
+    );
+    await markStripeEventAsProcessed(dbAdapter, event.id);
+  });
 
   return new Response('ok');
 }

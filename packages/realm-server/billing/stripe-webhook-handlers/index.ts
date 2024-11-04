@@ -119,6 +119,7 @@ export default async function stripeWebhookHandler(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
       );
+      break;
     case 'checkout.session.completed':
       await handleCheckoutSessionCompleted(
         dbAdapter,
