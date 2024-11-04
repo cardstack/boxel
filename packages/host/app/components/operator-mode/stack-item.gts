@@ -83,8 +83,7 @@ interface Signature {
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
-      doCloseAnimation: () => void,
-      doMoveForwardAnimation: () => void,
+      doAnimation: (type: 'isClosing' | 'isMovingForward') => void,
     ) => void;
   };
 }
@@ -142,8 +141,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.clearSelections,
       this.doWithStableScroll.perform,
       this.scrollIntoView.perform,
-      this.doCloseAnimation.perform,
-      this.doMoveForwardAnimation.perform,
+      (type) => this.doAnimation.perform(type),
     );
   }
 
@@ -225,7 +223,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private closeItem = dropTask(async () => {
-    await this.doCloseAnimation.perform();
+    await this.doAnimation.perform('isClosing');
     this.args.close(this.args.item);
   });
 
@@ -429,12 +427,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     });
   }
 
-  private doCloseAnimation = dropTask(async () => {
-    await this.startAnimation('isClosing');
-  });
-
-  private doMoveForwardAnimation = dropTask(async () => {
-    await this.startAnimation('isMovingForward');
+  private doAnimation = task(async (type: 'isClosing' | 'isMovingForward') => {
+    await this.startAnimation(type);
   });
 
   private handleAnimationCompletion(resolve: () => void) {

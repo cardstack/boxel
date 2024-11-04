@@ -32,8 +32,10 @@ interface Signature {
 }
 
 export default class OperatorModeStack extends Component<Signature> {
-  private closeAnimation = new WeakMap<StackItem, () => void>();
-  private moveForwardAnimation = new WeakMap<StackItem, () => void>();
+  private doAnimation = new WeakMap<
+    StackItem,
+    (type: 'isClosing' | 'isMovingForward') => void
+  >();
 
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
@@ -44,9 +46,9 @@ export default class OperatorModeStack extends Component<Signature> {
     // do closing animation on each closed item
     await Promise.all(
       itemsToDismiss.map((i) => {
-        const closeAnimation = this.closeAnimation.get(i);
-        if (closeAnimation) {
-          return closeAnimation();
+        const doAnimation = this.doAnimation.get(i);
+        if (doAnimation) {
+          return doAnimation('isClosing');
         }
       }),
     );
@@ -55,9 +57,9 @@ export default class OperatorModeStack extends Component<Signature> {
 
     // move forward animation on next top item
     const nextTopItem = this.args.stackItems[itemIndex];
-    const moveForwardAnimation = this.moveForwardAnimation.get(nextTopItem);
-    if (moveForwardAnimation) {
-      await moveForwardAnimation();
+    const doAnimation = this.doAnimation.get(nextTopItem);
+    if (doAnimation) {
+      doAnimation('isMovingForward');
     }
   });
 
@@ -66,8 +68,7 @@ export default class OperatorModeStack extends Component<Signature> {
     doClearSelections: () => void,
     doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
     doScrollIntoView: (selector: string) => void,
-    doCloseAnimation: () => void,
-    doMoveForwardAnimation: () => void,
+    doAnimation: (type: 'isClosing' | 'isMovingForward') => void,
   ) => {
     this.args.setupStackItem(
       item,
@@ -75,8 +76,7 @@ export default class OperatorModeStack extends Component<Signature> {
       doWithStableScroll,
       doScrollIntoView,
     );
-    this.closeAnimation.set(item, doCloseAnimation);
-    this.moveForwardAnimation.set(item, doMoveForwardAnimation);
+    this.doAnimation.set(item, doAnimation);
   };
 
   <template>
