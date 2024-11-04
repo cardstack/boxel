@@ -319,7 +319,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         'style',
         'background-image: url("https://i.postimg.cc/L8yXRvws/icon.png");',
       )
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .hasAttribute('alt', 'Test Workspace B');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
@@ -524,7 +524,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         'style',
         'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
       )
-      .hasAttribute('alt', 'Icon for workspace Base Workspace');
+      .hasAttribute('alt', 'Base Workspace');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',

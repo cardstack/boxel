@@ -31,7 +31,7 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
     <Header
       @title={{@title}}
       @hasBackground={{true}}
-      class={{cn 'base-container-header' is-active=@isActive}}
+      class={{cn 'base-container-header' active=@isActive}}
       ...attributes
     >
       <:detail>
@@ -55,7 +55,7 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
           var(--boxel-header-min-height)
         );
       }
-      .base-container-header.is-active {
+      .base-container-header.active {
         --boxel-header-background-color: var(--boxel-highlight);
         --boxel-header-text-color: var(--boxel-dark);
       }
@@ -69,10 +69,7 @@ interface BaseContainerSignature {
 }
 export const BaseContainer: TemplateOnlyComponent<BaseContainerSignature> =
   <template>
-    <CardContainer
-      class={{cn 'base-container' is-active=@isActive}}
-      ...attributes
-    >
+    <CardContainer class={{cn 'base-container' active=@isActive}} ...attributes>
       {{yield (component BaseContainerHeader)}}
     </CardContainer>
     <style scoped>
@@ -81,7 +78,7 @@ export const BaseContainer: TemplateOnlyComponent<BaseContainerSignature> =
         overflow: hidden;
         overflow-wrap: break-word;
       }
-      .base-container.is-active {
+      .base-container.active {
         box-shadow: var(--code-mode-active-box-shadow);
       }
     </style>
@@ -112,7 +109,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
   @service private declare realm: RealmService;
 
   <template>
-    <BaseContainer @isActive={{@isActive}} as |BaseHeader|>
+    <BaseContainer @isActive={{@isActive}} ...attributes as |BaseHeader|>
       <BaseHeader
         @title={{@title}}
         @isActive={{@isActive}}
