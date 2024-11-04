@@ -40,6 +40,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { on } from '@ember/modifier';
 
 const testRealm2URL = `http://test-realm/test2/`;
 
@@ -204,6 +205,13 @@ module('Acceptance | interact submode tests', function (hooks) {
       @field additionalAddresses = containsMany(Address);
 
       static isolated = class Isolated extends Component<typeof this> {
+        updateAndSavePet = () => {
+          let pet = this.args.model.pet;
+          if (pet) {
+            pet.name = 'Updated Pet';
+            this.args.context?.actions?.saveCard(pet, false);
+          }
+        };
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -219,6 +227,12 @@ module('Acceptance | interact submode tests', function (hooks) {
           <@fields.primaryAddress />
           Additional Adresses:
           <@fields.additionalAddresses />
+          <button
+            data-test-update-and-save-pet
+            {{on 'click' this.updateAndSavePet}}
+          >
+            Update and Save Pet
+          </button>
         </template>
       };
     }
@@ -949,6 +963,32 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
         )
         .exists('linked card now rendered as a stack item in edit format');
+    });
+
+    test('can save mutated card without having opened in stack', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-update-and-save-pet]');
+      await triggerEvent(
+        `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-pet]`,
+        'mouseenter',
+      );
+      await click(
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+      );
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
+        )
+        .hasValue('Updated Pet');
     });
 
     test('New card is auto-attached once it is saved', async function (assert) {

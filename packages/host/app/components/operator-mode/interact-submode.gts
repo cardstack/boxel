@@ -252,16 +252,20 @@ export default class InteractSubmode extends Component<Signature> {
         return await deferred.promise;
       },
       saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
-        let item = here.findCardInStack(card, stackIndex);
-        // WARNING: never await an ember concurrency perform outside of a task.
-        // Inside of a task, the `await` is actually just syntactic sugar for a
-        // `yield`. But if you await `perform()` outside of a task, that will cast
-        // the the task to an uncancellable promise which defeats the point of using
-        // ember concurrency.
-        // https://ember-concurrency.com/docs/task-cancelation-help
-        let deferred = new Deferred<void>();
-        here.save.perform(item, dismissItem, deferred);
-        await deferred.promise;
+        if (dismissItem) {
+          let item = here.findCardInStack(card, stackIndex);
+          // WARNING: never await an ember concurrency perform outside of a task.
+          // Inside of a task, the `await` is actually just syntactic sugar for a
+          // `yield`. But if you await `perform()` outside of a task, that will cast
+          // the the task to an uncancellable promise which defeats the point of using
+          // ember concurrency.
+          // https://ember-concurrency.com/docs/task-cancelation-help
+          let deferred = new Deferred<void>();
+          here.save.perform(item, dismissItem, deferred);
+          await deferred.promise;
+        } else {
+          await here.args.write(card);
+        }
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
