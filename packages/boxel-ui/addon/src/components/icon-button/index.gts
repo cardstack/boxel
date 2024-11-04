@@ -93,7 +93,7 @@ class IconButton extends Component<Signature> {
       }
 
       .svg-icon {
-        width: var(--inner-boxel-icon-button-widt);
+        width: var(--inner-boxel-icon-button-width);
         height: var(--inner-boxel-icon-button-width);
       }
     </style>
