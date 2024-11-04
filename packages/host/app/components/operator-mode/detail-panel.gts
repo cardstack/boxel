@@ -10,12 +10,7 @@ import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
 
-import {
-  CardContainer,
-  Header,
-  LoadingIndicator,
-  IconButton,
-} from '@cardstack/boxel-ui/components';
+import { LoadingIndicator, IconButton } from '@cardstack/boxel-ui/components';
 import {
   IconInherit,
   IconTrash,
@@ -54,6 +49,7 @@ import {
 import { lastModifiedDate } from '../../resources/last-modified-date';
 import { ModuleContentsResource } from '../../resources/module-contents';
 
+import { PanelSection } from './code-submode/inner-container';
 import { type FileType, type NewFileType } from './create-file-modal';
 import {
   Divider,
@@ -67,8 +63,6 @@ import {
 import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
-
-import { PanelSection } from './code-submode/inner-container';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 

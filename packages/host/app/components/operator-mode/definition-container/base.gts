@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
 
 import {
   Button,
@@ -16,6 +15,8 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import type RealmService from '@cardstack/host/services/realm';
+
+import type { ComponentLike } from '@glint/template';
 
 interface BaseContainerHeaderSignature {
   Args: {
