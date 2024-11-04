@@ -85,6 +85,7 @@ interface Signature {
       doScrollIntoView: (selector: string) => void,
       doCloseAnimation: () => void,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -326,7 +327,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.hasUnsavedChanges = true;
     await timeout(this.environmentService.autoSaveDelayMs);
     this.isSaving = true;
-    await this.args.publicAPI.saveCard(this.card, false);
+    await this.args.saveCard(this.card);
     this.hasUnsavedChanges = false;
     this.isSaving = false;
     this.lastSaved = Date.now();
@@ -350,22 +351,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private doneEditing = restartableTask(async () => {
+    let item = this.args.item;
+    let { request } = item;
     // if the card is actually different do the save and dismiss, otherwise
     // just change the stack item's format to isolated
     if (this.hasUnsavedChanges) {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
-      this.args.publicAPI.saveCard(this.card, true);
-    } else {
-      let { request } = this.args.item;
-      this.operatorModeStateService.replaceItemInStack(
-        this.args.item,
-        this.args.item.clone({
-          request,
-          format: 'isolated',
-        }),
-      );
+      let updatedCard = await this.args.saveCard(item.card);
+
+      if (updatedCard) {
+        request?.fulfill(updatedCard);
+      }
     }
+    this.operatorModeStateService.replaceItemInStack(
+      item,
+      item.clone({
+        request,
+        format: 'isolated',
+      }),
+    );
   });
 
   private doWithStableScroll = restartableTask(
