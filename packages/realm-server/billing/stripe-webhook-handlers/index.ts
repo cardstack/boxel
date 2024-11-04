@@ -92,6 +92,7 @@ export default async function stripeWebhookHandler(
   // subsciptions, we should listen for invoice.payment_succeeded (I discovered this when I was
   // testing which webhooks arrive for both types of payments)
   switch (type) {
+    // These handlers should eventually become jobs which workers will process asynchronously
     case 'invoice.payment_succeeded':
       await handlePaymentSucceeded(
         dbAdapter,
