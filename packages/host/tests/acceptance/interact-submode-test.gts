@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import {
   currentURL,
   click,
@@ -40,7 +41,6 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import { on } from '@ember/modifier';
 
 const testRealm2URL = `http://test-realm/test2/`;
 

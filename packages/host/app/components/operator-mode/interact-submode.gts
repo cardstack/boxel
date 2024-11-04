@@ -353,41 +353,6 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
-  private save = task(
-    async (
-      item: StackItem,
-      dismissStackItem: boolean,
-      done: Deferred<void>,
-    ) => {
-      let { request } = item;
-      let hasRejected = false;
-      try {
-        let updatedCard = await this.args.saveCard(item.card);
-
-        if (updatedCard) {
-          request?.fulfill(updatedCard);
-          if (!dismissStackItem) {
-            return;
-          }
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      } catch (e) {
-        hasRejected = true;
-        done.reject(e);
-      } finally {
-        if (!hasRejected) {
-          done.fulfill();
-        }
-      }
-    },
-  );
-
   private runCommand = restartableTask(
     async (card: CardDef, skillCardId: string, message: string) => {
       let resource = getCard(new URL(skillCardId));
