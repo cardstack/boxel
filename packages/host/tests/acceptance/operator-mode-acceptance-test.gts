@@ -144,7 +144,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               <@fields.name />
             </h2>
           </div>
-          <style>
+          <style scoped>
             .pet-isolated {
               height: 100%;
               background-color: #355e3b;
