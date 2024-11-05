@@ -475,6 +475,47 @@ export function getGenerateAppModuleTool(attachedOpenCardId: string) {
   };
 }
 
+export function getGenerateProductRequirementTool(prompt: string): Tool {
+  return {
+    type: 'function',
+    function: {
+      name: 'generateProductRequirement',
+      description: `You are given a prompt for an app:\n "${prompt}"\n\nYou must generate the contents of the product requirements document for this app. Generate content for the following fields:\n - 'appTitle' is for the title of the app. - 'shortDescription' is 1 or 2 short sentences describing the app. - 'prompt' should be a clear and accurate version of the prompt you are given. - In 'overview', provide 1 or 2 paragraph summary of the app. - In 'schema', generate the schema for the app. - In 'layoutAndNavigation', provide brief information for the layout and navigation of the app.\n\n You must offer to create this document.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          appTitle: {
+            type: 'string',
+          },
+          shortDescription: {
+            type: 'string',
+          },
+          prompt: {
+            type: 'string',
+          },
+          overview: {
+            type: 'string',
+          },
+          schema: {
+            type: 'string',
+          },
+          layoutAndNavigation: {
+            type: 'string',
+          },
+        },
+        required: [
+          'appTitle',
+          'shortDescription',
+          'prompt',
+          'overview',
+          'schema',
+          'layoutAndNavigation',
+        ],
+      },
+    },
+  };
+}
+
 export interface FunctionToolCall {
   id: string;
   name: string;

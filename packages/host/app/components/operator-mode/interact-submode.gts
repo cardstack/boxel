@@ -313,7 +313,7 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateSubmode(submode);
       },
       runCommand: (
-        card: CardDef,
+        card: CardDef | undefined,
         skillCardId: string,
         message?: string,
       ): void => {
@@ -398,7 +398,7 @@ export default class InteractSubmode extends Component<Signature> {
   );
 
   private runCommand = restartableTask(
-    async (card: CardDef, skillCardId: string, message: string) => {
+    async (card: CardDef | undefined, skillCardId: string, message: string) => {
       let resource = getCard(new URL(skillCardId));
       await resource.loaded;
       let commandCard = resource.card;
@@ -418,7 +418,7 @@ export default class InteractSubmode extends Component<Signature> {
       await this.matrixService.sendMessage(
         newRoomId,
         message,
-        [card],
+        card ? [card] : [],
         [commandCard],
         undefined,
         context,

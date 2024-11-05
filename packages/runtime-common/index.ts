@@ -353,7 +353,7 @@ export interface Actions {
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
   runCommand?: (
-    card: CardDef, // the card that the command is being run on
+    card: CardDef | undefined, // the card that the command is being run on
     skillCardId: string, // skill card id that the command is associated with
     message?: string, // message that posts in the chat
   ) => void;

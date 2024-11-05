@@ -103,6 +103,10 @@ export default class CommandService extends Service {
           String(payload.attached_card_id),
           { attributes: { moduleURL: moduleId } },
         );
+      } else if (command.name === 'generateProductRequirement') {
+        // TODO: create card
+        console.log(command, payload);
+        debugger;
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
