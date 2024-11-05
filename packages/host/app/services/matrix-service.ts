@@ -644,7 +644,13 @@ export default class MatrixService extends Service {
         function: {
           name: command.name,
           description: command.description,
-          parameters: await command.getInputJsonSchema(this.cardAPI, mappings),
+          parameters: {
+            type: 'object',
+            properties: await command.getInputJsonSchema(
+              this.cardAPI,
+              mappings,
+            ),
+          },
         },
       });
     }
@@ -661,6 +667,8 @@ export default class MatrixService extends Service {
       this.skillCardHashes,
       { includeComputeds: true, maybeRelativeURL: null },
     );
+
+    let clientGeneratedId = uuidv4();
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',

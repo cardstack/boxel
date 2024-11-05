@@ -54,11 +54,7 @@ export default class PatchCardCommand extends Command<
       cardApi,
       mappings,
     );
-    let inputTypeSchema = generateJsonSchemaForCardType(
-      await this.getInputType(),
-      cardApi,
-      mappings,
-    );
+    return cardTypeToPatchSchema;
     // TODO: merge cardTypeToPatchSchema into inputTypeSchema specifying the schema of the "patch" attribute
     debugger;
     return inputTypeSchema;

@@ -722,6 +722,7 @@ export default class InteractSubmode extends Component<Signature> {
     CommandConfiguration,
   >(
     name: string,
+    configuration: CommandConfiguration = undefined,
   ): Command<CardInputType, CardResultType, CommandConfiguration> => {
     let owner = getOwner(this)!;
     let commandFactory = owner.factoryFor(`command:${name}`);
@@ -733,11 +734,10 @@ export default class InteractSubmode extends Component<Signature> {
         commandContext: CommandContext,
       ): Command<CardInputType, CardResultType, CommandConfiguration>;
     };
-    let instance = new CommandClass(this.commandContext) as Command<
-      CardInputType,
-      CardResultType,
-      CommandConfiguration
-    >;
+    let instance = new CommandClass(
+      this.commandContext,
+      configuration,
+    ) as Command<CardInputType, CardResultType, CommandConfiguration>;
     setOwner(instance, owner);
     return instance;
   };
@@ -745,7 +745,9 @@ export default class InteractSubmode extends Component<Signature> {
   private get commandContext() {
     return {
       lookupCommand: this.lookupCommand,
-      sendAiAssistantMessage: this.matrixService.sendAiAssistantMessage,
+      sendAiAssistantMessage: (
+        ...args: Parameters<MatrixService['sendAiAssistantMessage']>
+      ) => this.matrixService.sendAiAssistantMessage(...args),
     };
   }
 
@@ -758,10 +760,7 @@ export default class InteractSubmode extends Component<Signature> {
     return {
       actions: this.publicAPI(this, 0),
       // TODO: should we include this here??
-      commandContext: {
-        lookupCommand: this.lookupCommand,
-        sendAiAssistantMessage: this.matrixService.sendAiAssistantMessage,
-      },
+      commandContext: this.commandContext,
     };
   }
 

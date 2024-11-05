@@ -38,11 +38,12 @@ export class CreateProductRequirementsInstance extends Command<
 
   get skillCard() {
     return new SkillCard({
+      id: 'SkillCard1',
       name: 'PRD Helper',
       description:
         'This skill card can be used to help with creating product requirements',
       instructions:
-        'You are a helpful assistant that can help with creating product requirements, etc. Use patchCard to apply changes, do not ask, just do it, etc.',
+        'You are a helpful assistant that can help with creating product requirements, etc. You *MUST* make the patchCard function call',
     });
   }
 
@@ -53,6 +54,7 @@ export class CreateProductRequirementsInstance extends Command<
   protected async run(
     input: CreateProductRequirementsInput,
   ): Promise<CreateProductRequirementsResult> {
+    console.log('Input into the run', input);
     // Create new card
     let prdCard = new ProductRequirementDocument();
 
@@ -73,7 +75,7 @@ export class CreateProductRequirementsInstance extends Command<
       PatchCardInput,
       undefined,
       ProductRequirementDocument
-    >('patch-card');
+    >('patch-card', { cardType: ProductRequirementDocument });
 
     // This should return a session ID so that we can potentially send followup messages
     // This should delegate to a matrix service method. Besides actually sending the message,

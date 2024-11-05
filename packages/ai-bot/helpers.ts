@@ -246,6 +246,7 @@ export function getTools(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Tool[] {
+  // TODO: there should be no default tools defined in the ai-bot, tools must be determined by the host
   let searchTool = getSearchTool();
   let tools = [searchTool];
   // Just get the users messages
@@ -426,7 +427,7 @@ export function getModifyPrompt(
     mostRecentlyAttachedCard,
     attachedCards,
   );
-
+  console.log('skillCards', skillCards);
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
@@ -467,6 +468,10 @@ export const attachedCardsToMessage = (
 };
 
 export const skillCardsToMessage = (cards: CardResource[]) => {
+  for (let card of cards) {
+    console.log('card', card);
+    console.log('card.attributes', card.attributes);
+  }
   return `${JSON.stringify(
     cards.map((card) => card.attributes?.instructions),
   )}`;

@@ -354,6 +354,7 @@ class DashboardTab extends GlimmerComponent<{
   @tracked isGenerating = false;
 
   @action setPrompt(key: string, value: string) {
+    console.log('setPrompt', key, value);
     this.prompt = { ...this.prompt, [key]: value };
   }
 
@@ -367,9 +368,9 @@ class DashboardTab extends GlimmerComponent<{
     try {
       await command.execute(
         new CreateProductRequirementsInput({
-          appType: this.prompt.appType,
-          domain: this.prompt.domain,
-          customRequirements: this.prompt.customRequirements,
+          productDescription: this.prompt.appType,
+          targetAudience: this.prompt.domain,
+          features: this.prompt.customRequirements,
           realm: this.args.currentRealm,
         }),
       );
