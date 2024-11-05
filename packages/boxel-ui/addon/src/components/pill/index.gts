@@ -10,7 +10,8 @@ export interface PillSignature {
   };
   Blocks: {
     default: [];
-    icon: [];
+    iconLeft?: [];
+    iconRight?: [];
   };
   Element: HTMLButtonElement | HTMLDivElement;
 }
@@ -18,12 +19,19 @@ export interface PillSignature {
 const Pill: TemplateOnlyComponent<PillSignature> = <template>
   {{#let (element (if (eq @kind 'button') 'button' 'div')) as |Tag|}}
     <Tag class={{cn 'pill' button-pill=(eq @kind 'button')}} ...attributes>
-      {{#if (has-block 'icon')}}
+      {{#if (has-block 'iconLeft')}}
         <figure class='icon'>
-          {{yield to='icon'}}
+          {{yield to='iconLeft'}}
         </figure>
       {{/if}}
+
       {{yield}}
+
+      {{#if (has-block 'iconRight')}}
+        <figure class='icon'>
+          {{yield to='iconRight'}}
+        </figure>
+      {{/if}}
     </Tag>
   {{/let}}
 
@@ -44,6 +52,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         border-radius: var(--boxel-border-radius-sm);
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+        word-break: break-word;
       }
 
       .button-pill:not(:disabled):hover {

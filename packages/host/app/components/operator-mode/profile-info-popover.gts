@@ -4,10 +4,16 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
+import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
+import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 interface ProfileInfoPopoverSignature {
   Args: {
@@ -22,27 +28,23 @@ interface ProfileInfoSignature {
 }
 
 export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSignature> {
-  @service declare matrixService: MatrixService;
-
-  @action logout() {
-    this.matrixService.logout();
-  }
-
   <template>
     <style scoped>
       .profile-popover {
-        width: 280px;
-        height: 280px;
+        width: 320px;
         position: absolute;
         bottom: 68px;
         left: 20px;
         z-index: var(--host-profile-popover-z-index);
-        background: white;
+        background: var(--boxel-100);
         padding: var(--boxel-sp);
         flex-direction: column;
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
         display: flex;
+      }
+      :deep(.profile-popover-body) {
+        padding: var(--boxel-sp-xl) 0;
       }
 
       .header {
@@ -51,39 +53,184 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         align-items: center;
       }
 
-      .header .label {
+      .header button {
+        --boxel-button-font: 600 var(--boxel-font-xs);
+      }
+
+      .credit-info {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-lg);
+        margin-bottom: var(--boxel-sp);
+        padding-top: var(--boxel-sp-lg);
+        border-top: 1px solid var(--boxel-dark);
+      }
+      .info-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .label {
         color: var(--boxel-dark);
-        text-transform: uppercase;
+        font: var(--boxel-font-xs);
+      }
+      .info-group .value {
+        color: var(--boxel-dark);
+        font: 700 var(--boxel-font-sm);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+
+        --icon-color: var(--boxel-teal);
+      }
+      .info-group .value.out-of-credit {
+        --icon-color: #ff0000;
+        color: #ff0000;
+      }
+      .info-group.additional-credit {
+        align-items: flex-end;
+      }
+
+      .info-group button {
+        margin-top: var(--boxel-sp-xs);
+      }
+
+      .buy-more-credits {
+        display: flex;
+        justify-content: flex-end;
+        width: 100%;
+        margin-top: calc(-1 * var(--boxel-sp-sm));
+      }
+      .buy-more-credits.out-of-credit {
+        justify-content: center;
+        margin-top: var(--boxel-sp-sm);
+        --boxel-button-min-width: 100%;
+      }
+      :deep(.buy-more-credits.out-of-credit .size-base) {
+        --boxel-button-min-height: 39px;
       }
     </style>
 
     <div class='profile-popover' data-test-profile-popover ...attributes>
       <header class='header'>
-        <div class='label'>
-          Signed in as
-        </div>
-
         <BoxelButton
           @kind='secondary-light'
-          @size='extra-small'
+          @size='small'
           {{on 'click' @toggleProfileSettings}}
           data-test-settings-button
         >
           Settings
         </BoxelButton>
+
+        <BoxelButton
+          @kind='primary-dark'
+          @size='small'
+          {{on 'click' this.logout}}
+          data-test-signout-button
+        >
+          Sign Out
+        </BoxelButton>
       </header>
 
       <ProfileInfo />
-
-      <BoxelButton
-        {{on 'click' this.logout}}
-        @kind='primary-dark'
-        data-test-signout-button
-      >
-        Sign out
-      </BoxelButton>
+      {{! TODO: Remove config.APP.stripeBillingEnabled once the API integration for credit info is completed. }}
+      {{#if config.APP.stripeBillingEnabled}}
+        <div class='credit-info' data-test-credit-info>
+          <div class='info-group'>
+            <span class='label'>Membership Tier</span>
+            <span
+              class='value'
+              data-test-membership-tier
+            >{{this.plan.name}}</span>
+          </div>
+          <BoxelButton
+            @kind='secondary-light'
+            @size='small'
+            data-test-upgrade-plan-button
+            {{on 'click' @toggleProfileSettings}}
+          >Upgrade Plan</BoxelButton>
+          <div class='info-group'>
+            <span class='label'>Monthly Credit</span>
+            <span
+              class={{cn 'value' out-of-credit=this.isOutOfPlanCreditAllowance}}
+              data-test-monthly-credit
+            ><IconHexagon width='16px' height='16px' />
+              {{this.monthlyCreditText}}</span>
+          </div>
+          <div class='info-group additional-credit'>
+            <span class='label'>Additional Credit</span>
+            <span
+              class={{cn 'value' out-of-credit=this.isOutOfCredit}}
+              data-test-additional-credit
+            ><IconHexagon width='16px' height='16px' />
+              {{this.extraCreditsAvailableInBalance}}</span>
+          </div>
+          <div
+            class={{cn 'buy-more-credits' out-of-credit=this.isOutOfCredit}}
+            data-test-buy-more-credits
+          >
+            <BoxelButton
+              @kind={{if this.isOutOfCredit 'primary' 'secondary-light'}}
+              @size={{if this.isOutOfCredit 'base' 'small'}}
+              {{on 'click' @toggleProfileSettings}}
+            >Buy more credits</BoxelButton>
+          </div>
+        </div>
+      {{/if}}
     </div>
   </template>
+
+  @service private declare realmServer: RealmServerService;
+  @service declare matrixService: MatrixService;
+
+  @action private logout() {
+    this.matrixService.logout();
+  }
+
+  private fetchCreditInfo = trackedFunction(this, async () => {
+    return await this.realmServer.fetchCreditInfo();
+  });
+
+  private get plan() {
+    return this.fetchCreditInfo.value?.plan;
+  }
+
+  private get creditsIncludedInPlanAllowance() {
+    return this.fetchCreditInfo.value?.creditsIncludedInPlanAllowance;
+  }
+
+  private get creditsUsedInPlanAllowance() {
+    return this.fetchCreditInfo.value?.creditsUsedInPlanAllowance;
+  }
+
+  private get extraCreditsAvailableInBalance() {
+    return this.fetchCreditInfo.value?.extraCreditsAvailableInBalance;
+  }
+
+  private get monthlyCreditText() {
+    return this.creditsUsedInPlanAllowance != undefined &&
+      this.creditsIncludedInPlanAllowance != undefined
+      ? `${
+          this.creditsIncludedInPlanAllowance - this.creditsUsedInPlanAllowance
+        } of ${this.creditsIncludedInPlanAllowance} left`
+      : '';
+  }
+
+  private get isOutOfCredit() {
+    return (
+      this.isOutOfPlanCreditAllowance &&
+      this.extraCreditsAvailableInBalance == 0
+    );
+  }
+
+  private get isOutOfPlanCreditAllowance() {
+    return (
+      this.creditsUsedInPlanAllowance &&
+      this.creditsIncludedInPlanAllowance &&
+      this.creditsUsedInPlanAllowance >= this.creditsIncludedInPlanAllowance
+    );
+  }
 }
 
 export class ProfileInfo extends Component<ProfileInfoSignature> {

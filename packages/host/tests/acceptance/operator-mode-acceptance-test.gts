@@ -34,6 +34,55 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+let userResponseBody = {
+  data: {
+    type: 'user',
+    id: 1,
+    attributes: {
+      matrixUserId: '@testuser:staging',
+      stripeCustomerId: 'stripe-id-1',
+      creditsUsedInPlanAllowance: 0,
+      extraCreditsAvailableInBalance: 100,
+    },
+    relationships: {
+      subscription: {
+        data: {
+          type: 'subscription',
+          id: 1,
+        },
+      },
+    },
+  },
+  included: [
+    {
+      type: 'subscription',
+      id: 1,
+      attributes: {
+        startedAt: '2024-10-15T03:42:11.000Z',
+        endedAt: '2025-10-15T03:42:11.000Z',
+        status: 'active',
+      },
+      relationships: {
+        plan: {
+          data: {
+            type: 'plan',
+            id: 1,
+          },
+        },
+      },
+    },
+    {
+      type: 'plan',
+      id: 1,
+      attributes: {
+        name: 'Free',
+        monthlyPrice: 0,
+        creditsIncluded: 1000,
+      },
+    },
+  ],
+};
+
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -419,38 +468,17 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('can logout via profile info popover', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}employee.gts`,
-    });
-
-    await waitFor('[data-test-profile-icon-button]');
-    assert.dom('[data-test-profile-icon]').hasText('T');
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
-
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').exists();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
-
-    await click('[data-test-signout-button]');
-
-    assert.dom('[data-test-login-btn]').exists();
-  });
-
   test('can access and save settings via profile info popover', async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        if (req.url.includes('_user')) {
+          return new Response(JSON.stringify(userResponseBody));
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
     await visitOperatorMode({
       stacks: [
         [
@@ -751,5 +779,88 @@ module('Acceptance | operator mode tests', function (hooks) {
         'new session token is different than original session token',
       );
     });
+  });
+
+  test(`displays credit info in account popover`, async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        if (req.url.includes('_user')) {
+          return new Response(JSON.stringify(userResponseBody));
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+
+    await waitFor('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
+
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').exists();
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('100');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-upgrade-plan-button]').exists();
+    assert.dom('[data-test-buy-more-credits]').exists();
+    assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+
+    await click('[data-test-upgrade-plan-button]');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
+
+    await click('[aria-label="close modal"]');
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-popover]').exists();
+    await click('[data-test-buy-more-credits] button');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
+
+    // out of credit
+    await click('[aria-label="close modal"]');
+
+    // out of monthly credit
+    userResponseBody.data.attributes.creditsUsedInPlanAllowance = 1000;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('100');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+    await click('[data-test-profile-icon-button]');
+
+    // out of monthly credit and additional credit
+    userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('0');
+    assert.dom('[data-test-additional-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-buy-more-credits]').hasClass('out-of-credit');
+    await click('[data-test-profile-icon-button]');
+
+    // out of additional credit
+    userResponseBody.data.attributes.creditsUsedInPlanAllowance = 0;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('0');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
   });
 });

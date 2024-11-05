@@ -1,6 +1,9 @@
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type { PowerSelectArgs } from 'ember-power-select/components/power-select';
+import type {
+  PowerSelectArgs,
+  Select,
+} from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 
@@ -8,10 +11,24 @@ import { BoxelAfterOptionsComponent } from './after-options.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
 } from './selected-item.gts';
-import BoxelTrigger, { type TriggerComponentSignature } from './trigger.gts';
+import BoxelMultiSelectDefaultTrigger, {
+  type TriggerComponentSignature,
+} from './trigger.gts';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
+  ariaLabel?: string;
+  closeOnSelect?: boolean;
+  disabled?: boolean;
+  extra?: any;
+  matchTriggerWidth?: boolean;
+  onBlur?: (select: Select, e: Event) => boolean | undefined;
+  onClose?: (select: Select, e: Event) => boolean | undefined;
+  onOpen?: (select: Select, e: Event) => boolean | undefined;
   options: ItemT[];
+  placeholder?: string;
+  renderInPlace?: boolean;
+  searchEnabled?: boolean;
+  searchField?: string;
   selected: ItemT[];
   selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
   triggerComponent?: ComponentLike<TriggerComponentSignature<ItemT>>;
@@ -37,37 +54,40 @@ export interface Signature<ItemT> {
 
 export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
   <template>
-    <div class='boxel-multi-select__wrapper'>
-      <PowerSelectMultiple
-        {{! required args }}
-        @options={{@options}}
-        @selected={{@selected}}
-        @onChange={{@onChange}}
-        {{! basic options }}
-        @placeholder={{@placeholder}}
-        @disabled={{@disabled}}
-        @renderInPlace={{@renderInPlace}}
-        @matchTriggerWidth={{@matchTriggerWidth}}
-        @searchField={{@searchField}}
-        @searchEnabled={{@searchEnabled}}
-        @closeOnSelect={{@closeOnSelect}}
-        @eventType={{@eventType}}
-        @ariaLabel={{@ariaLabel}}
-        @dropdownClass={{'boxel-multi-select__dropdown'}}
-        {{! actions  }}
-        @onOpen={{@onOpen}}
-        @onBlur={{@onBlur}}
-        {{! custom components }}
-        @selectedItemComponent={{@selectedItemComponent}}
-        @triggerComponent={{@triggerComponent}}
-        @afterOptionsComponent={{@afterOptionsComponent}}
-        @beforeOptionsComponent={{@beforeOptionsComponent}}
-        ...attributes
-        as |option|
-      >
-        {{yield option}}
-      </PowerSelectMultiple>
-    </div>
+    <PowerSelectMultiple
+      class='boxel-multi-select'
+      {{! required args }}
+      @options={{@options}}
+      @selected={{@selected}}
+      @onChange={{@onChange}}
+      {{! basic options }}
+      @placeholder={{@placeholder}}
+      @disabled={{@disabled}}
+      @renderInPlace={{@renderInPlace}}
+      @matchTriggerWidth={{@matchTriggerWidth}}
+      @searchField={{@searchField}}
+      @searchEnabled={{@searchEnabled}}
+      @closeOnSelect={{@closeOnSelect}}
+      @eventType={{@eventType}}
+      @ariaLabel={{@ariaLabel}}
+      @registerAPI={{@registerAPI}}
+      @initiallyOpened={{@initiallyOpened}}
+      @extra={{@extra}}
+      @dropdownClass={{'boxel-multi-select__dropdown'}}
+      {{! actions  }}
+      @onOpen={{@onOpen}}
+      @onClose={{@onClose}}
+      @onBlur={{@onBlur}}
+      {{! custom components }}
+      @selectedItemComponent={{@selectedItemComponent}}
+      @triggerComponent={{@triggerComponent}}
+      @afterOptionsComponent={{@afterOptionsComponent}}
+      @beforeOptionsComponent={{@beforeOptionsComponent}}
+      ...attributes
+      as |option|
+    >
+      {{yield option}}
+    </PowerSelectMultiple>
     {{! template-lint-disable require-scoped-style }}
     <style>
       .boxel-multi-select__dropdown {
@@ -109,7 +129,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       }
     </style>
     <style scoped>
-      .boxel-multi-select__wrapper {
+      .boxel-multi-select {
         position: relative;
         display: flex;
         align-items: stretch;
@@ -117,22 +137,6 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         overflow: hidden;
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius-sm);
-      }
-      .ember-basic-dropdown-trigger {
-        padding: var(--boxel-sp-xxxs);
-        display: flex;
-        align-items: center;
-        flex-grow: 1;
-        border: none;
-      }
-      .ember-power-select-trigger:focus,
-      .ember-power-select-trigger--active {
-        border: none;
-        box-shadow: none;
-        outline: none;
-      }
-      .ember-power-select-trigger:after {
-        margin-left: 10px;
       }
       .ember-power-select-multiple-options {
         list-style: none;
@@ -161,6 +165,9 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @searchEnabled={{@searchEnabled}}
       @closeOnSelect={{@closeOnSelect}}
       @ariaLabel={{@ariaLabel}}
+      @registerAPI={{@registerAPI}}
+      @initiallyOpened={{@initiallyOpened}}
+      @extra={{@extra}}
       {{! Do not remove eventType argument 
     This is to ensure that the click event from selected item does not bubble up to the trigger
      and cause the dropdown to close
@@ -168,6 +175,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @eventType='click'
       {{! actions }}
       @onOpen={{@onOpen}}
+      @onClose={{@onClose}}
       @onBlur={{@onBlur}}
       {{! custom components }}
       @selectedItemComponent={{if
@@ -175,7 +183,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
         @selectedItemComponent
         (component BoxelSelectedItem)
       }}
-      @triggerComponent={{component BoxelTrigger}}
+      @triggerComponent={{component BoxelMultiSelectDefaultTrigger}}
       @beforeOptionsComponent={{component BeforeOptions}}
       @afterOptionsComponent={{component BoxelAfterOptionsComponent}}
       ...attributes
