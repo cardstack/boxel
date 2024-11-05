@@ -49,9 +49,9 @@ export default class PillUsage extends Component {
         </:description>
         <:example>
           <Pill @kind={{this.kind}} data-test-pill-freestyle-usage>
-            <:icon>
+            <:iconLeft>
               <IconPlus />
-            </:icon>
+            </:iconLeft>
             <:default>
               Happy
             </:default>
