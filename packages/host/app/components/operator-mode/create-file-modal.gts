@@ -801,9 +801,9 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
 
   <template>
     <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
-      <:icon>
+      <:iconLeft>
         <RealmIcon @realmInfo={{this.realm.info @entry.id}} class='icon' />
-      </:icon>
+      </:iconLeft>
       <:default>
         {{@entry.title}}
       </:default>

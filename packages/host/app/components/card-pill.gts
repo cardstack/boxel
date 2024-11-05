@@ -41,9 +41,9 @@ export default class CardPill extends Component<CardPillSignature> {
       data-test-autoattached-card={{@isAutoAttachedCard}}
       ...attributes
     >
-      <:icon>
+      <:iconLeft>
         <RealmIcon @realmInfo={{this.realm.info @card.id}} class='icon' />
-      </:icon>
+      </:iconLeft>
       <:default>
         <div class='card-content' title={{@card.title}}>
           <this.component @format='atom' @displayContainer={{false}} />

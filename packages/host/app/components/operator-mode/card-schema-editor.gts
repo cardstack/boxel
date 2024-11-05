@@ -256,12 +256,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                 {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
-                <:icon>
+                <:iconLeft>
                   <RealmIcon
                     @realmInfo={{this.realm.info @cardType.module}}
                     class='icon'
                   />
-                </:icon>
+                </:iconLeft>
                 <:default>
                   {{@cardType.displayName}}
                 </:default>
@@ -342,7 +342,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                             }}
                             data-test-card-schema-field-navigational-button
                           >
-                            <:icon>
+                            <:iconLeft>
                               {{#if field.isComputed}}
                                 <span
                                   class='computed-icon'
@@ -360,7 +360,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                                 @realmInfo={{this.realm.info moduleUrl}}
                                 class='icon'
                               />
-                            </:icon>
+                            </:iconLeft>
                             <:default>
                               {{#let
                                 (this.fieldCardDisplayName field.card)
