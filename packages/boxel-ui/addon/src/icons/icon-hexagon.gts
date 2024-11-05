@@ -6,17 +6,14 @@ import type { Signature } from './types.ts';
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
     xmlns='http://www.w3.org/2000/svg'
+    xml:space='preserve'
     width='800'
     height='800'
-    fill='none'
-    viewBox='0 0 24 24'
+    fill='var(--icon-color, #000000)'
+    viewBox='0 0 490 490'
     ...attributes
   ><path
-      stroke='var(--icon-color, #000000)'
-      stroke-linecap='round'
-      stroke-linejoin='round'
-      stroke-width='5'
-      d='m12 5 6 3.464v7.072L12 19l-6-3.464V8.464L12 5z'
+      d='M122.5 34.031 0 245.001l122.5 210.968h245L490 245.001 367.5 34.031h-245zm165.058 284.262h-85.116l-42.557-73.292 42.557-73.292h85.116l42.557 73.292-42.557 73.292z'
     /></svg>
 </template>;
 
