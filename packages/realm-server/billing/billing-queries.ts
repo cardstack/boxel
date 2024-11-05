@@ -109,9 +109,12 @@ export async function updateUserStripeCustomerId(
   userId: string,
   stripeCustomerId: string,
 ) {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    stripe_customer_id: stripeCustomerId,
+  });
+
   await query(dbAdapter, [
-    `UPDATE users SET stripe_customer_id = `,
-    param(stripeCustomerId),
+    ...update('users', nameExpressions, valueExpressions),
     ` WHERE matrix_user_id = `,
     param(userId),
   ]);

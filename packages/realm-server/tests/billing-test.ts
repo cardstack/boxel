@@ -421,7 +421,6 @@ module('billing', function (hooks) {
 
   module('checkout session completed', function () {
     test('update user stripe customer id when checkout session completed', async function (assert) {
-      // mock user
       await insertUser(dbAdapter, 'testuser', '');
 
       let stripeCheckoutSessionCompletedEvent = {
