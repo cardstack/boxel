@@ -8,6 +8,7 @@ import {
   param,
   query,
   separatedByCommas,
+  update,
 } from '@cardstack/runtime-common';
 import { StripeEvent } from './stripe-webhook-handlers';
 
@@ -359,15 +360,14 @@ export async function updateSubscription(
     endedAt?: number;
   },
 ) {
-  let { valueExpressions, nameExpressions: _nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     status: params.status,
     ended_at: params.endedAt,
   });
 
   await query(dbAdapter, [
-    `UPDATE subscriptions SET (status, ended_at) = `,
-    ...addExplicitParens(separatedByCommas(valueExpressions)),
-    ` WHERE id = `,
+    ...update('subscriptions', nameExpressions, valueExpressions),
+    `WHERE id =`,
     param(subscriptionId),
   ] as Expression);
 }
