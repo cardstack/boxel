@@ -9,6 +9,13 @@ import type { StackItem } from '@cardstack/host/lib/stack-item';
 
 import OperatorModeStackItem, { CardDefOrId } from './stack-item';
 
+interface StackItemComponentAPI {
+  clearSelections: () => void;
+  doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void;
+  scrollIntoView: (selector: string) => void;
+  startAnimation: (type: 'closing' | 'movingForward') => void;
+}
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -22,19 +29,17 @@ interface Signature {
       stackItem: StackItem,
     ) => void;
     setupStackItem: (
-      stackItem: StackItem,
-      clearSelections: () => void,
-      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-      doScrollIntoView: (selector: string) => void,
+      model: StackItem,
+      componentAPI: StackItemComponentAPI,
     ) => void;
   };
   Blocks: {};
 }
 
 export default class OperatorModeStack extends Component<Signature> {
-  private doAnimation = new WeakMap<
+  private stackItemComponentAPI = new WeakMap<
     StackItem,
-    (type: 'isClosing' | 'isMovingForward') => void
+    StackItemComponentAPI
   >();
 
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
@@ -46,9 +51,9 @@ export default class OperatorModeStack extends Component<Signature> {
     // do closing animation on each closed item
     await Promise.all(
       itemsToDismiss.map((i) => {
-        const doAnimation = this.doAnimation.get(i);
-        if (doAnimation) {
-          return doAnimation('isClosing');
+        const componentAPI = this.stackItemComponentAPI.get(i);
+        if (componentAPI) {
+          return componentAPI.startAnimation('closing');
         }
       }),
     );
@@ -57,26 +62,18 @@ export default class OperatorModeStack extends Component<Signature> {
 
     // move forward animation on next top item
     const nextTopItem = this.args.stackItems[itemIndex];
-    const doAnimation = this.doAnimation.get(nextTopItem);
-    if (doAnimation) {
-      doAnimation('isMovingForward');
+    const componentAPI = this.stackItemComponentAPI.get(nextTopItem);
+    if (componentAPI) {
+      await componentAPI.startAnimation('movingForward');
     }
   });
 
   private setupStackItem = (
     item: StackItem,
-    doClearSelections: () => void,
-    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-    doScrollIntoView: (selector: string) => void,
-    doAnimation: (type: 'isClosing' | 'isMovingForward') => void,
+    componentAPI: StackItemComponentAPI,
   ) => {
-    this.args.setupStackItem(
-      item,
-      doClearSelections,
-      doWithStableScroll,
-      doScrollIntoView,
-    );
-    this.doAnimation.set(item, doAnimation);
+    this.args.setupStackItem(item, componentAPI);
+    this.stackItemComponentAPI.set(item, componentAPI);
   };
 
   <template>

@@ -66,6 +66,13 @@ import type EnvironmentService from '../../services/environment-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 
+interface StackItemComponentAPI {
+  clearSelections: () => void;
+  doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void;
+  scrollIntoView: (selector: string) => void;
+  startAnimation: (type: 'closing' | 'movingForward') => void;
+}
+
 interface Signature {
   Args: {
     item: StackItem;
@@ -79,11 +86,8 @@ interface Signature {
       stackItem: StackItem,
     ) => void;
     setupStackItem: (
-      stackItem: StackItem,
-      clearSelections: () => void,
-      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-      doScrollIntoView: (selector: string) => void,
-      doAnimation: (type: 'isClosing' | 'isMovingForward') => void,
+      model: StackItem,
+      componentAPI: StackItemComponentAPI,
     ) => void;
   };
 }
@@ -109,8 +113,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isSaving = false;
-  @tracked private isClosing = false;
-  @tracked private isMovingForward = false;
+  @tracked private animationType: 'closing' | 'movingForward' | undefined;
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
@@ -136,13 +139,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.loadCard.perform();
     this.subscribeToCard.perform();
-    this.args.setupStackItem(
-      this.args.item,
-      this.clearSelections,
-      this.doWithStableScroll.perform,
-      this.scrollIntoView.perform,
-      (type) => this.doAnimation.perform(type),
-    );
+    this.args.setupStackItem(this.args.item, {
+      clearSelections: this.clearSelections,
+      doWithStableScroll: this.doWithStableScroll.perform,
+      scrollIntoView: this.scrollIntoView.perform,
+      startAnimation: this.startAnimation.perform,
+    });
   }
 
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -413,23 +415,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
-  private async startAnimation(animationFlag: 'isClosing' | 'isMovingForward') {
-    this[animationFlag] = true;
-    if (!this.itemEl) return;
-
-    return new Promise<void>((resolve) => {
-      scheduleOnce(
-        'afterRender',
-        this,
-        this.handleAnimationCompletion,
-        resolve,
-      );
-    });
-  }
-
-  private doAnimation = task(async (type: 'isClosing' | 'isMovingForward') => {
-    await this.startAnimation(type);
-  });
+  private startAnimation = dropTask(
+    async (animationType: 'closing' | 'movingForward') => {
+      this.animationType = animationType;
+      if (!this.itemEl) return;
+      await new Promise<void>((resolve) => {
+        scheduleOnce(
+          'afterRender',
+          this,
+          this.handleAnimationCompletion,
+          resolve,
+        );
+      });
+    },
+  );
 
   private handleAnimationCompletion(resolve: () => void) {
     if (!this.itemEl) {
@@ -468,7 +467,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get doClosingAnimation() {
-    return this.isClosing;
+    return this.animationType === 'closing';
+  }
+
+  private get doMovingForwardAnimation() {
+    return this.animationType === 'movingForward';
   }
 
   private get isTesting() {
@@ -481,7 +484,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{if this.isBuried "buried"}}
         {{if this.doOpeningAnimation "opening-animation"}}
         {{if this.doClosingAnimation "closing-animation"}}
-        {{if this.isMovingForward "move-forward-animation"}}
+        {{if this.doMovingForwardAnimation "move-forward-animation"}}
         {{if this.isTesting "testing"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
