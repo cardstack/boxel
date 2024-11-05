@@ -83,6 +83,10 @@
   textarea:focus {
     outline-color: var(--boxel-highlight);
   }
+
+  .boxel-contents-only {
+    display: contents;
+  }
 }
 
 @layer utilities {
@@ -102,6 +106,7 @@
   }
 }
 
-#ember-basic-dropdown-wormhole .boxel-dropdown__content.ember-basic-dropdown-content {
+#ember-basic-dropdown-wormhole
+  .boxel-dropdown__content.ember-basic-dropdown-content {
   z-index: calc(var(--boxel-layer-modal-urgent) + 1);
 }
