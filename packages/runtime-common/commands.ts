@@ -23,7 +23,7 @@ export interface CommandContext {
     prompt: string;
     attachedCards?: CardDef[];
     skillCards?: SkillCard[];
-    autoExecuteCommands?: Command<any, any, any>[];
+    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
   }) => Promise<{ sessionId: string }>;
 }
 

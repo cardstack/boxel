@@ -91,7 +91,7 @@ export class CreateProductRequirementsInstance extends Command<
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
       skillCards: [this.skillCard],
-      autoExecuteCommands: [patchPRDCommand], // this should persist over multiple messages, matrix service is responsible to tracking whic
+      commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking whic
     });
 
     // Wait for the PRD command to have been applied
@@ -151,7 +151,7 @@ export class GenerateCodeFromPRDCommand extends Command<
       prompt: this.createPrompt(input.productRequirements),
       attachedCards: [input.productRequirements],
       skillCards: [this.skillCard],
-      autoExecuteCommands: [createModuleCommand],
+      commands: [{ command: createModuleCommand, autoExecute: true }],
     });
 
     // Wait for the module to be created

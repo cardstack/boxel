@@ -77,6 +77,7 @@ import { RoomResource, getRoom } from '../resources/room';
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
+import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -105,6 +106,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare realm: RealmService;
   @service private declare matrixSdkLoader: MatrixSDKLoader;
   @service private declare realmServer: RealmServerService;
@@ -117,6 +119,7 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   private rooms: TrackedMap<string, RoomState> = new TrackedMap();
+
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -628,7 +631,7 @@ export default class MatrixService extends Service {
     prompt: string;
     attachedCards?: CardDef[];
     skillCards?: SkillCard[];
-    autoExecuteCommands?: Command<any, any, any>[];
+    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
   }): Promise<{ roomId: string }> {
     let roomId = params.roomId;
     if (!roomId) {
@@ -638,11 +641,13 @@ export default class MatrixService extends Service {
     let html = markdownToHtml(params.prompt);
     let mappings = await basicMappings(this.loaderService.loader);
     let tools = [];
-    for (let command of params.autoExecuteCommands ?? []) {
+    for (let { command, autoExecute } of params.commands ?? []) {
+      // get a registered name for the command
+      let name = this.commandService.registerCommand(command, autoExecute);
       tools.push({
         type: 'function',
         function: {
-          name: command.name,
+          name,
           description: command.description,
           parameters: {
             type: 'object',

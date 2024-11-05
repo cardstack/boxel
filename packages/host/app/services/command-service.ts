@@ -5,6 +5,7 @@ import { task } from 'ember-concurrency';
 import flatMap from 'lodash/flatMap';
 
 import {
+  Command,
   type LooseSingleCardDocument,
   type PatchData,
   baseRealm,
@@ -37,13 +38,43 @@ export default class CommandService extends Service {
   @service private declare realm: Realm;
   @service private declare realmServer: RealmServerService;
 
+  private commandNonce = 0;
+  private commands: Map<
+    string,
+    { command: Command<any, any, any>; autoExecute: boolean }
+  > = new Map();
+
+  public registerCommand(
+    command: Command<any, any, any>,
+    autoExecute: boolean,
+  ) {
+    console.log('registerCommand', command.name);
+    let name = `${command.name}_${this.commandNonce++}`;
+    this.commands.set(name, { command, autoExecute });
+    return name;
+  }
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandCard, roomId: string) => {
     let { payload, eventId } = command;
     let res: any;
     try {
       this.matrixService.failedCommandState.delete(eventId);
-      if (command.name === 'patchCard') {
+
+      // lookup command
+      let { command: commandToRun } = this.commands.get(command.name) ?? {};
+
+      console.log('run', command.name, commandToRun);
+
+      if (commandToRun) {
+        // Get the input type and validate/construct the payload
+        let InputType = await commandToRun.getInputType();
+        // Construct a new instance of the input type with the payload
+        // Here the input type is undefined?
+        debugger;
+        let typedInput = new InputType(payload);
+        res = await commandToRun.execute(typedInput);
+      } else if (command.name === 'patchCard') {
         if (!hasPatchData(payload)) {
           throw new Error(
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
