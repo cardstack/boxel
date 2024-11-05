@@ -35,6 +35,19 @@ async function insertPermission(
   );
 }
 
+async function removePermissions(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+  username: string,
+) {
+  await query(dbAdapter, [
+    'DELETE from realm_user_permissions WHERE username =',
+    param(username),
+    'and realm_url =',
+    param(realmURL.href),
+  ]);
+}
+
 export async function insertPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
@@ -42,6 +55,10 @@ export async function insertPermissions(
 ) {
   let insertPromises = Object.entries(permissions).map(
     ([user, userPermissions]) => {
+      if (userPermissions == null || userPermissions.length === 0) {
+        return removePermissions(dbAdapter, realmURL, user);
+      }
+
       return insertPermission(dbAdapter, realmURL, user, {
         read: userPermissions.includes('read'),
         write: userPermissions.includes('write'),

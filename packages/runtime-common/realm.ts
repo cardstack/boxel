@@ -23,6 +23,7 @@ import {
   isSingleCardDocument,
   logger,
   fetchUserPermissions,
+  insertPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   internalKeyFor,
@@ -94,6 +95,7 @@ export type RealmInfo = {
   iconURL: string | null;
   showAsCatalog: boolean | null;
   visibility: RealmVisibility;
+  realmUserId?: string;
 };
 
 export interface FileRef {
@@ -108,11 +110,11 @@ export interface FileRef {
 export interface TokenClaims {
   user: string;
   realm: string;
-  permissions: ('read' | 'write' | 'realm-owner')[];
+  permissions: RealmPermissions['user'];
 }
 
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write' | 'realm-owner')[];
+  [username: string]: ('read' | 'write' | 'realm-owner')[] | null;
 }
 
 export interface RealmAdapter {
@@ -367,6 +369,16 @@ export class Realm {
         '/_session',
         SupportedMimeType.Session,
         this.createSession.bind(this),
+      )
+      .get(
+        '/_permissions',
+        SupportedMimeType.Permissions,
+        this.getRealmPermissions.bind(this),
+      )
+      .patch(
+        '/_permissions',
+        SupportedMimeType.Permissions,
+        this.patchRealmPermissions.bind(this),
       )
       .get(
         '/|/.+(?<!.json)',
@@ -691,14 +703,17 @@ export class Realm {
           }
         }
 
-        let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
-          request.method,
-        );
-        await this.checkPermission(
-          request,
-          requestContext,
-          isWrite ? 'write' : 'read',
-        );
+        let requiredPermission: 'read' | 'write' | 'realm-owner';
+        if (['_permissions'].includes(this.paths.local(new URL(request.url)))) {
+          requiredPermission = 'realm-owner';
+        } else if (
+          ['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)
+        ) {
+          requiredPermission = 'write';
+        } else {
+          requiredPermission = 'read';
+        }
+        await this.checkPermission(request, requestContext, requiredPermission);
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError(requestContext, 'search index is not available');
@@ -870,16 +885,18 @@ export class Realm {
   private async checkPermission(
     request: Request,
     requestContext: RequestContext,
-    neededPermission: 'read' | 'write',
+    requiredPermission: 'read' | 'write' | 'realm-owner',
   ) {
     let realmPermissions = requestContext.permissions;
     if (
-      lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
-      request.method === 'HEAD' ||
-      // If the realm is public readable or writable, do not require a JWT
-      (neededPermission === 'read' &&
-        realmPermissions['*']?.includes('read')) ||
-      (neededPermission === 'write' && realmPermissions['*']?.includes('write'))
+      requiredPermission !== 'realm-owner' &&
+      (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
+        request.method === 'HEAD' ||
+        // If the realm is public readable or writable, do not require a JWT
+        (requiredPermission === 'read' &&
+          realmPermissions['*']?.includes('read')) ||
+        (requiredPermission === 'write' &&
+          realmPermissions['*']?.includes('write')))
     ) {
       return;
     }
@@ -909,7 +926,7 @@ export class Realm {
 
       let userPermissions = await realmPermissionChecker.for(token.user);
       if (
-        JSON.stringify(token.permissions.sort()) !==
+        JSON.stringify(token.permissions?.sort()) !==
         JSON.stringify(userPermissions.sort())
       ) {
         throw new AuthenticationError(
@@ -917,7 +934,7 @@ export class Realm {
         );
       }
 
-      if (!(await realmPermissionChecker.can(token.user, neededPermission))) {
+      if (!(await realmPermissionChecker.can(token.user, requiredPermission))) {
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
@@ -1613,6 +1630,88 @@ export class Realm {
     });
   }
 
+  private async getRealmPermissions(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let permissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
+    let doc = {
+      data: {
+        id: this.url,
+        type: 'permissions',
+        attributes: { permissions },
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.Permissions },
+      },
+      requestContext,
+    });
+  }
+
+  private async patchRealmPermissions(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let json: { data?: { attributes?: { permissions?: RealmPermissions } } };
+    try {
+      json = await request.json();
+    } catch (e: any) {
+      return badRequest(
+        `The request body was not json: ${e.message}`,
+        requestContext,
+      );
+    }
+    let patch = json.data?.attributes?.permissions;
+    if (!patch) {
+      return badRequest(
+        `The request body was missing permissions`,
+        requestContext,
+      );
+    }
+    try {
+      assertRealmPermissions(patch);
+    } catch (e: any) {
+      return badRequest(
+        `The request body does not specify realm permissions correctly: ${e.message}`,
+        requestContext,
+      );
+    }
+
+    let currentPermissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    for (let [user, permissions] of Object.entries(patch)) {
+      if (currentPermissions[user]?.includes('realm-owner')) {
+        return badRequest(
+          `cannot modify permissions of the realm owner ${user}`,
+          requestContext,
+        );
+      }
+      if (permissions?.includes('realm-owner')) {
+        return badRequest(
+          `cannot create new realm owner ${user}`,
+          requestContext,
+        );
+      }
+    }
+
+    await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
+
+    return createResponse({
+      body: null,
+      init: { status: 204 },
+      requestContext,
+    });
+  }
+
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
@@ -1623,6 +1722,7 @@ export class Realm {
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
+      realmUserId: this.#matrixClient.getUserId()!,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1913,4 +2013,27 @@ function sseToChunkData(type: string, data: string, id?: string): string {
     info.push(`id: ${id}`);
   }
   return info.join('\n') + '\n\n';
+}
+
+function assertRealmPermissions(
+  realmPermissions: any,
+): asserts realmPermissions is RealmPermissions {
+  if (typeof realmPermissions !== 'object') {
+    throw new Error(`permissions must be an object`);
+  }
+  for (let [user, permissions] of Object.entries(realmPermissions)) {
+    if (typeof user !== 'string') {
+      throw new Error(`user ${user} must be a string`); // could be a symbol
+    }
+    if (!Array.isArray(permissions) && permissions !== null) {
+      throw new Error(`permissions must be an array or null`);
+    }
+    if (permissions && permissions.length > 0) {
+      for (let permission of permissions) {
+        if (!['read', 'write', 'realm-owner'].includes(permission)) {
+          throw new Error(`'${permission}' is not a valid permission`);
+        }
+      }
+    }
+  }
 }
