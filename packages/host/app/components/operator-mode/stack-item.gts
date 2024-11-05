@@ -435,9 +435,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return;
     }
     const animations = this.itemEl.getAnimations() || [];
-    Promise.all(animations.map((animation) => animation.finished)).then(() =>
-      resolve(),
-    );
+    Promise.all(animations.map((animation) => animation.finished))
+      .then(() => resolve())
+      .catch(() => resolve()); // Task was cancelled, which is fine to resolve - eg: the component was destroyed
   }
 
   private setupContentEl = (el: HTMLElement) => {

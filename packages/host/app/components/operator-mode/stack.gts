@@ -52,9 +52,10 @@ export default class OperatorModeStack extends Component<Signature> {
     await Promise.all(
       itemsToDismiss.map((i) => {
         const componentAPI = this.stackItemComponentAPI.get(i);
-        if (componentAPI) {
-          return componentAPI.startAnimation('closing');
+        if (!componentAPI) {
+          return Promise.resolve();
         }
+        return componentAPI.startAnimation('closing');
       }),
     );
 
