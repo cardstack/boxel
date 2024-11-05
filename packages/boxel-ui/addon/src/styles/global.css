@@ -86,6 +86,10 @@
 }
 
 @layer utilities {
+  .boxel-contents-only {
+    display: contents;
+  }
+
   /* Hides content visually only
   (accessible via screen readers) */
   .boxel-sr-only:not(:focus):not(:active) {
@@ -102,6 +106,7 @@
   }
 }
 
-#ember-basic-dropdown-wormhole .boxel-dropdown__content.ember-basic-dropdown-content {
+#ember-basic-dropdown-wormhole
+  .boxel-dropdown__content.ember-basic-dropdown-content {
   z-index: calc(var(--boxel-layer-modal-urgent) + 1);
 }
