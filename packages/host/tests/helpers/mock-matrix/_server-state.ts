@@ -224,7 +224,7 @@ export class ServerState {
     if (!room) {
       throw new Error(`room ${roomId} does not exist`);
     }
-    return room.events;
+    return [...room.events];
   }
 
   eventId(): string {

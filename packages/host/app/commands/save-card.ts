@@ -17,7 +17,7 @@ export default class SaveCardCommand extends Command<
   async getInputType() {
     let commandModule = await this.loaderService.loader.import<
       typeof BaseCommandModule
-    >(`${baseRealm.url}card-api`);
+    >(`${baseRealm.url}command`);
     const { SaveCardInput } = commandModule;
     return SaveCardInput;
   }

@@ -28,7 +28,7 @@ export default class PatchCardCommand extends Command<
   async getInputType() {
     let commandModule = await this.loaderService.loader.import<
       typeof BaseCommandModule
-    >(`${baseRealm.url}card-api`);
+    >(`${baseRealm.url}command`);
     const { PatchCardInput } = commandModule;
     return PatchCardInput;
   }
@@ -56,7 +56,6 @@ export default class PatchCardCommand extends Command<
     );
     return cardTypeToPatchSchema;
     // TODO: merge cardTypeToPatchSchema into inputTypeSchema specifying the schema of the "patch" attribute
-    debugger;
-    return inputTypeSchema;
+    // return inputTypeSchema;
   }
 }

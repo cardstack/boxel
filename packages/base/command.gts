@@ -67,6 +67,10 @@ export class ShowCardInput extends CardDef {
   @field placement = contains(StringField); // TODO: nicer if enum, likely need to specify stackIndex too?
 }
 
+export class SwitchSubmodeInput extends CardDef {
+  @field submode = contains(StringField);
+}
+
 export class CreateModuleInput extends CardDef {
   @field code = contains(StringField);
   @field realm = contains(StringField);
