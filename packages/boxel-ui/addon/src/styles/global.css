@@ -83,13 +83,13 @@
   textarea:focus {
     outline-color: var(--boxel-highlight);
   }
-
-  .boxel-contents-only {
-    display: contents;
-  }
 }
 
 @layer utilities {
+  .boxel-contents-only {
+    display: contents;
+  }
+
   /* Hides content visually only
   (accessible via screen readers) */
   .boxel-sr-only:not(:focus):not(:active) {
