@@ -348,7 +348,7 @@ export default class InteractSubmode extends Component<Signature> {
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
     if (item.format === 'edit') {
-      let updatedCard = await this.args.saveCard(card);
+      let updatedCard = this.args.saveCard(card);
       request?.fulfill(updatedCard);
     }
   });
