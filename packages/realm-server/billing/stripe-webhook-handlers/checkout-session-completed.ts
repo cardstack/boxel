@@ -12,7 +12,7 @@ import { TransactionManager } from '../../pg-transaction-manager';
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,
   event: StripeCheckoutSessionCompletedWebhookEvent,
-): Promise<Response> {
+) {
   let txManager = new TransactionManager(dbAdapter as PgAdapter);
 
   await txManager.withTransaction(async () => {
@@ -28,6 +28,4 @@ export async function handleCheckoutSessionCompleted(
     );
     await markStripeEventAsProcessed(dbAdapter, event.id);
   });
-
-  return new Response('ok');
 }
