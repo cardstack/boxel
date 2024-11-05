@@ -225,7 +225,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private closeItem = dropTask(async () => {
-    await this.doAnimation.perform('isClosing');
+    await this.startAnimation.perform('closing');
     this.args.close(this.args.item);
   });
 

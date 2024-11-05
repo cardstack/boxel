@@ -67,14 +67,7 @@ type Values<T> = T[keyof T];
 type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
-const clearSelections = new WeakMap<StackItem, () => void>();
-const stackItemScrollers = new WeakMap<
-  StackItem,
-  {
-    stableScroll: (_changeSizeCallback: () => Promise<void>) => void;
-    scrollIntoView: (_selector: string) => void;
-  }
->();
+const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
 
 interface NeighborStackTriggerButtonSignature {
   Element: HTMLButtonElement;
@@ -141,6 +134,13 @@ interface Signature {
   Args: {
     write: (card: CardDef) => Promise<CardDef | undefined>;
   };
+}
+
+interface StackItemComponentAPI {
+  clearSelections: () => void;
+  doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void;
+  scrollIntoView: (selector: string) => void;
+  startAnimation: (type: 'closing' | 'movingForward') => void;
 }
 
 export default class InteractSubmode extends Component<Signature> {
@@ -299,7 +299,7 @@ export default class InteractSubmode extends Component<Signature> {
           stackItem = stack.find((item: StackItem) => item.card === card);
           if (stackItem) {
             let doWithStableScroll =
-              stackItemScrollers.get(stackItem)?.stableScroll;
+              stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
             if (doWithStableScroll) {
               doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
               return;
@@ -534,16 +534,18 @@ export default class InteractSubmode extends Component<Signature> {
             scrollToCard = newCard; // we scroll to the first card lexically by title
           }
         }
-        let clearSelection = clearSelections.get(sourceItem);
+        let clearSelection =
+          stackItemComponentAPI.get(sourceItem)?.clearSelections;
         if (typeof clearSelection === 'function') {
           clearSelection();
         }
         cardSelections.delete(sourceItem);
-        let scroller = stackItemScrollers.get(destinationItem);
+        let scrollIntoView =
+          stackItemComponentAPI.get(destinationItem)?.scrollIntoView;
         if (scrollToCard) {
           // Currently the destination item is always a cards-grid, so we use that
           // fact to be able to scroll to the newly copied item
-          scroller?.scrollIntoView(
+          scrollIntoView?.(
             `[data-stack-card="${destinationItem.card.id}"] [data-cards-grid-item="${scrollToCard.id}"]`,
           );
         }
@@ -595,15 +597,9 @@ export default class InteractSubmode extends Component<Signature> {
 
   private setupStackItem = (
     item: StackItem,
-    doClearSelections: () => void,
-    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-    doScrollIntoView: (selector: string) => void,
+    componentAPI: StackItemComponentAPI,
   ) => {
-    clearSelections.set(item, doClearSelections);
-    stackItemScrollers.set(item, {
-      stableScroll: doWithStableScroll,
-      scrollIntoView: doScrollIntoView,
-    });
+    stackItemComponentAPI.set(item, componentAPI);
   };
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
