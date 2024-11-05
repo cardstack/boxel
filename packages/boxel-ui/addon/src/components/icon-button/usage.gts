@@ -77,16 +77,16 @@ export default class IconButtonUsage extends Component {
           @onInput={{fn (mut this.variant)}}
           @defaultValue='<undefined>'
         />
-        <Args.Number
+        <Args.String
           @name='width'
-          @description='used to size the SVG rendering'
+          @description='used to size the SVG rendering (only accepts px values)'
           @defaultValue={{'16px'}}
           @value={{this.width}}
           @onInput={{fn (mut this.width)}}
         />
-        <Args.Number
+        <Args.String
           @name='height'
-          @description='used to size the SVG rendering'
+          @description='used to size the SVG rendering (only accepts px values)'
           @defaultValue={{'16px'}}
           @value={{this.height}}
           @onInput={{fn (mut this.height)}}

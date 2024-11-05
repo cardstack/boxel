@@ -31,10 +31,6 @@ class IconButton extends Component<Signature> {
     this.isHoverOnButton = false;
   };
 
-  get hasCustomSizeAttributes() {
-    return this.args.width || this.args.height;
-  }
-
   <template>
     <button
       class={{cn (if @variant (concat @variant)) @class}}
@@ -42,13 +38,11 @@ class IconButton extends Component<Signature> {
       {{on 'mouseleave' this.onMouseLeaveButton}}
       ...attributes
     >
-      {{! Using inline style attribute because targeting the svg using <style scoped> does not work - css scoping works incorrectly }}
-      {{! template-lint-disable no-inline-styles }}
       {{#if @icon}}
         <@icon
           width={{if @width @width '16px'}}
           height={{if @height @height '16px'}}
-          class={{unless this.hasCustomSizeAttributes 'svg-icon'}}
+          class='svg-icon'
         />
       {{/if}}
     </button>
@@ -58,7 +52,7 @@ class IconButton extends Component<Signature> {
         --inner-boxel-icon-button-height: var(--boxel-icon-button-height, 40px);
         width: var(--inner-boxel-icon-button-width);
         height: var(--inner-boxel-icon-button-height);
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         padding: 0;
@@ -93,8 +87,8 @@ class IconButton extends Component<Signature> {
       }
 
       .svg-icon {
-        width: var(--inner-boxel-icon-button-width);
-        height: var(--inner-boxel-icon-button-width);
+        width: auto;
+        height: auto;
       }
     </style>
   </template>
