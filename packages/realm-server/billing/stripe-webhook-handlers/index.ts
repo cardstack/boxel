@@ -1,5 +1,7 @@
 import { DBAdapter } from '@cardstack/runtime-common';
 import { handlePaymentSucceeded } from './payment-succeeded';
+import { handleCheckoutSessionCompleted } from './checkout-session-completed';
+
 import Stripe from 'stripe';
 import { handleSubscriptionDeleted } from './subscription-deleted';
 
@@ -60,6 +62,19 @@ export type StripeSubscriptionDeletedWebhookEvent = StripeEvent & {
   };
 };
 
+export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
+  object: 'event';
+  type: 'checkout.session.completed';
+  data: {
+    object: {
+      id: string;
+      object: 'checkout.session';
+      client_reference_id: string;
+      customer: string;
+    };
+  };
+};
+
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,
   request: Request,
@@ -104,6 +119,13 @@ export default async function stripeWebhookHandler(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
       );
+      break;
+    case 'checkout.session.completed':
+      await handleCheckoutSessionCompleted(
+        dbAdapter,
+        event as StripeCheckoutSessionCompletedWebhookEvent,
+      );
+      break;
   }
 
   return new Response('ok');

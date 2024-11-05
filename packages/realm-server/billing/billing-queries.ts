@@ -104,6 +104,22 @@ export async function getPlanByStripeId(
   } as Plan;
 }
 
+export async function updateUserStripeCustomerId(
+  dbAdapter: DBAdapter,
+  userId: string,
+  stripeCustomerId: string,
+) {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    stripe_customer_id: stripeCustomerId,
+  });
+
+  await query(dbAdapter, [
+    ...update('users', nameExpressions, valueExpressions),
+    ` WHERE matrix_user_id = `,
+    param(userId),
+  ]);
+}
+
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
