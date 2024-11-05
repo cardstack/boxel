@@ -430,33 +430,7 @@ export function assertKey(key: string, pointer: string[]) {
   }
 }
 
-const removeBrackets = (obj: any): any => {
-  if (!obj || typeof obj !== 'object') return obj;
-
-  // Handle arrays
-  if (Array.isArray(obj)) {
-    return obj.map((item) => removeBrackets(item));
-  }
-
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    // Remove surrounding brackets if they exist
-    const newKey = key.replace(/^\[(.*)\]$/, '$1');
-
-    // Handle arrays in values
-    if (Array.isArray(value)) {
-      acc[newKey] = value.map((item) => removeBrackets(item));
-    } else if (typeof value === 'object' && value !== null) {
-      // Recursively removeBrackets nested objects
-      acc[newKey] = removeBrackets(value);
-    } else {
-      // Handle primitive values
-      acc[newKey] = value;
-    }
-
-    return acc;
-  }, {} as any);
-};
-
 export const parseQuery = (queryString: string) => {
-  return removeBrackets(qs.parse(queryString));
+  // @ts-ignore
+  return qs.parse(queryString, { depth: 10, strictDepth: true });
 };
