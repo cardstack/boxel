@@ -45,13 +45,14 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
+interface Plan {
+  name: string;
+  monthlyPrice: number;
+  creditsIncluded: number;
+}
 interface CreditInfo {
-  plan: {
-    name: string;
-    monthlyPrice: number;
-  };
-  creditsIncludedInPlanAllowance: number;
-  creditsUsedInPlanAllowance: number;
+  plan: Plan | null;
+  creditsAvailableInPlanAllowance: number;
   extraCreditsAvailableInBalance: number;
 }
 
@@ -177,25 +178,37 @@ export default class RealmServerService extends Service {
   }
 
   async fetchCreditInfo(): Promise<CreditInfo> {
-    let response = await this.network.authedFetch(`${this.url.origin}/_user`);
+    if (!this.client) {
+      throw new Error(`Cannot fetch credit info without matrix client`);
+    }
+    await this.login();
+    if (this.auth.type !== 'logged-in') {
+      throw new Error('Could not login to realm server');
+    }
+
+    let response = await this.network.authedFetch(`${this.url.origin}/_user`, {
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
     if (response.status !== 200) {
       throw new Error(
         `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
     }
     let json = await response.json();
-    let plan = json.included.find((i: { type: string }) => i.type === 'plan');
-    let creditsUsedInPlanAllowance =
-      json.data.attributes.creditsUsedInPlanAllowance;
+    let plan =
+      (json.included?.find((i: { type: string }) => i.type === 'plan')
+        ?.attributes as Plan) ?? null;
+    let creditsAvailableInPlanAllowance =
+      json.data?.attributes?.creditsAvailableInPlanAllowance;
     let extraCreditsAvailableInBalance =
-      json.data.attributes.extraCreditsAvailableInBalance;
+      json.data?.attributes?.extraCreditsAvailableInBalance;
     return {
-      plan: {
-        name: plan.attributes.name,
-        monthlyPrice: plan.attributes.monthlyPrice,
-      },
-      creditsIncludedInPlanAllowance: plan.attributes.creditsIncluded,
-      creditsUsedInPlanAllowance,
+      plan,
+      creditsAvailableInPlanAllowance,
       extraCreditsAvailableInBalance,
     };
   }

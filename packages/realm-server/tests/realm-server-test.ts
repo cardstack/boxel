@@ -51,6 +51,8 @@ import {
   matrixRegistrationSecret,
   seedPath,
   testRealmInfo,
+  insertUser,
+  insertPlan,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -62,6 +64,13 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import type PgAdapter from '../pg-adapter';
+import {
+  addToCreditsLedger,
+  insertSubscriptionCycle,
+  insertSubscription,
+} from '../billing/billing-queries';
+import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
+import { StripeInvoicePaymentSucceededWebhookEvent } from '../billing/stripe-webhook-handlers';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -136,6 +145,7 @@ module('Realm Server', function (hooks) {
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
+  let dbAdapter: PgAdapter;
 
   function setupPermissionedRealm(
     hooks: NestedHooks,
@@ -143,7 +153,7 @@ module('Realm Server', function (hooks) {
     fileSystem?: Record<string, string | LooseSingleCardDocument>,
   ) {
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
         dir = dirSync();
         let testRealmDir = join(dir.name, 'realm_server_1', 'test');
         ensureDirSync(testRealmDir);
@@ -152,7 +162,7 @@ module('Realm Server', function (hooks) {
           copySync(join(__dirname, 'cards'), testRealmDir);
         }
         let virtualNetwork = createVirtualNetwork();
-
+        dbAdapter = _dbAdapter;
         ({ testRealm, testRealmHttpServer, testRealmServer } =
           await runTestRealmServer({
             virtualNetwork,
@@ -2243,6 +2253,185 @@ module('Realm Server', function (hooks) {
           '/_info response is correct',
         );
       });
+    });
+  });
+
+  module('_user GET request', function (_hooks) {
+    setupPermissionedRealm(hooks, {
+      john: ['read', 'write'],
+    });
+
+    test('user is not found', async function (assert) {
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: null,
+          included: null,
+        },
+        '/_user response is correct',
+      );
+    });
+
+    test('subscription is not found', async function (assert) {
+      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'user',
+            id: user.id,
+            attributes: {
+              matrixUserId: user.matrixUserId,
+              stripeCustomerId: user.stripeCustomerId,
+              creditsAvailableInPlanAllowance: null,
+              extraCreditsAvailableInBalance: 0,
+            },
+            relationships: {
+              subscription: null,
+            },
+          },
+          included: null,
+        },
+        '/_user response is correct',
+      );
+    });
+
+    test('user subscibes to a plan and has extra credit', async function (assert) {
+      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let plan = await insertPlan(
+        dbAdapter,
+        'Creator',
+        12,
+        2500,
+        'prod_creator',
+      );
+      let subscription = await insertSubscription(dbAdapter, {
+        user_id: user.id,
+        plan_id: plan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567890',
+      });
+      let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+        subscriptionId: subscription.id,
+        periodStart: 1,
+        periodEnd: 2,
+      });
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 100,
+        creditType: 'extra_credit',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+      let stripeInvoicePaymentSucceededEvent = {
+        id: 'evt_1234567890',
+        object: 'event',
+        type: 'invoice.payment_succeeded',
+        data: {
+          object: {
+            id: 'in_1234567890',
+            object: 'invoice',
+            amount_paid: 12, // creator plan
+            billing_reason: 'subscription_cycle',
+            period_end: 3,
+            period_start: 2,
+            subscription: 'sub_1234567890',
+            customer: 'cus_123',
+            lines: {
+              data: [
+                {
+                  price: { product: 'prod_creator' },
+                },
+              ],
+            },
+          },
+        },
+      } as StripeInvoicePaymentSucceededWebhookEvent;
+
+      await handlePaymentSucceeded(
+        dbAdapter,
+        stripeInvoicePaymentSucceededEvent,
+      );
+
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'user',
+            id: user.id,
+            attributes: {
+              matrixUserId: user.matrixUserId,
+              stripeCustomerId: user.stripeCustomerId,
+              creditsAvailableInPlanAllowance: 2500,
+              extraCreditsAvailableInBalance: 100,
+            },
+            relationships: {
+              subscription: {
+                data: {
+                  type: 'subscription',
+                  id: subscription.id,
+                },
+              },
+            },
+          },
+          included: [
+            {
+              type: 'subscription',
+              id: subscription.id,
+              attributes: {
+                startedAt: 1,
+                endedAt: null,
+                status: 'active',
+              },
+              relationships: {
+                plan: {
+                  data: {
+                    type: 'plan',
+                    id: plan.id,
+                  },
+                },
+              },
+            },
+            {
+              type: 'plan',
+              id: plan.id,
+              attributes: {
+                name: plan.name,
+                monthlyPrice: plan.monthlyPrice,
+                creditsIncluded: plan.creditsIncluded,
+              },
+            },
+          ],
+        },
+        '/_user response is correct',
+      );
     });
   });
 

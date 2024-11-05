@@ -57,6 +57,16 @@ import {
   verify,
 } from 'jsonwebtoken';
 import stripeWebhookHandler from './billing/stripe-webhook-handlers';
+import {
+  getUserByMatrixUserId,
+  getMostRecentSubscriptionCycle,
+  sumUpCreditsLedger,
+  getMostRecentSubscription,
+  Subscription,
+  SubscriptionCycle,
+  Plan,
+  getPlan,
+} from './billing/billing-queries';
 
 interface RealmServerTokenClaim {
   user: string;
@@ -82,6 +92,57 @@ type CatalogRealm = {
   type: 'catalog-realm';
   id: string;
   attributes: RealmInfo;
+};
+
+type FetchUserResponse = {
+  data: {
+    type: 'user';
+    id: string;
+    attributes: {
+      matrixUserId: string;
+      stripeCustomerId: string;
+      creditsAvailableInPlanAllowance: number;
+      extraCreditsAvailableInBalance: number;
+    };
+    relationships: {
+      subscription: {
+        data: {
+          type: 'subscription';
+          id: string;
+        };
+      } | null;
+    };
+  } | null;
+  included:
+    | [
+        {
+          type: 'subscription';
+          id: string;
+          attributes: {
+            startedAt: number;
+            endedAt: number | null;
+            status: string;
+          };
+          relationships: {
+            plan: {
+              data: {
+                type: 'plan';
+                id: string;
+              };
+            };
+          };
+        },
+        {
+          type: 'plan';
+          id: string;
+          attributes: {
+            name: string;
+            monthlyPrice: number;
+            creditsIncluded: number;
+          };
+        },
+      ]
+    | null;
 };
 
 export class RealmServer {
@@ -165,6 +226,7 @@ export class RealmServer {
     router.post('/_create-realm', this.handleCreateRealmRequest);
     router.get('/_catalog-realms', this.fetchCatalogRealms);
     router.post('/_stripe-webhook', this.handleStripeWebhook);
+    router.get('/_user', this.fetchUser);
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -663,6 +725,122 @@ export class RealmServer {
 
     let response = await stripeWebhookHandler(this.dbAdapter, request);
     await setContextResponse(ctxt, response);
+  };
+
+  private fetchUser = async (ctxt: Koa.Context, _next: Koa.Next) => {
+    let request = await fetchRequestFromContext(ctxt);
+
+    let token: RealmServerTokenClaim;
+    try {
+      token = this.getJwtToken(request);
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        await sendResponseForForbiddenRequest(ctxt, e.message);
+        return;
+      }
+      throw e;
+    }
+
+    let user = await getUserByMatrixUserId(this.dbAdapter, token.user);
+    let mostRecentSubscription: Subscription | null | undefined = undefined;
+    if (user) {
+      mostRecentSubscription = await getMostRecentSubscription(
+        this.dbAdapter,
+        user.id,
+      );
+    }
+
+    let currentSubscriptionCycle: SubscriptionCycle | null | undefined =
+      undefined;
+    let plan: Plan | undefined = undefined;
+    if (mostRecentSubscription) {
+      [currentSubscriptionCycle, plan] = await Promise.all([
+        getMostRecentSubscriptionCycle(
+          this.dbAdapter,
+          mostRecentSubscription.id,
+        ),
+        getPlan(this.dbAdapter, mostRecentSubscription.planId),
+      ]);
+    }
+
+    let extraCreditsAvailableInBalance = await sumUpCreditsLedger(
+      this.dbAdapter,
+      {
+        creditType: ['extra_credit', 'extra_credit_used'],
+      },
+    );
+    let creditsAvailableInPlanAllowance: number | null = null;
+    if (currentSubscriptionCycle) {
+      creditsAvailableInPlanAllowance = await sumUpCreditsLedger(
+        this.dbAdapter,
+        {
+          creditType: ['plan_allowance', 'plan_allowance_used'],
+          subscriptionCycleId: currentSubscriptionCycle.id,
+        },
+      );
+    }
+
+    let responseBody = {
+      data: user
+        ? {
+            type: 'user',
+            id: user.id,
+            attributes: {
+              matrixUserId: user.matrixUserId,
+              stripeCustomerId: user.stripeCustomerId,
+              creditsAvailableInPlanAllowance: creditsAvailableInPlanAllowance,
+              extraCreditsAvailableInBalance: extraCreditsAvailableInBalance,
+            },
+            relationships: {
+              subscription: mostRecentSubscription
+                ? {
+                    data: {
+                      type: 'subscription',
+                      id: mostRecentSubscription.id,
+                    },
+                  }
+                : null,
+            },
+          }
+        : null,
+      included: mostRecentSubscription
+        ? [
+            {
+              type: 'subscription',
+              id: mostRecentSubscription.id,
+              attributes: {
+                startedAt: mostRecentSubscription.startedAt,
+                endedAt: mostRecentSubscription.endedAt ?? null,
+                status: mostRecentSubscription.status,
+              },
+              relationships: {
+                plan: {
+                  data: {
+                    type: 'plan',
+                    id: plan!.id,
+                  },
+                },
+              },
+            },
+            {
+              type: 'plan',
+              id: plan!.id,
+              attributes: {
+                name: plan!.name,
+                monthlyPrice: plan!.monthlyPrice,
+                creditsIncluded: plan!.creditsIncluded,
+              },
+            },
+          ]
+        : null,
+    } as FetchUserResponse;
+
+    return setContextResponse(
+      ctxt,
+      new Response(JSON.stringify(responseBody), {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      }),
+    );
   };
 
   private fetchCatalogRealms = async (ctxt: Koa.Context, _next: Koa.Next) => {
