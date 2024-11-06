@@ -186,9 +186,26 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     }
   });
 
-  @action async onMoveCardMutation(draggedCard: DndItem, newColumn: DndColumn) {
-    // This only updates the value of the card but doesn't commit to fileystem nor server
-    draggedCard.status.label = newColumn.title;
+  @action async onMoveCardMutation(draggedCard: Card, newColumn: Column) {
+    let cardUrl = new URL(draggedCard.id);
+
+    // We must fetch the specific card instance when moving cards
+    // Direct value assignment won't work without a fresh instance, it would break the modifier
+    let resource = getCard(cardUrl);
+    await resource.loaded;
+
+    const cardInstance: any = resource.card;
+
+    // Find the status object that matches the new column title
+    const newStatus = TaskStatusField.values.find(
+      (status) => status.label === newColumn.title,
+    );
+
+    if (newStatus) {
+      cardInstance.status.index = newStatus.index;
+      cardInstance.status.label = newStatus.label;
+      this.args.context?.actions?.saveCard?.(cardInstance);
+    }
   }
 
   <template>
