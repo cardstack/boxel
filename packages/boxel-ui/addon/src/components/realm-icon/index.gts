@@ -28,7 +28,7 @@ export default class RealmIcon extends Component<Signature> {
   }
   <template>
     <div
-      alt='Icon for workspace {{@realmInfo.name}}'
+      alt={{@realmInfo.name}}
       class='realm-icon-img {{if this.showAnimation "indexing"}}'
       data-test-realm-indexing-indicator={{this.showAnimation}}
       data-test-realm-icon-url={{@realmInfo.iconURL}}
@@ -49,7 +49,7 @@ export default class RealmIcon extends Component<Signature> {
       }
       .realm-icon-img::after {
         content: '';
-        background-color: black;
+        background-color: var(--boxel-dark);
         opacity: 0;
         display: block;
         height: 100%;

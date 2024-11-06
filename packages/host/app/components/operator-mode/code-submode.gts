@@ -770,7 +770,6 @@ export default class CodeSubmode extends Component<Signature> {
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
-                          data-test-card-inspector-panel
                         />
                       {{/if}}
                     </:inspector>
@@ -786,7 +785,7 @@ export default class CodeSubmode extends Component<Signature> {
                   @minLengthPx={{100}}
                 >
                   <InnerContainer
-                    class='recent-files'
+                    class='recent-files-panel'
                     as |InnerContainerContent InnerContainerHeader|
                   >
                     <InnerContainerHeader aria-label='Recent Files Header'>
@@ -958,6 +957,11 @@ export default class CodeSubmode extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
+        --code-mode-panel-background-color: #ebeaed;
+        --code-mode-container-border-radius: 10px;
+        --code-mode-realm-icon-size: 1.125rem;
+        --code-mode-realm-icon-border-radius: 4px;
+        --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
         --code-mode-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
@@ -1004,8 +1008,8 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .inner-container.recent-files {
-        background-color: var(--boxel-200);
+      .recent-files-panel {
+        background-color: var(--code-mode-panel-background-color);
       }
 
       .choose-file-prompt {
@@ -1058,7 +1062,9 @@ export default class CodeSubmode extends Component<Signature> {
         border-bottom: var(--boxel-border);
       }
       .accordion-content {
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--code-mode-panel-background-color);
+        min-height: 100%;
       }
 
       .preview-error-container {

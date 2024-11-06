@@ -11,6 +11,7 @@ import OperatorModeStackItem, {
   type StackItemComponentAPI,
   CardDefOrId,
 } from './stack-item';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -28,6 +29,7 @@ interface Signature {
       model: StackItem,
       componentAPI: StackItemComponentAPI,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
   Blocks: {};
 }
@@ -86,6 +88,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}
+            @saveCard={{@saveCard}}
           />
         {{/each}}
       </div>

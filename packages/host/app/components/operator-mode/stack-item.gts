@@ -33,7 +33,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
-import { cn, cssVar, optional } from '@cardstack/boxel-ui/helpers';
+import { cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
@@ -91,6 +91,7 @@ interface Signature {
       model: StackItem,
       componentAPI: StackItemComponentAPI,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -335,7 +336,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.hasUnsavedChanges = true;
     await timeout(this.environmentService.autoSaveDelayMs);
     this.isSaving = true;
-    await this.args.publicAPI.saveCard(this.card, false);
+    await this.args.saveCard(this.card);
     this.hasUnsavedChanges = false;
     this.isSaving = false;
     this.lastSaved = Date.now();
@@ -359,22 +360,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private doneEditing = restartableTask(async () => {
+    let item = this.args.item;
+    let { request } = item;
     // if the card is actually different do the save and dismiss, otherwise
     // just change the stack item's format to isolated
     if (this.hasUnsavedChanges) {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
-      this.args.publicAPI.saveCard(this.card, true);
-    } else {
-      let { request } = this.args.item;
-      this.operatorModeStateService.replaceItemInStack(
-        this.args.item,
-        this.args.item.clone({
-          request,
-          format: 'isolated',
-        }),
-      );
+      let updatedCard = await this.args.saveCard(item.card);
+
+      if (updatedCard) {
+        request?.fulfill(updatedCard);
+      }
     }
+    this.operatorModeStateService.replaceItemInStack(
+      item,
+      item.clone({
+        request,
+        format: 'isolated',
+      }),
+    );
   });
 
   private doWithStableScroll = restartableTask(
@@ -502,7 +507,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
-        class={{cn 'card' edit=this.isEditing}}
+        class='stack-item-card'
         {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if this.loadCard.isRunning}}
@@ -524,7 +529,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
               @onFinishEditing={{if this.isEditing (perform this.doneEditing)}}
               @onClose={{unless this.isBuried (perform this.closeItem)}}
-              class='header'
+              class='stack-item-header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if
                   this.isBuried '50px' '95px'
@@ -536,6 +541,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   @item.headerColor 'transparent'
                 )
               }}
+              role={{if this.isBuried 'button' 'banner'}}
               {{on
                 'click'
                 (optional
@@ -546,11 +552,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
             />
           {{/let}}
           <div
-            class='content'
+            class='stack-item-content'
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
             <Preview
+              class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
               @cardContext={{this.cardContext}}
@@ -568,8 +575,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <style scoped>
       :global(:root) {
         --stack-card-footer-height: 6rem;
-        --stack-item-header-area-height: 3.375rem;
-        --buried-operator-mode-header-height: 2.5rem;
       }
 
       @keyframes scaleIn {
@@ -620,6 +625,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .item {
+        --stack-item-header-height: 3rem;
         justify-self: center;
         position: absolute;
         width: 89%;
@@ -647,47 +653,57 @@ export default class OperatorModeStackItem extends Component<Signature> {
         animation-duration: 0s;
       }
 
-      .card {
-        border-radius: var(--boxel-border-radius-xl);
+      .item.buried {
+        --stack-item-header-height: 2.5rem;
+      }
+
+      .stack-item-card {
         position: relative;
         height: 100%;
         display: grid;
-        grid-template-rows: var(--stack-item-header-area-height) auto;
+        grid-template-rows: var(--stack-item-header-height) auto;
+        border-radius: var(--boxel-border-radius-xl);
         box-shadow: var(--boxel-deep-box-shadow);
         pointer-events: auto;
-      }
-
-      .content {
-        overflow: auto;
-      }
-
-      :global(.content > .boxel-card-container.boundaries) {
-        box-shadow: none;
-      }
-
-      .card {
         overflow: hidden;
       }
 
-      .buried .card {
+      .stack-item-header {
+        --boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        --boxel-card-header-background-color: var(--boxel-light);
+        border-radius: 0;
+        z-index: 1;
+        max-width: max-content;
+        height: var(--stack-item-header-height);
+        min-width: 100%;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .stack-item-content {
+        overflow: auto;
+      }
+
+      .stack-item-preview {
+        border-radius: 0;
+        box-shadow: none;
+        overflow: auto;
+      }
+
+      .buried > .stack-item-card {
         border-radius: var(--boxel-border-radius-lg);
         background-color: var(--boxel-200);
-        grid-template-rows: var(--buried-operator-mode-header-height) auto;
       }
 
-      .buried > .card > .content {
-        display: none;
-      }
-
-      .buried .header {
-        cursor: pointer;
+      .buried .stack-item-header {
         font: 600 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxxs);
-        --boxel-card-header-padding: var(--boxel-sp-xs);
         --boxel-card-header-text-font: var(--boxel-font-size-xs);
         --boxel-card-header-realm-icon-size: var(--boxel-icon-sm);
-        --boxel-card-header-border-radius: var(--boxel-border-radius-lg);
         --boxel-card-header-card-type-icon-size: var(--boxel-icon-xs);
+      }
+
+      .buried .stack-item-content {
+        display: none;
       }
 
       .loading {
@@ -695,7 +711,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify-content: center;
         align-items: center;
-        height: calc(100% - var(--stack-item-header-area-height));
+        height: calc(100% - var(--stack-item-header-height));
         padding: var(--boxel-sp);
         color: var(--boxel-dark);
 
