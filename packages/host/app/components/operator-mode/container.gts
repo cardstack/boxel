@@ -17,7 +17,6 @@ import type { Loader, Query } from '@cardstack/runtime-common';
 import Auth from '@cardstack/host/components/matrix/auth';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import RealmIndexingIndicator from '@cardstack/host/components/operator-mode/realm-indexing-indicator';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
@@ -36,7 +35,7 @@ import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
-const waiter = buildWaiter('operator-mode-container:write-waiter');
+const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
   Args: {
@@ -93,7 +92,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
   // at the same time
-  private write = task(async (card: CardDef) => {
+  private saveCard = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
       return await this.cardService.saveModel(this, card);
     });
@@ -131,17 +130,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.write}}
+          @saveCardOnClose={{perform this.saveCard}}
         />
       {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
-        <InteractSubmode @write={{perform this.write}} />
+        <InteractSubmode @saveCard={{perform this.saveCard}} />
       {{else}}
         <Auth />
-      {{/if}}
-
-      {{! TODO move this to its final home after we get designs !}}
-      {{#if this.matrixService.isLoggedIn}}
-        <RealmIndexingIndicator />
       {{/if}}
     </Modal>
 
@@ -149,9 +143,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
-        --container-button-size: var(--boxel-icon-lg);
+        --container-button-size: 2.5rem;
         --operator-mode-min-width: 20.5rem;
-        --operator-mode-left-column: 16rem;
+        --operator-mode-left-column: 15rem;
+        --operator-mode-spacing: var(--boxel-sp-sm);
+        --operator-mode-top-bar-item-height: var(--container-button-size);
+        --operator-mode-bottom-bar-item-height: var(--container-button-size);
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(--boxel-header-text-color, var(--boxel-highlight));

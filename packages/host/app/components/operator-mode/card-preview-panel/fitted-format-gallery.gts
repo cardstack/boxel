@@ -68,10 +68,10 @@ export default class FittedFormatGallery extends Component<Signature> {
       />
     </div>
     <div class='item'>
-      <div class='desc'>Aspect Ratio 0.2, 100px &times; 500px</div>
+      <div class='desc'>Aspect Ratio 0.375, 150px &times; 400px</div>
       <this.renderedCard
         @displayContainer={{true}}
-        style='width: 100px; height: 500px'
+        style='width: 150px; height: 400px'
       />
     </div>
     <div class='item'>

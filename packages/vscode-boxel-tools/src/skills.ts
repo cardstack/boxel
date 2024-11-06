@@ -41,16 +41,37 @@ export class SkillsProvider
 
   async refresh(): Promise<void> {
     const realmUrls = await this.realmAuth.getRealmUrls();
-    this.skillLists = [
-      new SkillList('Base', 'https://app.boxel.ai/base/', true),
-      new SkillList('Catalog', 'https://app.boxel.ai/catalog/', true),
-    ];
-    this.skillLists.push(...realmUrls.map((url) => new SkillList(url, url)));
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Loading all skills from realms',
+        cancellable: false,
+      },
+      async (progress) => {
+        this.skillLists = [
+          new SkillList('Base', 'https://app.boxel.ai/base/', true),
+          new SkillList('Catalog', 'https://app.boxel.ai/catalog/', true),
+        ];
+        this.skillLists.push(
+          ...realmUrls.map((url) => new SkillList(url, url)),
+        );
 
-    const loadingPromises = this.skillLists.map((skillList) => {
-      return skillList.loadSkills(this.realmAuth);
-    });
-    await Promise.all(loadingPromises);
+        const total = this.skillLists.length;
+        let completed = 0;
+
+        const loadingPromises = this.skillLists.map((skillList) =>
+          skillList.loadSkills(this.realmAuth).then(() => {
+            completed++;
+            progress.report({
+              message: `Loaded ${completed}/${total} realms`,
+              increment: (1 / total) * 100,
+            });
+          }),
+        );
+
+        return Promise.all(loadingPromises);
+      },
+    );
     this._onDidChangeTreeData.fire();
   }
 

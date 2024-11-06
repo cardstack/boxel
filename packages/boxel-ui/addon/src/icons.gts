@@ -27,6 +27,7 @@ import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
 import IconGlobe from './icons/icon-globe.gts';
 import IconGrid from './icons/icon-grid.gts';
+import IconHexagon from './icons/icon-hexagon.gts';
 import IconInherit from './icons/icon-inherit.gts';
 import IconLink from './icons/icon-link.gts';
 import IconList from './icons/icon-list.gts';
@@ -77,6 +78,7 @@ export const ALL_ICON_COMPONENTS = [
   IconCode,
   IconGlobe,
   IconGrid,
+  IconHexagon,
   IconInherit,
   IconLink,
   IconList,
@@ -128,6 +130,7 @@ export {
   IconCode,
   IconGlobe,
   IconGrid,
+  IconHexagon,
   IconInherit,
   IconLink,
   IconList,

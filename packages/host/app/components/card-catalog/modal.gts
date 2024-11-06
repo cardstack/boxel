@@ -15,7 +15,6 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   createNewCard,
@@ -26,6 +25,7 @@ import {
   Loader,
   RealmInfo,
   CardCatalogQuery,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -39,11 +39,6 @@ import {
   isCardTypeFilter,
   isEveryFilter,
 } from '@cardstack/runtime-common/query';
-
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import RealmService from '@cardstack/host/services/realm';
-import RealmServerService from '@cardstack/host/services/realm-server';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -62,10 +57,13 @@ import { Submodes } from '../submode-switcher';
 
 import CardCatalogFilters from './filters';
 
-import CardCatalog from './index';
+import CardCatalog, { type NewCardArgs } from './index';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmService from '../../services/realm';
+import type RealmServerService from '../../services/realm-server';
 
 interface Signature {
   Args: {};
@@ -78,7 +76,6 @@ type Request = {
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
-      realmURL: URL | undefined;
     };
     createNewCard?: CreateNewCard;
   };
@@ -87,7 +84,7 @@ type Request = {
 type State = {
   id: number;
   request: Request;
-  selectedCardUrl?: string;
+  selectedCard?: string | NewCardArgs;
   searchKey: string;
   cardUrlFromSearchKey: string;
   chooseCardTitle: string;
@@ -155,8 +152,15 @@ export default class CardCatalogModal extends Component<Signature> {
                     @cards={{cards}}
                     @realmInfos={{this.availableRealms}}
                     @select={{this.selectCard}}
-                    @selectedCardUrl={{this.state.selectedCardUrl}}
+                    @selectedCard={{this.state.selectedCard}}
                     @hasPreselectedCard={{this.state.hasPreselectedCard}}
+                    @offerToCreate={{unless
+                      (eq
+                        this.operatorModeStateService.state.submode
+                        Submodes.Code
+                      )
+                      this.state.request.opts.offerToCreate
+                    }}
                   />
                 {{/if}}
               </:response>
@@ -164,35 +168,6 @@ export default class CardCatalogModal extends Component<Signature> {
           </:content>
           <:footer>
             <div class='footer'>
-              <div class='footer__actions-left'>
-                {{#if this.state.request.opts.offerToCreate}}
-                  {{#unless
-                    (eq
-                      this.operatorModeStateService.state.submode Submodes.Code
-                    )
-                  }}
-                    <Button
-                      @kind='secondary-light'
-                      @size='tall'
-                      class='create-new-button'
-                      {{on
-                        'click'
-                        (fn
-                          this.createNew
-                          this.state.request.opts.offerToCreate.ref
-                          this.state.request.opts.offerToCreate.relativeTo
-                          this.state.request.opts.offerToCreate.realmURL
-                        )
-                      }}
-                      data-test-card-catalog-create-new-button
-                    >
-                      <IconPlus width='20' height='20' role='presentation' />
-                      Create New
-                      {{this.cardRefName}}
-                    </Button>
-                  {{/unless}}
-                {{/if}}
-              </div>
               <div>
                 <Button
                   @kind='secondary-light'
@@ -206,11 +181,11 @@ export default class CardCatalogModal extends Component<Signature> {
                 <Button
                   @kind='primary'
                   @size='tall'
-                  @disabled={{eq this.state.selectedCardUrl undefined}}
+                  @disabled={{eq this.state.selectedCard undefined}}
                   class='footer-button'
                   {{on
                     'click'
-                    (fn this.pick this.state.selectedCardUrl undefined)
+                    (fn this.pick this.state.selectedCard undefined)
                   }}
                   data-test-card-catalog-go-button
                 >
@@ -243,23 +218,16 @@ export default class CardCatalogModal extends Component<Signature> {
       .footer-button + .footer-button {
         margin-left: var(--boxel-sp-xs);
       }
-      .create-new-button {
-        --icon-color: var(--boxel-highlight);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
     </style>
   </template>
 
   stateStack: State[] = new TrackedArray<State>();
   stateId = 0;
-  @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare realmServer: RealmServerService;
-  @service declare realm: RealmService;
+  @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare realm: RealmService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -269,7 +237,7 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  get cardUrls() {
+  private get cardUrls() {
     if (!this.state) {
       return [];
     }
@@ -280,9 +248,9 @@ export default class CardCatalogModal extends Component<Signature> {
     return [];
   }
 
-  get availableRealms(): Record<string, RealmInfo> | undefined {
+  private get availableRealms(): Record<string, RealmInfo> | undefined {
     let items: Record<string, RealmInfo> = {};
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsMeta)) {
+    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
       if (this.state == null || !this.state.availableRealmUrls.includes(url)) {
         continue;
       }
@@ -291,32 +259,18 @@ export default class CardCatalogModal extends Component<Signature> {
     return items;
   }
 
-  get cardRefName() {
-    if (!this.state) {
-      return undefined;
-    }
-    return (
-      (
-        this.state.request.opts?.offerToCreate?.ref as {
-          module: string;
-          name: string;
-        }
-      ).name ?? 'Card'
-    );
-  }
-
-  get state(): State | undefined {
+  private get state(): State | undefined {
     return this.stateStack[this.stateStack.length - 1];
   }
 
-  @action onSelectRealm(realmUrl: string) {
+  @action private onSelectRealm(realmUrl: string) {
     if (!this.state) {
       return;
     }
     this.state.selectedRealmUrls = [...this.state.selectedRealmUrls, realmUrl];
   }
 
-  @action onDeselectRealm(realmUrl: string) {
+  @action private onDeselectRealm(realmUrl: string) {
     if (!this.state) {
       return;
     }
@@ -332,7 +286,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     this.state.searchKey = '';
     this.state.cardUrlFromSearchKey = '';
-    this.state.selectedCardUrl = undefined;
+    this.state.selectedCard = undefined;
     this.state.dismissModal = false;
     this.state.query = this.state.originalQuery;
     this.state.hasPreselectedCard = false;
@@ -425,7 +379,7 @@ export default class CardCatalogModal extends Component<Signature> {
         originalQuery: query,
         availableRealmUrls: this.realmServer.availableRealmURLs,
         selectedRealmUrls: this.realmServer.availableRealmURLs,
-        selectedCardUrl: preselectedCardUrl,
+        selectedCard: preselectedCardUrl,
         hasPreselectedCard: Boolean(preselectedCardUrl),
       });
       this.stateStack.push(cardCatalogState);
@@ -440,7 +394,7 @@ export default class CardCatalogModal extends Component<Signature> {
   );
 
   @action
-  setSearchKey(searchKey: string) {
+  private setSearchKey(searchKey: string) {
     if (!this.state) {
       return;
     }
@@ -452,7 +406,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  get searchKeyIsURL() {
+  private get searchKeyIsURL() {
     if (!this.state) {
       return false;
     }
@@ -464,20 +418,20 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  debouncedSearchFieldUpdate = restartableTask(async () => {
+  private debouncedSearchFieldUpdate = restartableTask(async () => {
     await timeout(500);
     this.onSearchFieldUpdated();
   });
 
   @action
-  onSearchFieldKeypress(e: KeyboardEvent) {
+  private onSearchFieldKeypress(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       this.onSearchFieldUpdated();
     }
   }
 
   @action
-  onSearchFieldUpdated() {
+  private onSearchFieldUpdated() {
     if (!this.state) {
       return;
     }
@@ -543,38 +497,43 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @action selectCard(
-    cardUrl?: string,
+  @action private selectCard(
+    card?: string | NewCardArgs,
     event?: MouseEvent | KeyboardEvent,
   ): void {
-    if (!this.state || !cardUrl) {
+    if (!this.state || !card) {
       return;
     }
 
-    this.state.selectedCardUrl = cardUrl;
+    this.state.selectedCard = card;
     this.state.hasPreselectedCard = false;
 
     if (
       (event instanceof KeyboardEvent && event?.key === 'Enter') ||
       (event instanceof MouseEvent && event?.type === 'dblclick')
     ) {
-      this.pickCard.perform(cardUrl);
+      this.pickCard.perform(card);
     }
   }
 
   pickCard = restartableTask(
-    async (cardUrlOrCardDef?: string | CardDef, state?: State) => {
+    async (item?: string | CardDef | NewCardArgs, state?: State) => {
       if (!this.state) {
         return;
       }
       let card: CardDef | undefined;
 
-      if (cardUrlOrCardDef) {
-        let isCardDef = typeof cardUrlOrCardDef !== 'string';
-        if (isCardDef) {
-          card = cardUrlOrCardDef as CardDef;
+      if (item) {
+        if (isCardInstance(item)) {
+          card = item;
+        } else if (typeof item === 'string') {
+          card = await this.cardService.getCard(item);
         } else {
-          card = await this.cardService.getCard(cardUrlOrCardDef as string);
+          card = await this.createNewTask.perform(
+            item.ref,
+            item.relativeTo ? new URL(item.relativeTo) : undefined,
+            new URL(item.realmURL),
+          );
         }
       }
 
@@ -595,25 +554,17 @@ export default class CardCatalogModal extends Component<Signature> {
     },
   );
 
-  @action handleKeydown(event: KeyboardEvent) {
+  @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       this.pick(undefined);
     }
   }
 
-  @action pick(cardUrlOrCardDef?: string | CardDef, state?: State) {
-    this.pickCard.perform(cardUrlOrCardDef, state);
+  @action private pick(item?: string | CardDef | NewCardArgs, state?: State) {
+    this.pickCard.perform(item, state);
   }
 
-  @action createNew(
-    ref: CodeRef,
-    relativeTo: URL | undefined,
-    realmURL: URL | undefined,
-  ) {
-    this.createNewTask.perform(ref, relativeTo, realmURL);
-  }
-
-  createNewTask = task(
+  private createNewTask = task(
     async (
       ref: CodeRef,
       relativeTo: URL | undefined /* this should be the catalog entry ID */,
@@ -624,11 +575,6 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       let newCard;
       this.state.dismissModal = true;
-
-      // We need to store the current state in a variable
-      // because there is a possibility that in createNewCard,
-      // users will open the card catalog modal and insert a new state into the stack.
-      let currentState = this.state;
       if (this.state.request.opts?.createNewCard) {
         newCard = await this.state.request.opts?.createNewCard(
           ref,
@@ -641,7 +587,7 @@ export default class CardCatalogModal extends Component<Signature> {
       } else {
         newCard = await createNewCard(ref, relativeTo, { realmURL });
       }
-      this.pick(newCard, currentState);
+      return newCard;
     },
   );
 }

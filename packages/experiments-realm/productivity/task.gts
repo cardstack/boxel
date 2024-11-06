@@ -23,26 +23,31 @@ import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
+import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
+import TagIcon from '@cardstack/boxel-icons/tag';
+import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
+import UsersIcon from '@cardstack/boxel-icons/users';
+import UserIcon from '@cardstack/boxel-icons/user';
 
-export class StatusField extends FieldDef {
+export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
-  statuses: StatusFieldData[] = []; //help with the types
+  static values: LooseyGooseyData[] = []; //help with the types
 
   get color() {
-    return this.statuses.find((status) => {
-      return status.label === this.label;
+    return LooseGooseyField.values.find((value) => {
+      return value.label === this.label;
     })?.color;
   }
 }
 
-interface StatusFieldData {
-  index?: number;
-  label?: string;
+export interface LooseyGooseyData {
+  index: number;
+  label: string;
   color?: string;
 }
 
-class Edit extends Component<typeof StatusField> {
+class Edit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
   <template>
     <BoxelSelect
@@ -57,16 +62,16 @@ class Edit extends Component<typeof StatusField> {
   </template>
 
   get selectedStatus() {
-    return this.statuses?.find((status) => {
+    return this.statuses.find((status) => {
       return status.label === this.label;
     });
   }
 
   get statuses() {
-    return this.args.model?.statuses;
+    return TaskStatusField.values;
   }
 
-  @action onSelectStatus(status: StatusFieldData): void {
+  @action onSelectStatus(status: LooseyGooseyData): void {
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;
@@ -77,10 +82,8 @@ class Edit extends Component<typeof StatusField> {
   }
 }
 
-export class TaskStatusField extends StatusField {
-  // loosey goosey pattern
-
-  statuses = [
+export class TaskStatusField extends LooseGooseyField {
+  static values = [
     { index: 0, label: 'Backlog', color: '#B0BEC5' },
     {
       index: 1,
@@ -126,17 +129,17 @@ export class TaskStatusField extends StatusField {
 class EditPriority extends Component<typeof TaskPriorityField> {
   @tracked label = this.args.model.label;
 
-  get statuses() {
-    return this.args.model?.statuses;
+  get priorities() {
+    return TaskPriorityField.values;
   }
 
   get selectedPriority() {
-    return this.statuses?.find((status) => {
-      return status.label === this.label;
+    return this.priorities?.find((priority) => {
+      return priority.label === this.label;
     });
   }
 
-  @action handlePriorityChange(priority: StatusFieldData): void {
+  @action handlePriorityChange(priority: LooseyGooseyData): void {
     this.label = priority.label;
     this.args.model.label = this.selectedPriority?.label;
     this.args.model.index = this.selectedPriority?.index;
@@ -146,7 +149,7 @@ class EditPriority extends Component<typeof TaskPriorityField> {
     <div class='priority-field'>
       <RadioInput
         @groupDescription='Select Task Priority'
-        @items={{@model.statuses}}
+        @items={{this.priorities}}
         @checkedId={{this.selectedPriority.label}}
         @orientation='horizontal'
         @spacing='default'
@@ -161,10 +164,9 @@ class EditPriority extends Component<typeof TaskPriorityField> {
   </template>
 }
 
-export class TaskPriorityField extends StatusField {
+export class TaskPriorityField extends LooseGooseyField {
   // loosey goosey pattern
-
-  statuses = [
+  static values = [
     { index: 0, label: 'Low' },
     {
       index: 1,
@@ -197,6 +199,7 @@ export class User extends CardDef {
 
 export class Team extends CardDef {
   static displayName = 'Team';
+  static icon = UsersIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Team) {
@@ -223,11 +226,13 @@ export class Team extends CardDef {
 
 export class TeamMember extends User {
   static displayName = 'Team Member';
+  static icon = UserIcon;
   @field team = linksTo(Team);
 }
 
 export class Project extends CardDef {
   static displayName = 'Project';
+  static icon = FolderGitIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
@@ -329,6 +334,11 @@ class Fitted extends Component<typeof Task> {
         font-weight: bold;
         color: #333;
         margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .avatar {
         --profile-avatar-icon-size: 25px;
@@ -411,6 +421,7 @@ class Fitted extends Component<typeof Task> {
 
 export class Tag extends CardDef {
   static displayName = 'Tag';
+  static icon = TagIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Tag) {
@@ -733,6 +744,7 @@ class TaskIsolated extends Component<typeof Task> {
 
 export class Task extends CardDef {
   static displayName = 'Task';
+  static icon = CheckboxIcon;
   @field shortId = contains(StringField, {
     computeVia: function (this: Task) {
       if (this.id) {
@@ -770,17 +782,35 @@ export class Task extends CardDef {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <span class='short-id'>{{@model.shortId}}</span>
-      {{@model.taskName}}
-      <Avatar
-        @userId={{@model.assignee.id}}
-        @displayName={{@model.assignee.name}}
-        @isReady={{true}}
-      />
+      <div class='task-atom'>
+        {{#if @model.assignee}}
+          <div class='avatar-wrapper'>
+            <Avatar
+              @userId={{@model.assignee.id}}
+              @displayName={{@model.assignee.name}}
+              @isReady={{true}}
+              class='avatar'
+            />
+          </div>
+        {{/if}}
+        <div class='task-title'>{{@model.taskName}}</div>
+      </div>
       <style scoped>
-        .short-id {
-          color: var(--boxel-purple);
-          font-size: var(--boxel-font-size-sm);
+        .task-atom {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .avatar-wrapper {
+          display: inline-block;
+        }
+        .avatar {
+          --profile-avatar-icon-size: 20px;
+        }
+        .task-title {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       </style>
     </template>

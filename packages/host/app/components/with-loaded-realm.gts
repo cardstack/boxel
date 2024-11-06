@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import { RealmInfo } from '@cardstack/runtime-common';
+import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import RealmService from '../services/realm';
 
@@ -12,7 +12,7 @@ interface Signature {
     realmURL: string;
   };
   Blocks: {
-    default: [realm: { info: RealmInfo; canWrite: boolean }];
+    default: [realm: { info: EnhancedRealmInfo; canWrite: boolean }];
   };
 }
 export default class WithLoadedRealm extends Component<Signature> {

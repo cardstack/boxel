@@ -770,7 +770,6 @@ export default class CodeSubmode extends Component<Signature> {
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
-                          data-test-card-inspector-panel
                         />
                       {{/if}}
                     </:inspector>
@@ -786,7 +785,7 @@ export default class CodeSubmode extends Component<Signature> {
                   @minLengthPx={{100}}
                 >
                   <InnerContainer
-                    class='recent-files'
+                    class='recent-files-panel'
                     as |InnerContainerContent InnerContainerHeader|
                   >
                     <InnerContainerHeader aria-label='Recent Files Header'>
@@ -958,11 +957,18 @@ export default class CodeSubmode extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
+        --code-mode-panel-background-color: #ebeaed;
+        --code-mode-container-border-radius: 10px;
+        --code-mode-realm-icon-size: 1.125rem;
+        --code-mode-realm-icon-border-radius: 4px;
+        --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
         --code-mode-padding-top: calc(
-          var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
+          var(--operator-mode-top-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
         --code-mode-padding-bottom: calc(
-          var(--search-sheet-closed-height) + (var(--boxel-sp))
+          var(--operator-mode-bottom-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
       }
 
@@ -971,7 +977,7 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        padding: var(--code-mode-padding-top) var(--boxel-sp)
+        padding: var(--code-mode-padding-top) var(--operator-mode-spacing)
           var(--code-mode-padding-bottom);
         overflow: auto;
         flex: 1;
@@ -1002,8 +1008,8 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .inner-container.recent-files {
-        background-color: var(--boxel-200);
+      .recent-files-panel {
+        background-color: var(--code-mode-panel-background-color);
       }
 
       .choose-file-prompt {
@@ -1015,14 +1021,14 @@ export default class CodeSubmode extends Component<Signature> {
 
       .code-mode-top-bar {
         --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--boxel-sp)
-        );
+          var(--operator-mode-left-column) - var(--operator-mode-spacing)
+        ); /* subtract additional padding */
 
         position: absolute;
         top: 0;
         right: 0;
         left: var(--code-mode-top-bar-left-offset);
-        padding: var(--boxel-sp);
+        padding: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
       }
@@ -1049,9 +1055,6 @@ export default class CodeSubmode extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
-      .empty-container > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
-      }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;
       }
@@ -1059,7 +1062,9 @@ export default class CodeSubmode extends Component<Signature> {
         border-bottom: var(--boxel-border);
       }
       .accordion-content {
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--code-mode-panel-background-color);
+        min-height: 100%;
       }
 
       .preview-error-container {

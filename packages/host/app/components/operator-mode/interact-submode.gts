@@ -99,25 +99,47 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
 
   <template>
     <button
-      ...attributes
       class={{cn
         'add-card-to-neighbor-stack'
         this.triggerSideClass
-        (if
-          (eq @activeTrigger @triggerSide) 'add-card-to-neighbor-stack--active'
-        )
+        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
+      ...attributes
     >
       <Download width='19' height='19' />
     </button>
+    <style scoped>
+      .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
+        width: var(--container-button-size);
+        height: var(--container-button-size);
+        padding: 0;
+        border-radius: 50%;
+        background-color: var(--boxel-light-100);
+        border-color: transparent;
+        box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--boxel-layer-floating-button);
+      }
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack--active {
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
+      }
+      .add-card-to-neighbor-stack--left {
+        margin-left: var(--operator-mode-spacing);
+      }
+      .add-card-to-neighbor-stack--right {
+        margin-right: var(--operator-mode-spacing);
+      }
+    </style>
   </template>
 }
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    write: (card: CardDef) => Promise<CardDef | undefined>;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -229,17 +251,8 @@ export default class InteractSubmode extends Component<Signature> {
         here._copyCard.perform(card, stackIndex, deferred);
         return await deferred.promise;
       },
-      saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
-        let item = here.findCardInStack(card, stackIndex);
-        // WARNING: never await an ember concurrency perform outside of a task.
-        // Inside of a task, the `await` is actually just syntactic sugar for a
-        // `yield`. But if you await `perform()` outside of a task, that will cast
-        // the the task to an uncancellable promise which defeats the point of using
-        // ember concurrency.
-        // https://ember-concurrency.com/docs/task-cancelation-help
-        let deferred = new Deferred<void>();
-        here.save.perform(item, dismissItem, deferred);
-        await deferred.promise;
+      saveCard: async (card: CardDef): Promise<void> => {
+        await here.args.saveCard(card);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
@@ -335,45 +348,10 @@ export default class InteractSubmode extends Component<Signature> {
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
     if (item.format === 'edit') {
-      let updatedCard = await this.args.write(card);
+      let updatedCard = this.args.saveCard(card);
       request?.fulfill(updatedCard);
     }
   });
-
-  private save = task(
-    async (
-      item: StackItem,
-      dismissStackItem: boolean,
-      done: Deferred<void>,
-    ) => {
-      let { request } = item;
-      let hasRejected = false;
-      try {
-        let updatedCard = await this.args.write(item.card);
-
-        if (updatedCard) {
-          request?.fulfill(updatedCard);
-          if (!dismissStackItem) {
-            return;
-          }
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      } catch (e) {
-        hasRejected = true;
-        done.reject(e);
-      } finally {
-        if (!hasRejected) {
-          done.fulfill();
-        }
-      }
-    },
-  );
 
   private runCommand = restartableTask(
     async (card: CardDef, skillCardId: string, message: string) => {
@@ -386,11 +364,20 @@ export default class InteractSubmode extends Component<Signature> {
       let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
         aiBotUsername,
       ]);
+      const context = {
+        submode: this.operatorModeStateService.state.submode,
+        openCardIds: this.operatorModeStateService
+          .topMostStackItems()
+          .map((item) => item.card.id),
+      };
+
       await this.matrixService.sendMessage(
         newRoomId,
         message,
         [card],
         [commandCard],
+        undefined,
+        context,
       );
     },
   );
@@ -691,7 +678,7 @@ export default class InteractSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
     >
-      <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+      <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='right'>
             <:trigger>
@@ -722,13 +709,11 @@ export default class InteractSubmode extends Component<Signature> {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
-                  'operator-mode-stack'
-                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                  (if
-                    (and (gt stack.length 1) (lt stack.length 3))
-                    'medium-padding-top'
+                  stack-with-bg-image=backgroundImageURLSpecificToThisStack
+                  stack-medium-padding-top=(and
+                    (gt stack.length 1) (lt stack.length 3)
                   )
-                  (if (gt stack.length 2) 'small-padding-top')
+                  stack-small-padding-top=(gt stack.length 2)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -746,6 +731,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
+                @saveCard={{@saveCard}}
               />
             {{/let}}
           {{/each}}
@@ -760,6 +746,7 @@ export default class InteractSubmode extends Component<Signature> {
           <Tooltip @placement='left'>
             <:trigger>
               <NeighborStackTriggerButton
+                class='neighbor-stack-trigger'
                 data-test-add-card-right-stack
                 @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
                 @activeTrigger={{this.searchSheetTrigger}}
@@ -786,7 +773,7 @@ export default class InteractSubmode extends Component<Signature> {
     </SubmodeLayout>
 
     <style scoped>
-      .operator-mode__main {
+      .interact-submode {
         display: flex;
         justify-content: center;
         align-items: center;
@@ -795,38 +782,35 @@ export default class InteractSubmode extends Component<Signature> {
         background-size: cover;
         height: 100%;
       }
-      .operator-mode__main .stacks {
+      .stacks {
         flex: 1;
         height: 100%;
         display: flex;
         justify-content: center;
         align-items: center;
       }
-      .operator-mode__main .add-card-to-neighbor-stack {
+      .stack-with-bg-image:before {
+        content: ' ';
+        height: 100%;
+        width: 2px;
+        background-color: var(--boxel-dark);
+        display: block;
+        position: absolute;
+        top: 0;
+        left: -1px;
+      }
+      .stack-with-bg-image:first-child:before {
+        display: none;
+      }
+      .stack-medium-padding-top {
+        padding-top: var(--operator-mode-top-bar-item-height);
+      }
+      .stack-small-padding-top {
+        padding-top: var(--operator-mode-spacing);
+      }
+      .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--boxel-sp);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--boxel-sp);
       }
     </style>
   </template>

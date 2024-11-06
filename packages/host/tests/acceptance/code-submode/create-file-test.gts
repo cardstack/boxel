@@ -265,6 +265,21 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .exists();
     });
 
+    test('filename is auto-populated from display name', async function (assert) {
+      await visitOperatorMode();
+      await openNewFileModal('Card Definition');
+      await fillIn('[data-test-display-name-field]', 'Très test card 😀');
+      assert.dom('[data-test-file-name-field]').hasValue('tres_test_card');
+    });
+
+    test('filename stops auto-populating after user edits it', async function (assert) {
+      await visitOperatorMode();
+      await openNewFileModal('Card Definition');
+      await fillIn('[data-test-file-name-field]', 'test_card');
+      await fillIn('[data-test-display-name-field]', 'Très test card 😀');
+      assert.dom('[data-test-file-name-field]').hasValue('test_card');
+    });
+
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
       const baseRealmIconURL =
         'https://boxel-images.boxel.ai/icons/cardstack.png';
@@ -279,7 +294,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('General Card');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasAttribute('src', baseRealmIconURL);
+        .hasStyle({ backgroundImage: `url("${baseRealmIconURL}")` });
 
       // card type selection
       await click('[data-test-select-card-type]');
@@ -291,7 +306,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('Person');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasAttribute('src', testRealmAIconURL);
+        .hasStyle({ backgroundImage: `url("${testRealmAIconURL}")` });
 
       let deferred = new Deferred<void>();
       let fileID = '';
@@ -415,8 +430,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         '[data-test-code-mode-card-preview-header][data-test-card-resource-loaded]',
       );
       assert
-        .dom('[data-test-code-mode-card-preview-header] img')
-        .hasAttribute('alt', 'Icon for workspace Test Workspace A');
+        .dom(
+          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+        )
+        .hasAttribute('alt', 'Test Workspace A');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
       assert.dom('[data-test-field="title"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileURL}.json`);
@@ -472,8 +489,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-create-file-modal]', { count: 0 });
       await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
       assert
-        .dom('[data-test-code-mode-card-preview-header] img')
-        .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+        .dom(
+          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+        )
+        .hasAttribute('alt', 'Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
       assert.dom('[data-test-field="title"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
@@ -536,8 +555,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-create-file-modal]', { count: 0 });
       await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
       assert
-        .dom('[data-test-code-mode-card-preview-header] img')
-        .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+        .dom(
+          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+        )
+        .hasAttribute('alt', 'Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Person');
       assert.dom('[data-test-field="firstName"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
@@ -587,7 +608,7 @@ export class TrèsTestCard extends CardDef {
         .hasText('Inherits From');
       assert
         .dom('[data-test-create-definition]')
-        .isDisabled('create button is disabled');
+        .isEnabled('create button is enabled');
       await fillIn('[data-test-file-name-field]', 'très-test-card');
       assert
         .dom('[data-test-create-definition]')

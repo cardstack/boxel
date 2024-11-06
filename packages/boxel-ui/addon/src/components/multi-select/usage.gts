@@ -1,5 +1,3 @@
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -9,10 +7,13 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
+import type { Select } from 'ember-power-select/components/power-select';
 import { includes } from 'lodash';
 import pluralize from 'pluralize';
 
+import cn from '../../helpers/cn.ts';
 import cssVar from '../../helpers/css-var.ts';
+import CheckMark from '../../icons/check-mark.gts';
 import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
 import BoxelSelectedItem from './selected-item.gts';
 
@@ -82,9 +83,6 @@ interface AssigneePillArgs {
 
 //Custom component for rendering dropdown items with enhanced design and functionality
 class AssigneePill extends Component<AssigneePillArgs> {
-  get issueText() {
-    return String(this.args.option.issues);
-  }
   <template>
     <span class='assignee-pill'>
       <div class='assignee-pill-content'>
@@ -92,7 +90,8 @@ class AssigneePill extends Component<AssigneePillArgs> {
         <div class='assignee-avatar'>{{@option.avatar}}</div>
         <div class='assignee-name'>{{@option.name}}</div>
       </div>
-      <div class='assignee-issues'>{{getPlural this.issueText}}</div>
+      <div class='assignee-issues'>{{@option.issues}}
+        {{getPlural 'issue' @option.issues}}</div>
     </span>
 
     <style scoped>
@@ -166,6 +165,9 @@ export default class BoxelMultiSelectUsage extends Component {
   @tracked hasCheckbox = false;
   @tracked useCustomTriggerComponent = false;
 
+  @tracked selectedFilter: string | undefined = undefined;
+  @tracked publicAPI: Select | undefined = undefined;
+
   @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
   declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
 
@@ -187,6 +189,25 @@ export default class BoxelMultiSelectUsage extends Component {
 
   @action onSelectAssignees(assignees: AssigneeOption[]) {
     this.selectedAssignees = assignees;
+  }
+
+  @action updateFilter(o: string | undefined): void {
+    this.selectedFilter = o;
+    this.openDropdown();
+  }
+
+  //We need this to open the dropdown from outside the component
+  @action registerAPI(select: Select): void {
+    this.publicAPI = select; //note: we must link select by reference
+  }
+
+  @action openDropdown(): void {
+    this.publicAPI?.actions.open();
+  }
+
+  @action onClose(): boolean | undefined {
+    this.selectedFilter = undefined;
+    return true;
   }
 
   <template>
@@ -307,6 +328,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @searchField='name'
             @searchEnabled={{true}}
+            @closeOnSelect={{false}}
             @ariaLabel='Select assignees'
             as |option|
           >
@@ -331,6 +353,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @searchField='name'
             @searchEnabled={{true}}
+            @closeOnSelect={{false}}
             @ariaLabel='Select countries'
             @selectedItemComponent={{(component SelectedCountry)}}
             as |option|
@@ -350,6 +373,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @searchField='name'
             @searchEnabled={{true}}
+            @closeOnSelect={{false}}
             @onChange={{this.onSelectAssignees}}
             @ariaLabel='Select assignees'
             as |option|
@@ -363,12 +387,11 @@ export default class BoxelMultiSelectUsage extends Component {
             Select component. It is a simpler version of Boxel Multi Select that
             does not include custom components for the selected items, trigger,
             beforeOptions, and afterOptions. If you would like to maintain, the
-            <strong>STYLE OF DROPDOWN AND WRAPPER</strong>
-            but build your own components, you should use this.
+            default style of ember-power-select but build your own components,
+            you should use this.
           </p>
         </:description>
       </FreestyleUsage>
-
     </div>
   </template>
 }

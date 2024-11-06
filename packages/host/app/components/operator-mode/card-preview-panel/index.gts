@@ -16,6 +16,7 @@ import {
   BoxelDropdown,
   IconButton,
   Menu as BoxelMenu,
+  RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 
@@ -24,7 +25,6 @@ import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -211,9 +211,9 @@ export default class CardPreviewPanel extends Component<Signature> {
         display: flex;
       }
 
-      .header-icon > img {
-        height: 25px;
-        width: 25px;
+      .header-icon > .realm-icon-img {
+        min-height: 25px;
+        min-width: 25px;
       }
 
       .header-icon {

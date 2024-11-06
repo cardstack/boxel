@@ -10,9 +10,11 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import { format as formatDate } from 'date-fns';
+import CalendarClockIcon from '@cardstack/boxel-icons/calendar-clock';
 
 export class GameSlot extends CardDef {
   static displayName = 'Game Slot';
+  static icon = CalendarClockIcon;
   @field location = contains(StringField);
   @field minPlayers = contains(NumberField);
   @field maxPlayers = contains(NumberField);
@@ -65,5 +67,6 @@ export class GameSlot extends CardDef {
 
 export class PickupGamesScheduler extends CardDef {
   static displayName = 'Pickup Games Scheduler';
+  static icon = CalendarClockIcon;
   @field gameSlots = linksToMany(GameSlot);
 }

@@ -5,11 +5,11 @@ import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
+import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import DndKanbanBoard, {
-  type DndKanbanBoardArgs,
-  Card as DndCard,
-  Column as DndColumn,
+  type DndItem,
+  DndColumn,
 } from './components/drag-and-drop/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
@@ -33,9 +33,13 @@ import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
+import BoxelMultiSelect, {
+  BoxelMultiSelectBasic,
+} from './components/multi-select/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
 import RadioInput from './components/radio-input/index.gts';
+import RealmIcon from './components/realm-icon/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
   ResizeHandle,
@@ -60,15 +64,17 @@ export {
   BoxelInputValidationState,
   BoxelInputValidationStates,
   BoxelMessage,
+  BoxelMultiSelect,
+  BoxelMultiSelectBasic,
   BoxelSelect,
   Button,
   CardContainer,
   CardContentContainer,
+  CardHeader,
   CircleSpinner,
-  DndCard,
   DndColumn,
+  DndItem,
   DndKanbanBoard,
-  DndKanbanBoardArgs,
   FieldContainer,
   Filter,
   FilterList,
@@ -83,6 +89,7 @@ export {
   Pill,
   ProgressBar,
   RadioInput,
+  RealmIcon,
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,

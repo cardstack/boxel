@@ -3,9 +3,10 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { RealmIcon } from '@cardstack/boxel-ui/components';
+
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmService from '@cardstack/host/services/realm';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
 
@@ -89,11 +90,11 @@ class File extends Component<FileArgs> {
     {{/unless}}
     <style scoped>
       .recent-file {
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         padding: var(--boxel-sp-xxs);
         font-weight: 600;
         margin-bottom: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--code-mode-container-border-radius);
         display: flex;
         align-items: center;
         overflow-wrap: anywhere;
@@ -101,8 +102,12 @@ class File extends Component<FileArgs> {
       }
 
       .icon {
-        width: 20px;
-        height: 20px;
+        --boxel-realm-icon-border: none;
+        --boxel-realm-icon-border-radius: var(
+          --code-mode-realm-icon-border-radius
+        );
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
         margin-right: var(--boxel-sp-xxxs);
       }
     </style>

@@ -6,15 +6,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
+import { RealmInfo } from '@cardstack/runtime-common/realm';
+
 import { RealmAuth } from './realm-auth';
 import { SkillsProvider } from './skills';
-
-function getUrl(uri: vscode.Uri) {
-  let scheme = uri.scheme.split('+')[1];
-  let auth = uri.authority;
-  let path = uri.path;
-  return `${scheme}://${auth}${path}`;
-}
 
 export class File implements vscode.FileStat {
   type: vscode.FileType;
@@ -55,16 +50,49 @@ export class Directory implements vscode.FileStat {
 
 export type Entry = File | Directory;
 
+const selectedRealmKey = 'selectedRealms';
 export class RealmFS implements vscode.FileSystemProvider {
   root = new Directory('');
 
+  private context: vscode.ExtensionContext;
+  private selectedRealms: Set<string> = new Set();
+  private realmDirNamePromises: Map<string, Promise<string>> = new Map();
+  private realmDirNameToUrl: Map<string, string> = new Map();
+
   constructor(
+    context: vscode.ExtensionContext,
     private realmAuth: RealmAuth,
     private skillsProvider: SkillsProvider,
-  ) {}
+  ) {
+    this.context = context;
+    this.realmAuth = realmAuth;
+    this.skillsProvider = skillsProvider;
 
-  async getJWT(url: string) {
-    return await this.realmAuth.getJWT(url);
+    let selectedRealms = this.context.globalState.get<string>(selectedRealmKey);
+    if (selectedRealms && typeof selectedRealms === 'string') {
+      this.selectedRealms = new Set(selectedRealms.split(','));
+    } else {
+      this.selectedRealms = new Set();
+    }
+  }
+
+  addSelectedRealms(realmURL: string) {
+    this.selectedRealms.add(realmURL);
+    // Using globalState because workspaceState will be reset when the extension is reactivated.
+    this.context.globalState.update(
+      selectedRealmKey,
+      Array.from(this.selectedRealms).join(','),
+    );
+  }
+
+  deleteSelectedRealms(realmURL: string) {
+    this.selectedRealms.delete(realmURL);
+    this.context.globalState.update(selectedRealmKey, undefined);
+  }
+
+  resetSelectedRealms() {
+    this.selectedRealms = new Set();
+    this.context.globalState.update(selectedRealmKey, undefined);
   }
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
@@ -107,10 +135,10 @@ export class RealmFS implements vscode.FileSystemProvider {
     uri: vscode.Uri,
   ): Promise<{ success: boolean; body: string }> {
     console.log('Fetching raw file:', uri);
-    let apiUrl = getUrl(uri);
+    let apiUrl = this._getUrl(uri);
     console.log('API URL:', apiUrl);
     const headers = {
-      Authorization: `${await this.getJWT(apiUrl)}`,
+      Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
     };
 
     const response = await fetch(apiUrl, { headers });
@@ -128,11 +156,11 @@ export class RealmFS implements vscode.FileSystemProvider {
     console.log('Writing file:', uri);
 
     let requestType = 'POST';
-    let apiUrl = getUrl(uri);
+    let apiUrl = this._getUrl(uri);
 
     let headers: Record<string, string> = {
       'Content-Type': 'text/plain;charset=UTF-8',
-      Authorization: `${await this.getJWT(apiUrl)}`,
+      Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
       Accept: SupportedMimeType.CardSource,
     };
 
@@ -194,6 +222,10 @@ export class RealmFS implements vscode.FileSystemProvider {
   async delete(uri: vscode.Uri): Promise<void> {
     const dirname = uri.with({ path: path.posix.dirname(uri.path) });
     const basename = path.posix.basename(uri.path);
+    if (this.realmDirNameToUrl.has(basename)) {
+      this.deleteSelectedRealms(this.realmDirNameToUrl.get(basename)!);
+    }
+
     const parent = await this._lookupAsDirectory(dirname);
     if (!parent.entries.has(basename)) {
       throw vscode.FileSystemError.FileNotFound(uri);
@@ -226,7 +258,7 @@ export class RealmFS implements vscode.FileSystemProvider {
 
   private async _lookup(uri: vscode.Uri): Promise<Entry | undefined> {
     const parts = uri.path.split('/').filter((part) => part.length > 0);
-    if (!parts[parts.length - 1].includes('.')) {
+    if (parts.length == 0 || !parts[parts.length - 1].includes('.')) {
       return await this._fetchDirectoryEntry(uri);
     }
     // ok we know it's a file.
@@ -236,8 +268,11 @@ export class RealmFS implements vscode.FileSystemProvider {
 
   private async _fetchDirectoryEntry(uri: vscode.Uri): Promise<Directory> {
     console.log('Fetching directory entry:', uri);
+    if (this._isRootDirectory(uri)) {
+      return await this._fetchRootDirectoryEntry(uri);
+    }
 
-    let apiUrl = getUrl(uri);
+    let apiUrl = this._getUrl(uri);
     // We can only get the directory contents if we have a trailing slash
     if (!apiUrl.endsWith('/')) {
       apiUrl += '/';
@@ -247,7 +282,7 @@ export class RealmFS implements vscode.FileSystemProvider {
       const response = await fetch(apiUrl, {
         headers: {
           Accept: 'application/vnd.api+json',
-          Authorization: `${await this.getJWT(apiUrl)}`,
+          Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
         },
       });
       console.log('Response!');
@@ -293,6 +328,20 @@ export class RealmFS implements vscode.FileSystemProvider {
     file.size = file.data.byteLength;
     return file;
   }
+  private async _fetchRootDirectoryEntry(uri: vscode.Uri) {
+    for (const selectedRealmURL of this.selectedRealms) {
+      let realmDirName = await this.getRealmDirName(selectedRealmURL);
+      console.log('Realm directory name:', realmDirName);
+
+      let realmDirUri = uri.toString() + realmDirName;
+      let realmDir = await this._fetchDirectoryEntry(
+        vscode.Uri.parse(realmDirUri),
+      );
+      this.root.entries.set(realmDirName, realmDir);
+    }
+
+    return this.root;
+  }
 
   private async _fetchFileEntry(uri: vscode.Uri): Promise<File> {
     // special case for .cursorrules
@@ -301,13 +350,17 @@ export class RealmFS implements vscode.FileSystemProvider {
       return this._fetchCursorRules();
     }
     console.log('Fetching file entry:', uri);
-    let apiUrl = getUrl(uri);
+    // We don't expect any files in root directory
+    if (this._isFileInRootDirectory(uri)) {
+      throw vscode.FileSystemError.Unavailable(uri);
+    }
+    let apiUrl = this._getUrl(uri);
     console.log('API URL:', apiUrl);
 
     try {
       let headers = {
         Accept: 'application/vnd.api+json',
-        Authorization: `${await this.getJWT(apiUrl)}`,
+        Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
       };
 
       // Add special header for .gts files
@@ -368,6 +421,70 @@ export class RealmFS implements vscode.FileSystemProvider {
   private async _lookupParentDirectory(uri: vscode.Uri): Promise<Directory> {
     const dirname = uri.with({ path: path.posix.dirname(uri.path) });
     return await this._lookupAsDirectory(dirname);
+  }
+
+  // Realm directory name format:
+  // [REALM NAME] ([REALM PATH join with '-'])
+  // Example: My Workspace (fadhlan-workspace1)
+  getRealmDirName(realmURL: string) {
+    if (!this.realmDirNamePromises.has(realmURL)) {
+      let promise = (async () => {
+        let realmName = await this._getRealmName(realmURL);
+        let realmPathNameParts = new URL(realmURL).pathname
+          .split('/')
+          .filter((part) => part.length > 0);
+        let realmDirName = `${realmName} (${realmPathNameParts.join('-')})`;
+        this.realmDirNameToUrl.set(realmDirName, realmURL);
+        return realmDirName;
+      })();
+      this.realmDirNamePromises.set(realmURL, promise);
+    }
+    return this.realmDirNamePromises.get(realmURL)!;
+  }
+
+  private async _getRealmName(realmUrl: string) {
+    console.log('Getting realm name for', realmUrl);
+
+    let response = await fetch(`${realmUrl}_info`, {
+      headers: {
+        Accept: SupportedMimeType.RealmInfo,
+        Authorization: `${await this.realmAuth.getJWT(realmUrl)}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.log('response not ok when fetching realm info');
+      return 'Unknown Workspace';
+    }
+
+    let realmInfo = (await response.json())?.data?.attributes as RealmInfo;
+    return realmInfo.name;
+  }
+
+  private _getUrl(uri: vscode.Uri) {
+    let realmDirName = Array.from(this.realmDirNameToUrl.keys()).find(
+      (realmDirName) => uri.path.includes(realmDirName),
+    );
+    if (!realmDirName) {
+      throw vscode.FileSystemError.Unavailable(uri);
+    }
+    let realmUrl = this.realmDirNameToUrl.get(realmDirName);
+    if (!realmUrl) {
+      throw vscode.FileSystemError.Unavailable(uri);
+    }
+    return `${realmUrl}${uri.path.substring(realmDirName.length + 2).trim()}`;
+  }
+
+  private _isRootDirectory(uri: vscode.Uri): boolean {
+    return (
+      uri.authority === 'boxel-workspaces' &&
+      (uri.path === '' || uri.path === '/')
+    );
+  }
+
+  private _isFileInRootDirectory(uri: vscode.Uri): boolean {
+    let parts = uri.path.split('/').filter((part) => part.length > 0);
+    return parts[0].includes('.') && uri.authority === 'boxel-workspaces';
   }
 
   // --- manage file events

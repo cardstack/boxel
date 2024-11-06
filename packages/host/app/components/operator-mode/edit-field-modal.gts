@@ -344,7 +344,7 @@ export default class EditFieldModal extends Component<Signature> {
           <div class='card-chooser-area'>
             {{#if this.fieldCard}}
               <Pill data-test-selected-field-realm-icon>
-                <:icon>
+                <:iconLeft>
                   {{#if this.fieldModuleURL.href}}
                     {{#let
                       (this.realm.info this.fieldModuleURL.href)
@@ -357,7 +357,7 @@ export default class EditFieldModal extends Component<Signature> {
                       />
                     {{/let}}
                   {{/if}}
-                </:icon>
+                </:iconLeft>
                 <:default>
                   <span data-test-selected-field-display-name>
                     {{this.fieldCard.displayName}}

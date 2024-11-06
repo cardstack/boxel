@@ -315,15 +315,21 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://i.postimg.cc/L8yXRvws/icon.png");',
+      )
+      .hasAttribute('alt', 'Test Workspace B');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
+      );
 
     await click('[data-test-file="index.json"]');
     assert
@@ -514,15 +520,21 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png')
-      .hasAttribute('alt', 'Icon for workspace Base Workspace');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
+      )
+      .hasAttribute('alt', 'Base Workspace');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
+      );
 
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');

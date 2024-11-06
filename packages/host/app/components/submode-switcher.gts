@@ -77,14 +77,17 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </div>
     <style scoped>
       :global(:root) {
-        --submode-switcher-trigger-height: 2.5rem;
+        --submode-switcher-trigger-height: var(
+          --operator-mode-top-bar-item-height
+        );
         --submode-switcher-dropdown-content-border-radius: 0 0
           var(--boxel-border-radius) var(--boxel-border-radius);
         --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.45);
         --submode-switcher-width: calc(
-          var(--operator-mode-left-column) - 5rem - var(--boxel-sp-xs)
-        ); /* 5rem is workspace button (40px) + horizontal padding (2 * 20px) */
-        --submode-switcher-height: 40px;
+          var(--operator-mode-left-column) - var(--container-button-size) - 3 *
+            var(--operator-mode-spacing)
+        );
+        --submode-switcher-height: var(--operator-mode-top-bar-item-height);
       }
       .submode-switcher-dropdown-trigger {
         --icon-color: var(--boxel-highlight);

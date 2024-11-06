@@ -22,7 +22,11 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 
-import { getRandomBackgroundURL, iconURLFor } from '../../../lib/utils';
+import {
+  getRandomBackgroundURL,
+  iconURLFor,
+  cleanseString,
+} from '../../../lib/utils';
 
 import ModalContainer from '../../modal-container';
 
@@ -34,20 +38,26 @@ interface Signature {
 
 export default class AddWorkspace extends Component<Signature> {
   @service private declare matrixService: MatrixService;
-  @tracked isModalOpen = false;
-  @tracked endpoint = '';
-  @tracked displayName = '';
-  @tracked error: string | null = null;
-  setEndpoint = (value: string) => {
+  @tracked private isModalOpen = false;
+  @tracked private endpoint = '';
+  @tracked private displayName = '';
+  @tracked private hasUserEditedEndpoint = false;
+  @tracked private error: string | null = null;
+  private setEndpoint = (value: string) => {
+    this.hasUserEditedEndpoint = true;
     this.endpoint = value;
   };
-  setDisplayName = (value: string) => {
+  private setDisplayName = (value: string) => {
     this.displayName = value;
+    // if the user starts typing in the endpoint field, then stop helping them
+    if (!this.hasUserEditedEndpoint) {
+      this.endpoint = cleanseString(value, '-');
+    }
   };
-  closeModal = () => {
+  private closeModal = () => {
     this.isModalOpen = false;
   };
-  createWorkspaceTask = task(async () => {
+  private createWorkspaceTask = task(async () => {
     this.error = null;
     try {
       await this.matrixService.createPersonalRealmForUser({
@@ -61,7 +71,7 @@ export default class AddWorkspace extends Component<Signature> {
       this.error = e.message;
     }
   });
-  get isCreateWorkspaceButtonDisabled() {
+  private get isCreateWorkspaceButtonDisabled() {
     return !this.endpoint || !this.displayName;
   }
   <template>
