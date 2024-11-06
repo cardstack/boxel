@@ -92,9 +92,10 @@ export default class CardPreviewPanel extends Component<Signature> {
       data-test-code-mode-card-preview-header={{@card.id}}
       ...attributes
     >
-      <div class='header-icon'>
-        <RealmIcon @realmInfo={{this.realm.info @realmURL.href}} class='icon' />
-      </div>
+      <RealmIcon
+        @realmInfo={{this.realm.info @realmURL.href}}
+        class='header-icon'
+      />
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
       </div>
@@ -204,20 +205,15 @@ export default class CardPreviewPanel extends Component<Signature> {
 
     <style scoped>
       .preview-header {
-        background: white;
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-lg);
+        background-color: var(--boxel-light);
+        padding: var(--boxel-sp);
         display: flex;
-      }
-
-      .header-icon > .realm-icon-img {
-        min-height: 25px;
-        min-width: 25px;
+        gap: var(--boxel-sp-xxs);
+        align-items: center;
       }
 
       .header-icon {
-        margin-right: var(--boxel-sp-xxs);
+        flex-shrink: 0;
       }
 
       .preview-body {
@@ -239,8 +235,8 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .header-title {
-        font-weight: 600;
-        font-size: 1.2rem;
+        font: 600 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .preview-footer {
