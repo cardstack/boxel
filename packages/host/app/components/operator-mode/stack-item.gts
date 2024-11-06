@@ -66,11 +66,13 @@ import type EnvironmentService from '../../services/environment-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 
-interface StackItemComponentAPI {
+export interface StackItemComponentAPI {
   clearSelections: () => void;
-  doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void;
-  scrollIntoView: (selector: string) => void;
-  startAnimation: (type: 'closing' | 'movingForward') => void;
+  doWithStableScroll: (
+    changeSizeCallback: () => Promise<void>,
+  ) => Promise<void>;
+  scrollIntoView: (selector: string) => Promise<void>;
+  startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
 }
 
 interface Signature {

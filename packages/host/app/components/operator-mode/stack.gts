@@ -7,14 +7,10 @@ import type { Actions } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import OperatorModeStackItem, { CardDefOrId } from './stack-item';
-
-interface StackItemComponentAPI {
-  clearSelections: () => void;
-  doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void;
-  scrollIntoView: (selector: string) => void;
-  startAnimation: (type: 'closing' | 'movingForward') => void;
-}
+import OperatorModeStackItem, {
+  type StackItemComponentAPI,
+  CardDefOrId,
+} from './stack-item';
 
 interface Signature {
   Element: HTMLElement;

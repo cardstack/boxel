@@ -35,6 +35,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
+import type { StackItemComponentAPI } from './stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
@@ -134,13 +135,6 @@ interface Signature {
   Args: {
     write: (card: CardDef) => Promise<CardDef | undefined>;
   };
-}
-
-interface StackItemComponentAPI {
-  clearSelections: () => void;
-  doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void;
-  scrollIntoView: (selector: string) => void;
-  startAnimation: (type: 'closing' | 'movingForward') => void;
 }
 
 export default class InteractSubmode extends Component<Signature> {
