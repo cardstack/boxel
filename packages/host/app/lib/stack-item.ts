@@ -83,6 +83,10 @@ export class StackItem {
     throw new Error(`This StackItem has no card set`);
   }
 
+  get cardError() {
+    return this.cardResource?.cardError?.error;
+  }
+
   get isWideFormat() {
     if (!this.cardResource || !this.cardResource.card) {
       return false;
@@ -123,18 +127,6 @@ export class StackItem {
     await Promise.all([this.cardResource?.loaded, this.newCardApiPromise]);
   }
 
-  async setCardURL(url: URL) {
-    if (this.cardResource) {
-      throw new Error(
-        `Cannot set cardURL ${url.href} on this stack item when CardResource has already been set`,
-      );
-    }
-
-    this.cardResource = getCard(this.owner, () => url.href);
-    await this.cardResource.loaded;
-    this.newCard = undefined;
-  }
-
   clone(args: Partial<Args>) {
     let {
       card,
@@ -156,4 +148,12 @@ export class StackItem {
       ...args,
     });
   }
+}
+
+export function isIndexCard(stackItem: StackItem) {
+  let realmURL = stackItem.card[stackItem.api.realmURL];
+  if (!realmURL) {
+    return false;
+  }
+  return stackItem.card.id === `${realmURL.href}index`;
 }

@@ -22,7 +22,9 @@ export async function webStreamToText(
   return pieces.join('');
 }
 
-export async function fileContentToText({ content }: FileRef): Promise<string> {
+export async function fileContentToText({
+  content,
+}: Pick<FileRef, 'content'>): Promise<string> {
   if (typeof content === 'string') {
     return content;
   }
@@ -54,6 +56,7 @@ export async function fileContentToText({ content }: FileRef): Promise<string> {
 export interface TextFileRef {
   content: string;
   lastModified: number;
+  created: number;
   path: string;
   isShimmed?: true;
 }
@@ -75,6 +78,7 @@ export async function readFileAsText(
   return {
     content: await fileContentToText(ref),
     lastModified: ref.lastModified,
+    created: ref.created,
     path: ref.path,
     ...(Symbol.for('shimmed-module') in ref ? { isShimmed: true } : {}),
   };
@@ -122,6 +126,9 @@ export async function writeToStream(
       throw new Error(`cannot handle node-streams when not in node`);
     }
     return new Promise<void>((resolve, reject) => {
+      if ((stream as any).destroyed) {
+        reject(new Error('stream was destroyed'));
+      }
       (stream as any).write(chunk, null, (err: unknown) => {
         if (err) {
           reject(err);

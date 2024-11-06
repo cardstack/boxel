@@ -1,9 +1,6 @@
 import { click, waitFor, fillIn, find } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
@@ -11,6 +8,7 @@ import stringify from 'safe-stable-stringify';
 import {
   type LooseSingleCardDocument,
   Deferred,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -32,7 +30,8 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
@@ -43,8 +42,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
@@ -374,6 +375,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Person/john-with-bad-pet-link`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Person/john-with-bad-pet-link`],
         },
@@ -406,6 +415,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   >('card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(5);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -479,6 +496,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/mango`],
         },
@@ -525,6 +550,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       delete json.data.meta.realmInfo;
       delete json.data.meta.realmURL;
       delete json.data.meta.lastModified;
+      delete json.data.meta.resourceCreatedAt;
       assert.strictEqual(
         stringify(json),
         stringify(expected),
@@ -713,6 +739,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}pet.gts`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [
             `${testRealmURL}pet.gts`,
@@ -767,16 +801,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     test('the editor is read-only', async function (assert) {
       await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
         submode: 'code',
-        codePath: `${testRealmURL}Pet/mango.json`,
+        codePath: `${testRealmURL}pet.gts`,
       });
 
       await waitForCodeEditor();
@@ -796,6 +822,13 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         'rgb(235, 234, 237)', // equivalent to #ebeaed
         'monaco editor is greyed out when read-only',
       );
+
+      assert
+        .dom('[data-test-add-field-button]')
+        .doesNotExist('add field button does not exist');
+      assert
+        .dom('[data-test-schema-editor-field-contextual-button]')
+        .doesNotExist('field context menu button does not exist');
     });
   });
 });

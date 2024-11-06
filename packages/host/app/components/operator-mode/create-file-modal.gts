@@ -18,6 +18,8 @@ import {
   Button,
   BoxelInput,
   LoadingIndicator,
+  Pill,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -42,17 +44,16 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import { cleanseString } from '../../lib/utils';
+
 import ModalContainer from '../modal-container';
 
-import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
-import RealmIcon from './realm-icon';
-
 import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
+import type NetworkService from '../../services/network';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -263,7 +264,7 @@ export default class CreateFileModal extends Component<Signature> {
       </:default>
       <:loading></:loading>
     </WithKnownRealmsLoaded>
-    <style>
+    <style scoped>
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
@@ -322,11 +323,12 @@ export default class CreateFileModal extends Component<Signature> {
   </template>
 
   @service private declare cardService: CardService;
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
+  @tracked private hasUserEditedFileName = false;
   @tracked private fileNameError: string | undefined;
   @tracked private saveError: string | undefined;
   @tracked private currentRequest:
@@ -399,6 +401,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.fileNameError = undefined;
     this.displayName = '';
     this.fileName = '';
+    this.hasUserEditedFileName = false;
     this.clearSaveError();
   }
 
@@ -428,9 +431,14 @@ export default class CreateFileModal extends Component<Signature> {
   @action private setDisplayName(name: string) {
     this.clearSaveError();
     this.displayName = name;
+    if (!this.hasUserEditedFileName) {
+      // if the user starts typing in the filename field, then stop helping them
+      this.fileName = cleanseString(name);
+    }
   }
 
   @action private setFileName(name: string) {
+    this.hasUserEditedFileName = true;
     this.clearSaveError();
     this.fileNameError = undefined;
     this.fileName = name;
@@ -531,11 +539,12 @@ export default class CreateFileModal extends Component<Signature> {
   private chooseType = restartableTask(async () => {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
+
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
         // REMEMBER ME
-        eq: { isField },
+        every: [{ eq: { isField } }],
       },
     });
   });
@@ -576,12 +585,16 @@ export default class CreateFileModal extends Component<Signature> {
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
 
-    let response = await this.loaderService.loader.fetch(url, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
-    if (response.ok) {
-      this.fileNameError = `This file already exists`;
-      return;
+    try {
+      let response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      if (response.ok) {
+        this.fileNameError = `This file already exists`;
+        return;
+      }
+    } catch (err: any) {
+      // we expect a 404 here
     }
 
     let {
@@ -645,6 +658,10 @@ export class ${className} extends ${exportName} {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }`,
     );
@@ -784,14 +801,18 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
 
   <template>
     <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
-      <:icon>
-        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
-      </:icon>
+      <:iconLeft>
+        <RealmIcon @realmInfo={{this.realm.info @entry.id}} class='icon' />
+      </:iconLeft>
       <:default>
         {{@entry.title}}
       </:default>
     </Pill>
-    <style>
+    <style scoped>
+      .icon {
+        min-height: var(--boxel-icon-sm);
+        min-width: var(--boxel-icon-sm);
+      }
       .selected-type {
         padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);

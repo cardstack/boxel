@@ -94,7 +94,7 @@ export default class ButtonComponent extends Component<Signature> {
         </LinkTo>
       {{/if}}
     {{/let}}
-    <style>
+    <style scoped>
       @layer {
         /* Button */
         .boxel-button {
@@ -188,7 +188,7 @@ export default class ButtonComponent extends Component<Signature> {
         .kind-primary:not(:disabled) {
           --boxel-button-color: var(--boxel-highlight);
           --boxel-button-border: 1px solid var(--boxel-button-color);
-          --boxel-button-text-color: var(--boxel-light);
+          --boxel-button-text-color: var(--boxel-dark);
         }
 
         .kind-primary:not(:disabled):hover,
@@ -255,12 +255,12 @@ export default class ButtonComponent extends Component<Signature> {
         .kind-text-only:not(:disabled) {
           --boxel-button-color: transparent;
           --boxel-button-border: 1px solid transparent;
-          --boxel-button-text-color: var(--boxel-highlight);
           --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+          --boxel-button-text-color: var(--boxel-dark);
         }
 
         .kind-text-only:not(:disabled):hover {
-          --boxel-button-text-color: var(--boxel-highlight-hover);
+          background-color: var(--boxel-dark-hover);
         }
 
         /**
@@ -291,7 +291,7 @@ export default class ButtonComponent extends Component<Signature> {
         /* thinner base button */
         .size-small {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-          --boxel-button-font: 700 var(--boxel-font-sm);
+          --boxel-button-font: 600 var(--boxel-font-sm);
           --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
           --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 2rem;
@@ -299,7 +299,7 @@ export default class ButtonComponent extends Component<Signature> {
 
         .size-base {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
-          --boxel-button-font: 700 var(--boxel-font-sm);
+          --boxel-button-font: 600 var(--boxel-font-sm);
           --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
           --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 2rem;
@@ -308,7 +308,7 @@ export default class ButtonComponent extends Component<Signature> {
         /* tall but thinner button */
         .size-tall {
           --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp);
-          --boxel-button-font: 700 var(--boxel-font-sm);
+          --boxel-button-font: 600 var(--boxel-font-sm);
           --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
           --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 2.5rem;

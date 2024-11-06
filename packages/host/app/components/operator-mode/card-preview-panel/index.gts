@@ -16,6 +16,7 @@ import {
   BoxelDropdown,
   IconButton,
   Menu as BoxelMenu,
+  RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 
@@ -24,7 +25,6 @@ import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -150,19 +150,20 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
-      {{#if (eq this.format 'fitted')}}
-        <FittedFormatGallery @card={{@card}} />
-      {{else if (eq this.format 'embedded')}}
-        <EmbeddedPreview @card={{@card}} />
-      {{else if (eq this.format 'atom')}}
-        <div class='atom-wrapper'>
+      <div class='preview-content'>
+        {{#if (eq this.format 'fitted')}}
+          <FittedFormatGallery @card={{@card}} />
+        {{else if (eq this.format 'embedded')}}
+          <EmbeddedPreview @card={{@card}} />
+        {{else if (eq this.format 'atom')}}
+          <div class='atom-wrapper'>
+            <Preview @card={{@card}} @format={{this.format}} />
+          </div>
+        {{else}}
           <Preview @card={{@card}} @format={{this.format}} />
-        </div>
-      {{else}}
-        <Preview @card={{@card}} @format={{this.format}} />
-      {{/if}}
+        {{/if}}
+      </div>
     </div>
-
     <div
       class='preview-footer'
       {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
@@ -201,7 +202,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .preview-header {
         background: white;
         border-top-left-radius: var(--boxel-border-radius);
@@ -210,9 +211,9 @@ export default class CardPreviewPanel extends Component<Signature> {
         display: flex;
       }
 
-      .header-icon > img {
-        height: 25px;
-        width: 25px;
+      .header-icon > .realm-icon-img {
+        min-height: 25px;
+        min-width: 25px;
       }
 
       .header-icon {
@@ -222,6 +223,15 @@ export default class CardPreviewPanel extends Component<Signature> {
       .preview-body {
         flex-grow: 1;
         overflow-y: auto;
+      }
+
+      .preview-content {
+        height: auto;
+        margin: var(--boxel-sp-sm);
+      }
+
+      .preview-content > :deep(.boxel-card-container.boundaries) {
+        overflow: hidden;
       }
 
       .header-actions {

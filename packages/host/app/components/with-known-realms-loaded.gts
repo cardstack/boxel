@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import CardService from '../services/card-service';
 import RealmService from '../services/realm';
+import RealmServerService from '../services/realm-server';
 
 interface Signature {
   Args: {};
@@ -15,7 +15,7 @@ interface Signature {
 }
 export default class WithKnownRealmsLoaded extends Component<Signature> {
   @service declare realm: RealmService;
-  @service declare cardService: CardService;
+  @service declare realmServer: RealmServerService;
 
   constructor(...args: [any, any]) {
     super(...args);
@@ -23,7 +23,7 @@ export default class WithKnownRealmsLoaded extends Component<Signature> {
   }
 
   private loadRealmsTask = task(async () => {
-    let realmURLs = this.cardService.realmURLs;
+    let realmURLs = this.realmServer.availableRealmURLs;
     await Promise.all(
       realmURLs.map(
         async (realmURL) => await this.realm.ensureRealmMeta(realmURL),

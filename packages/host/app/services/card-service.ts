@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { stringify } from 'qs';
@@ -5,7 +6,6 @@ import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -22,8 +22,6 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type MessageService from '@cardstack/host/services/message-service';
-
 import type {
   BaseDef,
   CardDef,
@@ -36,24 +34,39 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
+import type MessageService from './message-service';
+import type NetworkService from './network';
+import type Realm from './realm';
+import type ResetService from './reset';
 
 export type CardSaveSubscriber = (
   url: URL,
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs, environment } = ENV;
+const { environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
+  @service private declare network: NetworkService;
+  @service private declare realm: Realm;
+  @service private declare reset: ResetService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
-  clientRequestIds = new Set<string>();
+  private declare loaderToCardAPILoadingCache: WeakMap<
+    Loader,
+    Promise<typeof CardAPI>
+  >;
+  declare clientRequestIds: Set<string>;
 
-  loaderToCardAPILoadingCache = new WeakMap<Loader, Promise<typeof CardAPI>>();
+  constructor(owner: Owner) {
+    super(owner);
+    this.resetState();
+    this.reset.register(this);
+  }
 
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.loader;
@@ -67,14 +80,10 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  // This is temporary until we have a better way of discovering the realms that
-  // are available for a user // unresolved URLs
-  realmURLs = [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])];
-
-  // Note that this should be the unresolved URL and that we need to rely on our
-  // fetch to do any URL resolution.
-  get defaultURL(): URL {
-    return new URL(ownRealmURL);
+  resetState() {
+    this.subscriber = undefined;
+    this.clientRequestIds = new Set();
+    this.loaderToCardAPILoadingCache = new WeakMap();
   }
 
   onSave(subscriber: CardSaveSubscriber) {
@@ -92,7 +101,7 @@ export default class CardService extends Service {
     let clientRequestId = uuidv4();
     this.clientRequestIds.add(clientRequestId);
 
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       headers: {
         Accept: SupportedMimeType.CardJson,
         'X-Boxel-Client-Request-Id': clientRequestId,
@@ -167,6 +176,14 @@ export default class CardService extends Service {
       // send doc over the wire with absolute URL's. The realm server will convert
       // to relative URL's as it serializes the cards
       let realmURL = await this.getRealmURL(card);
+      // in the case where we get no realm URL from the card, we are dealing with
+      // a new card instance that does not have a realm URL yet.
+      if (!realmURL) {
+        if (!this.realm.defaultWritableRealm) {
+          throw new Error('Could not find a writable realm');
+        }
+        realmURL = new URL(this.realm.defaultWritableRealm.path);
+      }
       let json = await this.saveCardDocument(doc, realmURL);
       let isNew = !card.id;
 
@@ -206,7 +223,7 @@ export default class CardService extends Service {
   }
 
   async saveSource(url: URL, content: string) {
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -226,7 +243,7 @@ export default class CardService extends Service {
   }
 
   async deleteSource(url: URL) {
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -297,7 +314,11 @@ export default class CardService extends Service {
       ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let card = await this.createFromSerialized(json.data, json, url);
+    let card = await this.createFromSerialized(
+      json.data,
+      json,
+      new URL(json.data.id),
+    );
     return card;
   }
 
@@ -337,16 +358,13 @@ export default class CardService extends Service {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl?: URL,
+    realmUrl: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.fetchJSON(
-      doc.data.id ?? realmUrl ?? this.defaultURL,
-      {
-        method: isSaved ? 'PATCH' : 'POST',
-        body: JSON.stringify(doc, null, 2),
-      },
-    );
+    let json = await this.fetchJSON(doc.data.id ?? realmUrl, {
+      method: isSaved ? 'PATCH' : 'POST',
+      body: JSON.stringify(doc, null, 2),
+    });
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
@@ -442,13 +460,9 @@ export default class CardService extends Service {
     return card[api.realmInfo];
   }
 
-  async getRealmURL(card: CardDef) {
+  async getRealmURL(card: CardDef): Promise<URL | undefined> {
     let api = await this.getAPI();
-    // in the case where we get no realm URL from the card, we are dealing with
-    // a new card instance that does not have a realm URL yet. For now let's
-    // assume that the new card instance will reside in the realm that is hosting the app...
-    // TODO change this after implementing CS-6381
-    return card[api.realmURL] ?? new URL(ownRealmURL);
+    return card[api.realmURL];
   }
 
   async cardsSettled() {
@@ -457,7 +471,7 @@ export default class CardService extends Service {
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
-    let response = await this.loaderService.loader.fetch(`${realmURL}_info`, {
+    let response = await this.network.authedFetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
       method: 'GET',
     });

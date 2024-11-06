@@ -4,6 +4,7 @@ import { fn } from '@ember/helper';
 import {
   BaseDef,
   CardContext,
+  realmURL,
   type Box,
   type BoxComponent,
   type CardDef,
@@ -97,7 +98,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
-        offerToCreate: { ref: type, relativeTo: undefined },
+        offerToCreate: {
+          ref: type,
+          relativeTo: undefined,
+          realmURL: this.args.model.value[realmURL],
+        },
         multiSelect: true,
         createNewCard: this.cardContext?.actions?.createCard,
       },
@@ -141,11 +146,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   <template>
     <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
-        <ul
-          class='list'
-          {{sortableGroup onChange=(fn this.setItems)}}
-          ...attributes
-        >
+        <ul class='list' {{sortableGroup onChange=this.setItems}} ...attributes>
           {{#each @arrayField.children as |boxedElement i|}}
             <li
               class='editor'
@@ -178,9 +179,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               {{/if}}
               {{#let
                 (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  boxedElement
-                  @field
+                  (@cardTypeFor @field boxedElement) boxedElement @field
                 )
                 as |Item|
               }}
@@ -203,7 +202,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         </AddButton>
       {{/if}}
     </PermissionsConsumer>
-    <style>
+    <style scoped>
       .list {
         list-style: none;
         padding: 0;
@@ -222,13 +221,15 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .remove {
         --icon-color: var(--boxel-light);
+        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-dark);
         align-self: auto;
         outline: 0;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-dark);
-        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--boxel-highlight);
       }
       .remove:focus + :deep(.boxel-card-container.fitted-format),
       .remove:hover + :deep(.boxel-card-container.fitted-format) {
@@ -283,7 +284,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       {{#each @arrayField.children as |boxedElement i|}}
         {{#let
           (getBoxComponent
-            (this.args.cardTypeFor @field boxedElement) boxedElement @field
+            (@cardTypeFor @field boxedElement) boxedElement @field
           )
           as |Item|
         }}
@@ -317,7 +318,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         {{@field.card.displayName}}
       </AddButton>
     </div>
-    <style>
+    <style scoped>
       .boxel-pills {
         display: flex;
         flex-wrap: wrap;
@@ -441,7 +442,7 @@ export function getLinksToManyComponent({
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>
-      <style>
+      <style scoped>
         .linksToMany-field.fitted-effectiveFormat
           > .linksToMany-item
           + .linksToMany-item {

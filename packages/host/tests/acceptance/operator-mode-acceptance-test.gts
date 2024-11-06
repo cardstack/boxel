@@ -2,16 +2,12 @@ import {
   visit,
   currentURL,
   click,
-  triggerEvent,
   waitFor,
   fillIn,
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -33,19 +29,69 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../helpers';
-import {
-  MockMatrixService,
-  setupMatrixServiceMock,
-} from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
+
+let userResponseBody = {
+  data: {
+    type: 'user',
+    id: 1,
+    attributes: {
+      matrixUserId: '@testuser:staging',
+      stripeCustomerId: 'stripe-id-1',
+      creditsUsedInPlanAllowance: 0,
+      extraCreditsAvailableInBalance: 100,
+    },
+    relationships: {
+      subscription: {
+        data: {
+          type: 'subscription',
+          id: 1,
+        },
+      },
+    },
+  },
+  included: [
+    {
+      type: 'subscription',
+      id: 1,
+      attributes: {
+        startedAt: '2024-10-15T03:42:11.000Z',
+        endedAt: '2025-10-15T03:42:11.000Z',
+        status: 'active',
+      },
+      relationships: {
+        plan: {
+          data: {
+            type: 'plan',
+            id: 1,
+          },
+        },
+      },
+    },
+    {
+      type: 'plan',
+      id: 1,
+      attributes: {
+        name: 'Free',
+        monthlyPrice: 0,
+        creditsIncluded: 1000,
+      },
+    },
+  ],
+};
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
-  let { setExpiresInSec } = setupMatrixServiceMock(hooks);
+  let { setExpiresInSec } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setExpiresInSec(60 * 60);
@@ -77,6 +123,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     class Pet extends CardDef {
       static displayName = 'Pet';
+      static headerColor = '#355e3b';
       @field name = contains(StringField);
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
@@ -88,6 +135,26 @@ module('Acceptance | operator mode tests', function (hooks) {
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
           </h3>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div class='pet-isolated'>
+            <h2 data-test-pet-isolated={{@model.name}}>
+              <@fields.name />
+            </h2>
+          </div>
+          <style scoped>
+            .pet-isolated {
+              height: 100%;
+              background-color: #355e3b;
+            }
+            h2 {
+              margin: 0;
+              padding: 20px;
+              color: white;
+            }
+          </style>
         </template>
       };
     }
@@ -379,21 +446,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('visiting index card and entering operator mode', async function (assert) {
+  test('visiting operator mode', async function (assert) {
     await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
 
-    assert.strictEqual(currentURL(), '/');
-
-    // Enter operator mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
-    });
-
-    await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
 
@@ -428,40 +487,37 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
       submode: Submodes.Interact,
     });
-  });
 
-  test('can logout via profile info popover', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}employee.gts`,
+    await click(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    await percySnapshot(assert); /* snapshot for special styling */
+    assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Interact,
     });
-
-    await waitFor('[data-test-profile-icon-button]');
-    assert.dom('[data-test-profile-icon]').hasText('T');
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
-
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').exists();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
-
-    await click('[data-test-signout-button]');
-
-    assert.dom('[data-test-login-btn]').exists();
   });
 
   test('can access and save settings via profile info popover', async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        if (req.url.includes('_user')) {
+          return new Response(JSON.stringify(userResponseBody));
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
     await visitOperatorMode({
       stacks: [
         [
@@ -472,10 +528,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
 
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');
@@ -496,15 +548,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Name is required');
 
-    await fillIn('[data-test-display-name-field]', 'John');
+    await fillIn('[data-test-display-name-field]', 'MAKEMECRASH');
 
     assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-
-    let setDisplayNameOriginal = matrixService.setDisplayName;
-
-    matrixService.setDisplayName = async function () {
-      throw new Error('Boom!');
-    };
 
     await click('[data-test-profile-settings-save-button]');
 
@@ -512,8 +558,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-profile-save-error]')
       .hasText('Failed to save profile. Please try again.');
 
-    matrixService.setDisplayName = setDisplayNameOriginal;
-
+    await fillIn('[data-test-display-name-field]', 'John');
     await click('[data-test-profile-settings-save-button]');
 
     assert.dom('[data-test-profile-save-error]').doesNotExist();
@@ -567,6 +612,133 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+  });
+
+  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        let isOnWorkspaceChooser = document.querySelector(
+          '[data-test-workspace-chooser]',
+        );
+        if (isOnWorkspaceChooser && req.url.includes('_info')) {
+          assert
+            .dom(
+              `[data-test-workspace-list] [data-test-workspace-loading-indicator]`,
+            )
+            .exists();
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+    assert.dom('[data-test-submode-layout-title]').doesNotExist();
+    assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    let url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    let urlParameters = new URLSearchParams(url);
+    assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
+
+    await click('[data-test-workspace-chooser-toggle]');
+
+    assert.dom('[data-test-submode-layout-title]').exists();
+    assert.dom('[data-test-workspace-chooser]').exists();
+    assert
+      .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
+      .doesNotExist();
+
+    url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    urlParameters = new URLSearchParams(url);
+    assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
+    await percySnapshot(assert);
+  });
+
+  test('check code mode states when switching between workspaces', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+
+    await click('[data-test-file-browser-toggle]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
+
+    await click('[data-test-file="boom-person.gts"]');
+    await click('[data-test-file="Person/fadhlan.json"]');
+    await click('[data-test-directory="Pet/"]');
+    await click('[data-test-file="Pet/mango.json"]');
+    await click('[data-test-file="Pet/vangogh.json"]');
+    assert.dom('[data-test-recent-file]').exists({ count: 3 });
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Person/fadhlan.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}boom-person.gts"]`)
+      .exists();
+
+    await click('[data-test-workspace-chooser-toggle]');
+    await click('[data-test-workspace="Boxel Catalog"]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Boxel Catalog');
+    assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
+    assert.dom('[data-test-recent-file]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Person/fadhlan.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}boom-person.gts"]`)
+      .exists();
+
+    await click('[data-test-workspace-chooser-toggle]');
+    await click('[data-test-workspace="Test Workspace B"]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
+    assert.dom(`[data-test-file="Pet/vangogh.json"]`).hasClass('selected');
+    assert.dom('[data-test-recent-file]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-recent-file="http://localhost:4201/catalog/index.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Person/fadhlan.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}boom-person.gts"]`)
+      .exists();
   });
 
   module('2 stacks', function () {
@@ -631,14 +803,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      // Enter operator mode
-      await triggerEvent(document.body, 'keydown', {
-        code: 'Key.',
-        key: '.',
-        ctrlKey: true,
-      });
-
-      await waitFor('[data-test-operator-mode-stack]');
       let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
       await waitUntil(
         () =>
@@ -654,5 +818,88 @@ module('Acceptance | operator mode tests', function (hooks) {
         'new session token is different than original session token',
       );
     });
+  });
+
+  test(`displays credit info in account popover`, async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        if (req.url.includes('_user')) {
+          return new Response(JSON.stringify(userResponseBody));
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+
+    await waitFor('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-icon]').hasText('T');
+    assert
+      .dom('[data-test-profile-icon]')
+      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
+
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+
+    await click('[data-test-profile-icon-button]');
+
+    assert.dom('[data-test-profile-popover]').exists();
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('100');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-upgrade-plan-button]').exists();
+    assert.dom('[data-test-buy-more-credits]').exists();
+    assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+
+    await click('[data-test-upgrade-plan-button]');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
+
+    await click('[aria-label="close modal"]');
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-popover]').exists();
+    await click('[data-test-buy-more-credits] button');
+    assert.dom('[data-test-profile-popover]').doesNotExist();
+    assert.dom('[data-test-boxel-card-container]').hasClass('profile-settings');
+
+    // out of credit
+    await click('[aria-label="close modal"]');
+
+    // out of monthly credit
+    userResponseBody.data.attributes.creditsUsedInPlanAllowance = 1000;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('100');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+    await click('[data-test-profile-icon-button]');
+
+    // out of monthly credit and additional credit
+    userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('0');
+    assert.dom('[data-test-additional-credit]').hasClass('out-of-credit');
+    assert.dom('[data-test-buy-more-credits]').hasClass('out-of-credit');
+    await click('[data-test-profile-icon-button]');
+
+    // out of additional credit
+    userResponseBody.data.attributes.creditsUsedInPlanAllowance = 0;
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-membership-tier]').hasText('Free');
+    assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
+    assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-additional-credit]').hasText('0');
+    assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+    assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
   });
 });

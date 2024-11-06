@@ -13,7 +13,6 @@ import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -72,14 +71,13 @@ import {
   ReadOnlyField,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
@@ -595,9 +593,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
-      assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
-        .exists();
+      assert.dom('[data-test-driver] [data-test-card-type-icon]').exists();
 
       await percySnapshot(assert);
     });
@@ -1264,15 +1260,17 @@ module('Integration | card-basics', function (hooks) {
         .hasStyle({ margin: '10px' });
     });
 
-    test('render whole composite field', async function (assert) {
+    test('render whole composite contains field', async function (assert) {
       class Person extends FieldDef {
-        @field firstName = contains(StringField);
         @field title = contains(StringField);
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
         @field number = contains(NumberField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
             <div data-test-embedded-person><@fields.title />
               <@fields.firstName />
+              <@fields.lastName />
               <@fields.number /></div>
           </template>
         };
@@ -1280,23 +1278,40 @@ module('Integration | card-basics', function (hooks) {
 
       class Post extends CardDef {
         @field author = contains(Person);
+        @field body = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
-            <div data-test><@fields.author /></div>
+            <div data-test-title><@fields.title /></div>
+            {{! template-lint-disable no-inline-styles }}
+            <div data-test-author><@fields.author style='width: 120px' /></div>
+            <div data-test-body><@fields.body /></div>
           </template>
         };
       }
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
+        title: 'This is My First Post',
         author: new Person({
           firstName: 'Arthur',
+          lastName: 'Mephistophoclesiasticallious',
           title: 'Mr',
           number: 10,
         }),
+        body: 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       });
       await renderCard(loader, helloWorld, 'isolated');
-      assert.dom('[data-test-embedded-person]').containsText('Mr Arthur 10');
+      assert
+        .dom(
+          '[data-test-compound-field-format="embedded"] [data-test-embedded-person]',
+        )
+        .exists();
+      assert
+        .dom('[data-test-compound-field-format="embedded"]')
+        .hasStyle({ width: '120px' });
+      assert
+        .dom('[data-test-embedded-person]')
+        .containsText('Mr Arthur Mephistophoclesiasticallious 10');
     });
 
     test('render nested composite field', async function (assert) {
@@ -1426,7 +1441,7 @@ module('Integration | card-basics', function (hooks) {
               <@fields.firstName />
               <@fields.age />
             </div>
-            <style>
+            <style scoped>
               .name {
                 color: red;
                 font-weight: bold;
@@ -1489,9 +1504,18 @@ module('Integration | card-basics', function (hooks) {
     test('render a containsMany composite field', async function (this: RenderingTestContext, assert) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <div data-test-person-firstName><@fields.firstName /></div>
+            {{! template-lint-disable no-inline-styles }}
+            <div
+              data-test-person-firstName
+              style='height: 12px'
+            ><@fields.firstName /></div>
+            <div
+              data-test-person-lastName
+              style='height: 20px'
+            ><@fields.lastName /></div>
           </template>
         };
       }
@@ -1508,12 +1532,12 @@ module('Integration | card-basics', function (hooks) {
 
       let abdelRahmans = new Family({
         people: [
-          new Person({ firstName: 'Mango' }),
-          new Person({ firstName: 'Van Gogh' }),
-          new Person({ firstName: 'Hassan' }),
-          new Person({ firstName: 'Mariko' }),
-          new Person({ firstName: 'Yume' }),
-          new Person({ firstName: 'Sakura' }),
+          new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Van Gogh', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Hassan', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Mariko', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Yume', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Sakura', lastName: 'Abdel-Rahman' }),
         ],
       });
 
@@ -1524,6 +1548,12 @@ module('Integration | card-basics', function (hooks) {
         ),
         ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
       );
+      assert
+        .dom('[data-test-compound-field-format="embedded"]')
+        .exists({ count: 6 });
+      assert
+        .dom('[data-test-plural-view-item="1"]')
+        .hasStyle({ height: '32px' });
     });
 
     test('can #each over a containsMany primitive @fields', async function (assert) {
@@ -1643,7 +1673,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
       assert
         .dom('[data-test-card-format="fitted"]:nth-child(2)')
-        .hasStyle({ marginTop: '20px' });
+        .hasStyle({ marginTop: '16px' });
     });
 
     test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
@@ -1897,6 +1927,9 @@ module('Integration | card-basics', function (hooks) {
 
       await renderCard(loader, helloWorld, 'edit');
       assert.dom('[data-test-field="title"]').hasText('Title');
+      assert
+        .dom('[data-test-field="title"] .boxel-field__icon')
+        .hasClass('icon-tabler-letter-case');
       assert.dom('[data-test-field="title"] input').hasValue('My Post');
       assert
         .dom(
@@ -1906,6 +1939,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="author"] [data-test-field="firstName"] input')
         .hasValue('Arthur');
+      assert
+        .dom('[data-test-field="author"] .boxel-field__icon')
+        .hasClass('lucide-rectangle-ellipsis');
 
       await fillIn('[data-test-field="title"] input', 'New Post');
       await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
@@ -2725,7 +2761,7 @@ function fittedViewDriver() {
           </div>
         </div>
 
-        <style>
+        <style scoped>
           .card {
             /* this is how a border would appear around a card.
              note that a card is not supposed to draw its own border
@@ -2738,7 +2774,7 @@ function fittedViewDriver() {
             margin: 2rem;
           }
           .header {
-            font: 700 var(--boxel-font-lg);
+            font: 600 var(--boxel-font-lg);
           }
           .item {
             padding-bottom: 1rem;

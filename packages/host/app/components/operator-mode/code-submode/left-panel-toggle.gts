@@ -32,12 +32,12 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
   >
     {{yield}}
   </Button>
-  <style>
+  <style scoped>
     .toggle-button {
       --boxel-button-border: 1px solid var(--boxel-400);
-      --boxel-button-font: 700 var(--boxel-font-xs);
+      --boxel-button-font: 600 var(--boxel-font-xs);
       --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-      --boxel-button-min-width: 6rem;
+      --boxel-button-min-width: 4rem;
       --boxel-button-padding: 0;
       border-radius: var(--boxel-border-radius);
       flex: 1;
@@ -112,7 +112,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
       as |InnerContainerContent|
     >
       <header
-        class='header'
+        class='left-panel-header'
         aria-label={{this.fileViewTitle}}
         data-test-file-view-header
       >
@@ -141,6 +141,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           container=this.scrollPositionContainer
           key=this.scrollPositionKey
         }}
+        data-test-card-inspector-panel={{not this.isFileTreeShowing}}
       >
         {{#if this.isFileTreeShowing}}
           {{yield to='browser'}}
@@ -150,18 +151,19 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
       </InnerContainerContent>
     </InnerContainer>
 
-    <style>
-      .header {
+    <style scoped>
+      .left-panel {
+        background-color: var(--code-mode-panel-background-color);
+      }
+      .left-panel-header {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-200);
-      }
-      .content {
-        background: var(--boxel-200);
+        border-bottom: var(--boxel-border);
       }
       .file-browser .content {
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
       }
     </style>
   </template>

@@ -1,8 +1,6 @@
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
-import { createHash } from 'crypto';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
-import path from 'path';
+import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import copy from 'rollup-plugin-copy';
 
 const addon = new Addon({
@@ -56,7 +54,7 @@ export default {
 
     // addons are allowed to contain imports of .css files, which we want rollup
     // to leave alone and keep in the published output.
-    addon.keepAssets(['styles/*']),
+    addon.keepAssets(['styles/*', '**/*.webp']),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean({ runOnce: true }),
@@ -81,43 +79,3 @@ export default {
     handler(level, log);
   },
 };
-
-function scopedCSS(srcDir) {
-  return {
-    name: 'scoped-css',
-    resolveId(source, importer) {
-      if (!isScopedCSSRequest(source)) {
-        return null;
-      }
-      let hash = createHash('md5');
-      let fullSrcDir = path.resolve(srcDir);
-      let localPath = path.relative(fullSrcDir, importer);
-      hash.update(source);
-      let cssFileName = hash.digest('hex').slice(0, 10) + '.css';
-      let dir = path.dirname(localPath);
-      let cssAndFile = decodeScopedCSSRequest(source);
-      return {
-        id: path.resolve(path.dirname(importer), cssFileName),
-        meta: {
-          'scoped-css': {
-            css: cssAndFile.css,
-            fileName: path.join(dir, cssFileName),
-          },
-        },
-        external: 'relative',
-      };
-    },
-    generateBundle() {
-      for (const moduleId of this.getModuleIds()) {
-        let info = this.getModuleInfo(moduleId);
-        if (info.meta['scoped-css']) {
-          this.emitFile({
-            type: 'asset',
-            fileName: info.meta['scoped-css'].fileName,
-            source: info.meta['scoped-css'].css,
-          });
-        }
-      }
-    },
-  };
-}

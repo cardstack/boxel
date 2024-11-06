@@ -63,144 +63,125 @@ export default class OperatorModeOverlays extends Component<Signature> {
         (this.isSelected renderedCard.cardDefOrId)
         as |cardDefOrId cardId isSelected|
       }}
-        <div
-          class={{cn
-            'actions-overlay'
-            selected=isSelected
-            hovered=(this.isHovered renderedCard)
-          }}
-          {{velcro renderedCard.element middleware=(Array this.offset)}}
-          data-test-overlay-selected={{if
-            isSelected
-            (removeFileExtension cardId)
-          }}
-          data-test-overlay-card={{removeFileExtension cardId}}
-          style={{this.zIndexStyle renderedCard.element}}
-          {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
-          {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-          ...attributes
-        >
-          <div class={{cn 'actions' field=(this.isField renderedCard)}}>
-            {{#if (this.isButtonDisplayed 'select' renderedCard)}}
-              <div class='actions-item select'>
-                <IconButton
-                  class='actions-item__button'
-                  {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
-                  {{on 'click' (fn @toggleSelect cardDefOrId)}}
-                  @width='100%'
-                  @height='100%'
-                  @icon={{if isSelected IconCircleSelected IconCircle}}
-                  aria-label='select card'
-                  data-test-overlay-select={{(removeFileExtension cardId)}}
-                />
-              </div>
-            {{/if}}
-            {{#if
-              (or
-                (this.isButtonDisplayed 'edit' renderedCard)
-                (this.isButtonDisplayed 'more-options' renderedCard)
-              )
+        {{#if (or isSelected (this.isHovered renderedCard))}}
+          <div
+            class={{cn
+              'actions-overlay'
+              selected=isSelected
+              hovered=(this.isHovered renderedCard)
             }}
-              <div class='actions-item'>
-                {{#if (this.isButtonDisplayed 'edit' renderedCard)}}
+            {{velcro renderedCard.element middleware=(array this.offset)}}
+            data-test-overlay-selected={{if
+              isSelected
+              (removeFileExtension cardId)
+            }}
+            data-test-overlay-card={{removeFileExtension cardId}}
+            style={{renderedCard.overlayZIndexStyle}}
+            ...attributes
+          >
+            <div class={{cn 'actions' field=(this.isField renderedCard)}}>
+              {{#if (this.isButtonDisplayed 'select' renderedCard)}}
+                <div class='actions-item select'>
                   <IconButton
-                    @icon={{IconPencil}}
+                    class='actions-item__button'
+                    {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
+                    {{on 'click' (fn @toggleSelect cardDefOrId)}}
                     @width='100%'
                     @height='100%'
-                    class='actions-item__button'
-                    aria-label='Edit'
-                    data-test-overlay-edit
-                    {{on
-                      'click'
-                      (fn
-                        this.openOrSelectCard
-                        cardDefOrId
-                        'edit'
-                        renderedCard.fieldType
-                        renderedCard.fieldName
-                      )
-                    }}
+                    @icon={{if isSelected IconCircleSelected IconCircle}}
+                    aria-label='select card'
+                    data-test-overlay-select={{(removeFileExtension cardId)}}
                   />
-                {{/if}}
-                {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
-                  <div>
-                    <BoxelDropdown
-                      @registerAPI={{(this.registerDropdownAPI renderedCard)}}
+                </div>
+              {{/if}}
+              {{#if
+                (or
+                  (this.isButtonDisplayed 'edit' renderedCard)
+                  (this.isButtonDisplayed 'more-options' renderedCard)
+                )
+              }}
+                <div class='actions-item'>
+                  {{#if (this.isButtonDisplayed 'edit' renderedCard)}}
+                    <IconButton
+                      @icon={{IconPencil}}
+                      @width='100%'
+                      @height='100%'
+                      class='actions-item__button'
+                      aria-label='Edit'
+                      data-test-overlay-edit
                       {{on
-                        'mouseenter'
-                        (fn this.setCurrentlyHoveredCard renderedCard)
+                        'click'
+                        (fn
+                          this.openOrSelectCard
+                          cardDefOrId
+                          'edit'
+                          renderedCard.fieldType
+                          renderedCard.fieldName
+                        )
                       }}
-                      {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-                    >
-                      <:trigger as |bindings|>
-                        <Tooltip @placement='top'>
-                          <:trigger>
-                            <IconButton
-                              @icon={{ThreeDotsHorizontal}}
-                              @width='auto'
-                              @height='auto'
-                              class='actions-item__button'
-                              aria-label='Options'
-                              data-test-overlay-more-options
-                              {{bindings}}
+                    />
+                  {{/if}}
+                  {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
+                    <div>
+                      <BoxelDropdown
+                        @registerAPI={{(this.registerDropdownAPI renderedCard)}}
+                      >
+                        <:trigger as |bindings|>
+                          <Tooltip @placement='top'>
+                            <:trigger>
+                              <IconButton
+                                @icon={{ThreeDotsHorizontal}}
+                                @width='100%'
+                                @height='100%'
+                                class='actions-item__button'
+                                aria-label='Options'
+                                data-test-overlay-more-options
+                                {{bindings}}
+                              />
+                            </:trigger>
+                            <:content>
+                              More Options
+                            </:content>
+                          </Tooltip>
+                        </:trigger>
+                        <:content as |dd|>
+                          {{#if (this.isMenuDisplayed 'view' renderedCard)}}
+                            <Menu
+                              @closeMenu={{dd.close}}
+                              @items={{array
+                                (menuItem
+                                  'View card'
+                                  (fn this.openOrSelectCard cardDefOrId)
+                                )
+                              }}
                             />
-                          </:trigger>
-                          <:content>
-                            More Options
-                          </:content>
-                        </Tooltip>
-                      </:trigger>
-                      <:content as |dd|>
-                        {{#if (this.isMenuDisplayed 'view' renderedCard)}}
-                          <Menu
-                            @closeMenu={{dd.close}}
-                            @items={{array
-                              (menuItem
-                                'View card'
-                                (fn this.openOrSelectCard cardDefOrId)
-                              )
-                            }}
-                            {{on
-                              'mouseenter'
-                              (fn this.setCurrentlyHoveredCard renderedCard)
-                            }}
-                            {{on
-                              'mouseleave'
-                              (fn this.setCurrentlyHoveredCard null)
-                            }}
-                          />
-                        {{else if (this.isMenuDisplayed 'delete' renderedCard)}}
-                          <Menu
-                            @closeMenu={{dd.close}}
-                            @items={{array
-                              (menuItem
-                                'Delete'
-                                (fn @publicAPI.delete cardDefOrId)
-                                icon=IconTrash
-                                dangerous=true
-                              )
-                            }}
-                            {{on
-                              'mouseenter'
-                              (fn this.setCurrentlyHoveredCard renderedCard)
-                            }}
-                            {{on
-                              'mouseleave'
-                              (fn this.setCurrentlyHoveredCard null)
-                            }}
-                          />
-                        {{/if}}
-                      </:content>
-                    </BoxelDropdown>
-                  </div>
-                {{/if}}
-              </div>
-            {{/if}}
+                          {{else if
+                            (this.isMenuDisplayed 'delete' renderedCard)
+                          }}
+                            <Menu
+                              @closeMenu={{dd.close}}
+                              @items={{array
+                                (menuItem
+                                  'Delete'
+                                  (fn @publicAPI.delete cardDefOrId)
+                                  icon=IconTrash
+                                  dangerous=true
+                                )
+                              }}
+                            />
+                          {{/if}}
+                        </:content>
+                      </BoxelDropdown>
+                    </div>
+                  {{/if}}
+                </div>
+              {{/if}}
+            </div>
           </div>
-        </div>
+        {{/if}}
       {{/let}}
     {{/each}}
-    <style>
+    <style scoped>
       :global(:root) {
         --overlay-fitted-card-header-height: 2.5rem;
       }
@@ -334,7 +315,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         align-items: center;
         background: var(--boxel-light);
         border: 1px solid var(--boxel-450);
-        border-radius: 5px;
+        border-radius: var(--boxel-border-radius-sm);
         gap: var(--boxel-sp-xxxs);
         box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
       }
@@ -349,7 +330,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .actions-item__button:hover {
         --icon-bg: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-cyan);
+        background-color: var(--boxel-highlight);
       }
       .selected .actions-item.select {
         visibility: visible;
@@ -401,12 +382,23 @@ export default class OperatorModeOverlays extends Component<Signature> {
       renderedCard.element.addEventListener(
         'mouseenter',
         // eslint-disable-next-line ember/no-side-effects
-        (_e: MouseEvent) => this.setCurrentlyHoveredCard(renderedCard),
+        (_ev: MouseEvent) => {
+          if (this.currentlyHoveredCard === renderedCard) {
+            return;
+          }
+          this.setCurrentlyHoveredCard(renderedCard);
+        },
       );
       renderedCard.element.addEventListener(
         'mouseleave',
         // eslint-disable-next-line ember/no-side-effects
-        (_e: MouseEvent) => this.setCurrentlyHoveredCard(null),
+        (ev: MouseEvent) => {
+          let relatedTarget = ev.relatedTarget as HTMLElement;
+          if (relatedTarget?.closest?.('.actions-overlay')) {
+            return;
+          }
+          this.setCurrentlyHoveredCard(null);
+        },
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
@@ -420,6 +412,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
+      renderedCard.overlayZIndexStyle = this.zIndexStyle(renderedCard.element);
     }
 
     return renderedCards;
@@ -557,7 +550,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
         return;
       }
 
-      await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
+      await this.args.publicAPI.viewCard(card, format, {
+        fieldType,
+        fieldName,
+      });
     },
   );
 

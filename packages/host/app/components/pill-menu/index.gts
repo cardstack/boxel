@@ -10,7 +10,11 @@ import { restartableTask } from 'ember-concurrency';
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
 import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 
-import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  baseCardRef,
+  type CardCatalogQuery,
+} from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
@@ -30,7 +34,7 @@ interface Signature {
     isExpandableHeader?: boolean;
     headerAction?: () => void;
     canAttachCard?: boolean;
-    query?: Query;
+    query?: CardCatalogQuery;
     onChooseCard?: (card: CardDef) => void;
   };
   Blocks: {
@@ -112,7 +116,7 @@ export default class PillMenu extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .pill-menu {
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);
@@ -135,7 +139,7 @@ export default class PillMenu extends Component<Signature> {
         overflow: hidden;
       }
       .menu-header :deep(.title) {
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
       }
       .header-button {
         margin: var(--button-outline);
@@ -143,7 +147,7 @@ export default class PillMenu extends Component<Signature> {
         background: none;
         border: none;
         border-radius: var(--boxel-border-radius-xl);
-        font: 700 var(--boxel-font-xs);
+        font: 600 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
         display: flex;
         align-items: center;
@@ -184,15 +188,13 @@ export default class PillMenu extends Component<Signature> {
         max-width: initial;
       }
       .add-button {
-        --icon-color: var(--boxel-highlight);
         width: max-content;
         margin: var(--button-outline);
         padding: var(--pill-menu-spacing);
         background: none;
         box-shadow: none;
         border-radius: var(--boxel-border-radius-xl);
-        color: var(--boxel-highlight);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         transition: color var(--boxel-transition);
       }

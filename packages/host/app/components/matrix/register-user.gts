@@ -204,9 +204,9 @@ export default class RegisterUser extends Component<Signature> {
         >Login with an existing account</Button>
       </div>
     {{/if}}
-    <style>
+    <style scoped>
       .title {
-        font: 700 var(--boxel-font-med);
+        font: 600 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);
       }
       .button-wrapper {
@@ -495,7 +495,7 @@ export default class RegisterUser extends Component<Signature> {
   @action
   private checkUsername() {
     if (!this.username) {
-      this.usernameError = 'User Name is missing';
+      this.usernameError = 'Username is missing';
     }
     this.checkUsernameAvailability.perform();
   }
@@ -503,14 +503,20 @@ export default class RegisterUser extends Component<Signature> {
   private checkUsernameAvailability = restartableTask(async () => {
     // Block usernames that may collide with realm or realm server API
     if (this.username.startsWith('_')) {
-      this.usernameError = 'User Name cannot start with an underscore';
+      this.usernameError = 'Username cannot start with an underscore';
+      return;
+    }
+
+    // Block usernames that may collide with realm users
+    if (this.username.startsWith('realm/')) {
+      this.usernameError = 'Username cannot start with "realm/"';
       return;
     }
 
     this.isUsernameAvailable =
       await this.matrixService.client.isUsernameAvailable(this.username);
     if (!this.isUsernameAvailable) {
-      this.usernameError = 'User Name is already taken';
+      this.usernameError = 'Username is already taken';
     }
   });
 
@@ -579,9 +585,10 @@ export default class RegisterUser extends Component<Signature> {
         console.log('Error verifying token', e);
 
         let extractedError = extractTokenErrorMessage(e);
-        let errorText = extractedError || e.message;
-
-        this.tokenError = `There was an error verifying token: ${errorText}`;
+        let errorText =
+          extractedError ||
+          'This registration token does not exist or has exceeded its usage limit.';
+        this.tokenError = errorText;
 
         if (!extractedError) {
           throw e;
@@ -700,7 +707,7 @@ export default class RegisterUser extends Component<Signature> {
             `invalid state: cannot doRegistrationFlow() with errcode '${e.errcode}' in state ${this.state.type}`,
           );
         }
-        this.usernameError = 'User Name is already taken';
+        this.usernameError = 'Username is already taken';
         this.state = { type: 'initial' };
       }
 
@@ -709,7 +716,7 @@ export default class RegisterUser extends Component<Signature> {
     // If access_token and device_id are present, RegisterResponse matches LoginResponse
     // except for the optional well_known field
     if (auth.access_token && auth.device_id) {
-      await this.matrixService.startAndSetDisplayName(
+      await this.matrixService.initializeNewUser(
         auth as LoginResponse,
         this.state.name,
       );

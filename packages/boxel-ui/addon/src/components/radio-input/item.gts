@@ -21,7 +21,7 @@ export interface Signature {
 }
 
 const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
-  <style>
+  <style scoped>
     .boxel-radio-option {
       position: relative;
       display: block;
@@ -122,7 +122,6 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   <label
     class={{cn
       'boxel-radio-option'
-      'boxel-radio-option--has-radio'
       boxel-radio-option--checked=@checked
       boxel-radio-option--disabled=@disabled
       boxel-radio-option--hidden-border=@hideBorder

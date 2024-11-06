@@ -2,13 +2,12 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, RealmIcon } from '@cardstack/boxel-ui/components';
 
 import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
 
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
@@ -44,7 +43,7 @@ export default class CardURLBar extends Component<Signature> {
       <div class='realm-info' data-test-card-url-bar-realm-info>
         {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
           <div class='realm-icon'>
-            <RealmIcon @realmInfo={{realmInfo}} />
+            <RealmIcon @realmInfo={{realmInfo}} @canAnimate={{true}} />
           </div>
           <span>in {{realmInfo.name}}</span>
         {{/let}}
@@ -76,7 +75,7 @@ export default class CardURLBar extends Component<Signature> {
       {{/if}}
 
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --card-url-bar-width: 100%;
         --card-url-bar-height: var(--boxel-form-control-height);
@@ -123,9 +122,12 @@ export default class CardURLBar extends Component<Signature> {
 
         --icon-color: var(--boxel-light);
       }
-      .realm-icon img {
-        width: 20px;
-        height: 20px;
+      .realm-icon .realm-icon-img {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
+      }
+      .realm-icon .realm-icon-img::after {
+        border-radius: 0;
       }
       .input {
         display: flex;
@@ -133,7 +135,7 @@ export default class CardURLBar extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         width: 100%;
 
-        --icon-color: var(--boxel-cyan);
+        --icon-color: var(--boxel-highlight);
       }
       .error .input {
         --icon-color: var(--boxel-error-200);
@@ -181,7 +183,7 @@ export default class CardURLBar extends Component<Signature> {
         position: absolute;
         right: 0;
         margin-right: var(--boxel-sp-xxs);
-        font-weight: bold;
+        font-weight: 600;
         color: var(--boxel-highlight);
         border: none;
         background-color: transparent;

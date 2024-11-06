@@ -68,10 +68,10 @@ export default class FittedFormatGallery extends Component<Signature> {
       />
     </div>
     <div class='item'>
-      <div class='desc'>Aspect Ratio 0.2, 100px &times; 500px</div>
+      <div class='desc'>Aspect Ratio 0.375, 150px &times; 400px</div>
       <this.renderedCard
         @displayContainer={{true}}
-        style='width: 100px; height: 500px'
+        style='width: 150px; height: 400px'
       />
     </div>
     <div class='item'>
@@ -123,8 +123,14 @@ export default class FittedFormatGallery extends Component<Signature> {
         style='width: 300px; height: 115px'
       />
     </div>
+    <div class='item'>
+      <div class='desc'>Aspect Ratio 8.6, 500px &times; 58px</div>
+      <div class='card' style='width: 500px; height: 58px'>
+        <this.renderedCard />
+      </div>
+    </div>
 
-    <style>
+    <style scoped>
       .item {
         position: relative;
         padding: var(--boxel-sp);

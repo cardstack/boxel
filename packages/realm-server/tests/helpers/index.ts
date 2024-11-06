@@ -9,48 +9,92 @@ import {
   VirtualNetwork,
   Worker,
   RunnerOptionsManager,
-  type MatrixConfig,
-  type Queue,
-  type IndexRunner,
+  Loader,
+  fetcher,
+  maybeHandleScopedCSSRequest,
   insertPermissions,
+  IndexWriter,
+  type MatrixConfig,
+  type QueuePublisher,
+  type QueueRunner,
+  type IndexRunner,
 } from '@cardstack/runtime-common';
+import { dirSync } from 'tmp';
+import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmServer } from '../../server';
 import PgAdapter from '../../pg-adapter';
-import PgQueue from '../../pg-queue';
+import { PgQueueRunner, PgQueuePublisher } from '../../pg-queue';
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { shimExternals } from '../../lib/externals';
 
 export * from '@cardstack/runtime-common/helpers/indexer';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
+export const matrixURL = new URL('http://localhost:8008');
 const testMatrix: MatrixConfig = {
-  url: new URL(`http://localhost:8008`),
+  url: matrixURL,
   username: 'node-test_realm',
+};
+export const testRealmInfo = {
+  name: 'Test Realm',
+  backgroundURL: null,
+  iconURL: null,
+  showAsCatalog: null,
+  visibility: 'public',
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
-  url: new URL(`http://localhost:8008`),
+  url: matrixURL,
   username: 'node-test_realm-server',
 };
-export const realmSecretSeed = `shhh! it's a secret`;
+export const secretSeed = `shhh! it's a secret`;
+export const matrixRegistrationSecret: string =
+  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
-let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
+export const seedPath = resolve(
+  join(__dirname, '..', '..', '..', 'seed-realm'),
+);
+const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 let manager = new RunnerOptionsManager();
 let fastbootState:
   | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
   | undefined;
 
+export function createVirtualNetworkAndLoader() {
+  let virtualNetwork = createVirtualNetwork();
+  let fetch = fetcher(virtualNetwork.fetch, [
+    async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    },
+  ]);
+  let loader = new Loader(fetch, virtualNetwork.resolveImport);
+  return { virtualNetwork, loader };
+}
+
+export function createVirtualNetwork() {
+  let virtualNetwork = new VirtualNetwork();
+  shimExternals(virtualNetwork);
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  return virtualNetwork;
+}
+
 export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
 }
 
+export async function closeServer(server: Server) {
+  await new Promise<void>((r) => server.close(() => r()));
+}
+
 type BeforeAfterCallback = (
   dbAdapter: PgAdapter,
-  queue: Queue,
+  publisher: QueuePublisher,
+  runner: QueueRunner,
 ) => Promise<void>;
 
 export function setupDB(
@@ -63,16 +107,19 @@ export function setupDB(
   } = {},
 ) {
   let dbAdapter: PgAdapter;
-  let queue: Queue;
+  let publisher: QueuePublisher;
+  let runner: QueueRunner;
 
   const runBeforeHook = async () => {
     prepareTestDB();
     dbAdapter = new PgAdapter();
-    queue = new PgQueue(dbAdapter);
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner(dbAdapter, 'test-worker');
   };
 
   const runAfterHook = async () => {
-    await queue?.destroy();
+    await publisher?.destroy();
+    await runner?.destroy();
     await dbAdapter?.close();
   };
 
@@ -88,11 +135,11 @@ export function setupDB(
     }
     hooks.before(async function () {
       await runBeforeHook();
-      await args.before!(dbAdapter, queue);
+      await args.before!(dbAdapter, publisher, runner);
     });
 
     hooks.after(async function () {
-      await args.after?.(dbAdapter, queue);
+      await args.after?.(dbAdapter, publisher, runner);
       await runAfterHook();
     });
   }
@@ -105,14 +152,24 @@ export function setupDB(
     }
     hooks.beforeEach(async function () {
       await runBeforeHook();
-      await args.beforeEach!(dbAdapter, queue);
+      await args.beforeEach!(dbAdapter, publisher, runner);
     });
 
     hooks.afterEach(async function () {
-      await args.afterEach?.(dbAdapter, queue);
+      await args.afterEach?.(dbAdapter, publisher, runner);
       await runAfterHook();
     });
   }
+}
+
+export async function getFastbootState() {
+  if (!fastbootState) {
+    fastbootState = await makeFastBootIndexRunner(
+      new URL(process.env.HOST_URL ?? 'http://localhost:4200/'),
+      manager.getOptions.bind(manager),
+    );
+  }
+  return fastbootState;
 }
 
 export async function createRealm({
@@ -121,9 +178,11 @@ export async function createRealm({
   realmURL = testRealm,
   permissions = { '*': ['read'] },
   virtualNetwork,
-  queue,
+  runner,
+  publisher,
   dbAdapter,
   matrixConfig = testMatrix,
+  withWorker,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -131,19 +190,16 @@ export async function createRealm({
   permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
   matrixConfig?: MatrixConfig;
-  queue: Queue;
+  publisher: QueuePublisher;
+  runner?: QueueRunner;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
+  // if you are creating a realm  to test it directly without a server, you can
+  // also specify `withWorker: true` to also include a worker with your realm
+  withWorker?: true;
 }): Promise<Realm> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
-  if (!fastbootState) {
-    fastbootState = await makeFastBootIndexRunner(
-      new URL('http://localhost:4200/'),
-      manager.getOptions.bind(manager),
-    );
-  }
-  let indexRunner = fastbootState.getRunner;
   for (let [filename, contents] of Object.entries(fileSystem)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);
@@ -154,132 +210,188 @@ export async function createRealm({
 
   let adapter = new NodeAdapter(dir);
   let worker: Worker | undefined;
+  if (withWorker) {
+    if (!runner) {
+      throw new Error(`must provider a QueueRunner when using withWorker`);
+    }
+    let indexRunner = (await getFastbootState()).getRunner;
+    worker = new Worker({
+      indexWriter: new IndexWriter(dbAdapter),
+      queue: runner,
+      runnerOptsManager: manager,
+      indexRunner,
+      virtualNetwork,
+      matrixURL: matrixConfig.url,
+      secretSeed,
+    });
+  }
   let realm = new Realm({
     url: realmURL,
     adapter,
-    getIndexHTML: fastbootState.getIndexHTML,
     matrix: matrixConfig,
-    realmSecretSeed: realmSecretSeed,
+    secretSeed,
     virtualNetwork,
     dbAdapter,
-    queue,
-    withIndexWriter: (indexWriter, loader) => {
-      worker = new Worker({
-        realmURL: new URL(realmURL!),
-        indexWriter,
-        queue,
-        realmAdapter: adapter,
-        runnerOptsManager: manager,
-        loader,
-        indexRunner,
-      });
-    },
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    queue: publisher,
   });
-  if (!worker) {
-    throw new Error(`worker for realm ${realmURL} was not created`);
+  if (worker) {
+    virtualNetwork.mount(realm.handle);
+    await worker.run();
   }
-  await worker.run();
   return realm;
 }
 
 export function setupBaseRealmServer(
   hooks: NestedHooks,
   virtualNetwork: VirtualNetwork,
+  matrixURL: URL,
 ) {
   let baseRealmServer: Server;
   setupDB(hooks, {
-    before: async (dbAdapter, queue) => {
+    before: async (dbAdapter, publisher, runner) => {
+      let dir = dirSync();
       baseRealmServer = await runBaseRealmServer(
         virtualNetwork,
-        queue,
+        publisher,
+        runner,
         dbAdapter,
+        matrixURL,
+        dir.name,
       );
     },
     after: async () => {
-      baseRealmServer.close();
+      await closeServer(baseRealmServer);
     },
   });
 }
 
 export async function runBaseRealmServer(
   virtualNetwork: VirtualNetwork,
-  queue: Queue,
+  publisher: QueuePublisher,
+  runner: QueueRunner,
   dbAdapter: PgAdapter,
+  matrixURL: URL,
+  realmsRootPath: string,
   permissions: RealmPermissions = { '*': ['read'] },
 ) {
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
+  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue: runner,
+    runnerOptsManager: manager,
+    indexRunner,
+    virtualNetwork,
+    matrixURL,
+    secretSeed,
+  });
   let testBaseRealm = await createRealm({
     dir: basePath,
     realmURL: baseRealm.url,
     virtualNetwork,
-    queue,
+    publisher,
     dbAdapter,
     permissions,
   });
+  // the base realm is public readable so it doesn't need a private network
   virtualNetwork.mount(testBaseRealm.handle);
+  await worker.run();
   await testBaseRealm.start();
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
+    seed: secretSeed,
   });
-  let testBaseRealmServer = new RealmServer(
-    [testBaseRealm],
+  let testBaseRealmServer = new RealmServer({
+    realms: [testBaseRealm],
     virtualNetwork,
     matrixClient,
-    realmSecretSeed,
-  );
+    secretSeed,
+    matrixRegistrationSecret,
+    realmsRootPath,
+    dbAdapter,
+    queue: publisher,
+    getIndexHTML,
+    serverURL: new URL(localBaseRealmURL.origin),
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+  });
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
 
 export async function runTestRealmServer({
-  dir,
+  testRealmDir,
+  realmsRootPath,
   fileSystem,
   realmURL,
   virtualNetwork,
-  queue,
+  publisher,
+  runner,
   dbAdapter,
   matrixConfig,
+  matrixURL,
   permissions = { '*': ['read'] },
 }: {
-  dir: string;
+  testRealmDir: string;
+  realmsRootPath: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL: URL;
   permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
-  queue: Queue;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
   dbAdapter: PgAdapter;
+  matrixURL: URL;
   matrixConfig?: MatrixConfig;
 }) {
+  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue: runner,
+    runnerOptsManager: manager,
+    indexRunner,
+    virtualNetwork,
+    matrixURL,
+    secretSeed,
+  });
+  await worker.run();
   let testRealm = await createRealm({
-    dir,
+    dir: testRealmDir,
     fileSystem,
     realmURL: realmURL.href,
     permissions,
     virtualNetwork,
     matrixConfig,
-    queue,
+    publisher,
     dbAdapter,
   });
   virtualNetwork.mount(testRealm.handle);
-  await testRealm.start();
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
+    seed: secretSeed,
   });
-  let testRealmServer = new RealmServer(
-    [testRealm],
+  let testRealmServer = new RealmServer({
+    realms: [testRealm],
     virtualNetwork,
     matrixClient,
-    realmSecretSeed,
-  ).listen(parseInt(realmURL.port));
+    secretSeed,
+    matrixRegistrationSecret,
+    realmsRootPath,
+    dbAdapter,
+    queue: publisher,
+    getIndexHTML,
+    seedPath,
+    serverURL: new URL(realmURL.origin),
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+  });
+  let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  await testRealmServer.start();
   return {
     testRealm,
     testRealmServer,
+    testRealmHttpServer,
   };
 }
 

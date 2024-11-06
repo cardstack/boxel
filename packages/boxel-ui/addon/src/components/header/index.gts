@@ -8,7 +8,6 @@ interface Signature {
   Args: {
     hasBackground?: boolean;
     hasBottomBorder?: boolean;
-    isHighlighted?: boolean;
     size?: 'large';
     subtitle?: string;
     title?: string;
@@ -26,7 +25,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
       has-background=@hasBackground
-      highlighted=@isHighlighted
       large=(eq @size 'large')
       hasBottomBorder=@hasBottomBorder
     }}
@@ -66,7 +64,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/if}}
   </header>
-  <style>
+  <style scoped>
     @layer {
       header {
         --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
@@ -81,7 +79,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         border-top-left-radius: calc(
           var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
         );
-        font: var(--boxel-header-font-weight, 700)
+        font: var(--boxel-header-font-weight, 600)
           var(--boxel-header-text-font, var(--boxel-font-sm));
         letter-spacing: var(--boxel-header-letter-spacing, normal);
         text-transform: var(--boxel-header-text-transform);
@@ -108,7 +106,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       }
       .large {
         padding: var(--boxel-header-padding, var(--boxel-sp-xl));
-        font: var(--boxel-header-font-weight, 700)
+        font: var(--boxel-header-font-weight, 600)
           var(--boxel-header-text-font, var(--boxel-font-lg));
       }
       .hasBottomBorder {
@@ -120,9 +118,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
           --boxel-header-background-color,
           var(--boxel-100)
         );
-      }
-      .highlighted {
-        background-color: var(--boxel-highlight);
       }
       .content {
         display: flex;

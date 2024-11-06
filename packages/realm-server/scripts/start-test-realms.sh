@@ -1,11 +1,13 @@
 #! /bin/sh
-check_postgres_ready() {
-  docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1
-}
-while ! check_postgres_ready; do
-  printf '.'
-  sleep 1
-done
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/wait-for-pg.sh"
+
+wait_for_postgres
+
+if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
+  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  export MATRIX_REGISTRATION_SHARED_SECRET
+fi
 
 NODE_ENV=test \
   PGPORT=5435 \
@@ -14,26 +16,21 @@ NODE_ENV=test \
   REALM_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  REALM_SERVER_MATRIX_PASSWORD=password \
-  PGPORT="5435" \
   ts-node \
   --transpileOnly main \
   --port=4202 \
+  --matrixURL='http://localhost:8008' \
+  --realmsRootPath='./realms/localhost_4202' \
+  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='./tests/cards' \
-  --matrixURL='http://localhost:8008' \
   --username='node-test_realm' \
-  --password='password' \
   --fromUrl='/node-test/' \
   --toUrl='/node-test/' \
   \
   --path='../host/tests/cards' \
-  --matrixURL='http://localhost:8008' \
   --username='test_realm' \
-  --password='password' \
   --fromUrl='/test/' \
   --toUrl='/test/' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/' \
-  \
-  --useTestingDomain
+  --toUrl='http://localhost:4201/base/'

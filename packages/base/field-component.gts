@@ -27,7 +27,7 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
 import { isEqual } from 'lodash';
 import { initSharedState } from './shared-state';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 
@@ -129,24 +129,11 @@ export function getBoxComponent(
     userFormat: Format | undefined,
     defaultFormats: FieldFormats,
   ): FieldFormats {
-    let result: FieldFormats;
     let availableFormats = formats;
-    let effectiveDefaultFormats = { ...defaultFormats };
-    if (field?.computeVia) {
-      availableFormats = formats.filter(
-        (f) => !['isolated', 'edit'].includes(f),
-      );
-      if (!availableFormats.includes(effectiveDefaultFormats.fieldDef)) {
-        effectiveDefaultFormats.fieldDef = 'embedded';
-      }
-      if (!availableFormats.includes(effectiveDefaultFormats.cardDef)) {
-        effectiveDefaultFormats.cardDef = 'fitted';
-      }
-    }
-    result =
+    let result: FieldFormats =
       userFormat && availableFormats.includes(userFormat)
         ? { fieldDef: userFormat, cardDef: userFormat }
-        : effectiveDefaultFormats;
+        : defaultFormats;
     return result;
   }
 
@@ -218,36 +205,42 @@ export function getBoxComponent(
               as |c displayContainer|
             }}
               {{#if (isCard model.value)}}
-                <DefaultFormatsProvider
-                  @value={{defaultFieldFormats effectiveFormats.cardDef}}
-                >
-                  <CardContainer
-                    @displayBoundaries={{displayContainer}}
-                    class='field-component-card
-                      {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
-                    {{context.cardComponentModifier
-                      card=model.value
-                      format=effectiveFormats.cardDef
-                      fieldType=field.fieldType
-                      fieldName=field.name
-                    }}
-                    data-test-card-format={{effectiveFormats.cardDef}}
-                    data-test-field-component-card
-                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                    ...attributes
+                {{#let model.value as |card|}}
+                  <DefaultFormatsProvider
+                    @value={{defaultFieldFormats effectiveFormats.cardDef}}
                   >
-                    <c.CardOrFieldFormatComponent
-                      @cardOrField={{cardOrField}}
-                      @model={{model.value}}
-                      @fields={{c.fields}}
-                      @format={{effectiveFormats.cardDef}}
-                      @set={{model.set}}
-                      @fieldName={{model.name}}
-                      @context={{context}}
-                      @canEdit={{permissions.canWrite}}
-                    />
-                  </CardContainer>
-                </DefaultFormatsProvider>
+                    <CardContainer
+                      @displayBoundaries={{displayContainer}}
+                      class='field-component-card
+                        {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
+                      {{context.cardComponentModifier
+                        card=card
+                        format=effectiveFormats.cardDef
+                        fieldType=field.fieldType
+                        fieldName=field.name
+                      }}
+                      data-test-card={{card.id}}
+                      data-test-card-format={{effectiveFormats.cardDef}}
+                      data-test-field-component-card
+                      {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+                      ...attributes
+                    >
+                      <c.CardOrFieldFormatComponent
+                        @cardOrField={{cardOrField}}
+                        @model={{card}}
+                        @fields={{c.fields}}
+                        @format={{effectiveFormats.cardDef}}
+                        @set={{model.set}}
+                        @fieldName={{model.name}}
+                        @context={{context}}
+                        @canEdit={{and
+                          (not field.computeVia)
+                          permissions.canWrite
+                        }}
+                      />
+                    </CardContainer>
+                  </DefaultFormatsProvider>
+                {{/let}}
               {{else if (isCompoundField model.value)}}
                 <DefaultFormatsProvider
                   @value={{defaultFieldFormats effectiveFormats.fieldDef}}
@@ -266,7 +259,10 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
-                      @canEdit={{permissions.canWrite}}
+                      @canEdit={{and
+                        (not field.computeVia)
+                        permissions.canWrite
+                      }}
                     />
                   </div>
                 </DefaultFormatsProvider>
@@ -282,7 +278,7 @@ export function getBoxComponent(
                     @set={{model.set}}
                     @fieldName={{model.name}}
                     @context={{context}}
-                    @canEdit={{permissions.canWrite}}
+                    @canEdit={{and (not field.computeVia) permissions.canWrite}}
                     ...attributes
                   />
                 </DefaultFormatsProvider>
@@ -292,7 +288,7 @@ export function getBoxComponent(
         </DefaultFormatsConsumer>
       </PermissionsConsumer>
     </CardContextConsumer>
-    <style>
+    <style scoped>
       .field-component-card.isolated-format {
         height: 100%;
       }
@@ -331,7 +327,7 @@ export function getBoxComponent(
         any styles that effect the inside of the card boundary into the CardDef's atom template
       */
       .field-component-card.atom-format {
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
 

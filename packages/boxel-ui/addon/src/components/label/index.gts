@@ -1,9 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
 
 interface Signature {
   Args: {
+    ellipsize?: boolean;
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
@@ -14,15 +16,20 @@ interface Signature {
 
 const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
-    <Tag class='boxel-label' ...attributes>
+    <Tag class={{cn 'boxel-label' ellipsize=@ellipsize}} ...attributes>
       {{yield}}
     </Tag>
   {{/let}}
-  <style>
+  <style scoped>
     .boxel-label {
       color: var(--boxel-label-color);
-      font: var(--boxel-label-font, 700 var(--boxel-font-sm));
+      font: var(--boxel-label-font, 600 var(--boxel-font-sm));
       letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
+    }
+    .ellipsize {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   </style>
 </template>;

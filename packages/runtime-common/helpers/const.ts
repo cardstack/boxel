@@ -4,4 +4,6 @@ export const testRealmInfo: RealmInfo = {
   name: 'Unnamed Workspace',
   backgroundURL: null,
   iconURL: null,
+  showAsCatalog: null,
+  visibility: 'public',
 };

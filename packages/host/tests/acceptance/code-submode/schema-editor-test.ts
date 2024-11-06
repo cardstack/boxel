@@ -6,8 +6,6 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
@@ -26,7 +24,8 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
@@ -67,7 +66,7 @@ const personCardSource = `
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -172,7 +171,7 @@ const friendCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -227,8 +226,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings
@@ -423,7 +424,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Check that realm icons in the schema editor are correct (card and its fields)
 
     let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
-    let realm2IconUrl = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+    let realm2IconUrl = 'https://boxel-images.boxel.ai/icons/cardstack.png';
 
     await waitFor(
       // using non test selectors to disambiguate what we are waiting for, as
@@ -532,6 +533,14 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
     assert.expect(18);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}person.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -656,6 +665,14 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.expect(10);
     let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}person.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -922,7 +939,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -986,7 +1003,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';

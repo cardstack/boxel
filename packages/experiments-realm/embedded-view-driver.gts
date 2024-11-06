@@ -4,11 +4,14 @@ import {
   CardDef,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import ViewIcon from '@cardstack/boxel-icons/view';
 
 export class EmbeddedViewDriver extends CardDef {
+  static icon = ViewIcon;
   @field card = linksTo(CardDef);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
+      {{! template-lint-disable no-inline-styles }}
       <div class='group'>
         <div class='header'>Aspect ratio &lt;= 1.0</div>
         <div class='item'>
@@ -105,10 +108,10 @@ export class EmbeddedViewDriver extends CardDef {
         </div>
       </div>
 
-      <style>
+      <style scoped>
         .card {
           /* this is how a border would appear around a card.
-             note that a card is not supposed to draw its own border 
+             note that a card is not supposed to draw its own border
           */
           box-shadow: 0 0 0 1px var(--boxel-light-500);
           overflow: hidden;

@@ -1,0 +1,106 @@
+name: Manual Deploy [vscode-boxel-tools]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  check-version:
+    name: Check for changes since last version update
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+      - name: Check for version change and subsequent modifications
+        id: check
+        run: |
+          PACKAGE_JSON="packages/vscode-boxel-tools/package.json"
+
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./$PACKAGE_JSON').version")
+          echo "Current version in package.json: $CURRENT_VERSION"
+
+          # Get latest version from VS Code Marketplace
+          MARKETPLACE_DATA=$(vsce show cardstack.boxel-tools --json)
+          MARKETPLACE_VERSION=$(echo "$MARKETPLACE_DATA" | jq -r '.versions[0].version')
+          echo "Marketplace version: $MARKETPLACE_VERSION"
+
+          if [ "$CURRENT_VERSION" = "$MARKETPLACE_VERSION" ]; then
+            echo "Error: The version in package.json ($CURRENT_VERSION) is the same as the Marketplace version. Please update the version before publishing."
+            exit 1
+          else
+            echo "Extension version has changed. Proceeding with check for relevant changes since then."
+            echo ""
+          fi
+
+          # Find the most recent commit that changed the version in package.json
+          LAST_VERSION_CHANGE=$(git rev-list -n 1 HEAD -- $PACKAGE_JSON | while read commit; do
+            if git show $commit:$PACKAGE_JSON | grep -q "\"version\": \"$CURRENT_VERSION\""; then
+              echo $commit
+              break
+            fi
+          done)
+
+          echo "Last version change commit: $LAST_VERSION_CHANGE"
+
+          if [ -z "$LAST_VERSION_CHANGE" ]; then
+            echo "Error: No version change found in git history. Will not publish."
+            exit 1
+          else
+            echo "Checking for changes since version was updated in $LAST_VERSION_CHANGE"
+            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/runtime-common/realm-auth-client.ts)
+            echo "Changes detected:"
+            echo "$CHANGES"
+
+            if [ -z "$CHANGES" ]; then
+              echo ""
+              echo "No changes detected since last version update. Proceeding with publish."
+              exit 0
+            else
+              git status
+              git diff
+              echo ""
+              echo "Error: Changes have been detected since the extension version was updated. Will not publish."
+              exit 1
+            fi
+          fi
+
+  publish:
+    name: Package and publish VS Code Boxel Tools extension
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Package
+        run: pnpm vscode:package
+        working-directory: packages/vscode-boxel-tools
+      - name: Publish
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            pnpm vscode:publish
+          else
+            pnpm vscode:publish:prerelease
+          fi
+        working-directory: packages/vscode-boxel-tools
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

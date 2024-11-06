@@ -24,7 +24,6 @@ interface LoginOptions {
   url?: string;
   expectFailure?: true;
   skipOpeningAssistant?: true;
-  skipOpeningOperatorMode?: true;
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -40,6 +39,16 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
   );
   await registerUser(
     synapse,
+    'seed_realm',
+    await realmPassword('seed_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'catalog_realm',
+    await realmPassword('catalog_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
     'test_realm',
     await realmPassword('test_realm', realmSecretSeed),
   );
@@ -48,20 +57,16 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     'node-test_realm',
     await realmPassword('node-test_realm', realmSecretSeed),
   );
+  await registerUser(
+    synapse,
+    'realm_server',
+    await realmPassword('realm_server', realmSecretSeed),
+  );
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
   await page.reload();
   await openAiAssistant(page);
-}
-
-export async function toggleOperatorMode(page: Page) {
-  let isOperatorMode = !!(await page.evaluate(() =>
-    document.querySelector('dialog.operator-mode'),
-  ));
-  if (!isOperatorMode) {
-    await page.locator('[data-test-operator-mode-btn]').click();
-  }
 }
 
 export async function openAiAssistant(page: Page) {
@@ -78,19 +83,27 @@ export async function openAiAssistant(page: Page) {
   ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
 }
 
-export async function openRoot(page: Page, url = testHost) {
-  await page.goto(url);
-  await expect(page.locator('.cards-grid')).toHaveCount(1);
-  let isOperatorMode = !!(await page.evaluate(() =>
-    document.querySelector('dialog.operator-mode'),
-  ));
-  if (!isOperatorMode) {
-    await page.keyboard.press('Control+,');
-  }
+export async function createRealm(
+  page: Page,
+  endpoint: string,
+  name = endpoint,
+) {
+  await page.locator('[data-test-add-workspace]').click();
+  await page.locator('[data-test-display-name-field]').fill(name);
+  await page.locator('[data-test-endpoint-field]').fill(endpoint);
+  await page.locator('[data-test-create-workspace-submit]').click();
+  await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
+  await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
+    0,
+  );
 }
 
-export async function clearLocalStorage(page: Page) {
-  await openRoot(page);
+export async function openRoot(page: Page, url = testHost) {
+  await page.goto(url);
+}
+
+export async function clearLocalStorage(page: Page, appURL = testHost) {
+  await openRoot(page, appURL);
   await page.evaluate(() => window.localStorage.clear());
 }
 
@@ -225,16 +238,16 @@ export async function validateEmailForResetPassword(
   return resetPasswordPage;
 }
 
-export async function gotoRegistration(page: Page) {
-  await openRoot(page);
-  await toggleOperatorMode(page);
+export async function gotoRegistration(page: Page, appURL = testHost) {
+  await openRoot(page, appURL);
+
   await page.locator('[data-test-register-user]').click();
   await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
-export async function gotoForgotPassword(page: Page) {
-  await openRoot(page);
-  await toggleOperatorMode(page);
+export async function gotoForgotPassword(page: Page, appURL = testHost) {
+  await openRoot(page, appURL);
+
   await page.locator('[data-test-forgot-password]').click();
   await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
     1,
@@ -247,10 +260,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  if (!opts?.skipOpeningOperatorMode) {
-    await openRoot(page, opts?.url);
-    await toggleOperatorMode(page);
-  }
+  await openRoot(page, opts?.url);
 
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
@@ -266,6 +276,31 @@ export async function login(
       await openAiAssistant(page);
     }
   }
+}
+
+export async function enterWorkspace(
+  page: Page,
+  workspace = 'Test Workspace A',
+) {
+  await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+  await expect(
+    page.locator(`[data-test-workspace="${workspace}"]`),
+  ).toHaveCount(1);
+  await page.locator(`[data-test-workspace="${workspace}"]`).click();
+  await expect(
+    page.locator(
+      `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+    ),
+  ).toContainText(workspace);
+}
+
+export async function showAllCards(page: Page) {
+  await expect(
+    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+  ).toHaveCount(1);
+  await page
+    .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+    .click();
 }
 
 export async function logout(page: Page) {

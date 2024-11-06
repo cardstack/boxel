@@ -7,13 +7,11 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { Tooltip } from '@cardstack/boxel-ui/components';
+import { RealmIcon, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   IconPencilNotCrossedOut,
   IconPencilCrossedOut,
 } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -77,7 +75,7 @@ export default class FileTree extends Component<Signature> {
       </nav>
     </WithLoadedRealm>
 
-    <style>
+    <style scoped>
       .mask {
         position: absolute;
         top: 0;
@@ -104,11 +102,12 @@ export default class FileTree extends Component<Signature> {
         grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
       }
 
-      .realm-info img {
-        width: 18px;
+      .realm-info .realm-icon-img {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
       }
 
       .realm-title {

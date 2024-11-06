@@ -50,7 +50,9 @@ import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import {
   coerceTypes,
+  RealmMetaTable,
   type BoxelIndexTable,
+  type CardTypeSummary,
   type RealmVersionsTable,
 } from './index-structure';
 
@@ -60,6 +62,7 @@ interface IndexedModule {
   source: string;
   canonicalURL: string;
   lastModified: number;
+  resourceCreatedAt: number;
   deps: string[] | null;
 }
 
@@ -69,6 +72,7 @@ export interface IndexedInstance {
   source: string;
   canonicalURL: string;
   lastModified: number;
+  resourceCreatedAt: number;
   isolatedHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
@@ -93,6 +97,7 @@ export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
   htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  cardUrls?: string[];
 }
 
 interface WIPOptions {
@@ -115,6 +120,12 @@ export interface QueryResultsMeta {
     realmVersion: number;
   };
 }
+
+// A mapper for fields that can be sorted on but are not an attribute of a card
+export const generalSortFields: Record<string, string> = {
+  lastModified: 'last_modified',
+  createdAt: 'resource_created_at',
+};
 
 export function isValidPrerenderedHtmlFormat(
   format: string | undefined,
@@ -173,6 +184,7 @@ export class IndexQueryEngine {
       source,
       url: canonicalURL,
       last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
     } = moduleEntry;
     if (!executableCode) {
       throw new Error(
@@ -187,6 +199,7 @@ export class IndexQueryEngine {
       executableCode,
       source,
       lastModified: parseInt(lastModified),
+      resourceCreatedAt: parseInt(resourceCreatedAt),
       deps: moduleEntry.deps,
     };
   }
@@ -238,6 +251,7 @@ export class IndexQueryEngine {
       realm_url: realmURL,
       indexed_at: indexedAt,
       last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
       source,
       types,
       deps,
@@ -264,6 +278,7 @@ export class IndexQueryEngine {
       source,
       deps,
       lastModified: parseInt(lastModified),
+      resourceCreatedAt: parseInt(resourceCreatedAt),
       realmVersion,
     };
   }
@@ -297,6 +312,16 @@ export class IndexQueryEngine {
       ['is_deleted = FALSE OR is_deleted IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
+
+    if (opts.cardUrls && opts.cardUrls.length > 0) {
+      conditions.push([
+        'i.url IN',
+        ...addExplicitParens(
+          separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
+        ),
+      ]);
+    }
+
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
@@ -358,6 +383,15 @@ export class IndexQueryEngine {
     return { cards, meta };
   }
 
+  private generalFieldSortColumn(field: string) {
+    let mappedField = generalSortFields[field];
+    if (mappedField) {
+      return mappedField;
+    } else {
+      throw new Error(`Unknown sort field: ${field}`);
+    }
+  }
+
   private orderExpression(sort: Sort | undefined): CardExpression {
     if (!sort) {
       return ['ORDER BY url COLLATE "POSIX"'];
@@ -369,7 +403,9 @@ export class IndexQueryEngine {
           // intentionally not using field arity here--not sure what it means to
           // sort via a plural field
           'ANY_VALUE(',
-          fieldQuery(s.by, s.on, false, 'sort'),
+          'on' in s
+            ? fieldQuery(s.by, s.on, false, 'sort')
+            : this.generalFieldSortColumn(s.by),
           ')',
           s.direction ?? 'asc',
           'NULLS LAST',
@@ -460,6 +496,19 @@ export class IndexQueryEngine {
     });
 
     return { prerenderedCards, scopedCssUrls: [...scopedCssUrls], meta };
+  }
+
+  async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
+    let results = (await this.query([
+      `SELECT value
+       FROM realm_meta rm
+       INNER JOIN realm_versions rv
+       ON rm.realm_url = rv.realm_url AND rm.realm_version = rv.current_version
+       WHERE`,
+      ...every([['rm.realm_url =', param(realmURL.href)]]),
+    ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
+
+    return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {
@@ -1000,10 +1049,11 @@ function isFieldPlural(field: Field): boolean {
 
 function assertIndexEntrySource<T>(obj: T): Omit<
   T,
-  'source' | 'last_modified'
+  'source' | 'last_modified' | 'resource_created_at'
 > & {
   source: string;
   last_modified: string;
+  resource_created_at: string;
 } {
   if (!obj || typeof obj !== 'object') {
     throw new Error(`expected index entry is null or not an object`);
@@ -1014,9 +1064,18 @@ function assertIndexEntrySource<T>(obj: T): Omit<
   if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
     throw new Error(`expected index entry to have "last_modified" property`);
   }
-  return obj as Omit<T, 'source' | 'last_modified'> & {
+  if (
+    !('resource_created_at' in obj) ||
+    typeof obj.resource_created_at !== 'string'
+  ) {
+    throw new Error(
+      `expected index entry to have "resource_created_at" property`,
+    );
+  }
+  return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
     source: string;
     last_modified: string;
+    resource_created_at: string;
   };
 }
 

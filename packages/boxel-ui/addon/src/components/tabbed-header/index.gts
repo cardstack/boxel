@@ -1,8 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
@@ -10,14 +8,14 @@ import { eq } from '../../helpers/truth-helpers.ts';
 
 interface Signature {
   Args: {
-    activeTabIndex?: number;
+    activeTabId?: string;
     headerBackgroundColor?: string;
-    onSetActiveTab?: (index: number) => void;
-    tabs?: Array<{
+    headerTitle: string;
+    setActiveTab: (tabId: string) => void;
+    tabs: Array<{
       displayName: string;
       tabId: string;
     }>;
-    title: string;
   };
   Blocks: {
     default: [];
@@ -39,16 +37,16 @@ export default class TabbedHeader extends Component<Signature> {
         {{#if (has-block 'headerIcon')}}
           {{yield to='headerIcon'}}
         {{/if}}
-        <h1 class='app-title'>{{@title}}</h1>
+        <h1 class='app-title'>{{@headerTitle}}</h1>
       </div>
       <nav class='app-nav'>
         <ul class='app-tab-list'>
-          {{#each @tabs as |tab index|}}
+          {{#each @tabs as |tab|}}
             <li>
               <a
                 href='#{{tab.tabId}}'
-                {{on 'click' (fn this.setActiveTab index)}}
-                class={{if (eq this.activeTabIndex index) 'active'}}
+                {{on 'click' (fn @setActiveTab tab.tabId)}}
+                class={{if (eq @activeTabId tab.tabId) 'active'}}
                 data-tab-label={{tab.displayName}}
                 {{! do not remove data-tab-label attribute }}
               >
@@ -59,7 +57,7 @@ export default class TabbedHeader extends Component<Signature> {
         </ul>
       </nav>
     </header>
-    <style>
+    <style scoped>
       .app-header {
         padding: 0 var(--boxel-sp-lg);
         background-color: var(--header-background-color, var(--boxel-light));
@@ -100,11 +98,11 @@ export default class TabbedHeader extends Component<Signature> {
       .app-tab-list a.active {
         color: var(--header-text-color, var(--boxel-dark));
         border-bottom-color: var(--header-text-color, var(--boxel-dark));
-        font-weight: 700;
+        font-weight: 600;
       }
       .app-tab-list a:hover:not(:disabled) {
         color: var(--header-text-color, var(--boxel-dark));
-        font-weight: 700;
+        font-weight: 600;
       }
       /* this prevents layout shift when text turns bold on hover/active */
       .app-tab-list a::after {
@@ -114,18 +112,8 @@ export default class TabbedHeader extends Component<Signature> {
         visibility: hidden;
         user-select: none;
         pointer-events: none;
-        font-weight: 700;
+        font-weight: 600;
       }
     </style>
   </template>
-
-  @tracked activeTabIndex =
-    this.args.activeTabIndex && this.args.activeTabIndex !== -1
-      ? this.args.activeTabIndex
-      : 0;
-
-  @action setActiveTab(index: number) {
-    this.activeTabIndex = index;
-    this.args.onSetActiveTab?.(index);
-  }
 }

@@ -18,6 +18,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', {
     default() {},
   });
+  virtualNetwork.shimAsyncModule({
+    prefix: '@cardstack/boxel-icons/',
+    resolve: async () => ({}),
+  });
+
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', {
     setCssVar: class {},
     SortableGroupModifier: class {},
@@ -50,6 +55,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   // import * as glimmerTracking from "@glimmer/tracking";
   virtualNetwork.shimModule('@glimmer/tracking', {
+    cached() {},
     tracked() {},
   });
   // import * as emberObject from "ember-source/dist/packages/@ember/object";

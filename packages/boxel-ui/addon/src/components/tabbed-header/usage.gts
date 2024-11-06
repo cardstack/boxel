@@ -29,32 +29,25 @@ export default class TabbedHeaderUsage extends Component {
       tabId: 'favorites',
     },
   ];
-  @tracked title = 'AI App Generator';
-  @tracked activeTabIndex = 0;
+  @tracked headerTitle = 'AI App Generator';
+  @tracked activeTabId = this.tabs[0]?.tabId;
   @tracked headerColor = '#ffd800';
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    let index = this.tabs?.findIndex(
-      (tab) => tab.tabId === window.location?.hash?.slice(1),
-    );
-    if (index && index !== -1) {
-      this.activeTabIndex = index;
-    }
+    this.activeTabId = window.location?.hash?.slice(1) ?? this.tabs[0]?.tabId;
   }
 
-  onSetActiveTab = (index: number) => {
-    this.activeTabIndex = index;
-  };
+  setActiveTab = (tabId: string) => (this.activeTabId = tabId);
 
   <template>
     <FreestyleUsage @name='TabbedHeader'>
       <:example>
         <TabbedHeader
-          @title={{this.title}}
+          @headerTitle={{this.headerTitle}}
           @tabs={{this.tabs}}
-          @onSetActiveTab={{fn this.onSetActiveTab}}
-          @activeTabIndex={{this.activeTabIndex}}
+          @setActiveTab={{this.setActiveTab}}
+          @activeTabId={{this.activeTabId}}
           @headerBackgroundColor={{this.headerColor}}
         >
           <:headerIcon>
@@ -64,10 +57,10 @@ export default class TabbedHeaderUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='title'
+          @name='headerTitle'
           @description='Title to be displayed on the header'
-          @value={{this.title}}
-          @onInput={{fn (mut this.title)}}
+          @value={{this.headerTitle}}
+          @onInput={{fn (mut this.headerTitle)}}
           @required={{true}}
         />
         <Args.Object
@@ -76,16 +69,15 @@ export default class TabbedHeaderUsage extends Component {
           @value={{this.tabs}}
           @onInput={{fn (mut this.tabs)}}
         />
-        <Args.Number
-          @name='activeTabIndex'
-          @description='Index of the active tab'
-          @defaultValue={{0}}
-          @value={{this.activeTabIndex}}
-          @onInput={{fn (mut this.activeTabIndex)}}
+        <Args.String
+          @name='activeTabId'
+          @description='Id of the active tab'
+          @value={{this.activeTabId}}
+          @onInput={{fn (mut this.activeTabId)}}
         />
         <Args.Action
-          @name='onSetActiveTab'
-          @description='Optional action to be called when a tab is clicked'
+          @name='setActiveTab'
+          @description='Action to be called when a tab is clicked'
         />
         <Args.String
           @name='headerBackgroundColor'

@@ -21,12 +21,16 @@ import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
 import FourLines from './icons/four-lines.gts';
+import Group from './icons/group.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
 import IconGlobe from './icons/icon-globe.gts';
+import IconGrid from './icons/icon-grid.gts';
+import IconHexagon from './icons/icon-hexagon.gts';
 import IconInherit from './icons/icon-inherit.gts';
 import IconLink from './icons/icon-link.gts';
+import IconList from './icons/icon-list.gts';
 import IconMinusCircle from './icons/icon-minus-circle.gts';
 import IconPencil from './icons/icon-pencil.gts';
 import IconPencilCrossedOut from './icons/icon-pencil-crossed-out.gts';
@@ -34,13 +38,14 @@ import IconPencilNotCrossedOut from './icons/icon-pencil-not-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
 import IconSearch from './icons/icon-search.gts';
+import IconSearchThick from './icons/icon-search-thick.gts';
 import IconTrash from './icons/icon-trash.gts';
 import IconTurnDownRight from './icons/icon-turn-down-right.gts';
 import IconX from './icons/icon-x.gts';
 import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
+import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
-import Search from './icons/search.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
@@ -67,12 +72,16 @@ export const ALL_ICON_COMPONENTS = [
   FailureBordered,
   File,
   FourLines,
+  Group,
   IconCircle,
   IconCircleSelected,
   IconCode,
   IconGlobe,
+  IconGrid,
+  IconHexagon,
   IconInherit,
   IconLink,
+  IconList,
   IconMinusCircle,
   IconPencil,
   IconPencilCrossedOut,
@@ -80,13 +89,14 @@ export const ALL_ICON_COMPONENTS = [
   IconPlus,
   IconPlusCircle,
   IconSearch,
+  IconSearchThick,
   IconTrash,
   IconTurnDownRight,
   IconX,
   ImagePlaceholder,
   LoadingIndicator,
+  Lock,
   Profile,
-  Search,
   Send,
   Sparkle,
   SuccessBordered,
@@ -114,12 +124,16 @@ export {
   FailureBordered,
   File,
   FourLines,
+  Group,
   IconCircle,
   IconCircleSelected,
   IconCode,
   IconGlobe,
+  IconGrid,
+  IconHexagon,
   IconInherit,
   IconLink,
+  IconList,
   IconMinusCircle,
   IconPencil,
   IconPencilCrossedOut,
@@ -127,13 +141,14 @@ export {
   IconPlus,
   IconPlusCircle,
   IconSearch,
+  IconSearchThick,
   IconTrash,
   IconTurnDownRight,
   IconX,
   ImagePlaceholder,
   LoadingIndicator,
+  Lock,
   Profile,
-  Search,
   Send,
   Sparkle,
   SuccessBordered,

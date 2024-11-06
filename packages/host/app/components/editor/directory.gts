@@ -75,7 +75,7 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
-    <style>
+    <style scoped>
       .level {
         --icon-length: 14px;
         --icon-margin: 4px;
@@ -107,7 +107,7 @@ export default class Directory extends Component<Args> {
 
       .file.selected,
       .file:active {
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
       }
 

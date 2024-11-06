@@ -16,6 +16,7 @@ import {
 } from 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/+esm';
 import Modifier from 'ember-modifier';
 import { isAfter, isBefore, isEqual } from 'date-fns';
+import BikeIcon from '@cardstack/boxel-icons/bike';
 
 type ProgressChartModifierSignature = {
   Args: {
@@ -69,7 +70,7 @@ class CyclingLogEntry extends FieldDef {
         <span>Routes: <@fields.origin /> - <@fields.destination /></span>
         <span>Distance: <@fields.distance /> KM</span>
       </div>
-      <style>
+      <style scoped>
         .entry {
           display: flex;
           flex-direction: column;
@@ -83,6 +84,7 @@ class CyclingLogEntry extends FieldDef {
 
 export class CyclingMileageLog extends CardDef {
   static displayName = 'Cycling Mileage Log';
+  static icon = BikeIcon;
 
   @field target = contains(NumberField);
   @field startDate = contains(Date);
@@ -124,9 +126,9 @@ export class CyclingMileageLog extends CardDef {
           <canvas
             id='progress-chart'
             {{ProgressChartModifier
-              total=this.args.model.total
-              target=this.args.model.target
-              unit=this.args.model.unit
+              total=@model.total
+              target=@model.target
+              unit=@model.unit
             }}
           />
         </div>
@@ -134,7 +136,7 @@ export class CyclingMileageLog extends CardDef {
           <@fields.entries />
         </div>
       </div>
-      <style>
+      <style scoped>
         .summary {
           display: flex;
           justify-content: center;

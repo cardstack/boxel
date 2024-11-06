@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -12,7 +13,7 @@ import { Position } from 'monaco-editor';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { logger } from '@cardstack/runtime-common';
+import { hasExecutableExtension, logger } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -261,7 +262,7 @@ export default class CodeEditor extends Component<Signature> {
     }
 
     // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
-    return file.write(content, true);
+    return file.write(content, hasExecutableExtension(file.name));
   }
 
   private safeJSONParse(content: string) {
@@ -304,6 +305,7 @@ export default class CodeEditor extends Component<Signature> {
             initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
             readOnly=@isReadOnly
+            editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
           }}
         ></div>
       {{/if}}
@@ -313,7 +315,7 @@ export default class CodeEditor extends Component<Signature> {
       </div>
     {{/if}}
 
-    <style>
+    <style scoped>
       .monaco-container {
         height: 100%;
         min-height: 100%;

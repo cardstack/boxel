@@ -30,6 +30,7 @@ interface Signature {
     moduleContentsResource: ModuleContentsResource;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
+    isReadOnly: boolean;
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
@@ -40,7 +41,11 @@ interface Signature {
       WithBoundArgs<typeof SchemaEditorTitle, 'totalFields' | 'hasModuleError'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
-        'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'goToDefinition'
+        | 'file'
+        | 'moduleSyntax'
+        | 'cardInheritanceChain'
+        | 'goToDefinition'
+        | 'isReadOnly'
       >,
     ];
   };
@@ -64,38 +69,20 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
   {{#if @hasModuleError}}
     <span class='syntax-error'>Fail to parse</span>
   {{else}}
-    <div class='total-fields' data-test-total-fields>
-      <span class='total-fields-value'>{{@totalFields}}</span>
-      <span class='total-fields-label'>{{getPlural 'Field' @totalFields}}</span>
-    </div>
+    <span class='total-fields' data-test-total-fields>
+      {{@totalFields}}
+      {{getPlural 'Field' @totalFields}}
+    </span>
   {{/if}}
 
-  <style>
-    .syntax-error {
-      margin-left: auto;
-      color: var(--boxel-400);
-      font-size: var(--boxel-font-size-sm);
-      font-weight: 500;
-      margin-right: var(--boxel-sp-sm);
-      margin-top: 3px;
-    }
+  <style scoped>
+    .syntax-error,
     .total-fields {
-      display: flex;
-      align-items: baseline;
-      gap: var(--boxel-sp-xxxs);
       margin-left: auto;
-    }
-
-    .total-fields > * {
-      margin: 0;
-    }
-
-    .total-fields-value {
-      font: 600 var(--boxel-font);
-    }
-
-    .total-fields-label {
-      font: var(--boxel-font-sm);
+      color: var(--boxel-450);
+      font: 500 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-xl);
+      text-transform: uppercase;
     }
   </style>
 </template>;
@@ -134,7 +121,7 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   <template>
-    <style>
+    <style scoped>
       .loading {
         display: flex;
         justify-content: center;
@@ -156,6 +143,7 @@ export default class SchemaEditor extends Component<Signature> {
         (component
           CardAdoptionChain
           file=@file
+          isReadOnly=@isReadOnly
           moduleSyntax=this.moduleSyntax
           cardInheritanceChain=this.cardInheritanceChain.value
           goToDefinition=@goToDefinition

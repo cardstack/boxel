@@ -6,7 +6,7 @@ import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { triggerEvent } from '@ember/test-helpers';
 
-const RESIZE_HANDLE_WIDTH = 18;
+const RESIZE_HANDLE_WIDTH = 15.126;
 const PANEL_INDEX_1_MIN_LENGTH = 50;
 
 class PanelProperties {
@@ -114,7 +114,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       async function renderResizablePanelGroup(
         renderController: RenderController,
       ) {
-        // Putting this in <style> causes syntax highlighting to break
+        // Putting this in <style scoped> causes syntax highlighting to break
         let testContainerStyles = `
             #test-container {
               ${orientationProperties.perpendicularDimension}: 100px;
@@ -125,7 +125,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         await render(<template>
           {{! template-lint-disable no-inline-styles }}
-          <style>{{testContainerStyles}}</style>
+          <style scoped>{{testContainerStyles}}</style>
           <div style={{htmlSafe renderController.containerStyle}}>
             <ResizablePanelGroup
               @orientation={{orientationProperties.orientation}}
@@ -212,7 +212,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (default)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 108px;
+          ${orientationProperties.dimension}: 105px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
@@ -233,7 +233,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 108px;
+          ${orientationProperties.dimension}: 105px;
         `;
 
         this.renderController.panels[0].lengthPx = 45;
@@ -351,7 +351,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it maintans ratio when its container shrinks`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 420px;
+          ${orientationProperties.dimension}: 417px;
         `;
 
         // length ratio panel 1 and panel 2 is 3:2
@@ -374,7 +374,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         );
 
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 220px;
+          ${orientationProperties.dimension}: 217px;
         `;
 
         await waitForRerender();
@@ -463,7 +463,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         // increase window/container length to original length
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 620px;
+          ${orientationProperties.dimension}: 617px;
         `;
 
         await waitForRerender();
@@ -519,7 +519,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assert.hasNumericStyle(
           '[data-test-panel-index="0"]',
           orientationProperties.dimension,
-          218,
+          215,
           1,
         );
         assert.hasNumericStyle(
@@ -535,7 +535,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assert.hasNumericStyle(
           '[data-test-panel-index="0"]',
           orientationProperties.dimension,
-          168,
+          165,
           1,
         );
         assert.hasNumericStyle(
@@ -551,7 +551,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assert.hasNumericStyle(
           '[data-test-panel-index="0"]',
           orientationProperties.dimension,
-          218,
+          215,
           1,
         );
         assert.hasNumericStyle(

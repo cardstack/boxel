@@ -5,7 +5,6 @@ import {
   webStreamToText,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
-import basicAuth from 'basic-auth';
 import mime from 'mime-types';
 import { nodeStreamToText } from '../stream';
 
@@ -51,37 +50,21 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
+
+  logger.info(
+    `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
+      fullRequestURL(ctxt).href
+    }`,
+  );
+
   ctxt.res.on('finish', () => {
     logger.info(
-      `${ctxt.method} ${ctxt.req.headers.accept} ${
+      `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
       }: ${ctxt.status}`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
-  return next();
-}
-
-const BASIC_AUTH_USERNAME = 'cardstack';
-
-export function httpBasicAuth(ctxt: Koa.Context, next: Koa.Next) {
-  if (
-    process.env['BOXEL_HTTP_BASIC_PW'] &&
-    ctxt.header.accept?.includes('text/html')
-  ) {
-    let credentials = basicAuth(ctxt.request as any);
-    if (
-      !credentials ||
-      credentials.name !== BASIC_AUTH_USERNAME ||
-      credentials.pass !== process.env['BOXEL_HTTP_BASIC_PW']
-    ) {
-      ctxt.type = 'html';
-      ctxt.status = 401;
-      ctxt.body = 'Authorization Required';
-      ctxt.set('WWW-Authenticate', 'Basic realm="Boxel realm server"');
-      return;
-    }
-  }
   return next();
 }
 

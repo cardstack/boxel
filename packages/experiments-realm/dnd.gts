@@ -13,6 +13,10 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import Package from '@cardstack/boxel-icons/package';
+import Scroll from '@cardstack/boxel-icons/scroll';
+import Sword from '@cardstack/boxel-icons/sword';
+import Wand from '@cardstack/boxel-icons/wand';
 
 /**
  * These imports *are* used, but a bug causes them to be flagged as unused
@@ -25,6 +29,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
 export class Spell extends CardDef {
+  static icon = Wand;
   @field name = contains(StringField);
   @field level = contains(NumberField);
   @field isPrepared = contains(BooleanField);
@@ -126,7 +131,7 @@ export class Spell extends CardDef {
         {{/if}}
       </div>
 
-      <style>
+      <style scoped>
         .spell-card {
           font-family: 'Papyrus', fantasy;
           border: 2px solid #6b4226;
@@ -196,18 +201,22 @@ export class Spell extends CardDef {
 
 // Define the Item card
 export class DnDItem extends CardDef {
+  static icon = Sword;
   @field name = contains(StringField);
   @field value = contains(NumberField);
 }
 
 // Define the InventoryItem card
 export class InventoryItem extends CardDef {
+  static icon = Package;
   @field item = linksTo(DnDItem);
   @field quantity = contains(NumberField);
 }
 
 // Define the CharacterSheet card with attributes
 export class CharacterSheet extends CardDef {
+  static displayName = 'Character Sheet';
+  static icon = Scroll;
   @field name = contains(StringField);
   @field level = contains(NumberField);
   @field class = contains(StringField);
@@ -223,14 +232,14 @@ export class CharacterSheet extends CardDef {
   @field inventory = linksToMany(InventoryItem);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <!-- Character Header Section -->
+      {{! Character Header Section }}
       <div class='character-header'>
         <h1>{{@model.name}}</h1>
         <h3>{{@model.title}}</h3>
         <p>{{@model.description}}</p>
       </div>
 
-      <!-- Character Basic Information Section -->
+      {{! Character Basic Information Section }}
       <div class='character-info'>
         <div>
           <strong>Level:</strong>
@@ -250,7 +259,7 @@ export class CharacterSheet extends CardDef {
         </div>
       </div>
 
-      <!-- Character Attributes Section -->
+      {{! Character Attributes Section }}
       <div class='character-attributes'>
         <h2>Attributes</h2>
         <div class='attribute-grid'>
@@ -263,17 +272,17 @@ export class CharacterSheet extends CardDef {
         </div>
       </div>
 
-      <!-- Character Spells Section -->
+      {{! Character Spells Section }}
       <div class='character-spells'>
         <h2>Spells</h2>
         <ul>
-          {{#each @fields.spells as |spell|}}
-            <li> <spell /> </li>
+          {{#each @fields.spells as |SpellComponent|}}
+            <li> <SpellComponent /> </li>
           {{/each}}
         </ul>
       </div>
 
-      <!-- Character Inventory Section -->
+      {{! Character Inventory Section }}
       <div class='character-inventory'>
         <h2>Inventory</h2>
         <ul>
@@ -285,8 +294,8 @@ export class CharacterSheet extends CardDef {
         </ul>
       </div>
 
-      <!-- CSS Styling -->
-      <style>
+      {{! CSS Styling }}
+      <style scoped>
         body {
           font-family: 'Cinzel', serif; /* Classic fantasy font */
           background-color: #f5ecd3; /* Parchment background */

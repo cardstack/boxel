@@ -53,6 +53,7 @@ import type Owner from '@ember/owner';
 import { fn, concat, get } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoardAnnotation } from './board-annotation';
+import Route from '@cardstack/boxel-icons/route';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -92,7 +93,7 @@ class DiagramType extends FieldDef {
           </item.component>
         </RadioInput>
       </div>
-      <style></style>
+      <style scoped></style>
     </template>
 
     private radioGroup = `__boxel_carving_turn_diagram_type${groupNumber++}__`;
@@ -191,7 +192,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
     <div
       class='container
         {{this.stance}}
-        {{concat "diagram-type-" this.args.model.diagramType}}'
+        {{concat "diagram-type-" @model.diagramType}}'
     >
       {{#if this.showToeTurn}}
         <div class='turn' />
@@ -202,14 +203,14 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
         </div>
         <div class='toe turn'>
           {{#if this.toeAnnotationFields}}
-            {{#each this.toeAnnotationFields as |annotation i|}}
+            {{#each this.toeAnnotationFields as |Annotation i|}}
               {{#let
                 (get (get this.toeAnnotationModels i) 'position')
                 as |position|
               }}
                 <div class='position {{concat "position-" position}}'>
                   <div class='annotation'>position {{position}}</div>
-                  <annotation />
+                  <Annotation />
                 </div>
               {{/let}}
             {{/each}}
@@ -219,14 +220,14 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       {{#if this.showHeelTurn}}
         <div class='heel turn'>
           {{#if this.heelAnnotationFields}}
-            {{#each this.heelAnnotationFields as |annotation i|}}
+            {{#each this.heelAnnotationFields as |Annotation i|}}
               {{#let
                 (get (get this.heelAnnotationModels i) 'position')
                 as |position|
               }}
                 <div class='position {{concat "position-" position}}'>
                   <div class='annotation'>position {{position}}</div>
-                  <annotation />
+                  <Annotation />
                 </div>
               {{/let}}
             {{/each}}
@@ -241,7 +242,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       {{/if}}
     </div>
 
-    <style>
+    <style scoped>
       .title {
         width: 500px;
         margin: 2rem 2rem 0;
@@ -539,6 +540,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
 
 export class CarvingTurnDiagram extends CardDef {
   static displayName = 'Carving Turn Diagram';
+  static icon = Route;
   @field diagramType = contains(DiagramType, {
     description:
       'An indicator for which turns to include in the diagram: toe turn, heel turn, or both toe and heel turns.',

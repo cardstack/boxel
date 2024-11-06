@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -9,16 +8,14 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
+import { modifier } from 'ember-modifier';
 
 import { trackedFunction } from 'ember-resources/util/function';
-
-import { MatrixEvent } from 'matrix-js-sdk';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { isCardInstance, markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -30,7 +27,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type CommandField } from 'https://cardstack.com/base/command';
+import { type CommandCard } from 'https://cardstack.com/base/command';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -43,67 +40,22 @@ interface Signature {
   Args: {
     roomId: string;
     message: Message;
-    messages: Message[];
-    index?: number;
+    index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     currentEditor: number | undefined;
     setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
     isPending?: boolean;
+    registerScroller: (args: {
+      index: number;
+      element: HTMLElement;
+      scrollTo: Element['scrollIntoView'];
+    }) => void;
   };
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
-
-interface SendReadReceiptModifierSignature {
-  Args: {
-    Named: {
-      matrixService: MatrixService;
-      roomId: string;
-      message: Message;
-      messages: Message[];
-    };
-    Positional: [];
-  };
-  Element: Element;
-}
-
-class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
-  async modify(
-    _element: Element,
-    _positional: [],
-    args: NamedArgs<SendReadReceiptModifierSignature>,
-  ) {
-    let { matrixService, message, messages, roomId } = args;
-    let isLastMessage = messages[messages.length - 1] === message;
-    if (!isLastMessage) {
-      return;
-    }
-
-    let messageIsFromBot = message.author.userId === aiBotUserId;
-
-    if (!messageIsFromBot) {
-      return;
-    }
-
-    if (matrixService.currentUserEventReadReceipts.has(message.eventId)) {
-      return;
-    }
-
-    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
-    let matrixEvent = {
-      getId: () => message.eventId,
-      getRoomId: () => roomId,
-      getTs: () => message.created.getTime(),
-    };
-
-    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
-    schedule('afterRender', () => {
-      matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
-    });
-  }
-}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -112,9 +64,9 @@ export default class RoomMessage extends Component<Signature> {
     this.checkStreamingTimeout.perform();
   }
 
-  @tracked streamingTimeout = false;
+  @tracked private streamingTimeout = false;
 
-  checkStreamingTimeout = task(async () => {
+  private checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
       return;
     }
@@ -131,12 +83,16 @@ export default class RoomMessage extends Component<Signature> {
     this.checkStreamingTimeout.perform();
   });
 
-  get isFromAssistant() {
+  private get isFromAssistant() {
     return this.args.message.author.userId === aiBotUserId;
   }
 
-  get getComponent() {
-    return this.commandService.getCommandResultComponent(this.args.message);
+  private get getComponent() {
+    let { commandResult } = this.args.message;
+    if (!commandResult || !isCardInstance(commandResult)) {
+      return undefined;
+    }
+    return commandResult.constructor.getComponent(commandResult);
   }
 
   <template>
@@ -148,18 +104,14 @@ export default class RoomMessage extends Component<Signature> {
     }}
     {{#if this.resources}}
       <AiAssistantMessage
-        {{SendReadReceipt
-          matrixService=this.matrixService
-          roomId=@roomId
-          message=@message
-          messages=@messages
-        }}
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe
           (markdownToHtml @message.formattedMessage)
         }}
         @datetime={{@message.created}}
+        @index={{@index}}
+        @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component
           ProfileAvatarIcon
@@ -180,7 +132,7 @@ export default class RoomMessage extends Component<Signature> {
         {{#if @message.command}}
           <div
             class='command-button-bar'
-            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
+            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
             Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
             {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
             data-test-command-card-idle={{this.commandService.run.isIdle}}
@@ -200,10 +152,6 @@ export default class RoomMessage extends Component<Signature> {
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
-
-          {{#let this.getComponent as |Component|}}
-            <Component @format='embedded' />
-          {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
               <Button
@@ -238,11 +186,16 @@ export default class RoomMessage extends Component<Signature> {
               />
             </div>
           {{/if}}
+          {{#let this.getComponent as |Component|}}
+            {{#if Component}}
+              <Component @format='embedded' />
+            {{/if}}
+          {{/let}}
         {{/if}}
       </AiAssistantMessage>
     {{/if}}
 
-    <style>
+    <style scoped>
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
       }
@@ -258,7 +211,7 @@ export default class RoomMessage extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
       .view-code-button {
-        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-min-height: 1.5rem;
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         min-width: initial;
@@ -273,13 +226,13 @@ export default class RoomMessage extends Component<Signature> {
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
         );
-        margin: var(--boxel-sp) var(--fill-container-spacing)
+        margin: var(--boxel-sp) var(--fill-container-spacing) 0
           var(--fill-container-spacing);
         padding: var(--spacing) 0;
         background-color: var(--boxel-dark);
       }
       .copy-to-clipboard-button {
-        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         --icon-color: var(--boxel-highlight);
         --icon-stroke-width: 2px;
@@ -401,7 +354,7 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
-  run = task(async (command: CommandField, roomId: string) => {
+  run = task(async (command: CommandCard, roomId: string) => {
     return this.commandService.run.unlinked().perform(command, roomId);
   });
 
@@ -423,6 +376,8 @@ export default class RoomMessage extends Component<Signature> {
     }
   }
 
+  // TODO need to reevalutate this modifier--do we want to hijack the scroll
+  // when the user views the code?
   private scrollBottomIntoView = modifier((element: HTMLElement) => {
     if (this.args.currentEditor !== this.args.message.index) {
       return;

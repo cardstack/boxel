@@ -11,7 +11,7 @@ const GridContainer: TemplateOnlyComponent<Signature> = <template>
   <div class='grid-container' ...attributes>
     {{yield}}
   </div>
-  <style>
+  <style scoped>
     .grid-container {
       display: grid;
       gap: var(--boxel-sp);

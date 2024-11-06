@@ -18,6 +18,7 @@ export interface BoxelIndexTable {
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
   types: string[] | null;
+  display_names: string[] | null;
   transpiled_code: string | null;
   source: string | null;
   embedded_html: Record<string, string> | null;
@@ -26,12 +27,26 @@ export interface BoxelIndexTable {
   atom_html: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
+  resource_created_at: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
 }
 
 export interface RealmVersionsTable {
   realm_url: string;
   current_version: number;
+}
+
+export interface CardTypeSummary {
+  code_ref: string;
+  display_name: string;
+  total: number;
+}
+
+export interface RealmMetaTable {
+  realm_version: number;
+  realm_url: string;
+  value: Record<string, string>[];
+  indexed_at: string | null;
 }
 
 export const coerceTypes = Object.freeze({
@@ -42,7 +57,10 @@ export const coerceTypes = Object.freeze({
   search_doc: 'JSON',
   embedded_html: 'JSON',
   fitted_html: 'JSON',
+  display_names: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
+  resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',
+  value: 'JSON',
 });

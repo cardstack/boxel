@@ -39,10 +39,19 @@ interface SearchResultError {
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
+  #fetch: typeof globalThis.fetch;
   #loader: Loader;
   #indexQueryEngine: IndexQueryEngine;
 
-  constructor({ realm, dbAdapter }: { realm: Realm; dbAdapter: DBAdapter }) {
+  constructor({
+    realm,
+    dbAdapter,
+    fetch,
+  }: {
+    realm: Realm;
+    dbAdapter: DBAdapter;
+    fetch: typeof globalThis.fetch;
+  }) {
     if (!dbAdapter) {
       throw new Error(
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
@@ -50,6 +59,7 @@ export class RealmIndexQueryEngine {
     }
     this.#indexQueryEngine = new IndexQueryEngine(dbAdapter);
     this.#realm = realm;
+    this.#fetch = fetch;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
   }
 
@@ -99,6 +109,14 @@ export class RealmIndexQueryEngine {
       }
     }
     return doc;
+  }
+
+  async fetchCardTypeSummary() {
+    let results = await this.#indexQueryEngine.fetchCardTypeSummary(
+      new URL(this.#realm.url),
+    );
+
+    return results;
   }
 
   async searchPrerendered(query: Query, opts?: Options) {
@@ -209,7 +227,7 @@ export class RealmIndexQueryEngine {
         linkResource =
           maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
       } else {
-        let response = await this.loader.fetch(linkURL, {
+        let response = await this.#fetch(linkURL, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
         if (!response.ok) {

@@ -16,6 +16,7 @@ import {
   selectCardFromCatalog,
   getRoomEvents,
   setupTwoStackItems,
+  showAllCards,
 } from '../helpers';
 import {
   synapseStart,
@@ -193,7 +194,7 @@ test.describe('Room messages', () => {
           {
             id: testCard,
             title: 'Hassan',
-            realmIconUrl: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+            realmIconUrl: 'https://boxel-images.boxel.ai/icons/cardstack.png',
           },
         ],
       },
@@ -291,11 +292,12 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test(`it does include command tools (patch, search) in message event when top-most card is writable and context is shared`, async ({
+  test(`it does include command tools (patch, search, generateAppModule) in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -308,6 +310,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
+
     expect(boxelMessageData.context.tools).toMatchObject([
       {
         type: 'function',
@@ -351,39 +354,77 @@ test.describe('Room messages', () => {
         },
       },
       {
+        type: 'function',
         function: {
-          description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
           name: 'searchCard',
+          description:
+            'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
           parameters: {
+            type: 'object',
             properties: {
               description: {
                 type: 'string',
               },
               filter: {
+                type: 'object',
                 properties: {
-                  type: {
+                  contains: {
+                    type: 'object',
                     properties: {
-                      module: {
-                        description: 'the absolute path of the module',
+                      title: {
                         type: 'string',
-                      },
-                      name: {
-                        description: 'the name of the module',
-                        type: 'string',
+                        description: 'title of the card',
                       },
                     },
-                    required: ['module', 'name'],
+                    required: ['title'],
+                  },
+                  eq: {
                     type: 'object',
+                    properties: {
+                      _cardType: {
+                        type: 'string',
+                        description: 'name of the card type',
+                      },
+                    },
+                    required: ['_cardType'],
                   },
                 },
-                type: 'object',
               },
             },
             required: ['filter', 'description'],
-            type: 'object',
           },
         },
+      },
+      {
         type: 'function',
+        function: {
+          name: 'generateAppModule',
+          description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
+          parameters: {
+            type: 'object',
+            properties: {
+              attached_card_id: {
+                type: 'string',
+                const: `${testHost}/mango`,
+              },
+              description: {
+                type: 'string',
+              },
+              appTitle: {
+                type: 'string',
+              },
+              moduleCode: {
+                type: 'string',
+              },
+            },
+            required: [
+              'attached_card_id',
+              'description',
+              'appTitle',
+              'moduleCode',
+            ],
+          },
+        },
       },
     ]);
   });
@@ -393,6 +434,7 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -419,6 +461,12 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
+    await showAllCards(page);
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -646,6 +694,7 @@ test.describe('Room messages', () => {
     test.beforeEach(async ({ page }) => {
       await login(page, 'user1', 'pass');
       await getRoomId(page);
+      await showAllCards(page);
     });
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
@@ -715,14 +764,21 @@ test.describe('Room messages', () => {
       ).toHaveCount(1); // The index card appears by default, we verify it exists here
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
     });
+
     test('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
       const testCard1 = `${testHost}/jersey`;
       const embeddedCard = `${testHost}/justin`;
+      await showAllCards(page);
+      await expect(
+        page.locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
+        ),
+      ).toHaveCount(1);
       await page
         .locator(
-          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
         )
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
@@ -899,7 +955,8 @@ test.describe('Room messages', () => {
   }) => {
     const prompt = {
       from: 'user1',
-      message: 'Do I have to use AI with Boxel?', // a prompt on new-session template
+      message: 'Make this more polite.', // a prompt on new-session template
+      cards: [],
     };
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
@@ -912,14 +969,88 @@ test.describe('Room messages', () => {
     await assertMessages(page, [prompt]);
   });
 
-  test('sends message when no card open in the stack', async ({ page }) => {
+  test('sending a prompt submits attached cards', async ({ page }) => {
+    const testCard1 = `${testHost}/mango`;
+    const testCard2 = `${testHost}/hassan`;
+
+    await login(page, 'user1', 'pass');
+    await getRoomId(page);
+    await showAllCards(page);
+    await page
+      .locator(
+        `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+      )
+      .click();
+
+    await page
+      .locator('[data-test-message-field]')
+      .fill(`Change title to Mango`);
+    await selectCardFromCatalog(page, testCard2);
+    await expect(page.locator(`[data-test-message-field]`)).toHaveValue(
+      'Change title to Mango',
+    );
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+    ).toHaveCount(2);
+
+    await page.locator(`[data-test-prompt="0"]`).click();
+
+    const message1 = {
+      from: 'user1',
+      message: 'Fill in the title and description.', // prompt is submitted
+      cards: [
+        { id: testCard1, title: 'Mango' }, // auto-attached card is submitted
+        { id: testCard2, title: 'Hassan' }, // attached card is submitted
+      ],
+    };
+    await assertMessages(page, [message1]);
+
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+    ).toHaveCount(2); // attached cards remain
+    await expect(page.locator(`[data-test-message-field]`)).toHaveValue(
+      'Change title to Mango',
+    ); // previously typed message remains
+
+    await page.locator('[data-test-send-message-btn]').click();
+
+    const message2 = {
+      from: 'user1',
+      message: 'Change title to Mango',
+      cards: [
+        { id: testCard1, title: 'Mango' },
+        { id: testCard2, title: 'Hassan' },
+      ],
+    };
+    await assertMessages(page, [message1, message2]);
+
+    await expect(
+      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+    ).toHaveCount(1); // only auto-attached card remains
+    await expect(page.locator(`[data-test-message-field]`)).toBeEmpty(); // message field is empty
+
+    await page.locator('[data-test-send-message-btn]').click();
+
+    const message3 = {
+      from: 'user1',
+      cards: [{ id: testCard1, title: 'Mango' }],
+    };
+    await assertMessages(page, [message1, message2, message3]);
+  });
+
+  test('ai panel stays open when last card is closed and workspace chooser is opened', async ({
+    page,
+  }) => {
     await login(page, 'user1', 'pass');
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
       .click();
-    await page
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+
+    page
       .locator('[data-test-message-field]')
       .fill('Sending message with no card open');
+
     await page.locator('[data-test-send-message-btn]').click();
 
     await assertMessages(page, [
@@ -936,6 +1067,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await showAllCards(page);
 
     for (let i = 1; i <= 3; i++) {
       await page.locator('[data-test-message-field]').fill(`Message - ${i}`);
@@ -1020,6 +1152,7 @@ test.describe('Room messages', () => {
       }),
     };
 
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
@@ -1066,6 +1199,7 @@ test.describe('Room messages', () => {
       }),
     };
 
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,

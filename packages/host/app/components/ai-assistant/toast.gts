@@ -59,7 +59,7 @@ export default class AiAssistantToast extends Component<Signature> {
         View in chat
       </BoxelButton>
     </div>
-    <style>
+    <style scoped>
       .ai-assistant-toast {
         display: flex;
         flex-direction: column;
@@ -113,7 +113,7 @@ export default class AiAssistantToast extends Component<Signature> {
         -webkit-box-orient: vertical;
       }
       .view-in-chat-button {
-        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-min-height: 1.5rem;
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         min-width: initial;

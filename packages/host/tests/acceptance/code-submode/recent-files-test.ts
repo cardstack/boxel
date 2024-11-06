@@ -8,9 +8,7 @@ import {
 
 import { waitUntil } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -23,7 +21,8 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -64,7 +63,7 @@ const personCardSource = `
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -169,7 +168,7 @@ const friendCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -183,8 +182,10 @@ const friendCardSource = `
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings
@@ -314,15 +315,21 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://i.postimg.cc/L8yXRvws/icon.png");',
+      )
+      .hasAttribute('alt', 'Test Workspace B');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
+      );
 
     await click('[data-test-file="index.json"]');
     assert
@@ -513,15 +520,21 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png')
-      .hasAttribute('alt', 'Icon for workspace Base Workspace');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
+      )
+      .hasAttribute('alt', 'Base Workspace');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+      .hasAttribute(
+        'style',
+        'background-image: url("https://boxel-images.boxel.ai/icons/cardstack.png");',
+      );
 
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');

@@ -10,6 +10,7 @@ For a quickstart, see [here](./QUICKSTART.md)
 - this project uses [volta](https://volta.sh/) for Javascript toolchain version management. Make sure you have the latest verison of volta on your system and have define [the ENV var described here](https://docs.volta.sh/advanced/pnpm).
 - this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 - this project uses [docker](https://docker.com). Make sure to install docker on your system.
+- Ensure that node_modules/.bin is in your path. e.g. include `export PATH="./node_modules/.bin:$PATH"` in your .zshrc
 
 ## Orientation
 
@@ -28,6 +29,8 @@ For a quickstart, see [here](./QUICKSTART.md)
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
+
+`packages/vscode-boxel-tools` is a VS Code extension for browsing Boxel workspaces, published as [Boxel Tools](https://marketplace.visualstudio.com/items?itemName=cardstack.boxel-tools). It can be deployed via the bot, with `staging` environment producing a pre-release version.
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
@@ -72,17 +75,16 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port  | Description                                               | Running `start:all` | Running `start:base` |
-| ----- | --------------------------------------------------------- | ------------------- | -------------------- |
-| :4201 | `/base` base realm                                        | ✅                  | ✅                   |
-| :4201 | `/experiments` experiments realm                          | ✅                  | 🚫                   |
-| :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
-| :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
-| :4204 | `root (/)` experiments realm                              | ✅                  | 🚫                   |
-| :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
-| :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
-| :5435 | Postgres DB                                               | ✅                  | 🚫                   |
-| :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
+| Port  | Description                                                   | Running `start:all` | Running `start:base` |
+| ----- | ------------------------------------------------------------- | ------------------- | -------------------- |
+| :4201 | `/base` base realm                                            | ✅                  | ✅                   |
+| :4201 | `/experiments` experiments realm                              | ✅                  | 🚫                   |
+| :4201 | `/seed` seed realm                                            | ✅                  | 🚫                   |
+| :4202 | `/test` host test realm, `/node-test` node test realm         | ✅                  | 🚫                   |
+| :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
+| :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
+| :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
+| :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
 
 #### Using `start:development`
 
@@ -248,14 +250,6 @@ To run the `packages/realm-server/` workspace tests start:
 
 1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
 2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
-
-### Realm Server DOM tests
-
-This test suite contains acceptance tests for asserting that the Realm server is capable of hosting its own app. To run these tests in the browser execute the following in the `packages/realm-server` workspace:
-
-1. `pnpm start:all`
-
-Visit `http://localhost:4205` after the realms have finished starting up
 
 ### Boxel UI
 

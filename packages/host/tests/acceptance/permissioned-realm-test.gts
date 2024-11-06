@@ -1,12 +1,6 @@
-import { visit, currentURL, triggerEvent, waitFor } from '@ember/test-helpers';
-
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-
-import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import {
   setupLocalIndexing,
@@ -15,14 +9,17 @@ import {
   testRealmURL,
   lookupLoaderService,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | permissioned realm tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     let loader = lookupLoaderService().loader;
@@ -61,7 +58,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
             <p>Last name: <@fields.lastName /></p>
             <p>Title: <@fields.title /></p>
           </div>
-          <style>
+          <style scoped>
             div {
               color: green;
               content: '';
@@ -92,34 +89,5 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       },
       permissions: { users: ['read', 'write'] },
     });
-  });
-
-  test('visiting realm root', async function (assert) {
-    await visit('/test/');
-
-    // Redirecting to operator mode if realm is not publicly readable
-    assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Interact,
-    });
-
-    await waitFor('[data-test-stack-card]');
-    assert.dom(`[data-test-stack-card="${testRealmURL}"]`).exists();
-    assert.dom('[data-test-index-card]').containsText('Hello, world');
-
-    // Cannot go to guest mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
-    });
-    assert.dom('[data-test-stack-card="http://test-realm/test/"]').exists();
   });
 });

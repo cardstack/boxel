@@ -40,6 +40,14 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
+  test("invalidations don't cross realm boundaries", async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
   test('only invalidates latest version of content', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
@@ -129,6 +137,14 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('returns undefined when getting a deleted module', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('update realm meta when indexing is done', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

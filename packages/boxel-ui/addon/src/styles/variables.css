@@ -35,22 +35,24 @@
   --boxel-lsp-xxs: 0.005em; /* 0.08px */
 
   /* Modular scale for spacing */
-  --boxel-spacing: 1.25rem; /* base size (20px) */
+  --boxel-spacing: 1rem; /* base size (16px) */
   --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
-  --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.67px */
-  --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 3.57px */
-  --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio)); /* 4.75px */
-  --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 6.33px */
-  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 8.44px */
-  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 11.26px */
-  --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 15px */
-  --boxel-sp: var(--boxel-spacing); /* 20px */
-  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 26.66px */
-  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 35.54px */
-  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 47.37px */
-  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 63.15px */
+  --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.17px */
+  --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.88px */
+  --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio)); /* 3.827px */
+  --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 5.09px */
+  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 6.78px */
+  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 9.05px */
+  --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 12px */
+  --boxel-sp: var(--boxel-spacing); /* 16px */
+  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 21.28px */
+  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 37.44px */
+  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 50.1px */
+  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 66.6px */
 
   /* common icon sizes */
+  --boxel-icon-xxs: 0.75rem; /* 12px */
+  --boxel-icon-xs: 1rem; /* 16px */
   --boxel-icon-sm: 1.25rem; /* 20px */
   --boxel-icon-med: 1.875rem; /* 30px */
   --boxel-icon-lg: 2.5rem; /* 40px */
@@ -62,12 +64,14 @@
   --boxel-border-color: #d3d3d3;
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
+  --boxel-border-flexible: 1px solid rgba(255, 255, 255, 0.35);
   --boxel-border-card: 1px solid rgba(0,0,0, 0.1 );
-  --boxel-border-radius-xs: 2px;
-  --boxel-border-radius-sm: 8px;
-  --boxel-border-radius: 10px;
-  --boxel-border-radius-lg: 15px;
-  --boxel-border-radius-xl: 20px;
+  --boxel-border-radius-xs: 1.5px;
+  --boxel-border-radius-sm: 6px;
+  --boxel-border-radius: 7.5px;
+  --boxel-border-radius-lg: 11.25px;
+  --boxel-border-radius-xl: 15px;
+  --boxel-border-radius-xxl: 22px;
   --boxel-transition: 0.2s ease;
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
@@ -98,8 +102,8 @@
   --boxel-700: #272330;
 
   --boxel-cyan: #00ebe5;
-  --boxel-teal: #03c4bf;
-  --boxel-dark-teal: #03b0ac;
+  --boxel-teal: #00ffba;
+  --boxel-dark-teal: #00ebac;
   --boxel-red: #ff5050;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
@@ -119,6 +123,8 @@
   /* Primary colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
+  --boxel-dark-hover: rgba(0, 0, 0, 0.1);
+  --boxel-darker-hover: rgba(0, 0, 0, 0.5);
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
@@ -156,8 +162,9 @@
   --boxel-success-300: var(--boxel-dark-green);
 
   /* z-index layers */
-  --boxel-layer-modal-default: 15;
-  --boxel-layer-modal-urgent: 20;
+  --boxel-layer-floating-button: 1000;
+  --boxel-layer-modal-default: 1500;
+  --boxel-layer-modal-urgent: 2000;
 
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */

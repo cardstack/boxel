@@ -3,12 +3,12 @@ import { getOwner, setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
+import { didCancel, enqueueTask } from 'ember-concurrency';
 
-import { type IndexWriter, type TextFileRef } from '@cardstack/runtime-common';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import { type IndexWriter } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
+  getReader,
   type IndexResults,
   type Reader,
   type RunnerOpts,
@@ -18,16 +18,18 @@ import { CurrentRun } from '../lib/current-run';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
+import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
 
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm
 // to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
-  @service declare loaderService: LoaderService;
-  @service declare renderService: RenderService;
-  @service declare fastboot: { isFastBoot: boolean };
-  @service declare localIndexer: LocalIndexer;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare renderService: RenderService;
+  @service private declare fastboot: { isFastBoot: boolean };
+  @service private declare localIndexer: LocalIndexer;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -98,8 +100,7 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter } = this.getRunnerParams();
-    await this.resetLoaderInFastboot.perform();
+    let { reader, indexWriter } = this.getRunnerParams(realmURL);
     let currentRun = new CurrentRun({
       realmURL,
       reader,
@@ -120,8 +121,7 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
     ) => {
-      let { reader, indexWriter } = this.getRunnerParams();
-      await this.resetLoaderInFastboot.perform();
+      let { reader, indexWriter } = this.getRunnerParams(realmURL);
       let currentRun = new CurrentRun({
         realmURL,
         reader,
@@ -139,30 +139,10 @@ export default class CardPrerender extends Component {
     },
   );
 
-  // perform this in EC task to prevent rerender cycles
-  private resetLoaderInFastboot = restartableTask(async () => {
-    if (this.fastboot.isFastBoot) {
-      await Promise.resolve();
-      this.loaderService.reset();
-    }
-  });
-
-  private getRunnerParams(): {
+  private getRunnerParams(realmURL: URL): {
     reader: Reader;
     indexWriter: IndexWriter;
   } {
-    let self = this;
-    function readFileAsText(
-      path: LocalPath,
-      opts?: { withFallbacks?: true },
-    ): Promise<TextFileRef | undefined> {
-      return _readFileAsText(
-        path,
-        self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-        opts,
-      );
-    }
-
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
@@ -174,15 +154,7 @@ export default class CardPrerender extends Component {
       };
     } else {
       return {
-        reader: {
-          lastModified: this.localIndexer.adapter.lastModified.bind(
-            this.localIndexer.adapter,
-          ),
-          readdir: this.localIndexer.adapter.readdir.bind(
-            this.localIndexer.adapter,
-          ),
-          readFileAsText,
-        },
+        reader: getReader(this.network.authedFetch, realmURL),
         indexWriter: this.localIndexer.indexWriter,
       };
     }

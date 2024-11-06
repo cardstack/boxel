@@ -12,6 +12,8 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   setupDB,
+  matrixURL,
+  closeServer,
 } from './helpers';
 import { copySync } from 'fs-extra';
 import { shimExternals } from '../lib/externals';
@@ -25,7 +27,7 @@ const testRealmHref = testRealmURL.href;
 
 module('loader', function (hooks) {
   let dir: DirResult;
-  let testRealmServer: Server;
+  let testRealmHttpServer: Server;
 
   let virtualNetwork = new VirtualNetwork();
   shimExternals(virtualNetwork);
@@ -39,7 +41,7 @@ module('loader', function (hooks) {
     return new Loader(fetch, virtualNetwork.resolveImport);
   }
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.before(async function () {
     dir = dirSync();
@@ -47,17 +49,20 @@ module('loader', function (hooks) {
   });
 
   setupDB(hooks, {
-    before: async (dbAdapter, queue) => {
-      ({ testRealmServer } = await runTestRealmServer({
+    before: async (dbAdapter, publisher, runner) => {
+      ({ testRealmHttpServer } = await runTestRealmServer({
         virtualNetwork,
-        dir: dir.name,
+        testRealmDir: dir.name,
+        realmsRootPath: dir.name,
         realmURL: testRealmURL,
         dbAdapter,
-        queue,
+        publisher,
+        runner,
+        matrixURL,
       }));
     },
     after: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmHttpServer);
     },
   });
 
@@ -150,9 +155,10 @@ module('loader', function (hooks) {
     });
 
     setupDB(hooks, {
-      before: async (dbAdapter, queue) => {
+      before: async (dbAdapter, publisher, runner) => {
         loader2 = createLoader();
         realm = await createRealm({
+          withWorker: true,
           dir: dir.name,
           fileSystem: {
             'foo.js': `
@@ -163,7 +169,8 @@ module('loader', function (hooks) {
           realmURL: 'http://example.com/',
           virtualNetwork,
           dbAdapter,
-          queue,
+          runner,
+          publisher,
         });
         virtualNetwork.mount(realm.handle.bind(realm));
         await realm.start();

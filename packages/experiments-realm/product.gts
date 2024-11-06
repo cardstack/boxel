@@ -22,6 +22,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import PackageIcon from '@cardstack/boxel-icons/package';
 
 export function expectedArrivalDescription(
   leadTimeDays: number,
@@ -65,7 +66,7 @@ export class EmbeddedProductComponent extends GlimmerComponent<EmbeddedProductCo
         {{@model.seller.title}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         max-width: 300px;
       }
@@ -115,18 +116,20 @@ interface ProductImagesSignature {
 export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
   <template>
     <div ...attributes>
-      <img class='main' src={{@activeImage}} />
+      <img class='main' src={{@activeImage}} aria-hidden='true' />
       <div class='thumbnails'>
         {{#each @images as |image|}}
-          <img
-            src={{image}}
-            class={{cn active=(eq image @activeImage)}}
-            {{on 'click' (fn @onSelectImage image)}}
-          />
+          <button {{on 'click' (fn @onSelectImage image)}}>
+            <img
+              src={{image}}
+              class={{cn active=(eq image @activeImage)}}
+              aria-hidden='true'
+            />
+          </button>
         {{/each}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .main {
         min-width: 0;
         max-width: 100%;
@@ -219,7 +222,7 @@ export class ProductDetail extends GlimmerComponent<ProductDetailSignature> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       h2 {
         margin-top: 0;
         font-size: 1.1em;
@@ -269,7 +272,7 @@ class Isolated extends Component<typeof Product> {
         </button>
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         display: grid;
         grid-template-columns: 50% 50%;
@@ -321,6 +324,7 @@ class Isolated extends Component<typeof Product> {
 
 export class Product extends CardDef {
   static displayName = 'Product';
+  static icon = PackageIcon;
 
   // use title field for product title
 

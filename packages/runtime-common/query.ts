@@ -3,7 +3,7 @@ import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
 
-import { type CodeRef, isCodeRef } from './index';
+import { type CodeRef, isCodeRef, generalSortFields } from './index';
 
 export interface Query {
   filter?: Filter;
@@ -29,11 +29,20 @@ export interface TypedFilter {
   on?: CodeRef;
 }
 
-interface SortExpression {
+type GeneralSortField = keyof typeof generalSortFields;
+
+type SortExpressionWithoutCodeRef = {
+  by: GeneralSortField;
+  direction?: 'asc' | 'desc';
+};
+
+type SortExpressionWithCodeRef = {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
-}
+};
+
+type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
 
 export type Sort = SortExpression[];
 
@@ -164,6 +173,9 @@ function assertSortExpression(
     );
   }
   if (!('on' in sort)) {
+    if (Object.keys(generalSortFields).includes(sort.by)) {
+      return;
+    }
     throw new Error(
       `${pointer.concat('on').join('/') || '/'}: missing on object`,
     );
@@ -295,9 +307,9 @@ function assertEveryFilter(
       `${pointer.join('/') || '/'}: every must be an array of Filters`,
     );
   } else {
-    filter.every.every((value: any, index: number) =>
-      assertFilter(value, pointer.concat(`[${index}]`)),
-    );
+    filter.every.forEach((value: any, index: number) => {
+      assertFilter(value, pointer.concat(`[${index}]`));
+    });
   }
 }
 
@@ -336,9 +348,10 @@ function assertEqFilter(
   if (typeof filter.eq !== 'object' || filter.eq == null) {
     throw new Error(`${pointer.join('/') || '/'}: eq must be an object`);
   }
-  Object.entries(filter.eq).every(([key, value]) =>
-    assertJSONValue(value, pointer.concat(key)),
-  );
+  Object.entries(filter.eq).forEach(([key, value]) => {
+    assertKey(key, pointer);
+    assertJSONValue(value, pointer.concat(key));
+  });
 }
 
 function assertContainsFilter(
@@ -359,9 +372,10 @@ function assertContainsFilter(
   if (typeof filter.contains !== 'object' || filter.contains == null) {
     throw new Error(`${pointer.join('/') || '/'}: contains must be an object`);
   }
-  Object.entries(filter.contains).every(([key, value]) =>
-    assertJSONValue(value, pointer.concat(key)),
-  );
+  Object.entries(filter.contains).forEach(([key, value]) => {
+    assertKey(key, pointer);
+    assertJSONValue(value, pointer.concat(key));
+  });
 }
 
 function assertRangeFilter(
@@ -407,3 +421,15 @@ function assertRangeFilter(
     });
   });
 }
+
+export function assertKey(key: string, pointer: string[]) {
+  if (key.startsWith('[') && key.endsWith(']')) {
+    throw new Error(
+      `${pointer.join('/')}: field names cannot be wrapped in brackets: ${key}`,
+    );
+  }
+}
+
+export const parseQuery = (queryString: string) => {
+  return qs.parse(queryString, { depth: 10, strictDepth: true });
+};

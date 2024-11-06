@@ -3,49 +3,54 @@ import Component from '@glimmer/component';
 import { BoxelDropdown, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import { type RealmCards } from '@cardstack/runtime-common';
+import { RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {
-  availableRealms: RealmCards[];
-  selectedRealms: RealmCards[];
-  onSelectRealm: (realm: RealmCards) => void;
-  onDeselectRealm: (realm: RealmCards) => void;
+  availableRealms: Record<string, RealmInfo> | undefined;
+  selectedRealmUrls: string[];
+  onSelectRealm: (realmUrl: string) => void;
+  onDeselectRealm: (realmUrl: string) => void;
   disableRealmFilter: boolean;
 }
 
 export default class CardCatalogFilters extends Component<Signature> {
   get realmMenuItems() {
-    return this.args.availableRealms.map((realm) => {
-      return new MenuItem(realm.realmInfo.name, 'action', {
-        action: () => {
-          let isSelected = this.args.selectedRealms
-            .map((realm) => realm.url)
-            .includes(realm.url);
+    if (!this.args.availableRealms) {
+      return [];
+    }
+    return Object.entries(this.args.availableRealms).map(
+      ([realmUrl, realmInfo]) => {
+        return new MenuItem(realmInfo.name, 'action', {
+          action: () => {
+            let isSelected = this.args.selectedRealmUrls.includes(realmUrl);
 
-          // Toggle selection - if the item selected, deselect it, if not, select it
-          if (isSelected) {
-            this.args.onDeselectRealm(realm);
-          } else {
-            this.args.onSelectRealm(realm);
-          }
+            if (isSelected) {
+              this.args.onDeselectRealm(realmUrl);
+            } else {
+              this.args.onSelectRealm(realmUrl);
+            }
 
-          return false;
-        },
-        selected: this.args.selectedRealms
-          .map((realm) => realm.url)
-          .includes(realm.url),
-        iconURL: realm.realmInfo.iconURL ?? 'default-realm-icon.png',
-      });
-    });
+            return false;
+          },
+          selected: this.args.selectedRealmUrls.includes(realmUrl),
+          iconURL: realmInfo.iconURL ?? 'default-realm-icon.png',
+        });
+      },
+    );
   }
 
   get realmFilterSummary() {
-    if (this.args.selectedRealms.length === 0) {
+    if (
+      this.args.selectedRealmUrls.length ===
+      Object.keys(this.args.availableRealms || {}).length
+    ) {
       return 'All';
     }
-    return this.args.selectedRealms
-      .map(({ realmInfo }) => realmInfo.name)
-      .join(', ');
+    return (
+      this.args.selectedRealmUrls
+        .map((realmUrl: string) => this.args.availableRealms?.[realmUrl]?.name)
+        .join(', ') || 'None selected'
+    );
   }
 
   <template>
@@ -69,7 +74,7 @@ export default class CardCatalogFilters extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .filter-container {
         --filter-height: 30px;
         display: flex;

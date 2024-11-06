@@ -50,7 +50,7 @@ class BodyBalance extends FieldDef {
           </item.component>
         </RadioInput>
       </div>
-      <style></style>
+      <style scoped></style>
     </template>
 
     private radioGroup = `__boxel_body_balance${groupNumber++}__`;
@@ -150,7 +150,8 @@ export class BoardAnnotation extends FieldDef {
           {{#if this.hasEdgeAngle}}
             <div class='edge-angle'>
               <div class='angle'>
-                <div class='ray' style='{{this.edgeRayStyle}}'></div>
+                {{! template-lint-disable no-inline-styles }}
+                <div class='ray' style={{this.edgeRayStyle}}></div>
               </div>
               <div class='degrees'>{{this.edgeAngleDegrees}}° Edge</div>
             </div>
@@ -166,7 +167,8 @@ export class BoardAnnotation extends FieldDef {
             </div>
           {{/if}}
           {{#if this.hasBodyPosition}}
-            <div class='body-position' style='{{this.positionStyle}}'><div
+            {{! template-lint-disable no-inline-styles }}
+            <div class='body-position' style={{this.positionStyle}}><div
                 class='position-value'
               >{{this.positionDegrees}}°</div>
               <div class='arrow'></div>
@@ -177,7 +179,7 @@ export class BoardAnnotation extends FieldDef {
       {{#if @model.comment}}
         <div class='comment'>{{@model.comment}}</div>
       {{/if}}
-      <style>
+      <style scoped>
         .comment {
           font-size: 13px;
           max-width: 60px;
@@ -272,12 +274,12 @@ export class BoardAnnotation extends FieldDef {
           position: absolute;
           top: -40px;
           left: 50%;
-          font-weight: bold;
+          font-weight: 600;
           font-size: 23px;
         }
         .body-balance {
           display: flex;
-          font-weight: bold;
+          font-weight: 600;
           color: white;
           font-size: 23px;
           flex-direction: row-reverse;

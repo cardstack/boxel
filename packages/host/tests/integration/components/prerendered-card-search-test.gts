@@ -8,7 +8,6 @@ import {
 
 import { waitUntil } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -42,6 +41,7 @@ import {
   linksTo,
   setupBaseRealm,
 } from '../../helpers/base-realm';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module(`Integration | prerendered-card-search`, function (hooks) {
   let loader: Loader;
@@ -95,7 +95,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
               {{@model.author.lastName}}
             </span>
           </div>
-          <style>
+          <style scoped>
             .book {
               background: yellow;
             }
@@ -398,7 +398,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await this.expectEvents({
       assert,
       realm: testRealm,
-      expectedNumberOfEvents: 1,
+      expectedNumberOfEvents: 2,
       callback: async () => {
         let owner = (getContext() as TestContext).owner;
         let cardService = owner.lookup('service:card-service') as CardService;

@@ -45,6 +45,9 @@ module('Unit | query', function (hooks) {
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
     );
+    virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
+      return `${ENV.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
+    });
     shimExternals(virtualNetwork);
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -572,6 +575,15 @@ module('Unit | query', function (hooks) {
   });
 
   test('can get prerendered cards from the indexer', async function (assert) {
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      dbAdapter,
+      loader,
+      testCards,
+    });
+  });
+
+  test('can sort using a general field that is not an attribute of a card', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,

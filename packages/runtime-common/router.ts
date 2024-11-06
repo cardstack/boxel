@@ -21,10 +21,12 @@ export enum SupportedMimeType {
   CardSource = 'application/vnd.card+source',
   DirectoryListing = 'application/vnd.api+json',
   RealmInfo = 'application/vnd.api+json',
+  Permissions = 'application/vnd.api+json',
   Session = 'application/json',
   EventStream = 'text/event-stream',
   HTML = 'text/html',
   JSONAPI = 'application/vnd.api+json',
+  CardTypeSummary = 'application/json',
   All = '*/*',
 }
 

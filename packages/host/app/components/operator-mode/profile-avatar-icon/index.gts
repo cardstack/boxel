@@ -11,8 +11,8 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 interface Signature {
   Args: {
     userId: string | null;
-    size?: string; // CSS length value
-    border?: string; // CSS border value
+    size?: string;
+    border?: string;
   };
   Element: HTMLDivElement;
 }
@@ -50,7 +50,7 @@ interface ProfileAvatarIconVisualSignature {
 
 const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSignature> =
   <template>
-    <style>
+    <style scoped>
       .profile-icon {
         background: var(--profile-avatar-icon-background);
         border-radius: var(--profile-avatar-icon-size, 40px);

@@ -43,9 +43,7 @@ export default class SubscribeToRealms extends Helper<Signature> {
     this.subscriptions = realms.map((realm) => {
       return {
         realm,
-        unsubscribe: subscribeToRealm(`${realm}_message`, (ev) =>
-          callback(ev, realm),
-        ),
+        unsubscribe: subscribeToRealm(realm, (ev) => callback(ev, realm)),
       };
     });
   }

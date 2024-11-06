@@ -10,6 +10,7 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui/components';
 import { Country } from './country';
+import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 
 class TravelGoal extends FieldDef {
   static displayName = 'Travel Goal';
@@ -29,7 +30,7 @@ class TravelGoal extends FieldDef {
           <@fields.alternateTrips />
         </FieldContainer>
       </CardContainer>
-      <style>
+      <style scoped>
         .container {
           padding: 20px;
           background-color: whitesmoke;
@@ -73,7 +74,7 @@ class Traveler extends FieldDef {
           <@fields.nextTravelGoal />
         </FieldContainer>
       </div>
-      <style>
+      <style scoped>
         .traveler {
           display: grid;
           gap: 20px;
@@ -85,6 +86,7 @@ class Traveler extends FieldDef {
 
 export class TripInfo extends CardDef {
   static displayName = 'Trip Info';
+  static icon = MapPinIcon;
   @field destinations = linksToMany(Country);
   @field traveler = contains(Traveler);
   @field title = contains(StringField, {
@@ -109,5 +111,7 @@ export class TripInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
   */
 }

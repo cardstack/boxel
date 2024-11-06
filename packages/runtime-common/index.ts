@@ -34,9 +34,16 @@ export interface DirectoryEntryRelationship {
   links: {
     related: string;
   };
-  meta: {
-    kind: 'directory' | 'file';
-  };
+  meta: FileMeta | DirectoryMeta;
+}
+
+export interface FileMeta {
+  kind: 'file';
+  lastModified: number | null;
+}
+
+export interface DirectoryMeta {
+  kind: 'directory';
 }
 
 export interface RealmCards {
@@ -52,7 +59,7 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { Query } from './query';
+import { CardTypeFilter, EveryFilter, Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
@@ -71,13 +78,17 @@ export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
-export { cardTypeDisplayName } from './helpers/card-type-display-name';
+export {
+  cardTypeDisplayName,
+  cardTypeIcon,
+} from './helpers/card-type-display-name';
 export { maybeRelativeURL, maybeURL, relativeURL } from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
 export * from './realm-permission-queries';
+export * from './user-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -123,9 +134,9 @@ export {
   isSingleCardDocument,
   isCardDocumentString,
 } from './card-document';
-export { sanitizeHtml } from './dompurify';
+export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
-export { getPlural } from './pluralize';
+export { getPlural } from './pluralize-runtime';
 
 import type {
   CardDef,
@@ -166,9 +177,13 @@ export type CreateNewCard = (
 
 export interface CardChooser {
   chooseCard<T extends BaseDef>(
-    query: Query,
+    query: CardCatalogQuery,
     opts?: {
-      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+      offerToCreate?: {
+        ref: CodeRef;
+        relativeTo: URL | undefined;
+        realmURL: URL | undefined;
+      };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -176,11 +191,16 @@ export interface CardChooser {
 }
 
 export async function chooseCard<T extends BaseDef>(
-  query: Query,
+  query: CardCatalogQuery,
   opts?: {
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+      realmURL: URL | undefined;
+    };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
+    preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;
@@ -212,14 +232,10 @@ export interface CardSearch {
     cardError?: undefined | { id: string; error: Error };
   };
   trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
-  getLiveCards(
-    query: Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
+}
+
+export interface CardCatalogQuery extends Query {
+  filter?: CardTypeFilter | EveryFilter;
 }
 
 export function getCards(query: Query, realms?: string[]) {
@@ -253,16 +269,6 @@ export function trackCard<T extends object>(
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.trackCard(owner, card, realmURL);
-}
-
-export function getLiveCards(
-  query: Query,
-  realms?: string[],
-  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCards(query, realms, doWhileRefreshing);
 }
 
 export interface CardCreator {
@@ -331,11 +337,15 @@ export interface Actions {
   viewCard: (
     card: CardDef,
     format?: Format,
-    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-    fieldName?: string,
+    opts?: {
+      openCardInRightMostStack?: boolean;
+      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+      fieldName?: string;
+    },
   ) => Promise<void>;
   editCard: (card: CardDef) => void;
-  saveCard(card: CardDef, dismissItem: boolean): void;
+  copyCard?: (card: CardDef) => Promise<CardDef>;
+  saveCard(card: CardDef): Promise<void>;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,
@@ -346,7 +356,7 @@ export interface Actions {
     card: CardDef, // the card that the command is being run on
     skillCardId: string, // skill card id that the command is associated with
     message?: string, // message that posts in the chat
-  ) => Promise<void>;
+  ) => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {
@@ -446,4 +456,8 @@ export function uint8ArrayToHex(uint8: Uint8Array) {
   return Array.from(uint8)
     .map((i) => i.toString(16).padStart(2, '0'))
     .join('');
+}
+
+export function unixTime(epochTimeMs: number) {
+  return Math.floor(epochTimeMs / 1000);
 }

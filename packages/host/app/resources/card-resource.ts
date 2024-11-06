@@ -17,6 +17,7 @@ import {
   isSingleCardDocument,
   apiFor,
   loaderFor,
+  hasExecutableExtension,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -46,6 +47,7 @@ interface Args {
     // this is not always constructed within a container so we pass in our services
     cardService: CardService;
     messageService: MessageService;
+    resetLoader: () => void;
     onCardInstanceChange?: (
       oldCard: CardDef | undefined,
       newCard: CardDef | undefined,
@@ -80,6 +82,7 @@ export class CardResource extends Resource<Args> {
   private declare cardService: CardService;
   private declare messageService: MessageService;
   private declare loaderService: LoaderService;
+  private declare resetLoader: () => void;
   private _loader: Loader | undefined;
   private onCardInstanceChange?: (
     oldCard: CardDef | undefined,
@@ -99,6 +102,7 @@ export class CardResource extends Resource<Args> {
       onCardInstanceChange,
       messageService,
       cardService,
+      resetLoader,
     } = named;
     this.messageService = messageService;
     this.cardService = cardService;
@@ -106,6 +110,7 @@ export class CardResource extends Resource<Args> {
     this._loader = loader;
     this.onCardInstanceChange = onCardInstanceChange;
     this.cardError = undefined;
+    this.resetLoader = resetLoader;
     if (isLive && this.url) {
       this.loaded = this.loadLiveModel.perform(new URL(this.url));
     } else if (this.url) {
@@ -175,7 +180,9 @@ export class CardResource extends Resource<Args> {
       return;
     }
     let realmURL = await this.cardService.getRealmURL(card);
-
+    if (!realmURL) {
+      throw new Error(`Could not determine the realm for card "${card.id}"`);
+    }
     cardsForLoader.set(card.id, {
       card,
       realmURL,
@@ -199,7 +206,7 @@ export class CardResource extends Resource<Args> {
     }
     realmSubscribers.set(this, {
       unsubscribe: this.messageService.subscribe(
-        `${realmURL}_message`,
+        realmURL.href,
         ({ type, data: dataStr }) => {
           if (type !== 'index') {
             return;
@@ -225,6 +232,12 @@ export class CardResource extends Resource<Args> {
             // the inputs with past values. This can happen if the user makes edits in the time between the auto
             // save request and the arrival SSE event.
             if (!this.cardService.clientRequestIds.has(data.clientRequestId)) {
+              if (invalidations.find((i) => hasExecutableExtension(i))) {
+                // the invalidation included code changes too. in this case we
+                // need to flush the loader so that we can pick up any updated
+                // code before re-running the card
+                this.resetLoader();
+              }
               this.reload.perform(card);
             }
           }
@@ -249,7 +262,7 @@ export class CardResource extends Resource<Args> {
       let card = await this.cardService.createFromSerialized(
         json.data,
         json,
-        url,
+        new URL(json.data.id),
       );
       return card;
     } catch (error: any) {
@@ -374,6 +387,9 @@ export function getCard(
     ) => void;
   },
 ) {
+  let loaderService = (getOwner(parent) as any).lookup(
+    'service:loader-service',
+  ) as LoaderService;
   return CardResource.from(parent, () => ({
     named: {
       url: url(),
@@ -381,11 +397,8 @@ export function getCard(
       onCardInstanceChange: opts?.onCardInstanceChange
         ? opts.onCardInstanceChange()
         : undefined,
-      loader: (
-        (getOwner(parent) as any).lookup(
-          'service:loader-service',
-        ) as LoaderService
-      ).loader,
+      loader: loaderService.loader,
+      resetLoader: loaderService.reset.bind(loaderService),
       messageService: (getOwner(parent) as any).lookup(
         'service:message-service',
       ) as MessageService,

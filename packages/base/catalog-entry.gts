@@ -13,9 +13,11 @@ import CodeRef from './code-ref';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
+import BoxModel from '@cardstack/boxel-icons/box-model';
 
 export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
+  static icon = BoxModel;
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field ref = contains(CodeRef);
@@ -79,7 +81,7 @@ export class CatalogEntry extends CardDef {
           <@fields.description />
         </p>
       </CatalogEntryContainer>
-      <style>
+      <style scoped>
         .fitted > * {
           white-space: nowrap;
           overflow: hidden;
@@ -87,7 +89,7 @@ export class CatalogEntry extends CardDef {
         }
 
         .title {
-          font: 700 var(--boxel-font-sm);
+          font: 600 var(--boxel-font-sm);
         }
 
         .description {
@@ -118,7 +120,7 @@ export class CatalogEntry extends CardDef {
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
       </CatalogEntryContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp);
         }
@@ -143,11 +145,14 @@ class CatalogEntryContainer extends GlimmerComponent<Signature> {
     <div class='entry' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .entry {
         display: grid;
         gap: 3px;
         font: var(--boxel-font-sm);
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: var(--boxel-sp-xs);
       }
     </style>
   </template>

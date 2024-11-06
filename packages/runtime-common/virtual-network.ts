@@ -1,7 +1,10 @@
 import { RealmPaths } from './paths';
+import { baseRealm } from './index';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
+  type ModuleLike,
+  ModuleDescriptor,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
@@ -14,6 +17,7 @@ export type Handler = (req: Request) => Promise<Response | null>;
 export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
+  private importMap: Map<string, (rest: string) => string> = new Map();
 
   constructor(nativeFetch = globalThis.fetch.bind(globalThis)) {
     this.nativeFetch = nativeFetch;
@@ -21,6 +25,11 @@ export class VirtualNetwork {
   }
 
   resolveImport = (moduleIdentifier: string) => {
+    for (let [prefix, handler] of this.importMap) {
+      if (moduleIdentifier.startsWith(prefix)) {
+        return handler(moduleIdentifier.slice(prefix.length));
+      }
+    }
     if (!isUrlLike(moduleIdentifier)) {
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
     }
@@ -29,12 +38,20 @@ export class VirtualNetwork {
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
 
-  shimModule(moduleIdentifier: string, module: Record<string, any>) {
+  shimModule(moduleIdentifier: string, module: ModuleLike) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
+  }
+
+  shimAsyncModule(descriptor: ModuleDescriptor) {
+    this.packageShimHandler.shimAsyncModule(descriptor);
   }
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
+  }
+
+  addImportMap(prefix: string, handler: (rest: string) => string): void {
+    this.importMap.set(prefix, handler);
   }
 
   private nativeFetch: typeof globalThis.fetch;
@@ -121,7 +138,9 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    return await fetcher(this.nativeFetch, handlers)(request, init);
+    return withRetries(new URL(request.url), () =>
+      fetcher(this.nativeFetch, handlers)(request, init),
+    );
   }
 
   // This method is used to handle the boundary between the real and virtual network,
@@ -196,6 +215,38 @@ function isUrlLike(moduleIdentifier: string): boolean {
     moduleIdentifier.startsWith('http://') ||
     moduleIdentifier.startsWith('https://')
   );
+}
+
+// This is to handle a very mysterious situation in our CI environment where
+// fetches for base realm artifacts seem to vanish and we see "TypeError:
+// Fetch failed" exceptions.
+const maxAttempts = 5;
+const backOffMs = 100;
+async function withRetries(
+  url: URL,
+  fetchFn: () => ReturnType<typeof globalThis.fetch>,
+) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetchFn();
+    } catch (err: any) {
+      if (
+        (globalThis as any).__environment !== 'test' ||
+        (!baseRealm.inRealm(url) &&
+          !url.href.startsWith('https://boxel-icons.boxel.ai/')) ||
+        ++attempt > maxAttempts
+      ) {
+        throw err;
+      }
+      console.error(
+        `Encountered fetch failed for ${
+          url.href
+        } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+      );
+      await new Promise((r) => setTimeout(r, attempt * backOffMs));
+    }
+  }
 }
 
 async function buildRequest(url: string, originalRequest: Request) {

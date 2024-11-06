@@ -2,25 +2,23 @@ import { module, test } from 'qunit';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import {
   baseRealm,
-  fetcher,
-  Loader,
+  DBAdapter,
   LooseSingleCardDocument,
-  maybeHandleScopedCSSRequest,
   Realm,
   RealmPermissions,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
-  localBaseRealm,
   testRealm,
   setupCardLogs,
   setupBaseRealmServer,
   setupDB,
   runTestRealmServer,
-  runBaseRealmServer,
+  createVirtualNetwork,
+  createVirtualNetworkAndLoader,
+  matrixURL,
+  closeServer,
 } from './helpers';
-import { shimExternals } from '../lib/externals';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
 
@@ -35,22 +33,18 @@ function trimCardContainer(text: string) {
   );
 }
 
+let testDbAdapter: DBAdapter;
+
 setGracefulCleanup();
+
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
-module('indexing', function (hooks) {
-  let virtualNetwork = new VirtualNetwork();
-  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  shimExternals(virtualNetwork);
 
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
+module('indexing', function (hooks) {
+  let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
+    createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,
@@ -60,16 +54,20 @@ module('indexing', function (hooks) {
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      testDbAdapter = dbAdapter;
+      let virtualNetwork = createVirtualNetwork();
       dir = dirSync().name;
       realm = await createRealm({
+        withWorker: true,
         dir,
         virtualNetwork,
         dbAdapter,
-        queue,
+        publisher,
+        runner,
         fileSystem: {
           'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -86,7 +84,7 @@ module('indexing', function (hooks) {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
 
-                  <style>
+                  <style scoped>
                     h1 { color: red }
                   </style>
                 </template>
@@ -95,7 +93,7 @@ module('indexing', function (hooks) {
                 <template>
                   <h1> Fitted Card Person: <@fields.firstName/></h1>
 
-                  <style>
+                  <style scoped>
                     h1 { color: red }
                   </style>
                 </template>
@@ -122,7 +120,7 @@ module('indexing', function (hooks) {
                 <template>
                   <h1> Embedded Card Fancy Person: <@fields.firstName/></h1>
 
-                  <style>
+                  <style scoped>
                     h1 { color: pink }
                   </style>
                 </template>
@@ -158,6 +156,21 @@ module('indexing', function (hooks) {
                 get boom() {
                   throw new Error('intentional error');
                 }
+              }
+            }
+          `,
+          'boom2.gts': `
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
+
+            export class Boom extends CardDef {
+              @field firstName = contains(StringCard);
+              boom = () => {};
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  {{! From CS-7216 we are using a modifier in a strict mode template that is not imported }}
+                  <h1 {{did-insert this.boom}}><@fields.firstName/></h1>
+                </template>
               }
             }
           `,
@@ -253,6 +266,19 @@ module('indexing', function (hooks) {
               },
             },
           },
+          'boom2.json': {
+            data: {
+              attributes: {
+                firstName: 'Boom!',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './boom2',
+                  name: 'Boom',
+                },
+              },
+            },
+          },
           'empty.json': {
             data: {
               attributes: {},
@@ -264,6 +290,10 @@ module('indexing', function (hooks) {
               },
             },
           },
+          'random-file.txt': 'hello',
+          'random-image.png': 'i am an image',
+          '.DS_Store':
+            'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
         },
       });
       await realm.start();
@@ -314,6 +344,20 @@ module('indexing', function (hooks) {
           'Encountered error rendering HTML for card: intentional error',
         );
         assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
+      } else {
+        assert.ok('false', 'expected search entry to be an error document');
+      }
+    }
+    {
+      let entry = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}boom2`),
+      );
+      if (entry?.type === 'error') {
+        assert.strictEqual(
+          entry.error.detail,
+          'Encountered error rendering HTML for card: Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
+        );
+        assert.deepEqual(entry.error.deps, [`${testRealm}boom2`]);
       } else {
         assert.ok('false', 'expected search entry to be an error document');
       }
@@ -411,7 +455,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -439,7 +483,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -458,7 +502,7 @@ module('indexing', function (hooks) {
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 3,
       },
       'indexed correct number of files',
     );
@@ -491,7 +535,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 12,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -527,7 +571,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 10,
       },
       'index did not touch any files',
     );
@@ -568,7 +612,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 12,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -610,7 +654,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 12,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -663,7 +707,7 @@ module('indexing', function (hooks) {
         instanceErrors: 2,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -704,10 +748,24 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 12,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
+  });
+
+  test('sets resource_created_at for modules and instances', async function (assert) {
+    let entry = (await realm.realmIndexQueryEngine.module(
+      new URL(`${testRealm}fancy-person.gts`),
+    )) as { resourceCreatedAt: number };
+
+    assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+
+    entry = (await realm.realmIndexQueryEngine.instance(
+      new URL(`${testRealm}mango`),
+    )) as { resourceCreatedAt: number };
+
+    assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
   });
 
   test('sets urls containing encoded CSS for deps for a module', async function (assert) {
@@ -786,25 +844,42 @@ module('indexing', function (hooks) {
       assertCssDependency(entry.deps, pattern, fileName);
     });
   });
+
+  test('will not invalidate non-json/non-executable files', async function (assert) {
+    let deletedEntries = (await testDbAdapter.execute(
+      `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
+    )) as { url: string }[];
+
+    let deletedEntryUrls = deletedEntries.map((row) => row.url);
+
+    ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
+      assert.notOk(deletedEntryUrls.includes(file));
+    });
+  });
 });
 
 module('permissioned realm', function (hooks) {
+  let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
+    createVirtualNetworkAndLoader();
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
+
+  // We want 2 different realm users to test authorization between them - these
+  // names are selected because they are already available in the test
+  // environment (via register-realm-users.ts)
+  let matrixUser1 = 'test_realm';
+  let matrixUser2 = 'node-test_realm';
   let testRealm1URL = new URL('http://127.0.0.1:4447/');
   let testRealm2URL = new URL('http://127.0.0.1:4448/');
 
   let testRealm2: Realm;
   let testRealmServer1: Server;
   let testRealmServer2: Server;
-  let baseRealmServer: Server;
-  let virtualNetwork: VirtualNetwork;
-
-  hooks.beforeEach(async function () {
-    virtualNetwork = new VirtualNetwork();
-    virtualNetwork.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/'),
-    );
-  });
 
   function setupRealms(
     hooks: NestedHooks,
@@ -814,15 +889,11 @@ module('permissioned realm', function (hooks) {
     },
   ) {
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
-        baseRealmServer = await runBaseRealmServer(
-          virtualNetwork,
-          queue,
-          dbAdapter,
-        );
-        ({ testRealmServer: testRealmServer1 } = await runTestRealmServer({
-          virtualNetwork,
-          dir: dirSync().name,
+      beforeEach: async (dbAdapter, publisher, runner) => {
+        ({ testRealmHttpServer: testRealmServer1 } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
           realmURL: testRealm1URL,
           fileSystem: {
             'article.gts': `
@@ -834,17 +905,21 @@ module('permissioned realm', function (hooks) {
             `,
           },
           permissions: permissions.provider,
+          matrixURL,
           matrixConfig: {
-            url: new URL(`http://localhost:8008`),
+            url: matrixURL,
             username: matrixUser1,
           },
           dbAdapter,
-          queue,
+          publisher,
+          runner,
         }));
-        ({ testRealmServer: testRealmServer2, testRealm: testRealm2 } =
+
+        ({ testRealmHttpServer: testRealmServer2, testRealm: testRealm2 } =
           await runTestRealmServer({
-            virtualNetwork,
-            dir: dirSync().name,
+            virtualNetwork: await createVirtualNetwork(),
+            testRealmDir: dirSync().name,
+            realmsRootPath: dirSync().name,
             realmURL: testRealm2URL,
             fileSystem: {
               'website.gts': `
@@ -866,27 +941,22 @@ module('permissioned realm', function (hooks) {
               },
             },
             permissions: permissions.consumer,
+            matrixURL,
             matrixConfig: {
-              url: new URL(`http://localhost:8008`),
+              url: matrixURL,
               username: matrixUser2,
             },
             dbAdapter,
-            queue,
+            publisher,
+            runner,
           }));
       },
       afterEach: async () => {
-        testRealmServer1.close();
-        testRealmServer2.close();
-        baseRealmServer.close();
+        await closeServer(testRealmServer1);
+        await closeServer(testRealmServer2);
       },
     });
   }
-
-  // We want 2 different realm users to test authorization between them - these
-  // names are selected because they are already available in the test
-  // environment (via register-realm-users.ts)
-  let matrixUser1 = 'test_realm';
-  let matrixUser2 = 'node-test_realm';
 
   module('readable realm', function (hooks) {
     setupRealms(hooks, {
@@ -935,7 +1005,7 @@ module('permissioned realm', function (hooks) {
           instancesIndexed: 0,
           moduleErrors: 1,
           modulesIndexed: 0,
-          totalIndexEntries: 2,
+          totalIndexEntries: 0,
         },
         'has a module error',
       );

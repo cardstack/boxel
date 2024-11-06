@@ -45,14 +45,6 @@ export default class BoxelSelectUsage extends Component {
   }
 
   <template>
-    <style
-      unscoped
-    >
-          .boxel-select-usage {
-            --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
-            --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
-          }
-        </style>
     <FreestyleUsage @name='Select'>
       <:example>
 
@@ -145,22 +137,6 @@ export default class BoxelSelectUsage extends Component {
           @description='Tells the component what property of the options should be used to filter'
         />
       </:api>
-      <:cssVars as |Css|>
-        <Css.Basic
-          @name='boxel-select-current-color'
-          @type='color'
-          @defaultValue={{this.boxelSelectCurrentColor.defaults}}
-          @value={{this.boxelSelectCurrentColor.value}}
-          @onInput={{this.boxelSelectCurrentColor.update}}
-        />
-        <Css.Basic
-          @name='boxel-select-selected-color'
-          @type='color'
-          @defaultValue={{this.boxelSelectSelectedColor.defaults}}
-          @value={{this.boxelSelectSelectedColor.value}}
-          @onInput={{this.boxelSelectSelectedColor.update}}
-        />
-      </:cssVars>
     </FreestyleUsage>
   </template>
 }

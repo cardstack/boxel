@@ -5,32 +5,26 @@ import {
   fillIn,
   triggerEvent,
 } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
-import { setupRenderingTest } from 'ember-qunit';
+
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
-import { Deferred, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import {
-  addRoomEvent,
-  getCommandReactionEvents,
-  getCommandResultEvents,
-  updateRoomEvent,
-} from '@cardstack/host/lib/matrix-handlers';
-
+import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CardDef } from '../../../../experiments-realm/re-export';
+import type { CommandResultEvent } from 'https://cardstack.com/base/matrix-event';
+
 import {
   percySnapshot,
   testRealmURL,
@@ -45,19 +39,27 @@ import {
   lookupLoaderService,
 } from '../../helpers';
 import {
-  setupMatrixServiceMock,
-  MockMatrixService,
-} from '../../helpers/mock-matrix-service';
+  CardDef,
+  Component,
+  FieldDef,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+  setupBaseRealm,
+  StringField,
+} from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
-  let matrixService: MockMatrixService;
   let operatorModeStateService: OperatorModeStateService;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
 
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
@@ -70,33 +72,29 @@ module('Integration | ai-assistant-panel', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    getRoomEvents,
+    setReadReceipt,
+  } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+    now: (() => {
+      // deterministic clock so that, for example, screenshots
+      // have consistent content
+      let clock = new Date(2024, 8, 19).getTime();
+      return () => (clock += 10);
+    })(),
+  });
 
-  setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
-
-    let {
-      field,
-      contains,
-      linksTo,
-      linksToMany,
-      CardDef,
-      Component,
-      FieldDef,
-    } = cardApi;
-    let string: typeof import('https://cardstack.com/base/string');
-    string = await loader.import(`${baseRealm.url}string`);
-    let { default: StringField } = string;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -308,43 +306,100 @@ module('Integration | ai-assistant-panel', function (hooks) {
     return roomId;
   }
 
+  async function scrollAiAssistantToBottom() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    conversationElement.scrollTop =
+      conversationElement.scrollHeight - conversationElement.clientHeight;
+    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
+  }
+
+  async function scrollAiAssistantToTop() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    conversationElement.scrollTop = 0;
+    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
+  }
+
+  function isAiAssistantScrolledToBottom() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+
+    return (
+      Math.abs(
+        conversationElement.scrollHeight -
+          conversationElement.clientHeight -
+          conversationElement.scrollTop,
+        // we'll use a 20px threshold for considering the ai assistant scrolled
+        // all the way to the bottom
+      ) < 20
+    );
+  }
+  function isAiAssistantScrolledToTop() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+
+    return conversationElement.scrollTop === 0;
+  }
+
+  function fillRoomWithReadMessages(
+    roomId: string,
+    messagesHaveBeenRead = true,
+  ) {
+    for (let i = 0; i < 20; i++) {
+      simulateRemoteMessage(roomId, '@testuser:staging', {
+        body: `question #${i + 1}`,
+        msgtype: 'org.boxel.message',
+        formatted_body: `question #${i + 1}`,
+        format: 'org.matrix.custom.html',
+      });
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: `answer #${i + 1}`,
+        msgtype: 'm.text',
+        formatted_body: `answer #${i + 1}`,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      if (messagesHaveBeenRead) {
+        setReadReceipt(roomId, eventId, '@testuser:staging');
+      }
+    }
+  }
+
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
     assert.expect(4);
 
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'i am the body',
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Dave' },
-            },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'i am the body',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'A patch',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            attributes: { firstName: 'Dave' },
           },
-          eventId: 'patch1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'patch1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: 'patch1',
       },
-      status: null,
     });
 
     await waitFor('[data-test-command-apply]');
@@ -371,92 +426,74 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    await matrixService.createAndJoinRoom('room1', 'test room 1');
-    await matrixService.createAndJoinRoom('room2', 'test room 2');
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event1',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Evie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Evie' },
-            },
+    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+    simulateRemoteMessage(room2Id, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Incorrect command',
+      formatted_body: 'Incorrect command',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          argument: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            relationships: { pet: null }, // this will error
           },
-          eventId: 'room1-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event2',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Jackie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Jackie' },
-            },
+
+    simulateRemoteMessage(room1Id, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            attributes: { firstName: 'Evie' },
           },
-          eventId: 'room1-event2',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event2',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
-    await addRoomEvent(matrixService, {
-      event_id: 'room2-event1',
-      room_id: 'room2',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Incorrect command',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            argument: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              relationships: { pet: null }, // this will error
-            },
+
+    simulateRemoteMessage(room1Id, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Changing first name to Jackie',
+      formatted_body: 'Changing first name to Jackie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            attributes: { firstName: 'Jackie' },
           },
-          eventId: 'room2-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room2-event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
+
+    // let the room events all process before we open the assistant, so it will
+    // pick the appropriate room.
+    await settled();
 
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
@@ -472,7 +509,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
 
     await click('[data-test-past-sessions-button]');
-    await click(`[data-test-enter-room="room2"]`);
+    await click(`[data-test-enter-room="${room2Id}"]`);
     await waitFor('[data-test-room-name="test room 2"]');
     await waitFor('[data-test-command-apply]');
     await click('[data-test-command-apply]');
@@ -488,7 +525,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-ai-assistant-panel]');
 
     await click('[data-test-past-sessions-button]');
-    await click(`[data-test-enter-room="room1"]`);
+    await click(`[data-test-enter-room="${room1Id}"]`);
     await waitFor('[data-test-room-name="test room 1"]');
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
@@ -498,7 +535,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
 
     await click('[data-test-past-sessions-button]');
-    await click(`[data-test-enter-room="room2"]`);
+    await click(`[data-test-enter-room="${room2Id}"]`);
     await waitFor('[data-test-room-name="test room 2"]');
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
@@ -509,39 +546,30 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     let otherCardID = `${testRealmURL}Person/burcu`;
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'i am the body',
-        msgtype: 'org.boxel.command',
-        formatted_body:
-          'A patch<pre><code>https://www.example.com/path/to/resource?query=param1value&anotherQueryParam=anotherValue&additionalParam=additionalValue&longparameter1=someLongValue1</code></pre>',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: otherCardID,
-              attributes: { firstName: 'Dave' },
-            },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'i am the body',
+      msgtype: 'org.boxel.command',
+      formatted_body:
+        'A patch<pre><code>https://www.example.com/path/to/resource?query=param1value&anotherQueryParam=anotherValue&additionalParam=additionalValue&longparameter1=someLongValue1</code></pre>',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: otherCardID,
+            attributes: { firstName: 'Dave' },
           },
-          eventId: 'event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
 
     await waitFor('[data-test-command-apply="ready"]');
@@ -556,6 +584,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
+    await triggerEvent(
+      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
+      'mouseenter',
+    );
     await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
@@ -563,23 +595,24 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await setCardInOperatorModeState(otherCardID);
     await waitFor('[data-test-person="Burcu"]');
-    matrixService.sendReactionDeferred = new Deferred<void>();
-    await click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
+    click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
+    await waitFor('[data-test-apply-state="applying"]');
     assert.dom('[data-test-apply-state="applying"]').exists();
-    matrixService.sendReactionDeferred.fulfill();
 
     await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-apply-state="applied"]');
     assert.dom('[data-test-apply-state="applied"]').exists();
     assert.dom('[data-test-person]').hasText('Dave');
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
 
-    await waitUntil(
-      () =>
-        document.querySelectorAll(
-          '[data-test-overlay-card] [data-test-overlay-more-options]',
-        ).length === 2,
+    await triggerEvent(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
+      'mouseenter',
     );
+    assert
+      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
+      .exists();
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
     );
@@ -602,25 +635,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
       eventId: 'event1',
     };
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'A patch',
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({ toolCall: payload }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event1',
-        },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'A patch',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'A patch',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({ toolCall: payload }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: 'event1',
       },
-      status: null,
     });
 
     await waitFor('[data-test-view-code-button]');
@@ -665,38 +689,30 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(id);
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event0',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Removing pet and changing preferred carrier',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: {
-                address: { shippingInfo: { preferredCarrier: 'Fedex' } },
-              },
-              relationships: {
-                pet: { links: { self: null } },
-              },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Removing pet and changing preferred carrier',
+      formatted_body: 'Removing pet and changing preferred carrier',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: id,
+            attributes: {
+              address: { shippingInfo: { preferredCarrier: 'Fedex' } },
+            },
+            relationships: {
+              pet: { links: { self: null } },
             },
           },
-          eventId: 'patch0',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'patch0',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
 
     const stackCard = `[data-test-stack-card="${id}"]`;
@@ -711,40 +727,32 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Link to pet and change preferred carrier',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: {
-                address: { shippingInfo: { preferredCarrier: 'UPS' } },
-              },
-              relationships: {
-                pet: {
-                  links: { self: `${testRealmURL}Pet/mango` },
-                },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Link to pet and change preferred carrier',
+      formatted_body: 'Link to pet and change preferred carrier',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: id,
+            attributes: {
+              address: { shippingInfo: { preferredCarrier: 'UPS' } },
+            },
+            relationships: {
+              pet: {
+                links: { self: `${testRealmURL}Pet/mango` },
               },
             },
           },
-          eventId: 'patch1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'patch1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
     await waitFor('[data-test-command-apply="ready"]');
     assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
@@ -768,33 +776,25 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Mickey"]');
     assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Change tripTitle to Trip to Japan',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: { trips: { tripTitle: 'Trip to Japan' } },
-            },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Change tripTitle to Trip to Japan',
+      formatted_body: 'Change tripTitle to Trip to Japan',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: id,
+            attributes: { trips: { tripTitle: 'Trip to Japan' } },
           },
-          eventId: 'event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
 
     await waitFor('[data-test-command-apply="ready"]');
@@ -810,105 +810,85 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Change first name to Dave',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Change first name to Dave',
+      formatted_body: 'Change first name to Dave',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: id,
 
-              attributes: { firstName: 'Dave' },
-            },
+            attributes: { firstName: 'Dave' },
           },
-          eventId: 'event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Incorrect patch command',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              arguments: {
-                card_id: id,
-                relationships: { pet: null },
-              },
-            },
-          },
-          eventId: 'event2',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event2',
-        },
-      },
-      status: null,
-    });
-    await addRoomEvent(matrixService, {
-      event_id: 'event3',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Change first name to Jackie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Incorrect patch command',
+      formatted_body: 'Incorrect patch command',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
             arguments: {
               card_id: id,
-              attributes: { firstName: 'Jackie' },
+              relationships: { pet: null },
             },
           },
-          eventId: 'event3',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event3',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
+    });
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Change first name to Jackie',
+      formatted_body: 'Change first name to Jackie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: id,
+            attributes: { firstName: 'Jackie' },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
     });
 
     await waitFor('[data-test-command-apply="ready"]', { count: 3 });
 
-    matrixService.sendReactionDeferred = new Deferred<void>();
-    await click('[data-test-message-idx="2"] [data-test-command-apply]');
+    click('[data-test-message-idx="2"] [data-test-command-apply]');
+    await waitFor(
+      '[data-test-message-idx="2"] [data-test-apply-state="applying"]',
+    );
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
       .exists();
-    matrixService.sendReactionDeferred.fulfill();
 
     await waitFor('[data-test-message-idx="2"] [data-test-command-card-idle]');
+    await waitFor(
+      '[data-test-message-idx="2"] [data-test-apply-state="applied"]',
+    );
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -934,46 +914,42 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Change first name to Dave',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: { firstName: 'Dave' },
-            },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Change first name to Dave',
+      formatted_body: 'Change first name to Dave',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: id,
+            attributes: { firstName: 'Dave' },
           },
-          eventId: undefined,
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
 
     await waitFor('[data-test-command-apply="ready"]', { count: 1 });
 
-    matrixService.sendReactionDeferred = new Deferred<void>();
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applying"]',
+    );
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
       .exists();
-    matrixService.sendReactionDeferred?.fulfill();
 
     await waitFor('[data-test-message-idx="0"] [data-test-command-card-idle]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -983,53 +959,37 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
-      content: {
-        body: '',
-        formatted_body: '',
-        msgtype: 'org.boxel.cardFragment',
-        data: JSON.stringify({
-          index: 0,
-          totalParts: 1,
-          cardFragment: JSON.stringify({
-            data: {
-              id: 'http://this-is-not-a-real-card.com',
-              type: 'card',
-              attributes: {
-                firstName: 'Boom',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'http://not-a-real-card.com',
-                  name: 'Boom',
-                },
+    let event1Id = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      formatted_body: '',
+      msgtype: 'org.boxel.cardFragment',
+      data: JSON.stringify({
+        index: 0,
+        totalParts: 1,
+        cardFragment: JSON.stringify({
+          data: {
+            id: 'http://this-is-not-a-real-card.com',
+            type: 'card',
+            attributes: {
+              firstName: 'Boom',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://not-a-real-card.com',
+                name: 'Boom',
               },
             },
-          }),
+          },
         }),
-      },
-      status: null,
+      }),
     });
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(1994, 0, 1, 12, 30).getTime(),
-      content: {
-        body: 'card with error',
-        formatted_body: 'card with error',
-        msgtype: 'org.boxel.message',
-        data: JSON.stringify({
-          attachedCardsEventIds: ['event1'],
-        }),
-      },
-      status: null,
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'card with error',
+      formatted_body: 'card with error',
+      msgtype: 'org.boxel.message',
+      data: JSON.stringify({
+        attachedCardsEventIds: [event1Id],
+      }),
     });
 
     await waitFor('[data-test-card-error]');
@@ -1047,7 +1007,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           <OperatorMode @onClose={{noop}} />
           <CardPrerender />
           <div class='invisible' data-test-throw-room-error />
-          <style>
+          <style scoped>
             .invisible {
               display: none;
             }
@@ -1077,61 +1037,58 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('when opening ai panel it opens the most recent room', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await matrixService.createAndJoinRoom('test1', 'test room 1');
-    const room2Id = await matrixService.createAndJoinRoom(
-      'test2',
-      'test room 2',
-    );
-    const room3Id = await matrixService.createAndJoinRoom(
-      'test3',
-      'test room 3',
-    );
-
-    await openAiAssistant();
-    await waitFor(`[data-room-settled]`);
-
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
+    try {
+      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
       );
 
-    await click('[data-test-past-sessions-button]');
-    await click(`[data-test-enter-room="${room2Id}"]`);
+      createAndJoinRoom('@testuser:staging', 'test room 0');
+      let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+      const room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+      await settled();
 
-    await click('[data-test-close-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room2Id}"]`)
-      .exists(
-        "test room 2 is the most recently selected room and it's opened initially",
+      await openAiAssistant();
+      await waitFor(`[data-room-settled]`);
+
+      assert
+        .dom(`[data-test-room="${room2Id}"]`)
+        .exists(
+          "test room 2 is the most recently created room and it's opened initially",
+        );
+
+      await click('[data-test-past-sessions-button]');
+      await click(`[data-test-enter-room="${room1Id}"]`);
+
+      await click('[data-test-close-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom(`[data-test-room="${room1Id}"]`)
+        .exists(
+          "test room 1 is the most recently selected room and it's opened initially",
+        );
+
+      await click('[data-test-close-ai-assistant]');
+      window.localStorage.setItem(
+        currentRoomIdPersistenceKey,
+        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
-
-    await click('[data-test-close-ai-assistant]');
-    window.localStorage.setItem(
-      currentRoomIdPersistenceKey,
-      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
-    );
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
-      );
-
-    window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom(`[data-test-room="${room2Id}"]`)
+        .exists(
+          "test room 2 is the most recently created room and it's opened initially",
+        );
+    } finally {
+      window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+    }
   });
 
   test('can close past-sessions list on outside click', async function (assert) {
@@ -1140,7 +1097,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-past-sessions-button]');
     assert.dom('[data-test-past-sessions]').exists();
     assert.dom('[data-test-joined-room]').exists({ count: 1 });
-    await click('.operator-mode__main');
+    await click('.interact-submode'); // outside click
     assert.dom('[data-test-past-sessions]').doesNotExist();
 
     await click('[data-test-past-sessions-button]');
@@ -1155,25 +1112,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can render a markdown message from ai bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
-        msgtype: 'm.text',
-        formatted_body:
-          "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: 1709652566421,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
+      msgtype: 'm.text',
+      formatted_body:
+        "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
     });
     await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
     assert.dom('[data-test-message-idx="0"] h1').containsText('Beagles');
@@ -1193,91 +1136,27 @@ module('Integration | ai-assistant-panel', function (hooks) {
         </template>
       },
     );
-
-    let originalSendMessage = matrixService.sendMessage;
-    let clientGeneratedId = '';
-    let event: any;
-    matrixService.sendMessage = async function (
-      roomId: string,
-      body: string,
-      attachedCards: CardDef[],
-      _skillCards: [],
-      _clientGeneratedId: string,
-      _context?: any,
-    ) {
-      let serializedCard = cardApi.serializeCard(attachedCards[0]);
-      let cardFragmentEvent = {
-        event_id: 'test-card-fragment-event-id',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        sender: matrixService.userId!,
-        content: {
-          msgtype: 'org.boxel.cardFragment' as const,
-          format: 'org.boxel.card' as const,
-          body: `card fragment 1 of 1`,
-          formatted_body: `card fragment 1 of 1`,
-          data: JSON.stringify({
-            cardFragment: JSON.stringify(serializedCard),
-            index: 0,
-            totalParts: 1,
-          }),
-        },
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        unsigned: {
-          age: 105,
-          transaction_id: '1',
-        },
-        status: null,
-      };
-      await addRoomEvent(this, cardFragmentEvent);
-
-      clientGeneratedId = _clientGeneratedId;
-      event = {
-        event_id: 'test-event-id',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        sender: matrixService.userId!,
-        content: {
-          body,
-          msgtype: 'org.boxel.message',
-          formatted_body: body,
-          format: 'org.matrix.custom.html',
-          clientGeneratedId,
-          data: JSON.stringify({
-            attachedCardsEventIds: [cardFragmentEvent.event_id],
-          }),
-        },
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        unsigned: {
-          age: 105,
-          transaction_id: '1',
-        },
-        status: EventStatus.SENDING,
-      };
-      await addRoomEvent(this, event);
-    };
     await openAiAssistant();
 
-    await fillIn('[data-test-message-field]', 'Test Message');
-    assert.dom('[data-test-message-field]').hasValue('Test Message');
+    await fillIn(
+      '[data-test-message-field]',
+      'This is a magic message with a SENDING_DELAY_THEN_SUCCESS!',
+    );
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue('This is a magic message with a SENDING_DELAY_THEN_SUCCESS!');
     assert.dom('[data-test-send-message-btn]').isEnabled();
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
-    await click('[data-test-send-message-btn]');
+    click('[data-test-send-message-btn]');
 
+    await waitFor('[data-test-ai-assistant-message].is-pending');
     assert.dom('[data-test-message-field]').hasValue('');
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
     await percySnapshot(assert);
 
-    let newEvent = {
-      ...event,
-      event_id: 'updated-event-id',
-      status: EventStatus.SENT,
-    };
-    await updateRoomEvent(matrixService, newEvent, event.event_id);
+    await waitFor('[data-test-ai-assistant-message]:not(.is-pending)');
     await waitUntil(
       () =>
         !(
@@ -1288,7 +1167,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
-    matrixService.sendMessage = originalSendMessage;
   });
 
   test('displays retry button for message that failed to send', async function (assert) {
@@ -1302,59 +1180,26 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
 
-    let originalSendMessage = matrixService.sendMessage;
-    let clientGeneratedId = '';
-    let event: any;
-    matrixService.sendMessage = async function (
-      roomId: string,
-      body: string,
-      _attachedCards: [],
-      _skillCards: [],
-      _clientGeneratedId: string,
-      _context?: any,
-    ) {
-      clientGeneratedId = _clientGeneratedId;
-      event = {
-        event_id: 'test-event-id',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        sender: matrixService.userId!,
-        content: {
-          body,
-          msgtype: 'org.boxel.message',
-          formatted_body: body,
-          format: 'org.matrix.custom.html',
-          clientGeneratedId,
-        },
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        unsigned: {
-          age: 105,
-          transaction_id: '1',
-        },
-        status: EventStatus.SENDING,
-      };
-      await addRoomEvent(this, event);
-    };
     await openAiAssistant();
 
-    await fillIn('[data-test-message-field]', 'Test Message');
-    assert.dom('[data-test-message-field]').hasValue('Test Message');
+    await fillIn(
+      '[data-test-message-field]',
+      'This is a magic message with a SENDING_DELAY_THEN_FAILURE!',
+    );
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue('This is a magic message with a SENDING_DELAY_THEN_FAILURE!');
     assert.dom('[data-test-send-message-btn]').isEnabled();
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
-    await click('[data-test-send-message-btn]');
+    click('[data-test-send-message-btn]');
 
+    await waitFor('[data-test-ai-assistant-message].is-pending');
     assert.dom('[data-test-message-field]').hasValue('');
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
 
-    let newEvent = {
-      ...event,
-      event_id: 'updated-event-id',
-      status: EventStatus.NOT_SENT,
-    };
-    await updateRoomEvent(matrixService, newEvent, event.event_id);
+    await waitFor('[data-test-ai-assistant-message].is-error');
     await waitUntil(
       () =>
         !(
@@ -1369,57 +1214,33 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-ai-bot-retry-button]').exists();
     await percySnapshot(assert);
 
-    matrixService.sendMessage = async function (
-      _roomId: string,
-      _body: string,
-      _attachedCards: [],
-      _skillCards: [],
-      _clientGeneratedId: string,
-      _context?: any,
-    ) {
-      event = {
-        ...event,
-        status: null,
-      };
-      await addRoomEvent(this, event);
-    };
     await click('[data-test-ai-bot-retry-button]');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
-    matrixService.sendMessage = originalSendMessage;
   });
 
   test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'i am the body',
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Dave' },
-            },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'i am the body',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'A patch',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            attributes: { firstName: 'Dave' },
           },
-          eventId: 'patch1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'patch1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: 'patch1',
       },
-      status: null,
     });
 
     await waitFor('[data-test-message-idx="0"]');
@@ -1434,80 +1255,46 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it animates the sessions dropdown button when there are other sessions that have activity which was not seen by the user yet', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event0',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@matic:boxel',
-      content: {
-        body: 'Say one word.',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'Say one word.',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 100,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    simulateRemoteMessage(roomId, '@matic:boxel', {
+      body: 'Say one word.',
+      msgtype: 'org.boxel.message',
+      formatted_body: 'Say one word.',
+      format: 'org.matrix.custom.html',
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'Word.',
-        msgtype: 'm.text',
-        formatted_body: 'Word.',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-      },
-      origin_server_ts: Date.now() - 99,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Word.',
+      msgtype: 'm.text',
+      formatted_body: 'Word.',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
     });
 
     assert
       .dom('[data-test-past-sessions-button] [data-test-has-active-sessions]')
       .doesNotExist();
     assert
-      .dom(
-        "[data-test-enter-room='New AI Assistant Chat'] [data-test-is-streaming]",
-      )
+      .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: anotherRoomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
         body: 'I sent a message from the background.',
         msgtype: 'm.text',
         formatted_body: 'Word.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
-      origin_server_ts: Date.now() - 98,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: Date.now(),
       },
-      status: null,
-    });
+    );
 
     await waitFor('[data-test-has-active-sessions]');
 
@@ -1519,38 +1306,34 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     assert
       .dom(
-        "[data-test-joined-room='Another Room'] [data-test-is-unseen-message]",
+        `[data-test-joined-room='${anotherRoomId}'] [data-test-is-unseen-message]`,
       )
       .exists('Newly created room has an unseen message');
 
     assert
       .dom(
-        "[data-test-joined-room='Another Room'] [data-test-is-unseen-message]",
+        `[data-test-joined-room='${anotherRoomId}'] [data-test-is-unseen-message]`,
       )
       .containsText('Updated');
 
     assert
-      .dom(
-        "[data-test-joined-room='New AI Assistant Chat'][data-test-is-unseen-message]",
-      )
+      .dom(`[data-test-joined-room='${roomId}'][data-test-is-unseen-message]`)
       .doesNotExist("Old room doesn't have an unseen message");
 
     assert
-      .dom("[data-test-joined-room='New AI Assistant Chat']")
+      .dom(`[data-test-joined-room='${roomId}']`)
       .doesNotContainText('Updated');
 
-    await click("[data-test-enter-room='Another Room']");
+    await click(`[data-test-enter-room='${anotherRoomId}']`);
     assert
       .dom(
-        "[data-test-joined-room='Another Room'] [data-test-is-unseen-message]",
+        `[data-test-joined-room='${anotherRoomId}'] [data-test-is-unseen-message]`,
       )
       .doesNotExist(
         "Newly created room doesn't have an unseen message because we just opened it and saw the message",
       );
     assert
-      .dom(
-        "[data-test-joined-room='New AI Assistant'] [data-test-is-unseen-message]",
-      )
+      .dom(`[data-test-joined-room='${roomId}'] [data-test-is-unseen-message]`)
       .doesNotExist("Old room doesn't have an unseen message");
 
     assert
@@ -1562,188 +1345,227 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-past-sessions-button]');
 
     assert
-      .dom("[data-test-joined-room='New AI Assistant Chat']")
+      .dom(`[data-test-joined-room='${roomId}']`)
       .doesNotContainText('Updated');
     assert
-      .dom("[data-test-joined-room='Another Room']")
+      .dom(`[data-test-joined-room='${anotherRoomId}']`)
       .doesNotContainText('Updated');
+  });
+
+  test('it shows unread message indicator when new message received and not scrolled to bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when all messages have been read',
+      );
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .exists('unread messages button exists when there are unread messages');
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .containsText('1 unread message');
+  });
+
+  test('clicking on unread message indicator scrolls to unread message', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when all messages have been read',
+      );
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    await click('[data-test-unread-messages-button]');
+    await new Promise((r) => setTimeout(r, 2000)); // wait for animated scroll to complete
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
+  test('it does not show unread message indicator when new message received and scrolled to bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+    await scrollAiAssistantToBottom();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when scrolled to the bottom',
+      );
+  });
+
+  test('it scrolls to first unread message when opening a room with unread messages', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId, false);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToTop(),
+      'AI assistant is scrolled to top (where the first unread message is)',
+    );
+  });
+
+  test('it scrolls to last message when opening a room with no unread messages', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
   });
 
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'userevent0',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@matic:boxel',
-      content: {
-        body: 'Say one word.',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'Say one word.',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 100,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    simulateRemoteMessage(roomId, '@testuser:staging', {
+      body: 'Say one word.',
+      msgtype: 'org.boxel.message',
+      formatted_body: 'Say one word.',
+      format: 'org.matrix.custom.html',
     });
 
     await waitFor(`[data-room-settled]`);
 
-    await addRoomEvent(matrixService, {
-      event_id: 'botevent1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'Word.',
-        msgtype: 'm.text',
-        formatted_body: 'Word.',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-      },
-      origin_server_ts: Date.now() - 99,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    let eventId2 = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Word.',
+      msgtype: 'm.text',
+      formatted_body: 'Word.',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
     });
 
     assert
       .dom('[data-test-past-sessions-button] [data-test-has-active-sessions]')
       .doesNotExist();
     assert
-      .dom(
-        "[data-test-enter-room='New AI Assistant Chat'] [data-test-is-streaming]",
-      )
+      .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
 
-    await addRoomEvent(matrixService, {
-      event_id: 'botevent2',
-      room_id: anotherRoomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    let eventId3 = simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
         body: 'I sent a message from the background.',
         msgtype: 'm.text',
         formatted_body: 'Word.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
-      origin_server_ts: Date.now() - 98,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: Date.now(),
       },
-      status: null,
-    });
+    );
 
     await waitFor('[data-test-has-active-sessions]');
     await click('[data-test-past-sessions-button]');
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
+    await waitFor('[data-test-message-idx="0"]');
 
+    let matrixService = this.owner.lookup(
+      'service:matrix-service',
+    ) as MatrixService;
     assert.deepEqual(
       Array.from(matrixService.currentUserEventReadReceipts.keys()),
-      ['botevent1', 'botevent2'],
+      [eventId2, eventId3],
     );
   });
 
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@testuser:staging',
-      content: {
-        body: 'I have a feeling something will go wrong',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'I have a feeling something will go wrong',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 100,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    await simulateRemoteMessage(roomId, '@testuser:staging', {
+      body: 'I have a feeling something will go wrong',
+      msgtype: 'org.boxel.message',
+      formatted_body: 'I have a feeling something will go wrong',
+      format: 'org.matrix.custom.html',
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'There was an error processing your request, please try again later',
-        msgtype: 'm.text',
-        formatted_body:
-          'There was an error processing your request, please try again later',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-        errorMessage: 'AI bot error',
-      },
-      origin_server_ts: Date.now() - 99,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'There was an error processing your request, please try again later',
+      msgtype: 'm.text',
+      formatted_body:
+        'There was an error processing your request, please try again later',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      errorMessage: 'AI bot error',
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event3',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@testuser:staging',
-      content: {
-        body: 'I have a feeling something will go wrong',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'I have a feeling something will go wrong',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 98,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    await simulateRemoteMessage(roomId, '@testuser:staging', {
+      body: 'I have a feeling something will go wrong',
+      msgtype: 'org.boxel.message',
+      formatted_body: 'I have a feeling something will go wrong',
+      format: 'org.matrix.custom.html',
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event4',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'There was an error processing your request, please try again later',
-        msgtype: 'm.text',
-        formatted_body:
-          'There was an error processing your request, please try again later',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-        errorMessage: 'AI bot error',
-      },
-      origin_server_ts: Date.now() - 97,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'There was an error processing your request, please try again later',
+      msgtype: 'm.text',
+      formatted_body:
+        'There was an error processing your request, please try again later',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      errorMessage: 'AI bot error',
     });
 
     await waitFor('[data-test-message-idx="0"]');
@@ -1781,13 +1603,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('replacement message should use `created` from the oldest message', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    let firstMessage = {
-      event_id: 'first-message-event',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    let firstMessageId = await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
         body: 'This is the first message',
         msgtype: 'org.text',
         formatted_body: 'This is the first message',
@@ -1799,39 +1618,27 @@ module('Integration | ai-assistant-panel', function (hooks) {
           format: 'org.matrix.custom.html',
         },
       },
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
       },
-      status: null,
-    };
-    let secondMessage = {
-      event_id: 'second-message-event',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    );
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
         body: 'Second message body',
         msgtype: 'org.text',
         formatted_body: 'Second message body',
         format: 'org.matrix.custom.html',
       },
-      origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
       },
-      status: null,
-    };
-    let firstMessageReplacement = {
-      event_id: 'first-message-replacement-event',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    );
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
         body: 'First replacement message body',
         msgtype: 'org.text',
         formatted_body: 'First replacement message body',
@@ -1843,23 +1650,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
           format: 'org.matrix.custom.html',
         },
         ['m.relates_to']: {
-          event_id: 'first-message-event',
+          event_id: firstMessageId,
           rel_type: 'm.replace',
         },
       },
-      origin_server_ts: new Date(2024, 0, 3, 12, 32).getTime(),
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 32).getTime(),
       },
-      status: null,
-    };
-
-    await addRoomEvent(matrixService, firstMessage);
-
-    await addRoomEvent(matrixService, secondMessage);
-
-    await addRoomEvent(matrixService, firstMessageReplacement);
+    );
 
     await waitFor('[data-test-message-idx="1"]');
 
@@ -1875,87 +1673,42 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event0',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@matic:boxel',
-      content: {
-        body: 'Say one word.',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'Say one word.',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 100,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    simulateRemoteMessage(roomId, '@matic:boxel', {
+      body: 'Say one word.',
+      msgtype: 'org.boxel.message',
+      formatted_body: 'Say one word.',
+      format: 'org.matrix.custom.html',
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'French.',
-        msgtype: 'm.text',
-        formatted_body: 'French.',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-      },
-      origin_server_ts: Date.now() - 99,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'French.',
+      msgtype: 'm.text',
+      formatted_body: 'French.',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@matic:boxel',
-      content: {
-        body: 'What is a french bulldog?',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'What is a french bulldog?',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 98,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
+    simulateRemoteMessage(roomId, '@matic:boxel', {
+      body: 'What is a french bulldog?',
+      msgtype: 'org.boxel.message',
+      formatted_body: 'What is a french bulldog?',
+      format: 'org.matrix.custom.html',
     });
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event3',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    let partialEventId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
         body: 'French bulldog is a',
         msgtype: 'm.text',
         formatted_body: 'French bulldog is a',
         format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
       },
-      origin_server_ts: Date.now() - 97,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: Date.now(),
       },
-      status: null,
-    });
+    );
 
     await waitFor('[data-test-message-idx="3"]');
 
@@ -1973,18 +1726,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       );
 
     await click('[data-test-past-sessions-button]');
-    assert
-      .dom("[data-test-enter-room='New AI Assistant Chat']")
-      .includesText('Thinking');
+    assert.dom(`[data-test-enter-room='${roomId}']`).includesText('Thinking');
     assert.dom('[data-test-is-streaming]').exists();
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event4',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
         body: 'French bulldog is a French breed of companion dog or toy dog.',
         msgtype: 'm.text',
         formatted_body:
@@ -1993,18 +1741,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
         'm.relates_to': {
           rel_type: 'm.replace',
-          event_id: 'event3',
+          event_id: partialEventId,
         },
       },
-      origin_server_ts: Date.now() - 96,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: Date.now(),
       },
-      status: null,
-    });
+    );
 
     await waitFor('[data-test-message-idx="3"]');
+    await waitUntil(() => !document.querySelector('.ai-avatar-animated'));
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
       .doesNotHaveClass(
@@ -2019,7 +1765,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       );
 
     assert
-      .dom("[data-test-enter-room='New AI Assistant Chat']")
+      .dom(`[data-test-enter-room='${roomId}']`)
       .doesNotContainText('Thinking');
     assert.dom('[data-test-is-streaming]').doesNotExist();
   });
@@ -2038,53 +1784,44 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await createAndJoinRoom(
+      '@testuser:staging',
+      'Another Room',
+    );
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: anotherRoomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    await simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
         body: 'I sent a message sixteen minutes ago',
         msgtype: 'm.text',
         formatted_body: 'A message that was sent sixteen minutes ago.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
-      origin_server_ts: sixteenMinutesAgo.getTime(),
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: sixteenMinutesAgo.getTime(),
       },
-      status: null,
-    });
+    );
     assert.dom('[data-test-ai-assistant-toast]').exists({ count: 0 });
 
     let fourteenMinutesAgo = subMinutes(new Date(), 14);
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: anotherRoomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
+    await simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
         body: 'I sent a message from the background.',
         msgtype: 'm.text',
         formatted_body: 'A message from the background.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
-      origin_server_ts: fourteenMinutesAgo.getTime(),
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
+      {
+        origin_server_ts: fourteenMinutesAgo.getTime(),
       },
-      status: null,
-    });
+    );
 
     await waitFor('[data-test-ai-assistant-toast]');
     // Hovering over the toast prevents it from disappearing
@@ -2145,44 +1882,40 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    await matrixService.createAndJoinRoom('room1', 'test room 1');
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event1',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Evie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Evie' },
-            },
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            attributes: { firstName: 'Evie' },
           },
-          eventId: 'room1-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
-    let commandReactionEvents = await getCommandReactionEvents(
-      matrixService,
-      'room1',
+    let commandReactionEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === 'm.reaction' &&
+        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
       commandReactionEvents.length,
       0,
       'reaction event is not dispatched',
     );
+
+    await settled();
 
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
@@ -2194,9 +1927,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandReactionEvents = await getCommandReactionEvents(
-      matrixService,
-      'room1',
+    commandReactionEvents = await getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === 'm.reaction' &&
+        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
       commandReactionEvents.length,
@@ -2216,49 +1951,44 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    await matrixService.createAndJoinRoom('room1', 'test room 1');
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event1',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Evie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Changing first name to Evie',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          eventId: 'room1-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
-    let commandResultEvents = await getCommandResultEvents(
-      matrixService,
-      'room1',
+    let commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === 'm.room.message' &&
+        typeof event.content === 'object' &&
+        event.content.msgtype === 'org.boxel.commandResult',
     );
     assert.equal(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
     );
+    await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2269,7 +1999,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandResultEvents = await getCommandResultEvents(matrixService, 'room1');
+    commandResultEvents = await getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === 'm.room.message' &&
+        typeof event.content === 'object' &&
+        event.content.msgtype === 'org.boxel.commandResult',
+    );
     assert.equal(
       commandResultEvents.length,
       1,
@@ -2281,125 +2016,320 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Search for the following card',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          eventId: 'search1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'search1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="1"]');
-    let commandResultEvents = await getCommandResultEvents(
-      matrixService,
-      roomId,
-    );
-    assert.equal(
-      commandResultEvents[0].content.result.length,
-      2,
-      'number of search results',
-    );
+    await waitFor('.result-list li:nth-child(2)');
+    let commandResultEvent = (await getRoomEvents(roomId)).find(
+      (e) =>
+        e.type === 'm.room.message' &&
+        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content['m.relates_to']?.rel_type === 'm.annotation',
+    ) as CommandResultEvent;
+    let serializedResults =
+      typeof commandResultEvent?.content?.result === 'string'
+        ? JSON.parse(commandResultEvent.content.result)
+        : commandResultEvent.content.result;
+    serializedResults = Array.isArray(serializedResults)
+      ? serializedResults
+      : [];
+    assert.equal(serializedResults.length, 2, 'number of search results');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
     assert
-      .dom('[data-test-comand-result-header]')
-      .containsText('Search Results 2 results');
+      .dom('[data-test-command-result-header]')
+      .containsText('Search Results 2 Results');
 
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Jackie');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Mango');
+    assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
+    assert.dom('.result-list li:nth-child(2)').containsText('Mango');
+    assert.dom('[data-test-toggle-show-button]').doesNotExist();
+  });
+
+  test('it can search for card instances based upon title of card', async function (assert) {
+    let id = `${testRealmURL}Pet/mango.json`;
+    let roomId = await renderAiAssistantPanel(id);
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              contains: {
+                title: 'Mango',
+              },
+            },
+          },
+        },
+        eventId: 'search1',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: 'search1',
+      },
+    });
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-result]');
+    await waitFor('.result-list li:nth-child(1)');
+    let commandResultEvent = (await getRoomEvents(roomId)).find(
+      (e) =>
+        e.type === 'm.room.message' &&
+        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content['m.relates_to']?.rel_type === 'm.annotation',
+    ) as CommandResultEvent;
+    let serializedResults =
+      typeof commandResultEvent?.content?.result === 'string'
+        ? JSON.parse(commandResultEvent.content.result)
+        : commandResultEvent.content.result;
+    serializedResults = Array.isArray(serializedResults)
+      ? serializedResults
+      : [];
+    assert.equal(serializedResults.length, 1, 'number of search results');
+    assert
+      .dom('[data-test-command-message]')
+      .containsText('Search for the following card');
+    assert
+      .dom('[data-test-command-result-header]')
+      .containsText('Search Results 1 Result');
+
+    assert.dom('.result-list li:nth-child(1)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
 
   test('toggle more search results', async function (assert) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Search for the following card',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              type: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
               },
             },
           },
-          eventId: 'search1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'search1',
         },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
       },
-      status: null,
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="4"]');
-    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
+    await waitFor('.result-list li:nth-child(5)');
+    assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
       .containsText('Show 3 more results');
     await click('[data-test-toggle-show-button]');
-    await waitFor('[data-test-result-card-idx="7"]');
+
+    await waitFor('.result-list li', { count: 8 });
     assert.dom('[data-test-toggle-show-button]').containsText('See Less');
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="5"]').containsText('5. Justin');
-    assert.dom('[data-test-result-card-idx="6"]').containsText('6. Matic');
-    assert.dom('[data-test-result-card-idx="7"]').containsText('7. Mickey');
+    assert.dom('.result-list li:nth-child(1)').containsText('Buck');
+    assert.dom('.result-list li:nth-child(2)').containsText('Burcu');
+    assert.dom('.result-list li:nth-child(3)').containsText('Fadhlan');
+    assert.dom('.result-list li:nth-child(4)').containsText('Hassan');
+    assert.dom('.result-list li:nth-child(5)').containsText('Ian');
+    assert.dom('.result-list li:nth-child(6)').containsText('Justin');
+    assert.dom('.result-list li:nth-child(7)').containsText('Matic');
+    assert.dom('.result-list li:nth-child(8)').containsText('Mickey');
     await click('[data-test-toggle-show-button]');
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
+    assert.dom('.result-list li:nth-child(1)').containsText('Buck');
+    assert.dom('.result-list li:nth-child(2)').containsText('Burcu');
+    assert.dom('.result-list li:nth-child(3)').containsText('Fadhlan');
+    assert.dom('.result-list li:nth-child(4)').containsText('Hassan');
+    assert.dom('.result-list li:nth-child(5)').containsText('Ian');
+    assert.dom('.result-list li:nth-child(6)').doesNotExist();
+  });
+
+  test('it can copy search results card to workspace', async function (assert) {
+    const id = `${testRealmURL}Person/fadhlan.json`;
+    const roomId = await renderAiAssistantPanel(id);
+    const toolArgs = {
+      description: 'Search for Person cards',
+      filter: {
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+      },
+    };
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: toolArgs,
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    assert.dom(`[data-test-stack-card="${id}"]`).exists();
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-command-result-header]')
+      .containsText('Search Results 8 Results');
+
+    let resultListItem = '[data-test-result-list] > li';
+    assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
+    assert.dom(`${resultListItem}:nth-child(5)`).containsText('Ian');
+
+    const rightStackItem =
+      '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]';
+    assert.dom(rightStackItem).doesNotExist();
+
+    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
+    assert
+      .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
+      .hasText('Command Result');
+
+    const savedCardId = document
+      .querySelector(rightStackItem)
+      ?.getAttribute('data-stack-card');
+    const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
+    assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
+    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 3 });
+    assert
+      .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
+      .hasText(`Description ${toolArgs.description}`);
+    assert
+      .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
+      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+
+    resultListItem = `${savedCard} ${resultListItem}`;
+    assert.dom(resultListItem).exists({ count: 8 });
+    assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
+    assert.dom(`${resultListItem}:nth-child(6)`).containsText('Justin');
+    assert.dom(`${resultListItem}:nth-child(8)`).containsText('Mickey');
+  });
+
+  test('it can copy search results card to workspace (no cards in stack)', async function (assert) {
+    const id = `${testRealmURL}Person/fadhlan.json`;
+    const roomId = await renderAiAssistantPanel(id);
+    const toolArgs = {
+      description: 'Search for Person cards',
+      filter: {
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+      },
+    };
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: toolArgs,
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+    assert.dom(`[data-test-stack-card="${id}"]`).exists();
+    await click('[data-test-close-button]'); // close the last open card
+    assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
+    assert.dom('[data-test-workspace-chooser]').exists();
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-command-result-header]')
+      .containsText('Search Results 8 Results');
+
+    let resultListItem = '[data-test-result-list] > li';
+    assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
+    assert.dom(`${resultListItem}:nth-child(5)`).containsText('Ian');
+
+    const stackItem =
+      '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]';
+    assert.dom(stackItem).doesNotExist();
+
+    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
+    assert
+      .dom(`${stackItem} [data-test-boxel-card-header-title]`)
+      .hasText('Command Result');
+
+    const savedCardId = document
+      .querySelector(stackItem)
+      ?.getAttribute('data-stack-card');
+    const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
+    assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
+    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 3 });
+    assert
+      .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
+      .hasText(`Description ${toolArgs.description}`);
+    assert
+      .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
+      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+
+    resultListItem = `${savedCard} ${resultListItem}`;
+    assert.dom(resultListItem).exists({ count: 8 });
+    assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
+    assert.dom(`${resultListItem}:nth-child(6)`).containsText('Justin');
+    assert.dom(`${resultListItem}:nth-child(8)`).containsText('Mickey');
   });
 });

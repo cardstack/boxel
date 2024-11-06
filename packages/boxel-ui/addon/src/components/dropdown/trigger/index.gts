@@ -36,13 +36,13 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
       role='presentation'
     />
   </BoxelButton>
-  <style>
+  <style scoped>
     @layer {
       .boxel-dropdown-trigger {
         border: 0;
         padding: 0;
         border-radius: 0;
-        font-weight: bold;
+        font-weight: 600;
         font-size: var(--boxel-font-size);
         justify-content: flex-start;
       }

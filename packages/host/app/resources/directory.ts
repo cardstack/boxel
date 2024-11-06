@@ -8,12 +8,13 @@ import { Resource } from 'ember-resources';
 
 import {
   logger,
-  Relationship,
   SupportedMimeType,
+  type Relationship,
 } from '@cardstack/runtime-common';
 
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
+import type NetworkService from '../services/network';
 
 const log = logger('resource:directory');
 
@@ -35,8 +36,9 @@ export class DirectoryResource extends Resource<Args> {
   private directoryURL: URL | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
-  @service declare loaderService: LoaderService;
-  @service declare messageService: MessageService;
+  @service private declare loaderService: LoaderService;
+  @service private declare messageService: MessageService;
+  @service private declare network: NetworkService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -49,25 +51,38 @@ export class DirectoryResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    this.directoryURL = new URL(named.relativePath, named.realmURL);
+    let { relativePath, realmURL } = named;
+    this.directoryURL = new URL(relativePath, realmURL);
     this.readdir.perform();
 
-    let path = `${named.realmURL}_message`;
-
-    if (this.subscription && this.subscription.url !== path) {
+    if (this.subscription && this.subscription.url !== realmURL.href) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: path,
-        unsubscribe: this.messageService.subscribe(path, ({ type }) => {
-          // we are only interested in the filesystem based events
-          if (type === 'update') {
-            this.readdir.perform();
-          }
-        }),
+        url: realmURL.href,
+        unsubscribe: this.messageService.subscribe(
+          realmURL.href,
+          ({ type, data: dataStr }) => {
+            if (!this.directoryURL) {
+              return;
+            }
+            let eventData = JSON.parse(dataStr);
+            if (type !== 'index' || !eventData.updatedFile) {
+              return;
+            }
+
+            let { updatedFile } = eventData as { updatedFile: string };
+            let segments = updatedFile.split('/');
+            segments.pop();
+            let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
+            if (updatedDir === this.directoryURL.href) {
+              this.readdir.perform();
+            }
+          },
+        ),
       };
     }
   }
@@ -90,7 +105,7 @@ export class DirectoryResource extends Resource<Args> {
 
   private async getEntries(url: URL): Promise<Entry[]> {
     let response: Response | undefined;
-    response = await this.loaderService.loader.fetch(url, {
+    response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.DirectoryListing },
     });
     if (!response.ok) {

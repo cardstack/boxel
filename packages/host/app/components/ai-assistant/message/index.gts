@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
@@ -6,6 +7,7 @@ import Component from '@glimmer/component';
 
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
+import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -31,6 +33,12 @@ interface Signature {
       cards: CardDef[] | undefined;
       errors: { id: string; error: Error }[] | undefined;
     };
+    index: number;
+    registerScroller: (args: {
+      index: number;
+      element: HTMLElement;
+      scrollTo: Element['scrollIntoView'];
+    }) => void;
     errorMessage?: string;
     isPending?: boolean;
     retryAction?: () => void;
@@ -38,9 +46,77 @@ interface Signature {
   Blocks: { default: [] };
 }
 
-class ScrollIntoView extends Modifier {
-  modify(element: HTMLElement) {
-    element.scrollIntoView();
+interface MessageScrollerSignature {
+  Args: {
+    Named: {
+      index: number;
+      registerScroller: (args: {
+        index: number;
+        element: HTMLElement;
+        scrollTo: Element['scrollIntoView'];
+      }) => void;
+    };
+  };
+}
+
+class MessageScroller extends Modifier<MessageScrollerSignature> {
+  private hasRegistered = false;
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { index, registerScroller }: MessageScrollerSignature['Args']['Named'],
+  ) {
+    if (!this.hasRegistered) {
+      this.hasRegistered = true;
+      registerScroller({
+        index,
+        element,
+        scrollTo: element.scrollIntoView.bind(element),
+      });
+    }
+  }
+}
+
+interface ScrollPositionSignature {
+  Args: {
+    Named: {
+      setScrollPosition: (args: { isBottom: boolean }) => void;
+      registerConversationScroller: (isScrollable: () => boolean) => void;
+    };
+  };
+}
+
+// an amount of pixels from the bottom of the element that we would consider to
+// be scrolled "all the way down"
+const BOTTOM_THRESHOLD = 50;
+class ScrollPosition extends Modifier<ScrollPositionSignature> {
+  private hasRegistered = false;
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    {
+      setScrollPosition,
+      registerConversationScroller,
+    }: ScrollPositionSignature['Args']['Named'],
+  ) {
+    if (!this.hasRegistered) {
+      this.hasRegistered = true;
+      registerConversationScroller(
+        () => element.scrollHeight > element.clientHeight,
+      );
+    }
+
+    let detectPosition = throttle(() => {
+      let isBottom =
+        Math.abs(
+          element.scrollHeight - element.clientHeight - element.scrollTop,
+        ) <= BOTTOM_THRESHOLD;
+      setScrollPosition({ isBottom });
+    }, 500);
+    element.addEventListener('scroll', detectPosition);
+    registerDestructor(this, () =>
+      element.removeEventListener('scroll', detectPosition),
+    );
   }
 }
 
@@ -55,7 +131,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         is-pending=@isPending
         is-error=@errorMessage
       }}
-      {{ScrollIntoView}}
+      {{MessageScroller index=@index registerScroller=@registerScroller}}
       data-test-ai-assistant-message
       ...attributes
     >
@@ -121,7 +197,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .ai-assistant-message {
         --ai-bot-message-background-color: #3b394b;
         --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
@@ -228,7 +304,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .content > :deep(.command-message) {
-        font-weight: 700;
+        font-weight: 600;
         letter-spacing: var(--boxel-lsp-sm);
       }
 
@@ -247,7 +323,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         background-color: var(--boxel-danger);
         color: var(--boxel-light);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
       }
       .error-icon {
@@ -284,7 +360,10 @@ export default class AiAssistantMessage extends Component<Signature> {
 
 interface AiAssistantConversationSignature {
   Element: HTMLDivElement;
-  Args: {};
+  Args: {
+    setScrollPosition: (args: { isBottom: boolean }) => void;
+    registerConversationScroller: (isScrollable: () => boolean) => void;
+  };
   Blocks: {
     default: [];
   };
@@ -292,10 +371,17 @@ interface AiAssistantConversationSignature {
 
 const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSignature> =
   <template>
-    <div class='ai-assistant-conversation'>
+    <div
+      {{ScrollPosition
+        setScrollPosition=@setScrollPosition
+        registerConversationScroller=@registerConversationScroller
+      }}
+      class='ai-assistant-conversation'
+      data-test-ai-assistant-conversation
+    >
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;

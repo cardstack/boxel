@@ -12,7 +12,7 @@ interface Signature {
 }
 
 const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
-  <style>
+  <style scoped>
     .panel-popover {
       position: absolute;
       top: 0;
@@ -25,7 +25,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-xl);
       color: var(--boxel-dark);
       box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
-      z-index: 20;
+      z-index: var(--host-ai-panel-popover-z-index);
       display: flex;
       flex-direction: column;
     }
@@ -34,7 +34,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       padding: var(--boxel-sp);
       font-size: 1.125rem;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: var(--boxel-lsp-xs);
       line-height: 1.2;
     }

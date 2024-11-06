@@ -1,6 +1,8 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
+pnpm setup:seed-in-deployment
+pnpm setup:catalog-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='perf=debug' \
   MATRIX_URL=https://matrix-staging.stack.cards \
@@ -8,18 +10,28 @@ NODE_NO_WARNINGS=1 \
   ts-node \
   --transpileOnly main \
   --port=3000 \
+  --matrixURL='https://matrix-staging.stack.cards' \
+  --realmsRootPath='/persistent/realms' \
+  --serverURL='https://realms-staging.stack.cards' \
+  --seedPath='/persistent/seed' \
   \
   --path='/persistent/base' \
-  --matrixURL='https://matrix-staging.stack.cards' \
   --username='base_realm' \
-  --password=${BASE_REALM_PASSWORD} \
   --distURL='https://boxel-host-staging.stack.cards' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
   \
   --path='/persistent/experiments' \
-  --matrixURL='https://matrix-staging.stack.cards' \
   --username='experiments_realm' \
-  --password=${EXPERIMENTS_REALM_PASSWORD} \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
+  \
+  --path='/persistent/seed' \
+  --username='seed_realm' \
+  --fromUrl='https://realms-staging.stack.cards/seed/' \
+  --toUrl='https://realms-staging.stack.cards/seed/' \
+  \
+  --path='/persistent/catalog' \
+  --username='catalog_realm' \
+  --fromUrl='https://realms-staging.stack.cards/catalog/' \
+  --toUrl='https://realms-staging.stack.cards/catalog/'

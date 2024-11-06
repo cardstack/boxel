@@ -22,7 +22,7 @@ module.exports = {
           ],
         },
       },
-      plugins: ['ember', '@typescript-eslint'],
+      plugins: ['ember', '@typescript-eslint', 'window-mock'],
       extends: [
         'eslint:recommended',
         'plugin:ember/recommended',
@@ -45,6 +45,8 @@ module.exports = {
         '@typescript-eslint/no-non-null-assertion': 'off',
         'no-undef': 'off',
         'ember/no-runloop': 'off',
+        'window-mock/mock-window-only': 'error',
+        'window-mock/wrapped-setup-helpers-only': 'error',
       },
     },
     {
@@ -64,7 +66,7 @@ module.exports = {
         },
         warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember'],
+      plugins: ['ember', 'window-mock'],
       extends: [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
@@ -92,6 +94,8 @@ module.exports = {
         'ember/no-runloop': 'off',
         'node/no-deprecated-api': 'off',
         'deprecation/deprecation': 'off',
+        'window-mock/mock-window-only': 'error',
+        'window-mock/wrapped-setup-helpers-only': 'error',
       },
     },
     // node files

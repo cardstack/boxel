@@ -2,7 +2,8 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "moduleResolution": "node",
+    "module": "es2022",
+    "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -18,7 +19,6 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "es2022",
     "strict": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
@@ -35,6 +35,8 @@
       "include": [
         "../experiments-realm/**",
         "../base/**",
+        "../seed-realm/**",
+        "../catalog-realm/**",
         "../boxel-ui/addon/**"
       ]
     }

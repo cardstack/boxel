@@ -18,6 +18,7 @@ import {
   BoxelInput,
   FieldContainer,
   RadioInput,
+  Pill,
 } from '@cardstack/boxel-ui/components';
 import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
@@ -32,7 +33,6 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import Pill from '@cardstack/host/components/pill';
 import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
 
 import { Ready } from '@cardstack/host/resources/file';
@@ -174,11 +174,7 @@ export default class EditFieldModal extends Component<Signature> {
   private chooseCardTask = restartableTask(async () => {
     let chosenCatalogEntry = await chooseCard<CatalogEntry>({
       filter: {
-        any: [
-          {
-            type: catalogEntryRef,
-          },
-        ],
+        type: catalogEntryRef,
       },
     });
 
@@ -297,7 +293,7 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   <template>
-    <style>
+    <style scoped>
       .edit-field-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
@@ -348,7 +344,7 @@ export default class EditFieldModal extends Component<Signature> {
           <div class='card-chooser-area'>
             {{#if this.fieldCard}}
               <Pill data-test-selected-field-realm-icon>
-                <:icon>
+                <:iconLeft>
                   {{#if this.fieldModuleURL.href}}
                     {{#let
                       (this.realm.info this.fieldModuleURL.href)
@@ -361,7 +357,7 @@ export default class EditFieldModal extends Component<Signature> {
                       />
                     {{/let}}
                   {{/if}}
-                </:icon>
+                </:iconLeft>
                 <:default>
                   <span data-test-selected-field-display-name>
                     {{this.fieldCard.displayName}}

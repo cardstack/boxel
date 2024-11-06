@@ -101,7 +101,7 @@ class PasswordModal extends Component<PasswordModalSignature> {
         </div>
       </:footer>
     </ModalContainer>
-    <style>
+    <style scoped>
       .password-modal :deep(.boxel-modal__inner) {
         height: 21rem;
         margin-top: calc((100vh - 21rem) / 2);
@@ -170,7 +170,7 @@ class EmailWrapper extends Component<EmailWrapperSignature> {
       {{/if}}
     </div>
 
-    <style>
+    <style scoped>
       .email-wrapper {
         display: flex;
         flex-direction: column;
@@ -316,7 +316,7 @@ export default class ProfileEmail extends Component<Signature> {
       />
     {{/if}}
 
-    <style>
+    <style scoped>
       .buttons {
         margin-left: auto;
         margin-top: auto;
@@ -339,16 +339,15 @@ export default class ProfileEmail extends Component<Signature> {
         margin-top: var(--boxel-sp-xl);
         border-radius: var(--boxel-border-radius);
         border: 2px solid var(--boxel-warning-100);
+        overflow: hidden;
       }
       .warning-title {
         display: flex;
         align-items: center;
         text-transform: uppercase;
-        font-weight: bold;
+        font-weight: 600;
         padding: var(--boxel-sp-xxs);
         background-color: var(--boxel-warning-100);
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
       }
       .warning-title span {
         margin-left: var(--boxel-sp-xs);

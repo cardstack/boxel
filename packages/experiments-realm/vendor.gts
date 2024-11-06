@@ -15,9 +15,12 @@ import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { PaymentMethod } from './payment-method';
 import GlimmerComponent from '@glimmer/component';
+import BuildingIcon from '@cardstack/boxel-icons/building';
 
 class VendorDetails extends FieldDef {
   static displayName = 'Vendor';
+  static icon = BuildingIcon;
+
   @field name = contains(StringCard); // required
   @field description = contains(TextAreaCard);
   @field logoURL = contains(StringCard); // url format
@@ -113,9 +116,9 @@ export class Vendor extends CardDef {
           <@fields.mailingAddress />
           <@fields.vendor.email />
         </div>
-        <img src={{@model.vendor.logoHref}} />
+        <img src={{@model.vendor.logoHref}} aria-hidden='true' />
       </div>
-      <style>
+      <style scoped>
         .vendor-card--embedded {
           display: grid;
           grid-template-columns: 1fr auto;
@@ -157,7 +160,7 @@ export class Vendor extends CardDef {
           {{/if}}
         </section>
       </VendorContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }
@@ -192,7 +195,7 @@ export class Vendor extends CardDef {
           <@fields.alternatePaymentMethod />
         </section>
       </VendorContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
             var(--boxel-sp-xl);
@@ -214,7 +217,7 @@ class VendorContainer extends GlimmerComponent<Signature> {
     <div class='vendor' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .vendor :deep(.boxel-field + .boxel-field) {
         margin-top: var(--boxel-sp);
       }

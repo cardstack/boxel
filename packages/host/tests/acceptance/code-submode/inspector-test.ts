@@ -9,9 +9,7 @@ import {
   visit,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -42,7 +40,8 @@ import {
   setMonacoContent,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {
@@ -105,7 +104,7 @@ const personCardSource = `
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -235,7 +234,7 @@ const friendCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -402,11 +401,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL, testRealmURL2],
+  });
 
   hooks.beforeEach(async function () {
-    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+    setRealmPermissions({
+      [testRealmURL]: ['read', 'write'],
+      [testRealmURL2]: ['read', 'write'],
+    });
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -852,7 +856,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
       .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .hasAttribute('alt', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -911,7 +915,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
       .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Icon for workspace Test Workspace A');
+      .hasAttribute('alt', 'Test Workspace A');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -920,6 +924,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     let done = assert.async();
 
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/vangogh`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -980,6 +992,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         done();
       },
     });
+
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
@@ -1012,6 +1025,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/vangogh`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/vangogh`],
         },
@@ -1024,6 +1045,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         [testRealmURL, 'Pet/mango.json'],
       ]),
     );
+
     await visitOperatorMode({
       stacks: [
         [
@@ -1045,6 +1067,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
+
     await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
@@ -1065,6 +1088,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     });
+
     await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')
@@ -1082,6 +1106,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         },
       },
     });
+
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"`);
@@ -1098,6 +1123,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card definition and fallback to recent file', async function (assert) {
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}pet.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -1160,6 +1193,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card definition with no recent files to fall back on', async function (assert) {
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}pet.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -1688,6 +1729,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}in-this-file.gts`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}in-this-file.gts`],
         },
@@ -1755,6 +1804,10 @@ export class TestCard extends ExportedCard {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim();
     await visitOperatorMode({
@@ -1780,7 +1833,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-create-definition]').isDisabled();
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
-    assert.dom('[data-test-create-definition]').isDisabled();
+    assert.dom('[data-test-create-definition]').isEnabled();
     await fillIn('[data-test-file-name-field]', '/test-card');
     assert.dom('[data-test-create-definition]').isEnabled();
 
@@ -1880,6 +1933,10 @@ export class TestField extends ExportedField {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
+  }
   */
 }`.trim(),
         'the source is correct',
@@ -1956,6 +2013,10 @@ export class ExportedCard extends ExportedCardParent {
   }
 
   static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+
+  static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
   */

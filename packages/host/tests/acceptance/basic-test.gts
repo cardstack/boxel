@@ -1,7 +1,5 @@
-import { find, visit, currentURL } from '@ember/test-helpers';
+import { click, find, visit } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -11,13 +9,19 @@ import {
   setupServerSentEvents,
   setupAcceptanceTestRealm,
   lookupLoaderService,
+  testRealmURL,
 } from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     let loaderService = lookupLoaderService();
@@ -57,7 +61,7 @@ module('Acceptance | basic tests', function (hooks) {
             <p>Last name: <@fields.lastName /></p>
             <p>Title: <@fields.title /></p>
           </div>
-          <style>
+          <style scoped>
             div {
               color: green;
               content: '';
@@ -90,10 +94,14 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   test('visiting realm root', async function (assert) {
-    await visit('/test/');
+    await visit('/');
 
-    assert.strictEqual(currentURL(), '/test/');
-    assert.dom('[data-test-index-card]').containsText('Hello, world');
+    assert.dom('[data-test-workspace-chooser]').exists();
+    await click('[data-test-workspace="Unnamed Workspace"]');
+
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-index-card]')
+      .containsText('Hello, world');
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {

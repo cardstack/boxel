@@ -15,18 +15,13 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
     data-test-open-ai-assistant
     ...attributes
   />
-  <style>
+  <style scoped>
     .ai-assistant-button {
       width: var(--container-button-size);
       height: var(--container-button-size);
-
-      position: absolute;
-      bottom: var(--boxel-sp);
-      right: var(--boxel-sp);
       border-radius: var(--boxel-border-radius);
       background-color: var(--boxel-dark);
-      border: 1px solid rgba(255, 255, 255, 0.35);
-
+      border: var(--boxel-border-flexible);
       background-image: image-set(
         url('./ai-assist-icon.webp') 1x,
         url('./ai-assist-icon@2x.webp') 2x,

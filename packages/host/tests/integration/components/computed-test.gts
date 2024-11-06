@@ -1,6 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -34,6 +33,7 @@ import {
   linksToMany,
 } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 
@@ -325,7 +325,7 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(family.totalAge, 10, 'computed is correct');
   });
 
-  test('computed fields render as embedded in the edit format', async function (assert) {
+  test('computed fields render as disabled in the edit format', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field alias = contains(StringField, {
@@ -337,10 +337,8 @@ module('Integration | computeds', function (hooks) {
 
     let person = new Person({ firstName: 'Mango' });
     await renderCard(loader, person, 'edit');
-    assert.dom('[data-test-field=alias]').containsText('Mango');
-    assert
-      .dom('[data-test-field=alias] input')
-      .doesNotExist('input field not rendered for computed');
+    assert.dom('[data-test-field=alias] input').hasValue('Mango');
+    assert.dom('[data-test-field=alias] input').hasAttribute('disabled');
   });
 
   test('can render a computed linksTo relationship', async function (assert) {

@@ -12,6 +12,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import ListIcon from '@cardstack/boxel-icons/list';
 
 interface FeaturedProductComponentSignature {
   Args: {
@@ -23,11 +24,9 @@ interface FeaturedProductComponentSignature {
 class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponentSignature> {
   <template>
     <div class='product'>
-      <img
-        {{on 'click' (fn @viewProduct @model)}}
-        src={{@model.thumbnailURL}}
-        alt={{@model.title}}
-      />
+      <button {{on 'click' (fn @viewProduct @model)}}>
+        <img src={{@model.thumbnailURL}} alt={{@model.title}} />
+      </button>
       <div>
         <div class='seller'>
           {{@model.seller.title}}
@@ -41,7 +40,7 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
         <button {{on 'click' (fn @viewProduct @model)}}>Shop this item</button>
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         display: grid;
         grid-template-columns: 1.5fr 2.5fr;
@@ -156,7 +155,7 @@ class Isolated extends Component<typeof ProductList> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       .search-container {
         background-image: url(https://i.imgur.com/PQuDAEo.jpg);
         padding: var(--boxel-sp);
@@ -200,6 +199,7 @@ class Isolated extends Component<typeof ProductList> {
 export class ProductList extends CardDef {
   @field products = linksToMany(ProductCard);
   static displayName = 'Product List';
+  static icon = ListIcon;
 
   static isolated = Isolated;
 
@@ -216,6 +216,10 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
 
 
 

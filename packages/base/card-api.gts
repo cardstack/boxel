@@ -53,6 +53,15 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import MissingEmbeddedTemplate from './default-templates/missing-embedded';
 import FieldDefEditTemplate from './default-templates/field-edit';
+import CaptionsIcon from '@cardstack/boxel-icons/captions';
+import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
+import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+
+interface CardorFieldTypeIconSignature {
+  Element: Element;
+}
+
+type CardorFieldTypeIcon = ComponentLike<CardorFieldTypeIconSignature>;
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -1644,9 +1653,13 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
+  static icon: CardorFieldTypeIcon;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
+  }
+  static getIconComponent(instance: BaseDef) {
+    return instance.constructor.icon;
   }
 
   static [serialize](
@@ -1797,6 +1810,7 @@ export class FieldDef extends BaseDef {
   // class type cannot masquarade as a FieldDef class type
   static isFieldDef = true;
   static displayName = 'Field';
+  static icon = RectangleEllipsisIcon;
 
   static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -1820,6 +1834,7 @@ export class ReadOnlyField extends FieldDef {
 
 export class StringField extends FieldDef {
   static displayName = 'String';
+  static icon = LetterCaseIcon;
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -1873,6 +1888,7 @@ export class CardDef extends BaseDef {
   @field thumbnailURL = contains(MaybeBase64Field);
   static displayName = 'Card';
   static isCardDef = true;
+  static icon = CaptionsIcon;
 
   static assignInitialFieldValue(
     instance: BaseDef,
@@ -2597,7 +2613,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   return instance;
 }
 
-export function setCardAsSavedForTest(instance: CardDef): void {
+export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
+  if (id != null) {
+    let deserialized = getDataBucket(instance);
+    deserialized.set('id', id);
+  }
   instance[isSavedInstance] = true;
 }
 

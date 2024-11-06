@@ -16,7 +16,9 @@ import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import { baseRealm, getLiveCards } from '@cardstack/runtime-common';
+import { baseRealm, getCards } from '@cardstack/runtime-common';
+import LayoutBoardSplitIcon from '@cardstack/boxel-icons/layout-board-split';
+import PlantIcon from '@cardstack/boxel-icons/plant';
 
 class Isolated extends Component<typeof GardenDesign> {
   <template>
@@ -76,7 +78,7 @@ class Isolated extends Component<typeof GardenDesign> {
         </ul>
       </div>
     </section>
-    <style>
+    <style scoped>
       .garden-design {
         width: 100%;
         height: 100%;
@@ -211,7 +213,8 @@ class Isolated extends Component<typeof GardenDesign> {
       }),
     );
     this.updateGridModel();
-    this.liveQuery = getLiveCards(
+    // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
+    this.liveQuery = getCards(
       {
         filter: {
           eq: {
@@ -229,16 +232,6 @@ class Isolated extends Component<typeof GardenDesign> {
         ],
       },
       this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
-      async (ready: Promise<void> | undefined) => {
-        if (this.args.context?.actions) {
-          this.args.context.actions.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              await ready;
-            },
-          );
-        }
-      },
     );
   }
 
@@ -389,6 +382,7 @@ export class GardenItem extends CardDef {
   });
 
   static displayName = 'Garden Item';
+  static icon = PlantIcon;
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -404,5 +398,6 @@ export class GardenDesign extends CardDef {
   @field columns = contains(NumberField);
   @field items = containsMany(PositionedCard);
   static displayName = 'Garden Design';
+  static icon = LayoutBoardSplitIcon;
   static isolated = Isolated;
 }

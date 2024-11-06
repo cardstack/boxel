@@ -5,6 +5,7 @@ import cssUrl from 'ember-css-url';
 import { identifyCard, isCardDef, moduleFrom } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { Button } from '@cardstack/boxel-ui/components';
 
 export default class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {
@@ -24,16 +25,18 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
         {{@cardOrField.displayName}}</span>
       {{#if @context.actions.changeSubmode}}
-        <span
+        <Button
           class='open-code-submode'
+          @kind='secondary-light'
+          @size='tall'
           {{on 'click' this.openCodeSubmode}}
           data-test-open-code-submode
         >
-          Open In Code Mode
-        </span>
+          Open in Code Mode
+        </Button>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .missing-embedded-template {
         display: flex;
         flex-direction: column;
@@ -47,7 +50,7 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         border: none;
         border-radius: var(--boxel-form-control-border-radius);
         color: var(--boxel-dark);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         transition: background-color var(--boxel-transition);
       }
@@ -60,11 +63,7 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         margin: 0;
       }
       .open-code-submode {
-        cursor: pointer;
-        color: var(--boxel-highlight);
-      }
-      .open-code-submode:hover {
-        text-decoration: underline;
+        margin-top: var(--boxel-sp-sm);
       }
     </style>
   </template>

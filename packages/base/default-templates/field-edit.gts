@@ -3,6 +3,7 @@ import type { FieldDef } from '../card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
+import { getField } from '@cardstack/runtime-common';
 
 export default class FieldDefEditTemplate extends GlimmerComponent<{
   Args: {
@@ -10,6 +11,9 @@ export default class FieldDefEditTemplate extends GlimmerComponent<{
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
+  getFieldIcon = (key: string) => {
+    return getField(this.args.model.constructor, key)?.card?.icon;
+  };
   <template>
     <div class='field-def-edit-template'>
       {{#each-in @fields as |key Field|}}
@@ -17,6 +21,7 @@ export default class FieldDefEditTemplate extends GlimmerComponent<{
           <FieldContainer
             {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
             @label={{startCase key}}
+            @icon={{this.getFieldIcon key}}
             @vertical={{true}}
             data-test-field={{key}}
           >
@@ -25,7 +30,7 @@ export default class FieldDefEditTemplate extends GlimmerComponent<{
         {{/unless}}
       {{/each-in}}
     </div>
-    <style>
+    <style scoped>
       .field-def-edit-template {
         display: grid;
         gap: var(--boxel-sp-lg);

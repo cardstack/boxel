@@ -20,10 +20,11 @@ import InteractSubmode from '@cardstack/host/components/operator-mode/interact-s
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
-  getLiveSearchResults,
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
+
+import MessageService from '@cardstack/host/services/message-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -34,7 +35,7 @@ import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
-const waiter = buildWaiter('operator-mode-container:write-waiter');
+const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
   Args: {
@@ -46,18 +47,16 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare messageService: MessageService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
 
-    if (isTesting()) {
-      (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-      registerDestructor(this, () => {
-        delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
-      });
-    }
+    this.messageService.register();
 
     registerDestructor(this, () => {
+      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }
@@ -83,21 +82,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return trackCard(owner, card, realmURL);
   }
 
-  // public API
-  @action
-  getLiveCards(
-    query: Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): Search {
-    return getLiveSearchResults(
-      this,
-      query,
-      realms,
-      doWhileRefreshing ? () => doWhileRefreshing : undefined,
-    );
-  }
-
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
@@ -108,7 +92,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
   // at the same time
-  private write = task(async (card: CardDef) => {
+  private saveCard = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
       return await this.cardService.saveModel(this, card);
     });
@@ -146,22 +130,25 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.write}}
+          @saveCardOnClose={{perform this.saveCard}}
         />
       {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
-        <InteractSubmode @write={{perform this.write}} />
+        <InteractSubmode @saveCard={{perform this.saveCard}} />
       {{else}}
         <Auth />
       {{/if}}
     </Modal>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
-        --container-button-size: var(--boxel-icon-lg);
+        --container-button-size: 2.5rem;
         --operator-mode-min-width: 20.5rem;
-        --operator-mode-left-column: 14rem;
+        --operator-mode-left-column: 15rem;
+        --operator-mode-spacing: var(--boxel-sp-sm);
+        --operator-mode-top-bar-item-height: var(--container-button-size);
+        --operator-mode-bottom-bar-item-height: var(--container-button-size);
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(--boxel-header-text-color, var(--boxel-highlight));

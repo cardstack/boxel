@@ -20,6 +20,7 @@ import {
   moduleFrom,
   isCardDef,
   IndexWriter,
+  unixTime,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -50,14 +51,17 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
+
+import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 
 const log = logger('current-run');
 
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
+  displayName: string;
 }
 type TypesWithErrors =
   | {
@@ -87,7 +91,8 @@ export class CurrentRun {
     moduleErrors: 0,
     totalIndexEntries: 0,
   };
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   constructor({
     realmURL,
@@ -225,26 +230,31 @@ export class CurrentRun {
     url: URL,
     mtimes: LastModifiedTimes,
   ): Promise<void> {
-    let ignorePatterns = await this.#reader.readFileAsText(
-      this.#realmPaths.local(new URL('.gitignore', url)),
+    log.debug(`discovering invalidations in dir ${url.href}`);
+    let ignorePatterns = await this.#reader.readFile(
+      new URL('.gitignore', url),
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
-    for await (let { path: innerPath, kind } of this.#reader.readdir(
-      this.#realmPaths.local(url),
-    )) {
-      let innerURL = this.#realmPaths.fileURL(innerPath);
+    let entries = await this.#reader.directoryListing(url);
+
+    for (let { url, kind, lastModified } of entries) {
+      let innerURL = new URL(url);
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
         continue;
       }
 
       if (kind === 'directory') {
-        let directoryURL = this.#realmPaths.directoryURL(innerPath);
-        await this.discoverInvalidations(directoryURL, mtimes);
+        await this.discoverInvalidations(innerURL, mtimes);
       } else {
+        if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
+          // Only allow json and executable files to be invalidated so that we don't end up with invalidated files that weren't meant to be indexed (images, etc)
+          continue;
+        }
+
         let indexEntry = mtimes.get(innerURL.href);
         if (
           !indexEntry ||
@@ -255,8 +265,6 @@ export class CurrentRun {
           continue;
         }
 
-        let localPath = this.#realmPaths.local(innerURL);
-        let lastModified = await this.#reader.lastModified(localPath);
         if (lastModified !== indexEntry.lastModified) {
           await this.batch.invalidate(innerURL);
         }
@@ -286,16 +294,16 @@ export class CurrentRun {
       return;
     }
 
-    let fileRef = await this.#reader.readFileAsText(localPath);
+    let fileRef = await this.#reader.readFile(url);
     if (!fileRef) {
-      fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
+      fileRef = await this.#reader.readFile(new URL(encodeURI(localPath), url));
     }
     if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
       error.deps = [url.href];
       throw error;
     }
-    let { content, lastModified } = fileRef;
+    let { content, lastModified, created } = fileRef;
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
@@ -318,10 +326,17 @@ export class CurrentRun {
         }
 
         if (resource && isCardResource(resource)) {
+          if (lastModified == null) {
+            log.warn(
+              `No lastModified date available for ${url.href}, using current time`,
+            );
+            lastModified = unixTime(Date.now());
+          }
           await this.indexCard({
             path: localPath,
             source: content,
             lastModified,
+            resourceCreatedAt: created,
             resource,
             identityContext,
           });
@@ -372,6 +387,7 @@ export class CurrentRun {
       type: 'module',
       source: ref.content,
       lastModified: ref.lastModified,
+      resourceCreatedAt: ref.created,
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
@@ -381,12 +397,14 @@ export class CurrentRun {
     path,
     source,
     lastModified,
+    resourceCreatedAt,
     resource,
     identityContext,
   }: {
     path: LocalPath;
     source: string;
     lastModified: number;
+    resourceCreatedAt: number;
     resource: LooseCardResource;
     identityContext: IdentityContextType;
   }): Promise<void> {
@@ -412,13 +430,15 @@ export class CurrentRun {
     let isolatedHtml: string | undefined;
     let atomHtml: string | undefined;
     let card: CardDef | undefined;
+    let embeddedHtml: Record<string, string> | undefined;
+    let fittedHtml: Record<string, string> | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
 
       if (!this.#realmInfo) {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        let realmInfoResponse = await this.network.authedFetch(
           `${this.realmURL}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
@@ -479,7 +499,8 @@ export class CurrentRun {
         data: {
           id: instanceURL.href,
           meta: {
-            lastModified: lastModified,
+            lastModified,
+            resourceCreatedAt,
             realmInfo: this.#realmInfo,
             realmURL: this.realmURL.href,
           },
@@ -496,36 +517,28 @@ export class CurrentRun {
       // Add a "pseudo field" to the search doc for the card type. We use the
       // "_" prefix to make a decent attempt to not pollute the userland
       // namespace for cards
-      if (cardType.displayName === 'Card') {
-        searchData._cardType = cardType.name;
-      } else {
-        searchData._cardType = cardType.displayName;
+      searchData._cardType = getDisplayName(cardType);
+      typesMaybeError = await this.getTypes(cardType);
+      if (card && typesMaybeError?.type === 'types') {
+        embeddedHtml = await this.buildCardHtml(
+          card,
+          typesMaybeError.types,
+          'embedded',
+          identityContext,
+        );
+      }
+      if (card && typesMaybeError?.type === 'types') {
+        fittedHtml = await this.buildCardHtml(
+          card,
+          typesMaybeError.types,
+          'fitted',
+          identityContext,
+        );
       }
     } catch (err: any) {
       uncaughtError = err;
     }
-    // if we already encountered an uncaught error then no need to deal with this
-    if (!uncaughtError && cardType) {
-      typesMaybeError = await this.getTypes(cardType);
-    }
-    let embeddedHtml: Record<string, string> | undefined;
-    if (card && typesMaybeError?.type === 'types') {
-      embeddedHtml = await this.buildCardHtml(
-        card,
-        typesMaybeError.types,
-        'embedded',
-        identityContext,
-      );
-    }
-    let fittedHtml: Record<string, string> | undefined;
-    if (card && typesMaybeError?.type === 'types') {
-      fittedHtml = await this.buildCardHtml(
-        card,
-        typesMaybeError.types,
-        'fitted',
-        identityContext,
-      );
-    }
+
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
         type: 'instance',
@@ -537,7 +550,11 @@ export class CurrentRun {
         embeddedHtml,
         fittedHtml,
         lastModified,
+        resourceCreatedAt,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
+        displayNames: typesMaybeError.types.map(
+          ({ displayName }) => displayName,
+        ),
         deps: new Set([
           moduleURL,
           ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
@@ -648,6 +665,7 @@ export class CurrentRun {
       types.push({
         refURL: internalKeyFor(loadedCardRef, undefined),
         codeRef: loadedCardRef,
+        displayName: getDisplayName(loadedCard),
       });
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {
@@ -682,8 +700,17 @@ function assertURLEndsWithJSON(url: URL): URL {
 function unwrap(html: string): string {
   return html
     .trim()
-    .replace(/^<div ([^<]*\n)/, '')
+    .replace(/^<div ([^>]*>)/, '')
+    .trim()
     .replace(/^<!---->/, '')
     .replace(/<\/div>$/, '')
     .trim();
+}
+
+function getDisplayName(card: typeof CardDef) {
+  if (card.displayName === 'Card') {
+    return card.name;
+  } else {
+    return card.displayName;
+  }
 }

@@ -1,4 +1,3 @@
-import { CheckMark, IconX } from '@cardstack/boxel-ui/icons';
 import { A } from '@ember/array';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -12,6 +11,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
+import { CheckMark, IconX } from '../../icons.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelField from '../field-container/index.gts';
 import {
@@ -173,14 +173,14 @@ export default class BoxelInputGroupUsage extends Component {
           @name='validIcon'
           @description='Override the default valid icon'
           @options={{validIconDescriptions}}
-          @onInput={{fn this.onChooseValidIcon}}
+          @onInput={{this.onChooseValidIcon}}
           @value={{this.validIconDescription}}
         />
         <Args.String
           @name='invalidIcon'
           @description='Override the default invalid icon'
           @options={{invalidIconDescriptions}}
-          @onInput={{fn this.onChooseInvalidIcon}}
+          @onInput={{this.onChooseInvalidIcon}}
           @value={{this.invalidIconDescription}}
         />
         <Args.String
@@ -267,7 +267,7 @@ export default class BoxelInputGroupUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .boxel-input-usage-examples .boxel-input-group {
         margin-bottom: var(--boxel-sp-xl);
       }

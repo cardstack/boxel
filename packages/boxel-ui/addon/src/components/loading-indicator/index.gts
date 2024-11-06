@@ -21,11 +21,15 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
       role='presentation'
     />
   </div>
-  <style>
+  <style scoped>
     /* zero specificity default sizing */
     :where(.boxel-loading-indicator) {
-      width: var(--boxel-icon-sm);
-      height: var(--boxel-icon-sm);
+      --loading-indicator-size: var(
+        --boxel-loading-indicator-size,
+        var(--boxel-icon-sm)
+      );
+      width: var(--loading-indicator-size);
+      height: var(--loading-indicator-size);
       flex-shrink: 0;
     }
 
@@ -35,6 +39,8 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
     @media (prefers-reduced-motion: no-preference) {
       .boxel-loading-indicator :deep(svg) {
         animation: spin 6000ms linear infinite;
+        width: var(--loading-indicator-size);
+        height: var(--loading-indicator-size);
       }
     }
 

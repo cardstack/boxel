@@ -3,9 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import compact from 'ember-composable-helpers/helpers/compact';
-
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, compact } from '@cardstack/boxel-ui/helpers';
 
 import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
@@ -163,29 +161,36 @@ export default class Selector extends Component<Signature> {
                 >
                   <div class='selector-item'>
                     {{#if selectorItem.declaration.exportName}}
-                      <span class='exported-arrow'>
-                        <DiagonalArrowLeftUp width='10' height='10' />
+                      <span class='exported-item ellipsis'>
+                        <DiagonalArrowLeftUp
+                          class='exported-arrow'
+                          width='10'
+                          height='10'
+                        />
+                        <strong>
+                          {{selectorItem.declaration.exportName}}
+                        </strong>
+                        {{#unless
+                          (eq
+                            selectorItem.declaration.exportName
+                            selectorItem.declaration.localName
+                          )
+                        }}
+                          ({{selectorItem.declaration.localName}})
+                        {{/unless}}
                       </span>
-                      <span
-                        class='exported'
-                      >{{selectorItem.declaration.exportName}}</span>
-                      {{#unless
-                        (eq
-                          selectorItem.declaration.exportName
-                          selectorItem.declaration.localName
-                        )
-                      }}<span
-                        >({{selectorItem.declaration.localName}})</span>{{/unless}}
                     {{else}}
-                      <span class='non-exported'>{{if
+                      <span class='non-exported ellipsis'>
+                        {{if
                           selectorItem.declaration.localName
                           selectorItem.declaration.localName
                           '[No Name Found]'
-                        }}</span>
+                        }}
+                      </span>
                     {{/if}}
-                    <span class='type'>{{this.getType
-                        selectorItem.declaration
-                      }}</span>
+                    <span class='type ellipsis'>
+                      {{this.getType selectorItem.declaration}}
+                    </span>
                   </div>
                 </div>
               </li>
@@ -194,20 +199,21 @@ export default class Selector extends Component<Signature> {
         {{/each}}
       {{/if}}
     </ul>
-    <style>
+    <style scoped>
       @layer {
         .boxel-selector {
-          --boxel-selector-border-radius: var(--boxel-border-radius);
+          --boxel-selector-border-radius: var(--boxel-border-radius-sm);
           --boxel-selector-color: var(--boxel-light);
-          --boxel-selector-current-color: var(--boxel-light-100);
+          --boxel-selector-current-color: var(--boxel-100);
           --boxel-selector-selected-color: var(--boxel-highlight);
           --boxel-selector-disabled-color: var(--boxel-highlight);
-          --boxel-selector-font: 500 var(--boxel-font-sm);
-          --boxel-selector-item-gap: var(--boxel-sp-xxs);
+          --boxel-selector-font: var(--boxel-font-xs);
+          --boxel-selector-item-gap: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
           --boxel-selector-item-content-padding: var(--boxel-sp-xs);
+          --boxel-selector-item-type-color: var(--boxel-450);
           --boxel-selector-selected-background-color: var(--boxel-highlight);
-          --boxel-selector-selected-font-color: var(--boxel-light-100);
-          --boxel-selector-selected-hover-font-color: var(--boxel-light);
+          --boxel-selector-selected-font-color: var(--boxel-dark);
+          --boxel-selector-selected-hover-font-color: var(--boxel-dark);
           --boxel-selector-selected-hover-background-color: var(
             --boxel-highlight-hover
           );
@@ -247,6 +253,7 @@ export default class Selector extends Component<Signature> {
         }
 
         .boxel-selector__item--selected {
+          --boxel-selector-item-type-color: currentColor;
           background-color: var(--boxel-selector-selected-background-color);
           color: var(--boxel-selector-selected-font-color);
         }
@@ -269,22 +276,31 @@ export default class Selector extends Component<Signature> {
         }
 
         .selector-item {
-          --icon-color: var(--boxel-highlight);
-
+          --icon-color: var(--boxel-dark);
           display: flex;
           align-items: center;
-          overflow-wrap: anywhere;
-          overflow: hidden;
+          justify-content: space-between;
+          flex-wrap: wrap;
           gap: var(--boxel-selector-item-gap);
         }
 
-        .boxel-selector__item--selected .selector-item {
-          color: var(--boxel-light);
-          --icon-color: var(--boxel-light);
+        .ellipsis {
+          max-width: 100%;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
-        .exported {
-          font-weight: 700;
+        .exported-item {
+          flex-grow: 1;
+        }
+
+        .exported-item strong {
+          font-weight: 600;
+        }
+
+        .exported-arrow {
+          margin-right: var(--boxel-sp-4xs);
         }
 
         .non-exported {
@@ -292,14 +308,8 @@ export default class Selector extends Component<Signature> {
         }
 
         .type {
-          margin-left: auto;
+          color: var(--boxel-selector-item-type-color);
           text-transform: uppercase;
-          color: var(--boxel-450);
-          white-space: nowrap;
-        }
-
-        .boxel-selector__item--selected .selector-item .type {
-          color: var(--boxel-light);
         }
       }
     </style>

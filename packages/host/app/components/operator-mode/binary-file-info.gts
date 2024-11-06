@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 
 import { format } from 'date-fns';
+// @ts-expect-error this package's types do not work under moduleResolution nodeNext
 import { filesize } from 'filesize';
 
 import { File } from '@cardstack/boxel-ui/icons';
@@ -45,7 +46,7 @@ export default class BinaryFileInfo extends Component<Signature> {
         {{this.lastModified}}</div>
     </div>
 
-    <style>
+    <style scoped>
       .binary-info {
         display: flex;
         flex-wrap: wrap;
@@ -56,7 +57,7 @@ export default class BinaryFileInfo extends Component<Signature> {
       .file-name {
         margin-top: var(--boxel-sp);
         font: var(--boxel-font-med);
-        font-weight: bold;
+        font-weight: 600;
         width: 100%;
       }
       .info {
@@ -70,7 +71,6 @@ export default class BinaryFileInfo extends Component<Signature> {
         text-transform: uppercase;
       }
       .file-icon {
-        --icon-color: var(--boxel-highlight);
         width: 100%;
       }
     </style>

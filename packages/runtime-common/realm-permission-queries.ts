@@ -1,32 +1,51 @@
 import { DBAdapter } from './db';
 import { RealmPermissions } from './realm';
-import {
-  query,
-  separatedByCommas,
-  Expression,
-  asExpressions,
-  param,
-} from './expression';
+import { query, asExpressions, param, upsert } from './expression';
 
 async function insertPermission(
   dbAdapter: DBAdapter,
   realmURL: URL,
   username: string,
-  read: boolean,
-  write: boolean,
+  permissions: {
+    read?: boolean;
+    write?: boolean;
+    realmOwner?: boolean;
+  },
 ) {
-  let { valueExpressions } = asExpressions({
+  let { read, write, realmOwner: realm_owner } = permissions;
+  read = !!read;
+  write = !!write;
+  realm_owner = !!realm_owner;
+  let { valueExpressions, nameExpressions } = asExpressions({
     realm_url: realmURL.href,
     username,
     read,
     write,
+    realm_owner,
   });
 
-  return query(dbAdapter, [
-    'INSERT INTO realm_user_permissions (realm_url, username, read, write) VALUES (',
-    ...separatedByCommas(valueExpressions),
-    ')',
-  ] as Expression);
+  await query(
+    dbAdapter,
+    upsert(
+      'realm_user_permissions',
+      'realm_user_permissions_pkey',
+      nameExpressions,
+      valueExpressions,
+    ),
+  );
+}
+
+async function removePermissions(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+  username: string,
+) {
+  await query(dbAdapter, [
+    'DELETE from realm_user_permissions WHERE username =',
+    param(username),
+    'and realm_url =',
+    param(realmURL.href),
+  ]);
 }
 
 export async function insertPermissions(
@@ -36,13 +55,15 @@ export async function insertPermissions(
 ) {
   let insertPromises = Object.entries(permissions).map(
     ([user, userPermissions]) => {
-      return insertPermission(
-        dbAdapter,
-        realmURL,
-        user,
-        userPermissions.includes('read'),
-        userPermissions.includes('write'),
-      );
+      if (userPermissions == null || userPermissions.length === 0) {
+        return removePermissions(dbAdapter, realmURL, user);
+      }
+
+      return insertPermission(dbAdapter, realmURL, user, {
+        read: userPermissions.includes('read'),
+        write: userPermissions.includes('write'),
+        realmOwner: userPermissions.includes('realm-owner'),
+      });
     },
   );
 
@@ -62,17 +83,42 @@ export async function permissionsExist(dbAdapter: DBAdapter, realmURL: URL) {
 export async function fetchUserPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
-) {
-  let permissions = await query(dbAdapter, [
-    `SELECT username, read, write FROM realm_user_permissions WHERE realm_url =`,
+): Promise<RealmPermissions> {
+  let permissions = (await query(dbAdapter, [
+    `SELECT username, read, write, realm_owner FROM realm_user_permissions WHERE realm_url =`,
     param(realmURL.href),
-  ]);
+  ])) as {
+    username: string;
+    read: boolean;
+    write: boolean;
+    realm_owner: boolean;
+  }[];
 
-  return permissions.reduce((permissionsAcc, { username, read, write }) => {
-    let userPermissions: ('read' | 'write')[] = [];
-    if (read) userPermissions.push('read');
-    if (write) userPermissions.push('write');
-    permissionsAcc[username as string] = userPermissions;
-    return permissionsAcc;
-  }, {}) as RealmPermissions;
+  return permissions.reduce(
+    (permissionsAcc, { username, read, write, realm_owner }) => {
+      let userPermissions: RealmPermissions['user'] = [];
+      if (read) {
+        userPermissions.push('read');
+      }
+      if (write) {
+        userPermissions.push('write');
+      }
+      if (realm_owner) {
+        userPermissions.push('realm-owner');
+      }
+      permissionsAcc[username as string] = userPermissions;
+      return permissionsAcc;
+    },
+    {} as RealmPermissions,
+  );
+}
+
+export async function fetchPublicRealms(dbAdapter: DBAdapter) {
+  let results = (await query(dbAdapter, [
+    `SELECT realm_url FROM realm_user_permissions WHERE username = '*' AND read = true`,
+  ])) as {
+    realm_url: string;
+  }[];
+
+  return results;
 }

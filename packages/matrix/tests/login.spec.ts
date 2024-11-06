@@ -12,7 +12,6 @@ import {
   login,
   logout,
   openRoot,
-  toggleOperatorMode,
   registerRealmUsers,
   testHost,
 } from '../helpers';
@@ -35,9 +34,59 @@ test.describe('Login', () => {
     await synapseStop(synapse.synapseId);
   });
 
+  test('it can login on the realm server home page and see the workspace chooser', async ({
+    page,
+  }) => {
+    await page.goto(`http://localhost:4202/`); // realm server index page
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(
+      page.locator('[data-test-workspace="Test Workspace A"]'),
+    ).toHaveCount(1);
+
+    await page.locator('[data-test-workspace="Test Workspace A"]').click();
+
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1);
+
+    await logout(page);
+    await assertLoggedOut(page);
+    await page.reload();
+    await assertLoggedOut(page);
+  });
+
+  test('it can login after visiting a card and then see the attempted card without choosing a workspace', async ({
+    page,
+  }) => {
+    await page.goto(`http://localhost:4202/test/hassan`);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(0);
+
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1);
+
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/hassan"]`),
+    ).toHaveCount(1);
+  });
+
   test('it can login', async ({ page }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -50,7 +99,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
-      await new Promise((res) => setTimeout(res, 1000));
+      await new Promise((res) => setTimeout(res, 1500));
       return window.localStorage.getItem('boxel-session');
     });
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
@@ -59,7 +108,7 @@ test.describe('Login', () => {
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
       realm: string;
-      permissions: ('read' | 'write')[];
+      permissions: ('read' | 'write' | 'realm-owner')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
     expect(claims.realm).toStrictEqual(`${testHost}/`);
@@ -114,7 +163,7 @@ test.describe('Login', () => {
     page,
   }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
+
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
@@ -138,7 +187,6 @@ test.describe('Login', () => {
 
   test('it reacts to enter keypresses', async ({ page }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
 
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('pass');
@@ -156,9 +204,6 @@ test.describe('Login', () => {
           '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
         )`,
     });
-
-    await openRoot(page);
-    await toggleOperatorMode(page);
 
     await assertLoggedOut(page);
   });

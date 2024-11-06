@@ -7,7 +7,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -24,8 +23,9 @@ import {
   setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
 const baseRealmCardCount = 2;
@@ -34,7 +34,11 @@ module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
 
   const noop = () => {};
 
@@ -63,6 +67,22 @@ module('Integration | card-catalog', function (hooks) {
       @field lastName = contains(StringField);
     }
 
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+    }
+
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+    }
+
+    class Tree extends CardDef {
+      static displayName = 'Tree';
+      @field species = contains(StringField);
+    }
+
     class BlogPost extends CardDef {
       static displayName = 'Blog Post';
       @field title = contains(StringField);
@@ -89,6 +109,9 @@ module('Integration | card-catalog', function (hooks) {
         'blog-post.gts': { BlogPost },
         'address.gts': { Address },
         'author.gts': { Author },
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+        'tree.gts': { Tree },
         'publishing-packet.gts': { PublishingPacket },
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
@@ -108,6 +131,33 @@ module('Integration | card-catalog', function (hooks) {
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
+          },
+        }),
+        'CatalogEntry/person.json': new CatalogEntry({
+          title: 'Person',
+          description: 'Catalog entry for Person',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
+        }),
+        'CatalogEntry/pet.json': new CatalogEntry({
+          title: 'Pet',
+          description: 'Catalog entry for Pet',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        }),
+        'CatalogEntry/tree.json': new CatalogEntry({
+          title: 'Tree',
+          description: 'Catalog entry for Tree',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}tree`,
+            name: 'Tree',
           },
         }),
         'CatalogEntry/blog-post.json': new CatalogEntry({
@@ -164,10 +214,10 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-realm]').exists({ count: 2 });
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)
-        .hasText('3 results');
+        .hasText('6 results');
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-        .exists({ count: 3 });
+        .exists({ count: 5 });
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
         .hasText(`${baseRealmCardCount} results`);
@@ -186,19 +236,27 @@ module('Integration | card-catalog', function (hooks) {
       assert.deepEqual(localResults, [
         'http://test-realm/test/CatalogEntry/author',
         'http://test-realm/test/CatalogEntry/blog-post',
+        'http://test-realm/test/CatalogEntry/person',
+        'http://test-realm/test/CatalogEntry/pet',
         'http://test-realm/test/CatalogEntry/publishing-packet',
       ]);
     });
 
     test('can filter cards by selecting a realm', async function (assert) {
       await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item]').exists({ count: 2 });
-      assert.dom('[data-test-boxel-menu-item-selected]').doesNotExist(); // no realms selected
-
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`); // base realm is selected
+      assert.dom('[data-test-boxel-menu-item]').exists({ count: 3 });
+      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 3 }); // All realms are selected by default
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace`, 'Only base realm is selected');
+        .includesText('Workspace: All');
+
+      await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
+      assert
+        .dom('[data-test-realm-filter-button]')
+        .hasText(
+          `Workspace: Base Workspace, Boxel Catalog`,
+          'base realm and boxel catalog are selected',
+        );
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists({ count: baseRealmCardCount });
@@ -206,88 +264,45 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
 
       await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 1 });
-      assert
-        .dom('[data-test-boxel-menu-item-selected]')
-        .hasText('Base Workspace');
-    });
-
-    test('can filter cards by selecting all realms', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`); // all realms selected
-
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: ${realmName}, Base Workspace`);
-      assert
-        .dom('[data-test-realm]')
-        .exists({ count: 2 }, 'Both realms are selected');
-      assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-        .exists({ count: 3 });
-      assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
-
-      await click('[data-test-realm-filter-button]');
       assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 });
-    });
-
-    test('can filter cards by unselecting a realm', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // all realms selected
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // local realm unselected
-
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace`);
-      assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
-      assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
-
-      await click('[data-test-realm-filter-button]');
       assert
         .dom('[data-test-boxel-menu-item-selected]')
         .hasText('Base Workspace');
     });
 
-    test('unselecting all realm filters displays all realms', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
+    test('can paginate results from a realm', async function (assert) {
       assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: ${realmName}, Base Workspace`); // all realms selected
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // all realms unselected
+        .dom(`[data-test-realm="Base Workspace"] [data-test-show-more-cards]`)
+        .doesNotExist("don't show pagination button for base realm");
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+        .exists('show pagination button for test realm');
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+        .containsText('Show 1 more card (1 not shown)');
 
-      assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
+      await click(
+        `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
+      );
       assert
-        .dom('[data-test-realm]')
-        .exists(
-          { count: 2 },
-          'All realms are shown when filters are unselected',
-        );
+        .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+        .doesNotExist("don't show pagination button for test realm");
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-        .exists({ count: 3 });
-      assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
-
-      await click('[data-test-realm-filter-button]');
-      assert
-        .dom('[data-test-boxel-menu-item-selected]')
-        .doesNotExist('No realms are selected');
+        .exists({ count: 6 });
+      let localResults = [
+        ...document.querySelectorAll(
+          '[data-test-realm="Local Workspace"] [data-test-card-catalog-item]',
+        ),
+      ].map((n) => n.getAttribute('data-test-card-catalog-item'));
+      assert.deepEqual(localResults, [
+        'http://test-realm/test/CatalogEntry/author',
+        'http://test-realm/test/CatalogEntry/blog-post',
+        'http://test-realm/test/CatalogEntry/person',
+        'http://test-realm/test/CatalogEntry/pet',
+        'http://test-realm/test/CatalogEntry/publishing-packet',
+        'http://test-realm/test/CatalogEntry/tree',
+      ]);
     });
   });
 
@@ -295,7 +310,9 @@ module('Integration | card-catalog', function (hooks) {
     test(`pressing enter on a card selects it and submits the selection`, async function (assert) {
       const card = `${testRealmURL}CatalogEntry/publishing-packet`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -307,14 +324,18 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Publishing Packet');
     });
 
     test(`can select card using mouse click and then submit selection using enter key`, async function (assert) {
       const card = `${testRealmURL}CatalogEntry/blog-post`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -331,7 +352,9 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Blog Post');
     });
 
@@ -339,7 +362,9 @@ module('Integration | card-catalog', function (hooks) {
       const card1 = `${testRealmURL}CatalogEntry/blog-post`;
       const card2 = `${testRealmURL}CatalogEntry/author`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -362,14 +387,18 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Author');
     });
 
     test(`double-clicking on a card selects the card and submits the selection`, async function (assert) {
       const card = `${testRealmURL}CatalogEntry/blog-post`;
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
@@ -381,13 +410,17 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
-        .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Blog Post');
     });
 
     test(`pressing escape key closes the modal`, async function (assert) {
       assert
-        .dom(`[data-test-stack-card-index="0"] [data-test-boxel-header-title]`)
+        .dom(
+          `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+        )
         .hasText('Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 

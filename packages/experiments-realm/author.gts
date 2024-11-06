@@ -7,9 +7,11 @@ import {
   contains,
 } from 'https://cardstack.com/base/card-api';
 import { CardContentContainer } from '@cardstack/boxel-ui/components';
+import SquareUser from '@cardstack/boxel-icons/square-user';
 
 export class Author extends CardDef {
   static displayName = 'Author Bio';
+  static icon = SquareUser;
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   @field title = contains(StringCard, {
@@ -28,7 +30,7 @@ export class Author extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContentContainer>
-        <h3><@fields.title /></h3>
+        <h3>Yo, my name is: <@fields.title /></h3>
         <p><@fields.body /></p>
       </CardContentContainer>
     </template>

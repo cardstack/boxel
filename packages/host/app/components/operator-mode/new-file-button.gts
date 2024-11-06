@@ -32,7 +32,7 @@ export default class NewFileButton extends Component<Signature> {
           <IconPlus
             @width='var(--boxel-icon-sm)'
             @height='var(--boxel-icon-sm)'
-            stroke='var(--boxel-light)'
+            stroke='var(--boxel-dark)'
             stroke-width='1px'
             aria-label='Add'
             class='new-file-button-icon'
@@ -49,20 +49,23 @@ export default class NewFileButton extends Component<Signature> {
       </:content>
     </BoxelDropdown>
 
-    <style>
+    <style scoped>
       .new-file-button {
         --new-file-button-width: 7.5rem;
-        --new-file-button-height: var(--boxel-form-control-height);
-        --boxel-button-text-color: var(--boxel-light);
+        --new-file-button-height: var(--operator-mode-top-bar-item-height);
+        --boxel-button-text-color: var(--boxel-dark);
 
         height: var(--new-file-button-height);
         width: var(--new-file-button-width);
-        margin-left: var(--boxel-sp);
+        margin-left: var(--operator-mode-spacing);
+        flex-shrink: 0;
       }
       .new-file-button-icon {
-        --icon-color: var(--boxel-light);
-        flex-shrink: 1;
-        margin-right: var(--boxel-sp-xxxs);
+        --icon-color: var(--boxel-dark);
+        width: 14px;
+        height: 14px;
+        margin-right: var(--boxel-sp-xs);
+        flex-shrink: 0;
       }
     </style>
   </template>

@@ -206,12 +206,15 @@ export default class AiAssistantPanel extends Component<Signature> {
       {{/let}}
     {{/if}}
 
-    <style>
+    <style scoped>
+      .left-border {
+        border-left: 1px solid var(--boxel-600);
+      }
+
       .ai-assistant-panel {
         display: grid;
         grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
-        border: none;
         border-radius: 0;
         color: var(--boxel-light);
         height: 100%;
@@ -252,7 +255,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         margin: 0;
         padding-right: var(--boxel-sp-xl);
         color: var(--boxel-light);
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -427,6 +430,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
         this.enterRoom(newRoomId);
       } catch (e) {
+        console.log(e);
         this.displayRoomError = true;
         this.currentRoomId = undefined;
       }

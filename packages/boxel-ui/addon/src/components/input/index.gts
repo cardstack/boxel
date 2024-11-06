@@ -211,7 +211,7 @@ export default class BoxelInput extends Component<Signature> {
         {{/if}}
       {{/let}}
     </div>
-    <style>
+    <style scoped>
       .input-container {
         --icon-size: var(--boxel-icon-sm);
         --icon-space: var(--boxel-sp-xs);
@@ -296,7 +296,7 @@ export default class BoxelInput extends Component<Signature> {
 
       .search.has-validation {
         padding-right: unset;
-        padding-left: var(--boxel-sp-xl);
+        padding-left: var(--boxel-sp-xxl); /* leave room for icon */
       }
 
       .boxel-input--bottom-flat {

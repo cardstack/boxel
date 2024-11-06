@@ -1,14 +1,27 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import max from 'lodash/max';
+
+import { MatrixEvent } from 'matrix-js-sdk';
+
+import pluralize from 'pluralize';
+
+import { TrackedObject } from 'tracked-built-ins';
+
 import { v4 as uuidv4 } from 'uuid';
 
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+
+import { unixTime } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -31,6 +44,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
+import type { RoomState } from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -50,14 +64,17 @@ export default class Room extends Component<Signature> {
         data-test-room-name={{this.roomResource.name}}
         data-test-room={{@roomId}}
       >
-        <AiAssistantConversation>
+        <AiAssistantConversation
+          @registerConversationScroller={{this.registerConversationScroller}}
+          @setScrollPosition={{this.setScrollPosition}}
+        >
           {{#if this.messages}}
             {{#each this.messages as |message i|}}
               <RoomMessage
                 @roomId={{@roomId}}
-                @messages={{this.messages}}
                 @message={{message}}
                 @index={{i}}
+                @registerScroller={{this.registerMessageScroller}}
                 @isPending={{this.isPendingMessage message}}
                 @monacoSDK={{@monacoSDK}}
                 @isStreaming={{this.isMessageStreaming message i}}
@@ -68,15 +85,27 @@ export default class Room extends Component<Signature> {
               />
             {{/each}}
           {{else}}
-            <NewSession @sendPrompt={{this.sendPrompt}} />
+            <NewSession @sendPrompt={{this.sendMessage}} />
           {{/if}}
           {{#if this.room}}
-            <AiAssistantSkillMenu
-              class='skills'
-              @skills={{this.skills}}
-              @onChooseCard={{this.attachSkill}}
-              data-test-skill-menu
-            />
+            {{#if this.showUnreadIndicator}}
+              <div class='unread-indicator'>
+                <BoxelButton
+                  @size='tall'
+                  @kind='primary'
+                  class='unread-button'
+                  data-test-unread-messages-button
+                  {{on 'click' this.scrollToFirstUnread}}
+                >{{this.unreadMessageText}}</BoxelButton>
+              </div>
+            {{else}}
+              <AiAssistantSkillMenu
+                class='skills'
+                @skills={{this.skills}}
+                @onChooseCard={{this.attachSkill}}
+                data-test-skill-menu
+              />
+            {{/if}}
           {{/if}}
         </AiAssistantConversation>
 
@@ -100,7 +129,7 @@ export default class Room extends Component<Signature> {
       </section>
     {{/if}}
 
-    <style>
+    <style scoped>
       .room {
         display: grid;
         grid-template-rows: 1fr auto;
@@ -111,6 +140,15 @@ export default class Room extends Component<Signature> {
         position: sticky;
         bottom: 0;
         margin-left: auto;
+      }
+      .unread-indicator {
+        position: sticky;
+        bottom: 0;
+        margin-left: auto;
+        width: 100%;
+      }
+      .unread-button {
+        width: 100%;
       }
       .room-actions {
         padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
@@ -146,24 +184,249 @@ export default class Room extends Component<Signature> {
   );
 
   @tracked private currentMonacoContainer: number | undefined;
+  private getConversationScrollability: (() => boolean) | undefined;
+  private roomScrollState: WeakMap<
+    RoomState,
+    {
+      messageElemements: WeakMap<HTMLElement, number>;
+      messageScrollers: Map<number, Element['scrollIntoView']>;
+      messageVisibilityObserver: IntersectionObserver;
+      isScrolledToBottom: boolean;
+      userHasScrolled: boolean;
+      isConversationScrollable: boolean;
+    }
+  > = new WeakMap();
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    this.loadRoomSkills.perform();
   }
 
-  maybeRetryAction = (messageIndex: number, message: Message) => {
+  private scrollState() {
+    if (!this.room) {
+      throw new Error(`Cannot get room scroll state before room is loaded`);
+    }
+    let state = this.roomScrollState.get(this.room);
+    if (!state) {
+      state = new TrackedObject({
+        isScrolledToBottom: false,
+        userHasScrolled: false,
+        isConversationScrollable: false,
+        messageElemements: new WeakMap(),
+        messageScrollers: new Map(),
+        messageVisibilityObserver: new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            let index = this.messageElements.get(entry.target as HTMLElement);
+            if (index != null) {
+              if (
+                (!this.isConversationScrollable || entry.isIntersecting) &&
+                index > this.lastReadMessageIndex
+              ) {
+                this.sendReadReceipt(this.messages[index]);
+              }
+            }
+          });
+        }),
+      });
+      this.roomScrollState.set(this.room, state);
+    }
+    return state;
+  }
+
+  private get isScrolledToBottom() {
+    return this.scrollState().isScrolledToBottom;
+  }
+
+  private get userHasScrolled() {
+    return this.scrollState().userHasScrolled;
+  }
+
+  private get isConversationScrollable() {
+    return this.scrollState().isConversationScrollable;
+  }
+
+  private get messageElements() {
+    return this.scrollState().messageElemements;
+  }
+
+  private get messageScrollers() {
+    return this.scrollState().messageScrollers;
+  }
+
+  private get messageVisibilityObserver() {
+    return this.scrollState().messageVisibilityObserver;
+  }
+
+  private loadRoomSkills = restartableTask(async () => {
+    await this.roomResource.loading;
+    let defaultSkills = await this.matrixService.loadDefaultSkills();
+    if (this.roomResource.room) {
+      this.roomResource.room.skills = defaultSkills;
+    }
+  });
+
+  private registerMessageScroller = ({
+    index,
+    element,
+    scrollTo,
+  }: {
+    index: number;
+    element: HTMLElement;
+    scrollTo: () => void;
+  }) => {
+    this.messageElements.set(element, index);
+    this.messageScrollers.set(index, scrollTo);
+    this.messageVisibilityObserver.observe(element);
+    this.scrollState().isConversationScrollable = Boolean(
+      this.getConversationScrollability?.(),
+    );
+    if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
+      return;
+    }
+
+    // TODO udpate this so that we preserve the scroll position as the user
+    // changes rooms and we restore the scroll position when a user enters a room
+    if (
+      // If we are permitted to auto-scroll and if there are no unread messages in the
+      // room, then scroll to the last message in the room.
+      !this.hasUnreadMessages &&
+      index === this.messages.length - 1
+    ) {
+      scrollTo();
+    } else if (
+      // otherwise if we are permitted to auto-scroll and if there are unread
+      // messages in the room, then scroll to the first unread message in the room.
+      this.hasUnreadMessages &&
+      index === this.lastReadMessageIndex + 1
+    ) {
+      scrollTo();
+    }
+  };
+
+  private registerConversationScroller = (
+    isConversationScrollable: () => boolean,
+  ) => {
+    this.getConversationScrollability = isConversationScrollable;
+  };
+
+  private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
+    this.scrollState().isScrolledToBottom = isBottom;
+    if (!isBottom) {
+      this.scrollState().userHasScrolled = true;
+    }
+  };
+
+  private scrollToFirstUnread = () => {
+    if (!this.hasUnreadMessages) {
+      return;
+    }
+
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    let scrollTo = this.messageScrollers.get(firstUnreadIndex);
+    if (!scrollTo) {
+      console.warn(`No scroller for message index ${firstUnreadIndex}`);
+    } else {
+      scrollTo({ behavior: 'smooth' });
+    }
+  };
+
+  private get isAllowedToAutoScroll() {
+    return !this.userHasScrolled || this.isScrolledToBottom;
+  }
+
+  // For efficiency, read receipts are implemented using “up to” markers. This
+  // marker indicates that the acknowledgement applies to all events “up to and
+  // including” the event specified. For example, marking an event as “read” would
+  // indicate that the user had read all events up to the referenced event.
+  @cached private get lastReadMessageIndex() {
+    let readReceiptIndicies: number[] = [];
+    for (let receipt of this.matrixService.currentUserEventReadReceipts.keys()) {
+      let maybeIndex = this.messages.findIndex((m) => m.eventId === receipt);
+      if (maybeIndex != null) {
+        readReceiptIndicies.push(maybeIndex);
+      }
+    }
+    return max(readReceiptIndicies) ?? -1;
+  }
+
+  @cached private get numberOfUnreadMessages() {
+    let unreadMessagesCount = 0;
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    for (let i = firstUnreadIndex; i < this.messages.length; i++) {
+      if (
+        this.matrixService.profile.userId === this.messages[i].author.userId
+      ) {
+        continue;
+      }
+      unreadMessagesCount++;
+    }
+    return unreadMessagesCount;
+  }
+
+  private get hasUnreadMessages() {
+    return this.numberOfUnreadMessages > 0;
+  }
+
+  private get showUnreadIndicator() {
+    // if user is already scrolled to bottom we don't show the indicator to
+    // prevent the flash of the indicator appearing and then disappearing during
+    // the read receipt acknowledgement
+    return (
+      this.isConversationScrollable &&
+      this.hasUnreadMessages &&
+      !this.isScrolledToBottom
+    );
+  }
+
+  private get unreadMessageText() {
+    return `${this.numberOfUnreadMessages} unread ${pluralize(
+      'message',
+      this.numberOfUnreadMessages,
+    )}`;
+  }
+
+  private sendReadReceipt(message: Message) {
+    if (this.matrixService.profile.userId === message.author.userId) {
+      return;
+    }
+    if (this.matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      return;
+    }
+
+    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix
+    // SDK), but it' not available to us here - however, we can fake it by adding
+    // the necessary methods
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => this.args.roomId,
+      getTs: () => message.created.getTime(),
+    };
+
+    // Without scheduling this after render, this produces the "attempted to
+    // update value, but it had already been used previously in the same
+    // computation" error
+    schedule('afterRender', () => {
+      this.matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+    });
+  }
+
+  private maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: Message, messageIndex: number) {
+  @action private isMessageStreaming(message: Message, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
-      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
+      // Older events do not come with isStreamingFinished property so we have
+      // no other way to determine if the message is done streaming other than
+      // checking if they are old messages (older than 60 seconds as an arbitrary
+      // threshold)
+      unixTime(new Date().getTime() - message.created.getTime()) < 60
     );
   }
 
@@ -198,7 +461,7 @@ export default class Room extends Component<Signature> {
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
-  @action resendLastMessage() {
+  @action private resendLastMessage() {
     if (!this.room) {
       throw new Error(
         'Bug: should not be able to resend a message without a room.',
@@ -222,12 +485,9 @@ export default class Room extends Component<Signature> {
     this.doSendMessage.perform(
       myLastMessage.message,
       attachedCards,
+      true,
       myLastMessage.clientGeneratedId,
     );
-  }
-
-  @action sendPrompt(prompt: string) {
-    this.doSendMessage.perform(prompt); // sends the prompt only
   }
 
   @action
@@ -236,7 +496,7 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private sendMessage() {
+  private sendMessage(prompt?: string) {
     let cards = [];
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
@@ -247,8 +507,9 @@ export default class Room extends Component<Signature> {
       });
     }
     this.doSendMessage.perform(
-      this.messageToSend,
+      prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
+      Boolean(prompt),
     );
   }
 
@@ -289,10 +550,16 @@ export default class Room extends Component<Signature> {
     async (
       message: string | undefined,
       cards?: CardDef[],
+      keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
     ) => {
-      this.matrixService.messagesToSend.set(this.args.roomId, undefined);
-      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      if (!keepInputAndAttachments) {
+        // this is for situations when a message is sent via some other way than the text box
+        // (example: ai prompt from new-session screen)
+        // if there were cards attached or a typed — but not sent — message, do not erase or remove them
+        this.matrixService.messagesToSend.set(this.args.roomId, undefined);
+        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      }
       let context = {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.operatorModeStateService
@@ -314,31 +581,8 @@ export default class Room extends Component<Signature> {
     },
   );
 
-  get topMostStackItems(): StackItem[] {
+  private get topMostStackItems(): StackItem[] {
     return this.operatorModeStateService.topMostStackItems();
-  }
-
-  get lastTopMostCard() {
-    let stackItems = this.operatorModeStateService.topMostStackItems();
-    if (stackItems.length === 0) {
-      return undefined;
-    }
-    let topMostItem = stackItems[stackItems.length - 1];
-    let topMostCard = topMostItem?.card;
-    if (!topMostCard) {
-      return undefined;
-    } else {
-      let realmURL = topMostItem.card[topMostItem.api.realmURL];
-      if (!realmURL) {
-        throw new Error(
-          `could not determine realm URL for card ${topMostItem.card.id}`,
-        );
-      }
-      if (topMostItem.card.id === `${realmURL.href}index`) {
-        return undefined;
-      }
-    }
-    return topMostCard;
   }
 
   private get autoAttachedCards() {

@@ -5,6 +5,7 @@ import PowerSelect, {
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
 import cn from '../../helpers/cn.ts';
+import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
 export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
   options: ItemT[];
@@ -19,6 +20,7 @@ interface Signature<ItemT = any> {
 }
 
 const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
+  {{! template-lint-disable no-autofocus-attribute }}
   <PowerSelect
     class='boxel-select'
     @options={{@options}}
@@ -31,7 +33,11 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     @renderInPlace={{@renderInPlace}}
     @verticalPosition={{@verticalPosition}}
     @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
-    @triggerComponent={{@triggerComponent}}
+    {{! We can avoid providing arguments to the triggerComponent as long as they are specified here https://github.com/cibernox/ember-power-select/blob/913c85ec82d5c6aeb80a7a3b9d9c21ca9613e900/ember-power-select/src/components/power-select.hbs#L79-L106 }}
+    {{! Even the custom BoxelTriggerWrapper will receive these arguments }}
+    @triggerComponent={{(if
+      @triggerComponent @triggerComponent (component BoxelSelectDefaultTrigger)
+    )}}
     @disabled={{@disabled}}
     @matchTriggerWidth={{@matchTriggerWidth}}
     @eventType='click'
@@ -43,59 +49,44 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     {{yield item}}
   </PowerSelect>
 
-  <style>
+  <style scoped>
     .boxel-select {
-      border: 1px solid var(--boxel-form-control-border-color);
-      border-radius: var(--boxel-form-control-border-radius);
-      background: none;
+      position: relative;
       display: flex;
-      gap: var(--boxel-sp-sm);
-    }
-
-    .boxel-select:after {
-      display: none;
+      align-items: stretch;
+      flex-grow: 1;
+      overflow: hidden;
+      border: 1px solid var(--boxel-border-color);
+      border-radius: var(--boxel-border-radius-sm);
     }
   </style>
-  {{! Note: When editing dropdown of the PowerSelect component we target 
-  the styles using :global -- this is not a mistake. The reason we do this is because 
-  content is teleported to an element #ember-basic-dropdown-wormhole at the top of the dom 
-  Therefore, our out-of-the-box scoped css solution do not work and we must use an escape hatch (ie :global) to 
-  ensure styles are being applied correctly.
-   }}
+  {{! template-lint-disable require-scoped-style }}
   <style>
-    :global(.boxel-select__dropdown) {
-      --boxel-select-current-color: var(--boxel-highlight);
-      --boxel-select-selected-color: var(--boxel-light-100);
+    .boxel-select__dropdown {
       box-shadow: var(--boxel-box-shadow);
       border-radius: var(--boxel-form-control-border-radius);
     }
-    :global(.boxel-select__dropdown ul) {
+    .boxel-select__dropdown ul {
       list-style: none;
       padding: 0;
       overflow: auto;
     }
-    :global(
-        .boxel-select__dropdown .ember-power-select-option[aria-selected='true']
-      ) {
-      background-color: var(--boxel-select-selected-color);
+    .boxel-select__dropdown .ember-power-select-option {
+      padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
     }
-
-    :global(
-        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
-      ) {
-      background-color: var(--boxel-select-current-color);
+    .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
+      background-color: var(--boxel-100);
+    }
+    .boxel-select__dropdown .ember-power-select-option[aria-current='true'] {
+      background-color: var(--boxel-100);
       color: black;
     }
-
-    :global(.boxel-select__dropdown .ember-power-select-search-input:focus) {
+    .boxel-select__dropdown .ember-power-select-search-input:focus {
       border: 1px solid var(--boxel-outline-color);
       box-shadow: var(--boxel-box-shadow-hover);
       outline: var(--boxel-outline);
     }
-
-    :global(
-        .boxel-select__dropdown .ember-power-select-option--no-matches-message
-      ) {
+    .boxel-select__dropdown .ember-power-select-option--no-matches-message {
       padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
     }
   </style>

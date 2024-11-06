@@ -209,6 +209,45 @@ const tests = Object.freeze({
     ]);
   },
 
+  "invalidations don't cross realm boundaries": async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 5 },
+      ],
+      [
+        {
+          url: `${testRealmURL}person.gts`,
+          file_alias: `${testRealmURL}person`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL2}luke.json`,
+          file_alias: `${testRealmURL2}luke.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL2,
+          deps: [`${testRealmURL}person`],
+        },
+      ],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let invalidations = await batch.invalidate(
+      new URL(`${testRealmURL}person.gts`),
+    );
+
+    // invalidations currently do not cross realm boundaries (probably they
+    // will in the future--but via a different mechanism)
+    assert.deepEqual(invalidations, [`${testRealmURL}person.gts`]);
+  },
+
   'only invalidates latest version of content': async (
     assert,
     { indexWriter, adapter },
@@ -331,8 +370,10 @@ const tests = Object.freeze({
       resource,
       source: JSON.stringify(resource),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
+      displayNames: ['Fancy Person', 'Person', 'Card'],
       types: [
         { module: `./fancy-person`, name: 'FancyPerson' },
         { module: `./person`, name: 'Person' },
@@ -521,6 +562,7 @@ const tests = Object.freeze({
           pristine_doc: originalResource,
           source: originalSource,
           last_modified: String(originalModified),
+          resource_created_at: String(originalModified),
         },
       ],
     );
@@ -545,8 +587,10 @@ const tests = Object.freeze({
       resource,
       source: JSON.stringify(resource),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
+      displayNames: [],
       types: [],
     });
 
@@ -572,6 +616,7 @@ const tests = Object.freeze({
         },
         source: originalSource,
         lastModified: originalModified,
+        resourceCreatedAt: originalModified,
         searchDoc: null,
         deps: null,
         types: null,
@@ -635,8 +680,10 @@ const tests = Object.freeze({
       resource,
       source,
       lastModified: now,
+      resourceCreatedAt: now,
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
+      displayNames: [],
       types: [],
     });
 
@@ -669,6 +716,7 @@ const tests = Object.freeze({
         },
         source,
         lastModified: now,
+        resourceCreatedAt: now,
         searchDoc: { name: 'Van Gogh' },
         deps: [],
         types: [],
@@ -783,6 +831,7 @@ const tests = Object.freeze({
         type: 'module',
         source: cardSrc,
         lastModified: now,
+        resourceCreatedAt: now,
         deps: new Set(),
       });
       await batch.done();
@@ -813,6 +862,7 @@ const tests = Object.freeze({
         type: 'module',
         source: cardSrc,
         lastModified: now,
+        resourceCreatedAt: now,
         deps: new Set(),
       });
       await batch.done();
@@ -845,6 +895,7 @@ const tests = Object.freeze({
       type: 'module',
       source: cardSrc,
       lastModified: now,
+      resourceCreatedAt: now,
       deps: new Set(),
     });
 
@@ -929,6 +980,235 @@ const tests = Object.freeze({
       new URL(`${testRealmURL}person.gts`),
     );
     assert.strictEqual(entry, undefined, 'deleted modules return undefined');
+  },
+
+  'update realm meta when indexing is done': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          pristine_doc: {
+            id: `${testRealmURL}1`,
+            type: 'card',
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+          } as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: [`Person`],
+          deps: [`${testRealmURL}person`],
+          types: [{ module: `./person`, name: 'Person' }, baseCardRef].map(
+            (i) => internalKeyFor(i, new URL(testRealmURL)),
+          ),
+        },
+      ],
+    );
+
+    let resource2: CardResource = {
+      id: `${testRealmURL}2`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./fancy-person`,
+          name: 'FancyPerson',
+        },
+      },
+    };
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.invalidate(new URL(`${testRealmURL}2.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
+      type: 'instance',
+      resource: resource2,
+      source: JSON.stringify(resource2),
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}fancy-person`]),
+      displayNames: ['Fancy Person', 'Person', 'Card'],
+      types: [
+        { module: `./fancy-person`, name: 'FancyPerson' },
+        { module: `./person`, name: 'Person' },
+        baseCardRef,
+      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+    });
+
+    let results = await adapter.execute(
+      `SELECT value FROM realm_meta r INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url WHERE r.realm_url = $1 AND r.realm_version = 1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: {
+          value: 'JSON',
+        },
+      },
+    );
+    assert.strictEqual(
+      results.length,
+      0,
+      'correct length of query result before indexing is done',
+    );
+
+    await batch.done();
+
+    results = await adapter.execute(
+      `SELECT value FROM realm_meta r INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url WHERE r.realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: {
+          value: 'JSON',
+        },
+      },
+    );
+
+    assert.strictEqual(
+      results.length,
+      1,
+      'correct length of query result after indexing is done',
+    );
+    let value = results[0].value as [
+      { code_ref: string; display_name: string; total: number },
+    ];
+    assert.strictEqual(
+      value.length,
+      2,
+      'correct length of card type summary after indexing is done',
+    );
+    assert.deepEqual(
+      value,
+      [
+        {
+          total: 1,
+          code_ref: `${testRealmURL}fancy-person/FancyPerson`,
+          display_name: 'Fancy Person',
+        },
+        {
+          total: 1,
+          code_ref: `${testRealmURL}person/Person`,
+          display_name: 'Person',
+        },
+      ],
+      'correct card type summary after indexing is done',
+    );
+
+    batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let resource3: CardResource = {
+      id: `${testRealmURL}3`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh2',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./fancy-person`,
+          name: 'FancyPerson',
+        },
+      },
+    };
+    await batch.invalidate(new URL(`${testRealmURL}3.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
+      type: 'instance',
+      resource: resource3,
+      source: JSON.stringify(resource3),
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Van Gogh2' },
+      deps: new Set([`${testRealmURL}fancy-person`]),
+      displayNames: ['Fancy Person', 'Person', 'Card'],
+      types: [
+        { module: `./fancy-person`, name: 'FancyPerson' },
+        { module: `./person`, name: 'Person' },
+        baseCardRef,
+      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+    });
+    let resource4: CardResource = {
+      id: `${testRealmURL}4`,
+      type: 'card',
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./pet`,
+          name: 'Pet',
+        },
+      },
+    };
+    await batch.invalidate(new URL(`${testRealmURL}4.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}4.json`), {
+      type: 'instance',
+      resource: resource4,
+      source: JSON.stringify(resource4),
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Mango' },
+      deps: new Set([`${testRealmURL}pet`]),
+      displayNames: ['Pet', 'Card'],
+      types: [
+        { module: `./pet`, name: 'Pet' },
+        { module: `./card-api`, name: 'CardDef' },
+        baseCardRef,
+      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+    });
+    await batch.done();
+
+    results = await adapter.execute(
+      `SELECT value FROM realm_meta r INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url WHERE r.realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: {
+          value: 'JSON',
+        },
+      },
+    );
+    assert.strictEqual(
+      results.length,
+      1,
+      'correct length of query result after indexing is done',
+    );
+    value = results[0].value as [
+      { code_ref: string; display_name: string; total: number },
+    ];
+    assert.strictEqual(
+      value.length,
+      3,
+      'correct length of card type summary after indexing is done',
+    );
+    assert.deepEqual(
+      value,
+      [
+        {
+          total: 2,
+          code_ref: `${testRealmURL}fancy-person/FancyPerson`,
+          display_name: 'Fancy Person',
+        },
+        {
+          total: 1,
+          code_ref: `${testRealmURL}person/Person`,
+          display_name: 'Person',
+        },
+        {
+          total: 1,
+          code_ref: `${testRealmURL}pet/Pet`,
+          display_name: 'Pet',
+        },
+      ],
+      'correct card type summary after indexing is done',
+    );
   },
 } as SharedTests<{
   indexWriter: IndexWriter;

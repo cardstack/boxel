@@ -3,12 +3,14 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { IconButton } from '@cardstack/boxel-ui/components';
+import {
+  IconButton,
+  Pill,
+  RealmIcon,
+  Switch,
+} from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -39,35 +41,24 @@ export default class CardPill extends Component<CardPillSignature> {
       data-test-autoattached-card={{@isAutoAttachedCard}}
       ...attributes
     >
-      <:icon>
-        <RealmIcon
-          @realmInfo={{this.realm.info @card.id}}
-          width='18'
-          height='18'
-        />
-      </:icon>
+      <:iconLeft>
+        <RealmIcon @realmInfo={{this.realm.info @card.id}} class='icon' />
+      </:iconLeft>
       <:default>
         <div class='card-content' title={{@card.title}}>
           <this.component @format='atom' @displayContainer={{false}} />
         </div>
         {{#if @onToggle}}
-          <label
-            class={{cn 'toggle' checked=@isEnabled}}
+          <Switch
+            @isEnabled={{@isEnabled}}
+            @onChange={{@onToggle}}
+            @label={{@card.title}}
             data-test-card-pill-toggle='{{@card.id}}-{{if
               @isEnabled
               "on"
               "off"
             }}'
-          >
-            <span class='boxel-sr-only'>{{@card.title}}</span>
-            <input
-              {{on 'click' @onToggle}}
-              {{on 'keypress' @onToggle}}
-              class='toggle-switch'
-              type='checkbox'
-              switch
-            />
-          </label>
+          />
         {{/if}}
         {{#if @removeCard}}
           <IconButton
@@ -79,7 +70,11 @@ export default class CardPill extends Component<CardPillSignature> {
         {{/if}}
       </:default>
     </Pill>
-    <style>
+    <style scoped>
+      .icon {
+        min-width: var(--boxel-icon-sm);
+        min-height: var(--boxel-icon-sm);
+      }
       .card-pill {
         --pill-icon-size: 18px;
         border: 1px solid var(--boxel-400);

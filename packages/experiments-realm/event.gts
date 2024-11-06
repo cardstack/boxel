@@ -10,10 +10,11 @@ import {
   contains,
   CardDef,
   linksTo,
-  StringField
+  StringField,
 } from 'https://cardstack.com/base/card-api';
 import TextAreaCard from '../base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
+import CalendarPlus from '@cardstack/boxel-icons/calendar-plus';
 
 class Edit extends Component<typeof Event> {
   @tracked selectedEventType = { name: this.args.model.eventType };
@@ -71,7 +72,7 @@ class Edit extends Component<typeof Event> {
         </FieldContainer>
       </div>
     </div>
-    <style>
+    <style scoped>
       .row {
         display: flex;
         flex-direction: row;
@@ -137,7 +138,7 @@ class Isolated extends Component<typeof Event> {
         </FieldContainer>
       </div>
     </div>
-    <style>
+    <style scoped>
       .row {
         display: flex;
         flex-direction: row;
@@ -162,6 +163,7 @@ class Isolated extends Component<typeof Event> {
 
 export class Event extends CardDef {
   static displayName = 'Event form';
+  static icon = CalendarPlus;
   @field subject = contains(StringCard);
   @field location = contains(StringCard);
   @field assignee = linksTo(PersonCard);

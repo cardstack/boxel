@@ -270,6 +270,38 @@ export function upsert(
   ] as Expression;
 }
 
+export function insert(
+  table: string,
+  nameExpressions: string[][],
+  valueExpressions: Expression[],
+) {
+  return [
+    'INSERT INTO',
+    table,
+    ...addExplicitParens(separatedByCommas(nameExpressions)),
+    'VALUES',
+    ...addExplicitParens(separatedByCommas(valueExpressions)),
+    'RETURNING *',
+  ] as Expression;
+}
+
+export function update(
+  table: string,
+  nameExpressions: string[][],
+  valueExpressions: Expression[],
+) {
+  let names = flattenDeep(nameExpressions);
+  let values = valueExpressions;
+  return [
+    'UPDATE',
+    table,
+    'SET',
+    ...separatedByCommas(
+      names.map((name, index) => [name, '=', values[index][0]]),
+    ),
+  ] as Expression;
+}
+
 export const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
 
 export async function query(

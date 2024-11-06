@@ -1,4 +1,8 @@
-import { associateDestroyableChild } from '@ember/destroyable';
+import {
+  associateDestroyableChild,
+  registerDestructor,
+} from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
 import Service from '@ember/service';
 
@@ -9,29 +13,37 @@ import { tracked } from '@glimmer/tracking';
 
 import { cached } from '@glimmer/tracking';
 
-import { task, restartableTask, rawTimeout } from 'ember-concurrency';
+import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { TrackedSet } from 'tracked-built-ins';
+import { TrackedSet, TrackedObject } from 'tracked-built-ins';
 
 import {
   Permissions,
-  type RealmInfo,
+  Deferred,
+  logger,
   JWTPayload,
   SupportedMimeType,
+  type RealmInfo,
+  type IndexEventData,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type LoaderService from './loader-service';
+import { assertNever } from '@cardstack/host/utils/assert-never';
+
 import type MatrixService from './matrix-service';
+import type MessageService from './message-service';
+import type NetworkService from './network';
+import type RealmServerService from './realm-server';
+import type ResetService from './reset';
 
-const { ownRealmURL } = ENV;
+const log = logger('service:realm');
 
-interface Meta {
-  info: RealmInfo;
+export type EnhancedRealmInfo = RealmInfo & {
+  isIndexing: boolean;
   isPublic: boolean;
-}
+};
 
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
@@ -39,18 +51,29 @@ type AuthStatus =
 
 class RealmResource {
   @service private declare matrixService: MatrixService;
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare messageService: MessageService;
 
-  @tracked meta: Meta | undefined;
+  @tracked info: EnhancedRealmInfo | undefined;
 
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
+  private subscription: { unsubscribe: () => void } | undefined;
 
   constructor(
     private realmURL: string,
     token: string | undefined,
   ) {
     this.token = token;
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+      }
+    });
+  }
+
+  get url(): string {
+    return this.realmURL;
   }
 
   get token(): string | undefined {
@@ -74,8 +97,8 @@ class RealmResource {
     this.tokenRefresher.perform();
   }
 
-  get info() {
-    return this.meta?.info;
+  get isPublic() {
+    return this.info?.isPublic;
   }
 
   get claims(): JWTPayload | undefined {
@@ -86,9 +109,7 @@ class RealmResource {
   }
 
   get canRead() {
-    return (
-      !!this.meta?.isPublic || !!this.claims?.permissions?.includes('read')
-    );
+    return !!this.isPublic || !!this.claims?.permissions?.includes('read');
   }
 
   get canWrite() {
@@ -99,12 +120,52 @@ class RealmResource {
 
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
+      await this.subscribe();
       return;
     }
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
     }
     await this.loggingIn;
+    await this.subscribe();
+  }
+
+  private async subscribe() {
+    if (this.subscription) {
+      return;
+    }
+
+    await this.fetchInfo();
+    this.subscription = {
+      unsubscribe: this.messageService.subscribe(
+        this.realmURL,
+        ({ type, data: dataStr }: { type: string; data: string }) => {
+          if (!this.info) {
+            console.warn(
+              `No realm info exists for ${this.realmURL} when trying to set indexing status`,
+            );
+            return;
+          }
+          if (type !== 'index') {
+            return;
+          }
+          let data = JSON.parse(dataStr) as IndexEventData;
+          if (data.type === 'full') {
+            return;
+          }
+          switch (data.type) {
+            case 'incremental-index-initiation':
+              this.info.isIndexing = true;
+              break;
+            case 'incremental':
+              this.info.isIndexing = false;
+              break;
+            default:
+              throw assertNever(data);
+          }
+        },
+      ),
+    };
   }
 
   private loginTask = task(async () => {
@@ -124,34 +185,36 @@ class RealmResource {
   logout(): void {
     this.token = undefined;
     this.loginTask.cancelAll();
+    this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
-    this.fetchMetaTask.cancelAll();
-    this.fetchingMeta = undefined;
+    this.fetchInfoTask.cancelAll();
+    this.fetchingInfo = undefined;
+    window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
-  private fetchingMeta: Promise<void> | undefined;
+  private fetchingInfo: Promise<void> | undefined;
 
-  async fetchMeta(): Promise<void> {
-    if (!this.fetchingMeta) {
-      this.fetchingMeta = this.fetchMetaTask.perform();
+  async fetchInfo(): Promise<void> {
+    if (!this.fetchingInfo) {
+      this.fetchingInfo = this.fetchInfoTask.perform();
     }
-    await this.fetchingMeta;
+    await this.fetchingInfo;
   }
 
-  private fetchMetaTask = task(async () => {
+  private fetchInfoTask = dropTask(async () => {
     try {
-      if (this.meta) {
+      if (this.info) {
         return;
       }
       let headers: Record<string, string> = {
         Accept: SupportedMimeType.RealmInfo,
+        ...(this.auth.type === 'logged-in'
+          ? { Authorization: `Bearer ${this.token}` }
+          : {}),
       };
-      let response = await this.loaderService.loader.fetch(
-        `${this.realmURL}_info`,
-        {
-          headers,
-        },
-      );
+      let response = await this.network.authedFetch(`${this.realmURL}_info`, {
+        headers,
+      });
       if (response.status !== 200) {
         throw new Error(
           `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
@@ -165,9 +228,9 @@ class RealmResource {
       let isPublic = Boolean(
         response.headers.get('x-boxel-realm-public-readable'),
       );
-      this.meta = { info, isPublic };
+      this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {
-      this.fetchingMeta = undefined;
+      this.fetchingInfo = undefined;
     }
   });
 
@@ -193,7 +256,10 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare matrixService: MatrixService;
+  @service private declare network: NetworkService;
+  @service private declare reset: ResetService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -202,10 +268,22 @@ export default class RealmService extends Service {
   // tracked reads from `currentKnownRealms` to establish dependencies.
   private realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
+  private reauthentications = new Map<string, Promise<string | undefined>>();
+
+  @tracked private identifyRealmTracker = 0;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.logout();
+  }
 
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
-    await resource.fetchMeta();
+    await resource.fetchInfo();
   }
 
   async login(realmURL: string): Promise<void> {
@@ -213,27 +291,42 @@ export default class RealmService extends Service {
     await resource.login();
   }
 
-  info = (url: string): RealmInfo => {
-    let resource = this.knownRealm(url);
+  info = (url: string): EnhancedRealmInfo => {
+    let resource = this.knownRealm(url, false);
     if (!resource) {
       this.identifyRealm.perform(url);
+
+      this.identifyRealmTracker;
+
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
+        visibility: 'private',
+        isIndexing: false,
+        isPublic: false,
       };
     }
 
-    if (!resource.meta) {
-      resource.fetchMeta();
+    if (!resource.info) {
+      resource.fetchInfo();
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
+        visibility: 'private',
+        isIndexing: false,
+        isPublic: false,
       };
     } else {
-      return resource.meta.info;
+      return resource.info;
     }
+  };
+
+  isPublic = (url: string): boolean => {
+    return this.knownRealm(url)?.isPublic ?? false;
   };
 
   canRead = (url: string): boolean => {
@@ -242,6 +335,10 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  url = (url: string): string | undefined => {
+    return this.knownRealm(url)?.url;
   };
 
   permissions = (url: string): Permissions => {
@@ -268,31 +365,67 @@ export default class RealmService extends Service {
     };
   };
 
-  get allRealmsMeta() {
-    const realmsMeta: Record<string, { info: RealmInfo; canWrite: boolean }> =
-      Object.create(null);
+  get allRealmsInfo() {
+    const realmsMeta: Record<
+      string,
+      { info: EnhancedRealmInfo; canWrite: boolean }
+    > = Object.create(null);
     for (const [url, _resource] of this.realms.entries()) {
       realmsMeta[url] = this.meta(url);
     }
     return realmsMeta;
   }
 
-  // Currently the personal realm has not yet been implemented,
-  // until then default to the realm serving the host app if it is writable,
-  // otherwise default to the first writable realm lexically
   @cached
-  get userDefaultRealm(): { path: string; info: RealmInfo } {
-    let writeableRealms = Object.entries(this.allRealmsMeta)
+  get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
+    let maybePersonalRealm = `${this.realmServer.url.href}${this.matrixService.userName}/personal/`;
+    if (Object.keys(this.allRealmsInfo).find((r) => r === maybePersonalRealm)) {
+      return {
+        path: maybePersonalRealm,
+        info: this.allRealmsInfo[maybePersonalRealm].info,
+      };
+    }
+    let writeableRealms = Object.entries(this.allRealmsInfo)
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
-    let ownRealm = writeableRealms.find(([url]) => url === ownRealmURL);
-    if (ownRealm) {
-      return { path: ownRealm[0], info: ownRealm[1].info };
-    } else {
-      let first = writeableRealms[0];
-      return { path: first[0], info: first[1].info };
+    let first = writeableRealms[0];
+
+    if (!first) {
+      log.debug(
+        `No writable realms found, known realms and writability: ${Object.keys(
+          this.allRealmsInfo,
+        )
+          .map(
+            (realmUrl) =>
+              `${realmUrl}: ${this.allRealmsInfo[realmUrl].canWrite}`,
+          )
+          .join(', ')}`,
+      );
+
+      return null;
     }
+
+    return { path: first[0], info: first[1].info };
+  }
+
+  @cached
+  get defaultReadableRealm(): { path: string; info: RealmInfo } {
+    if (this.defaultWritableRealm) {
+      return this.defaultWritableRealm;
+    }
+
+    let allRealmsInfoEntries = Object.entries(this.allRealmsInfo);
+
+    if (allRealmsInfoEntries.length > 0) {
+      let firstMeta = allRealmsInfoEntries[0];
+      return { path: firstMeta[0], info: firstMeta[1].info };
+    }
+
+    return {
+      path: ENV.resolvedBaseRealmURL,
+      info: this.info(ENV.resolvedBaseRealmURL),
+    };
   }
 
   token = (url: string): string | undefined => {
@@ -321,10 +454,26 @@ export default class RealmService extends Service {
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
+    if (this.reauthentications.has(realmURL)) {
+      return;
+    }
+    let inProgressAuthentication = this.reauthentications.get(realmURL);
+    if (inProgressAuthentication) {
+      return inProgressAuthentication;
+    }
+    let deferred = new Deferred<string | undefined>();
+    this.reauthentications.set(realmURL, deferred.promise);
+
     let resource = this.getOrCreateRealmResource(realmURL);
     resource.logout();
     await resource.login();
-    return resource.token;
+    let result = resource.token;
+    deferred.fulfill(result);
+    try {
+      return result;
+    } finally {
+      this.reauthentications.delete(realmURL);
+    }
   }
 
   private createRealmResource(
@@ -358,12 +507,13 @@ export default class RealmService extends Service {
         // could have already been discovered while we were queued
         return;
       }
-      let response = await this.loaderService.loader.fetch(url, {
+      let response = await this.network.authedFetch(url, {
         method: 'HEAD',
       });
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         this.getOrCreateRealmResource(realmURL);
+        this.identifyRealmTracker = 0;
       }
     },
   );

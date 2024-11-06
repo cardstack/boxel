@@ -4,12 +4,14 @@ import { bool, eq } from '../../helpers/truth-helpers.ts';
 import IconPlus from '../../icons/icon-plus.gts';
 import PlusCircleIcon from '../../icons/icon-plus-circle.gts';
 import IconButton from '../icon-button/index.gts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 
 interface Signature {
   Args: {
     hideIcon?: boolean;
     iconHeight?: string;
     iconWidth?: string;
+    loading?: boolean;
     variant?: AddButtonVariant;
   };
   Blocks: {
@@ -39,22 +41,28 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </button>
   {{else}}
-    <IconButton
-      @icon={{PlusCircleIcon}}
-      @width='40px'
-      @height='40px'
-      class='add-button'
-      title='Add'
-      data-test-create-new-card-button
-      ...attributes
-    />
+    {{#if (bool @loading)}}
+      <div class='add-button loading'>
+        <LoadingIndicator />
+      </div>
+    {{else}}
+      <IconButton
+        @icon={{PlusCircleIcon}}
+        @width='40px'
+        @height='40px'
+        class='add-button'
+        aria-label='Add'
+        data-test-create-new-card-button
+        ...attributes
+      />
+    {{/if}}
   {{/if}}
 
-  <style>
+  <style scoped>
     .add-button {
       --icon-bg: var(--boxel-light-100);
       --icon-border: var(--icon-bg);
-      --icon-color: var(--boxel-highlight);
+      --icon-color: var(--boxel-dark);
 
       border-radius: 100px;
       border: none;
@@ -65,7 +73,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .add-button--full-width {
-      --icon-color: var(--boxel-highlight);
+      --icon-color: var(--boxel-dark);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -77,8 +85,8 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-100);
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
-      color: var(--boxel-highlight);
-      font: 700 var(--boxel-font-sm);
+      color: var(--boxel-dark);
+      font: 600 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
       transition:
         background-color var(--boxel-transition),
@@ -91,7 +99,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .add-button--pill {
-      --icon-color: var(--boxel-light);
+      --icon-color: var(--boxel-dark);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -101,8 +109,8 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-highlight);
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
-      color: var(--boxel-light);
-      font: 700 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
+      color: var(--boxel-dark);
+      font: 600 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xs);
       transition:
         background-color var(--boxel-transition),
@@ -113,6 +121,14 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-highlight-hover);
       box-shadow: var(--boxel-box-shadow);
       cursor: pointer;
+    }
+
+    .loading {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
   </style>
 </template>;

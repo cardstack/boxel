@@ -8,9 +8,9 @@ export interface MatrixAccess {
 }
 
 export class MatrixClient {
+  readonly matrixURL: URL;
+  readonly username: string;
   private access: MatrixAccess | undefined;
-  private matrixURL: URL;
-  private username: string;
   private password?: string;
   private seed?: string;
 
@@ -70,10 +70,7 @@ export class MatrixClient {
     if (this.password) {
       password = this.password;
     } else if (this.seed) {
-      let hash = new Sha256();
-      hash.update(this.username);
-      hash.update(this.seed);
-      password = uint8ArrayToHex(await hash.digest());
+      password = await passwordFromSeed(this.username, this.seed);
     } else {
       throw new Error(
         'bug: should never be here, we ensure password or seed exists in constructor',
@@ -154,7 +151,9 @@ export class MatrixClient {
 
   async setAccountData<T>(type: string, data: T) {
     let response = await this.request(
-      `_matrix/client/v3/user/${this.access!.userId}/account_data/${type}`,
+      `_matrix/client/v3/user/${encodeURIComponent(
+        this.access!.userId,
+      )}/account_data/${type}`,
       'PUT',
       {
         body: JSON.stringify(data),
@@ -172,7 +171,9 @@ export class MatrixClient {
 
   async getAccountData<T>(type: string) {
     let response = await this.request(
-      `_matrix/client/v3/user/${this.access!.userId}/account_data/${type}`,
+      `_matrix/client/v3/user/${encodeURIComponent(
+        this.access!.userId,
+      )}/account_data/${type}`,
     );
     if (response.status === 404) {
       return;
@@ -192,7 +193,7 @@ export class MatrixClient {
     userId: string,
   ): Promise<{ displayname: string } | undefined> {
     let response = await this.request(
-      `_matrix/client/v3/profile/${userId}`,
+      `_matrix/client/v3/profile/${encodeURIComponent(userId)}`,
       'GET',
       undefined,
       false,
@@ -279,6 +280,29 @@ export class MatrixClient {
       msgtype: 'm.text',
     });
   }
+
+  async hashMessageWithSecret(message: string) {
+    let hash = new Sha256();
+    hash.update(message);
+    if (this.seed) {
+      hash.update(await passwordFromSeed(this.username, this.seed));
+    } else if (this.password) {
+      hash.update(this.password);
+    }
+    return uint8ArrayToHex(await hash.digest());
+  }
+}
+
+export function getMatrixUsername(userId: string) {
+  return userId.replace(/^@/, '').replace(/:.*$/, '');
+}
+
+export async function passwordFromSeed(username: string, seed: string) {
+  let hash = new Sha256();
+  let cleanUsername = getMatrixUsername(username);
+  hash.update(cleanUsername);
+  hash.update(seed);
+  return uint8ArrayToHex(await hash.digest());
 }
 
 export async function waitForMatrixMessage(

@@ -21,8 +21,9 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
-import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 import CardQueryResults from './card-query-results';
 import CardURLResults from './card-url-results';
@@ -72,7 +73,7 @@ export default class SearchSheet extends Component<Signature> {
 
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
-  @service declare cardService: CardService;
+  @service declare realmServer: RealmServerService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -174,7 +175,7 @@ export default class SearchSheet extends Component<Signature> {
     }
     let cardURL = this.searchKey;
 
-    let maybeIndexCardURL = this.cardService.realmURLs.find(
+    let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
       (u) => u === cardURL + '/',
     );
     let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
@@ -210,7 +211,7 @@ export default class SearchSheet extends Component<Signature> {
     ) {
       return 'invalid';
     } else {
-      return 'initial';
+      return 'none';
     }
   }
 
@@ -267,23 +268,35 @@ export default class SearchSheet extends Component<Signature> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
-        --search-sheet-closed-height: 3.5rem;
+        --search-sheet-closed-height: calc(
+          var(--operator-mode-bottom-bar-item-height) +
+            var(--operator-mode-spacing)
+        );
         --search-sheet-closed-width: 10.75rem;
         --search-sheet-prompt-height: 9.375rem;
       }
 
       .search-sheet {
+        --search-sheet-left-offset: calc(
+          var(--container-button-size) + 2 * var(--operator-mode-spacing)
+        );
+        --search-sheet-right-offset: calc(
+          var(--container-button-size) + 2 * var(--operator-mode-spacing)
+        );
         background-color: transparent;
         bottom: 0;
         display: flex;
         flex-direction: column;
         justify-content: stretch;
-        left: calc(6 * var(--boxel-sp-xs));
-        width: calc(100% - (7 * var(--boxel-sp)));
+        left: var(--search-sheet-left-offset);
+        width: calc(
+          100% - var(--search-sheet-left-offset) -
+            var(--search-sheet-right-offset)
+        );
         position: absolute;
-        z-index: 1;
+        z-index: var(--host-search-sheet-z-index);
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);
@@ -298,6 +311,11 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         height: var(--search-sheet-closed-height);
         width: var(--search-sheet-closed-width);
+      }
+
+      .closed .search-sheet__search-input-group {
+        outline: var(--boxel-border-flexible);
+        border-radius: var(--boxel-border-radius-xxl);
       }
 
       .search-sheet.closed .search-sheet-content {

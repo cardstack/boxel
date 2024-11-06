@@ -10,12 +10,7 @@ import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
 
-import {
-  CardContainer,
-  Header,
-  LoadingIndicator,
-  IconButton,
-} from '@cardstack/boxel-ui/components';
+import { LoadingIndicator, IconButton } from '@cardstack/boxel-ui/components';
 import {
   IconInherit,
   IconTrash,
@@ -54,8 +49,11 @@ import {
 import { lastModifiedDate } from '../../resources/last-modified-date';
 import { ModuleContentsResource } from '../../resources/module-contents';
 
+import { PanelSection } from './code-submode/inner-container';
 import { type FileType, type NewFileType } from './create-file-modal';
 import {
+  Divider,
+  BaseContainer,
   FileDefinitionContainer,
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
@@ -384,204 +382,145 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   <template>
-    <div ...attributes>
-      {{#if this.isLoading}}
-        <div class='loading'>
-          <LoadingIndicator />
-        </div>
-      {{else}}
-        {{#if this.showInThisFilePanel}}
-          <div class='in-this-file-panel'>
-            <div class='in-this-file-panel-banner'>
-              <header class='panel-header' aria-label='In This File Header'>
-                In This File
-              </header>
-              <span class='number-items'>{{this.numberOfItems}}
-              </span>
-            </div>
-            <CardContainer class='in-this-file-card-container'>
-              <Header
-                @title={{@readyFile.name}}
-                @hasBackground={{true}}
-                class='header'
-                data-test-current-module-name={{@readyFile.name}}
-              >
-                <:actions>
-                  {{#if (this.realm.canWrite @readyFile.url)}}
-                    <IconButton
-                      @icon={{IconTrash}}
-                      @width='18'
-                      @height='18'
-                      {{on 'click' (fn @delete this.codePath)}}
-                      class='delete-module-button'
-                      aria-label='Delete Module'
-                      data-test-delete-module-button
-                    />
-                  {{/if}}
-                </:actions>
-              </Header>
-              <Selector
-                @class='in-this-file-menu'
-                @items={{this.buildSelectorItems}}
-                data-test-in-this-file-selector
-              />
-            </CardContainer>
-          </div>
-        {{/if}}
-
-        {{#if this.showInheritancePanel}}
-          <div class='inheritance-panel'>
-            <header
-              class='panel-header'
-              aria-label='Inheritance Panel Header'
-              data-test-inheritance-panel-header
+    {{#if this.isLoading}}
+      <div class='loading'>
+        <LoadingIndicator />
+      </div>
+    {{else}}
+      {{#if this.showInThisFilePanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader aria-label='In This File Header'>
+            In This File
+            <span class='number-items'>{{this.numberOfItems}}</span>
+          </PanelHeader>
+          <BaseContainer as |BaseHeader|>
+            <BaseHeader
+              @title={{@readyFile.name}}
+              data-test-current-module-name={{@readyFile.name}}
             >
-              Card Inheritance
-            </header>
-            {{#if this.isCardInstance}}
-              {{! JSON case when visting, eg Author/1.json }}
-              <InstanceDefinitionContainer
-                @fileURL={{@readyFile.url}}
-                @name={{@cardInstance.title}}
-                @fileExtension='.JSON'
-                @infoText={{this.lastModified.value}}
-                @actions={{this.instanceActions}}
-              />
-              <div class='chain'>
-                <IconInherit
-                  class='chain-icon'
-                  width='24px'
-                  height='24px'
-                  role='presentation'
+              {{#if (this.realm.canWrite @readyFile.url)}}
+                <IconButton
+                  @icon={{IconTrash}}
+                  @width='15'
+                  @height='15'
+                  {{on 'click' (fn @delete this.codePath)}}
+                  class='delete-module-button'
+                  aria-label='Delete Module'
+                  data-test-delete-module-button
                 />
-                Adopts from
-              </div>
-              {{#if this.cardInstanceType.type}}
-                {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
-                  <ClickableModuleDefinitionContainer
-                    @title={{'Card Definition'}}
-                    @fileURL={{this.cardInstanceType.type.module}}
-                    @name={{this.cardInstanceType.type.displayName}}
-                    @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
-                    @goToDefinition={{@goToDefinition}}
-                    @codeRef={{codeRef}}
-                  />
-                {{/let}}
               {{/if}}
-            {{else if @selectedDeclaration}}
-              {{! Module case when selection exists}}
-              {{#let
-                (getDefinitionTitle @selectedDeclaration)
-                as |definitionTitle|
-              }}
-                {{#if (isCardOrFieldDeclaration @selectedDeclaration)}}
+            </BaseHeader>
+            <Selector
+              @class='in-this-file-menu'
+              @items={{this.buildSelectorItems}}
+              data-test-in-this-file-selector
+            />
+          </BaseContainer>
+        </PanelSection>
+      {{/if}}
 
-                  <ModuleDefinitionContainer
-                    @title={{definitionTitle}}
-                    @fileURL={{this.cardType.type.module}}
-                    @name={{this.cardType.type.displayName}}
-                    @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                    @infoText={{this.lastModified.value}}
-                    @isActive={{true}}
-                    @actions={{this.definitionActions}}
-                  />
-                  {{#if this.cardType.type.super}}
-                    {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
-                      <div class='chain'>
-                        <IconInherit
-                          class='chain-icon'
-                          width='24px'
-                          height='24px'
-                          role='presentation'
-                        />
-                        Inherits from
-                      </div>
-                      <ClickableModuleDefinitionContainer
-                        @title={{definitionTitle}}
-                        @fileURL={{this.cardType.type.super.module}}
-                        @name={{this.cardType.type.super.displayName}}
-                        @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                        @goToDefinition={{@goToDefinition}}
-                        @codeRef={{codeRef}}
-                        @localName={{this.cardType.type.super.localName}}
-                      />
-                    {{/let}}
-                  {{/if}}
-                {{else if (isReexportCardOrField @selectedDeclaration)}}
-                  {{#if this.cardType.type}}
-                    {{#let (getCodeRef this.cardType.type) as |codeRef|}}
-                      <ClickableModuleDefinitionContainer
-                        @title={{definitionTitle}}
-                        @fileURL={{this.cardType.type.module}}
-                        @name={{this.cardType.type.displayName}}
-                        @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                        @goToDefinition={{@goToDefinition}}
-                        @codeRef={{codeRef}}
-                        @localName={{this.cardType.type.localName}}
-                      />
-                    {{/let}}
-                  {{/if}}
-                {{/if}}
+      {{#if this.showInheritancePanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader
+            aria-label='Inheritance Panel Header'
+            data-test-inheritance-panel-header
+          >
+            Card Inheritance
+          </PanelHeader>
+          {{#if this.isCardInstance}}
+            {{! JSON case when visting, eg Author/1.json }}
+            <InstanceDefinitionContainer
+              @fileURL={{@readyFile.url}}
+              @name={{@cardInstance.title}}
+              @fileExtension='.JSON'
+              @infoText={{this.lastModified.value}}
+              @actions={{this.instanceActions}}
+            />
+            <Divider @label='Adopts From' />
+            {{#if this.cardInstanceType.type}}
+              {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
+                <ClickableModuleDefinitionContainer
+                  @title={{'Card Definition'}}
+                  @fileURL={{this.cardInstanceType.type.module}}
+                  @name={{this.cardInstanceType.type.displayName}}
+                  @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
+                  @goToDefinition={{@goToDefinition}}
+                  @codeRef={{codeRef}}
+                />
               {{/let}}
             {{/if}}
+          {{else if @selectedDeclaration}}
+            {{! Module case when selection exists}}
+            {{#let
+              (getDefinitionTitle @selectedDeclaration)
+              as |definitionTitle|
+            }}
+              {{#if (isCardOrFieldDeclaration @selectedDeclaration)}}
 
-          </div>
-        {{else if this.showDetailsPanel}}
-          <div class='details-panel'>
-            <header class='panel-header' aria-label='Details Panel Header'>
-              Details
-            </header>
-            <FileDefinitionContainer
-              @fileURL={{@readyFile.url}}
-              @fileExtension={{this.fileExtension}}
-              @infoText={{this.lastModified.value}}
-              @actions={{this.miscFileActions}}
-            />
-          </div>
-        {{/if}}
+                <ModuleDefinitionContainer
+                  @title={{definitionTitle}}
+                  @fileURL={{this.cardType.type.module}}
+                  @name={{this.cardType.type.displayName}}
+                  @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                  @infoText={{this.lastModified.value}}
+                  @isActive={{true}}
+                  @actions={{this.definitionActions}}
+                />
+                {{#if this.cardType.type.super}}
+                  {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
+                    <Divider @label='Inherits From' />
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @goToDefinition={{@goToDefinition}}
+                      @codeRef={{codeRef}}
+                      @localName={{this.cardType.type.super.localName}}
+                    />
+                  {{/let}}
+                {{/if}}
+              {{else if (isReexportCardOrField @selectedDeclaration)}}
+                {{#if this.cardType.type}}
+                  {{#let (getCodeRef this.cardType.type) as |codeRef|}}
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.module}}
+                      @name={{this.cardType.type.displayName}}
+                      @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                      @goToDefinition={{@goToDefinition}}
+                      @codeRef={{codeRef}}
+                      @localName={{this.cardType.type.localName}}
+                    />
+                  {{/let}}
+                {{/if}}
+              {{/if}}
+            {{/let}}
+          {{/if}}
+        </PanelSection>
+      {{else if this.showDetailsPanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader aria-label='Details Panel Header'>
+            Details
+          </PanelHeader>
+          <FileDefinitionContainer
+            @fileURL={{@readyFile.url}}
+            @fileExtension={{this.fileExtension}}
+            @infoText={{this.lastModified.value}}
+            @actions={{this.miscFileActions}}
+          />
+        </PanelSection>
       {{/if}}
-    </div>
-    <style>
-      .header {
-        --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-font: var(--boxel-font-size-xs);
-        --boxel-header-text-transform: uppercase;
-        --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
-        --boxel-header-background-color: var(--boxel-100);
-        --boxel-header-text-color: var(--boxel-dark);
-        --boxel-header-max-width: none;
-        height: 2.5rem;
-      }
-      .in-this-file-card-container {
-        overflow: hidden;
-        overflow-wrap: anywhere;
-      }
-      .in-this-file-panel-banner {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .panel-header {
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
+    {{/if}}
+    <style scoped>
       .number-items {
-        color: #919191;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 200;
-        letter-spacing: var(--boxel-lsp-xxl);
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
       }
       .selected {
         outline: 2px solid var(--boxel-highlight);
-      }
-      .in-this-file-panel,
-      .details-panel,
-      .inheritance-panel {
-        padding-top: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-xs);
-        display: flex;
-        flex-direction: column;
       }
       .in-this-file-menu {
         padding: var(--boxel-sp-xs);
@@ -590,28 +529,23 @@ export default class DetailPanel extends Component<Signature> {
         display: flex;
         justify-content: center;
       }
-      .chain {
-        display: flex;
-        font: var(--boxel-font-size-sm);
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-        justify-content: center;
-      }
-      .chain-icon {
-        --icon-color: var(--boxel-dark);
-      }
       .delete-module-button {
-        --icon-color: var(--boxel-highlight);
+        --icon-stroke-width: 1.2px;
+        border: none;
         border-radius: var(--boxel-border-radius-xs);
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .delete-module-button:hover:not(:disabled) {
         --icon-color: var(--boxel-danger);
       }
-      .delete-module-button:focus:not(:disabled) {
+      .delete-module-button:focus:focus-visible:not(:disabled) {
         --icon-color: var(--boxel-danger);
         outline: 2px solid var(--boxel-danger);
+        outline-offset: 0;
       }
     </style>
   </template>

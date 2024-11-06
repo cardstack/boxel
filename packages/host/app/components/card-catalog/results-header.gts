@@ -28,11 +28,13 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
         results
       {{else if (eq @resultsCount 1)}}
         1 result
+      {{else if (eq @resultsCount 0)}}
+        No results
       {{/if}}
     </span>
   </header>
 
-  <style>
+  <style scoped>
     .catalog-results-header {
       --realm-icon-size: 1.25rem;
       display: flex;
@@ -51,7 +53,7 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
     }
     .realm-name {
       display: inline-block;
-      font: 700 var(--boxel-font);
+      font: 600 var(--boxel-font);
     }
     .results-count {
       display: inline-block;

@@ -87,13 +87,13 @@ export default class Login extends Component<Signature> {
       {{on 'click' (fn @setMode 'register')}}
     >Create a new Boxel account</Button>
 
-    <style>
+    <style scoped>
       form {
         display: flex;
         flex-direction: column;
       }
       .title {
-        font: 700 var(--boxel-font-med);
+        font: 600 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);
         padding: 0;
       }
@@ -196,8 +196,12 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      await this.router.refresh();
-      await this.matrixService.start(auth);
+      // note that any commands after this await will not be executed as the act
+      // of starting the matrix service sets tracked properties that result in this
+      // component being removed from the DOM and destroyed. Keep in mind that in EC tasks,
+      // awaits are really just syntactic sugar for yields, and that we yield to
+      // this.matrixService.start()
+      await this.matrixService.start({ auth, refreshRoutes: true });
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`,
