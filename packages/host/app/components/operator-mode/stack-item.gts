@@ -115,7 +115,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isSaving = false;
-  @tracked private animationType: 'closing' | 'movingForward' | undefined;
+  @tracked private animationType:
+    | 'opening'
+    | 'closing'
+    | 'movingForward'
+    | undefined = 'opening';
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
@@ -437,9 +441,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return;
     }
     const animations = this.itemEl.getAnimations() || [];
-    Promise.all(animations.map((animation) => animation.finished))
-      .then(() => resolve())
-      .catch(() => resolve()); // Task was cancelled, which is fine to resolve - eg: the component was destroyed
+    Promise.all(animations.map((animation) => animation.finished)).then(() => {
+      this.animationType = undefined;
+      resolve();
+    });
   }
 
   private setupContentEl = (el: HTMLElement) => {
@@ -465,7 +470,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private get doOpeningAnimation() {
-    return this.isTopCard;
+    return this.isTopCard && this.animationType === 'opening';
   }
 
   private get doClosingAnimation() {
@@ -590,11 +595,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       @keyframes moveForward {
         from {
-          transform: translateY(20%);
+          transform: translateY(0);
           opacity: 0.8;
         }
         to {
-          transform: translateY(0);
+          transform: translateY(25px);
           opacity: 1;
         }
       }
@@ -630,7 +635,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         animation: fadeOut 0.2s forwards;
       }
       .item.move-forward-animation {
-        animation: moveForward 0.2s forwards;
+        animation: moveForward 0.2s none;
       }
       .item.opening-animation.testing {
         animation-duration: 0s;

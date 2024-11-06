@@ -44,25 +44,25 @@ export default class OperatorModeStack extends Component<Signature> {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
 
-    // do closing animation on each closed item
-    await Promise.all(
-      itemsToDismiss.map((i) => {
-        const componentAPI = this.stackItemComponentAPI.get(i);
-        if (!componentAPI) {
-          return Promise.resolve();
-        }
-        return componentAPI.startAnimation('closing');
-      }),
-    );
+    // Animate closing items
+    const animations = itemsToDismiss
+      .map((item) => {
+        const componentAPI = this.stackItemComponentAPI.get(item);
+        return componentAPI?.startAnimation('closing') ?? undefined;
+      })
+      .filter(Boolean);
+
+    // Animate next top item moving forward
+    const nextTopItem = this.args.stackItems[itemIndex];
+    const nextTopItemAPI = this.stackItemComponentAPI.get(nextTopItem);
+
+    if (nextTopItemAPI) {
+      animations.push(nextTopItemAPI.startAnimation('movingForward'));
+    }
+
+    await Promise.all(animations);
 
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
-
-    // move forward animation on next top item
-    const nextTopItem = this.args.stackItems[itemIndex];
-    const componentAPI = this.stackItemComponentAPI.get(nextTopItem);
-    if (componentAPI) {
-      await componentAPI.startAnimation('movingForward');
-    }
   });
 
   private setupStackItem = (
