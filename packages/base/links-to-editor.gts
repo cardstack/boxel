@@ -16,6 +16,7 @@ import {
   type Field,
   CardContext,
   realmURL,
+  getContainingCard,
 } from './card-api';
 import {
   chooseCard,
@@ -152,6 +153,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           realmURL: this.args.model.value?.[realmURL],
         },
         createNewCard: this.cardContext?.actions?.createCard,
+        consumingCard: this.args.model.containingBox
+          ? getContainingCard(this.args.model.containingBox)
+          : undefined,
       },
     );
     if (chosenCard) {

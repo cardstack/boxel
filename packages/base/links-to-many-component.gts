@@ -5,6 +5,7 @@ import {
   BaseDef,
   CardContext,
   realmURL,
+  getContainingCard,
   type Box,
   type BoxComponent,
   type CardDef,
@@ -105,6 +106,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         },
         multiSelect: true,
         createNewCard: this.cardContext?.actions?.createCard,
+        consumingCard: getContainingCard(this.args.model),
       },
     );
     if (chosenCard) {

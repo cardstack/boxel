@@ -299,7 +299,25 @@ module('Realm Server', function (hooks) {
           },
         });
 
-      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'permissions',
+            id: testRealmHref,
+            attributes: {
+              permissions: {
+                mary: ['read', 'write', 'realm-owner'],
+                bob: ['read', 'write'],
+                mango: ['read'],
+              },
+            },
+          },
+        },
+        'permissions response is correct',
+      );
       let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
       assert.deepEqual(
         permissions,
@@ -336,7 +354,23 @@ module('Realm Server', function (hooks) {
           },
         });
 
-      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'permissions',
+            id: testRealmHref,
+            attributes: {
+              permissions: {
+                mary: ['read', 'write', 'realm-owner'],
+              },
+            },
+          },
+        },
+        'permissions response is correct',
+      );
       let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
       assert.deepEqual(
         permissions,
@@ -371,7 +405,23 @@ module('Realm Server', function (hooks) {
           },
         });
 
-      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'permissions',
+            id: testRealmHref,
+            attributes: {
+              permissions: {
+                mary: ['read', 'write', 'realm-owner'],
+              },
+            },
+          },
+        },
+        'permissions response is correct',
+      );
       let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
       assert.deepEqual(
         permissions,

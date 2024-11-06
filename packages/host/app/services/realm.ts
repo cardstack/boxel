@@ -26,6 +26,7 @@ import {
   SupportedMimeType,
   type RealmInfo,
   type IndexEventData,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -55,10 +56,18 @@ class RealmResource {
   @service private declare messageService: MessageService;
 
   @tracked info: EnhancedRealmInfo | undefined;
+  @tracked private realmPermissions: RealmPermissions | null | undefined;
 
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
   private subscription: { unsubscribe: () => void } | undefined;
+
+  // Hassan: in general i'm questioning the usefulness of using Tasks in this
+  // class. We seem to be following the pattern of await-ing all the tasks on
+  // the outside of the Task.perform(). When we do this it actually casts the
+  // Task.perform() into a normal non-cancellable promise. Probably we can get
+  // rid of all these tasks and just use normal promises as I don't think the
+  // tasks are buying us anything.
 
   constructor(
     private realmURL: string,
@@ -189,6 +198,7 @@ class RealmResource {
     this.loggingIn = undefined;
     this.fetchInfoTask.cancelAll();
     this.fetchingInfo = undefined;
+    this.fetchRealmPermissionsTask.cancelAll();
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
@@ -196,6 +206,7 @@ class RealmResource {
 
   async fetchInfo(): Promise<void> {
     if (!this.fetchingInfo) {
+      // share the work if there are multiple requests to get the info for a realm
       this.fetchingInfo = this.fetchInfoTask.perform();
     }
     await this.fetchingInfo;
@@ -233,6 +244,85 @@ class RealmResource {
       this.fetchingInfo = undefined;
     }
   });
+
+  async fetchRealmPermissions() {
+    return await this.fetchRealmPermissionsTask.perform();
+  }
+
+  private fetchRealmPermissionsTask = dropTask(async () => {
+    if (this.realmPermissions !== undefined) {
+      return this.realmPermissions;
+    }
+    await this.loginTask.perform();
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.Permissions,
+      Authorization: `Bearer ${this.token}`,
+    };
+    let response = await this.network.authedFetch(
+      `${this.realmURL}_permissions`,
+      {
+        headers,
+      },
+    );
+
+    if (response.status === 403) {
+      // the user is not an owner of this realm which is a legit scenario
+      this.realmPermissions = null;
+      return;
+    } else if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch realm permissions for ${this.realmURL}: ${response.status}`,
+      );
+    }
+    let json = await waitForPromise(response.json());
+    this.realmPermissions = json.data.attributes.permissions;
+    return this.realmPermissions;
+  });
+
+  async setRealmPermission(
+    userId: string,
+    permissions: ('read' | 'write')[] | null,
+  ): Promise<void> {
+    return await this.setRealmPermissionTask.perform(userId, permissions);
+  }
+
+  private setRealmPermissionTask = restartableTask(
+    async (userId: string, permissions: ('read' | 'write')[] | null) => {
+      await this.loginTask.perform();
+      let headers: Record<string, string> = {
+        Accept: SupportedMimeType.Permissions,
+        Authorization: `Bearer ${this.token}`,
+      };
+      let response = await this.network.authedFetch(
+        `${this.realmURL}_permissions`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            data: {
+              type: 'permissions',
+              id: this.url,
+              attributes: {
+                permissions: {
+                  [userId]: permissions,
+                } as RealmPermissions,
+              },
+            },
+          }),
+        },
+      );
+
+      if (response.status !== 200) {
+        throw new Error(
+          `Failed to set realm permissions for '${userId}:${
+            permissions ? permissions.join() : 'null'
+          }' in realm ${this.url}: ${response.status}`,
+        );
+      }
+      let json = await waitForPromise(response.json());
+      this.realmPermissions = json.data.attributes.permissions;
+    },
+  );
 
   private tokenRefresher = restartableTask(async () => {
     if (!this.claims) {
@@ -324,6 +414,22 @@ export default class RealmService extends Service {
       return resource.info;
     }
   };
+
+  async allUsersPermissions(url: string) {
+    let resource = this.knownRealm(url);
+    if (!resource) {
+      await this.identifyRealm.perform(url);
+    }
+    return await resource?.fetchRealmPermissions();
+  }
+
+  async setPermissions(
+    url: string,
+    userId: string,
+    permissions: ('read' | 'write')[],
+  ) {
+    await this.knownRealm(url)?.setRealmPermission(userId, permissions);
+  }
 
   isPublic = (url: string): boolean => {
     return this.knownRealm(url)?.isPublic ?? false;
