@@ -285,6 +285,23 @@ export function insert(
   ] as Expression;
 }
 
+export function update(
+  table: string,
+  nameExpressions: string[][],
+  valueExpressions: Expression[],
+) {
+  let names = flattenDeep(nameExpressions);
+  let values = valueExpressions;
+  return [
+    'UPDATE',
+    table,
+    'SET',
+    ...separatedByCommas(
+      names.map((name, index) => [name, '=', values[index][0]]),
+    ),
+  ] as Expression;
+}
+
 export const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
 
 export async function query(

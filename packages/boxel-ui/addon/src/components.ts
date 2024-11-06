@@ -33,6 +33,9 @@ import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
+import BoxelMultiSelect, {
+  BoxelMultiSelectBasic,
+} from './components/multi-select/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
 import RadioInput from './components/radio-input/index.gts';
@@ -61,6 +64,8 @@ export {
   BoxelInputValidationState,
   BoxelInputValidationStates,
   BoxelMessage,
+  BoxelMultiSelect,
+  BoxelMultiSelectBasic,
   BoxelSelect,
   Button,
   CardContainer,

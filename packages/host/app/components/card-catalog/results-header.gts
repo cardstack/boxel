@@ -28,6 +28,8 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
         results
       {{else if (eq @resultsCount 1)}}
         1 result
+      {{else if (eq @resultsCount 0)}}
+        No results
       {{/if}}
     </span>
   </header>
