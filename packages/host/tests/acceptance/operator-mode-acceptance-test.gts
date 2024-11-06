@@ -123,6 +123,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     class Pet extends CardDef {
       static displayName = 'Pet';
+      static headerColor = '#355e3b';
       @field name = contains(StringField);
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
@@ -134,6 +135,26 @@ module('Acceptance | operator mode tests', function (hooks) {
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
           </h3>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div class='pet-isolated'>
+            <h2 data-test-pet-isolated={{@model.name}}>
+              <@fields.name />
+            </h2>
+          </div>
+          <style scoped>
+            .pet-isolated {
+              height: 100%;
+              background-color: #355e3b;
+            }
+            h2 {
+              margin: 0;
+              padding: 20px;
+              color: white;
+            }
+          </style>
         </template>
       };
     }
@@ -460,6 +481,24 @@ module('Acceptance | operator mode tests', function (hooks) {
         [
           {
             id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Interact,
+    });
+
+    await click(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    await percySnapshot(assert); /* snapshot for special styling */
+    assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/mango`,
             format: 'isolated',
           },
         ],

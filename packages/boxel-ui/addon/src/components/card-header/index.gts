@@ -93,7 +93,7 @@ export default class CardHeader extends Component<Signature> {
             {{#if @isSaving}}
               Saving…
             {{else if (bool @lastSavedMessage)}}
-              <div data-test-last-saved>
+              <div class='boxel-contents-only' data-test-last-saved>
                 {{@lastSavedMessage}}
               </div>
             {{/if}}
@@ -256,8 +256,8 @@ export default class CardHeader extends Component<Signature> {
           margin-bottom: calc(1rem - var(--boxel-font-size-sm));
         }
         .save-indicator {
-          font-weight: normal;
-          line-height: 1.1;
+          font: var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
         }
         .realm-icon-container {
           display: flex;

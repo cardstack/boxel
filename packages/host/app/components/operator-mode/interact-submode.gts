@@ -139,7 +139,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    write: (card: CardDef) => Promise<CardDef | undefined>;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -251,17 +251,8 @@ export default class InteractSubmode extends Component<Signature> {
         here._copyCard.perform(card, stackIndex, deferred);
         return await deferred.promise;
       },
-      saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
-        let item = here.findCardInStack(card, stackIndex);
-        // WARNING: never await an ember concurrency perform outside of a task.
-        // Inside of a task, the `await` is actually just syntactic sugar for a
-        // `yield`. But if you await `perform()` outside of a task, that will cast
-        // the the task to an uncancellable promise which defeats the point of using
-        // ember concurrency.
-        // https://ember-concurrency.com/docs/task-cancelation-help
-        let deferred = new Deferred<void>();
-        here.save.perform(item, dismissItem, deferred);
-        await deferred.promise;
+      saveCard: async (card: CardDef): Promise<void> => {
+        await here.args.saveCard(card);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
@@ -357,45 +348,10 @@ export default class InteractSubmode extends Component<Signature> {
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
     if (item.format === 'edit') {
-      let updatedCard = await this.args.write(card);
+      let updatedCard = this.args.saveCard(card);
       request?.fulfill(updatedCard);
     }
   });
-
-  private save = task(
-    async (
-      item: StackItem,
-      dismissStackItem: boolean,
-      done: Deferred<void>,
-    ) => {
-      let { request } = item;
-      let hasRejected = false;
-      try {
-        let updatedCard = await this.args.write(item.card);
-
-        if (updatedCard) {
-          request?.fulfill(updatedCard);
-          if (!dismissStackItem) {
-            return;
-          }
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      } catch (e) {
-        hasRejected = true;
-        done.reject(e);
-      } finally {
-        if (!hasRejected) {
-          done.fulfill();
-        }
-      }
-    },
-  );
 
   private runCommand = restartableTask(
     async (card: CardDef, skillCardId: string, message: string) => {
@@ -775,6 +731,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
+                @saveCard={{@saveCard}}
               />
             {{/let}}
           {{/each}}

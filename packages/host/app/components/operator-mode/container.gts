@@ -35,7 +35,7 @@ import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
-const waiter = buildWaiter('operator-mode-container:write-waiter');
+const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
   Args: {
@@ -92,7 +92,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
   // at the same time
-  private write = task(async (card: CardDef) => {
+  private saveCard = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
       return await this.cardService.saveModel(this, card);
     });
@@ -130,10 +130,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.write}}
+          @saveCardOnClose={{perform this.saveCard}}
         />
       {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
-        <InteractSubmode @write={{perform this.write}} />
+        <InteractSubmode @saveCard={{perform this.saveCard}} />
       {{else}}
         <Auth />
       {{/if}}

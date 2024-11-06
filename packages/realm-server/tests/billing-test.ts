@@ -4,6 +4,7 @@ import { prepareTestDB } from './helpers';
 import PgAdapter from '../pg-adapter';
 import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
+import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/checkout-session-completed';
 import {
   LedgerEntry,
   Plan,
@@ -19,6 +20,7 @@ import {
 import {
   StripeInvoicePaymentSucceededWebhookEvent,
   StripeSubscriptionDeletedWebhookEvent,
+  StripeCheckoutSessionCompletedWebhookEvent,
 } from '../billing/stripe-webhook-handlers';
 
 async function insertUser(
@@ -70,6 +72,16 @@ async function insertPlan(
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);
+}
+
+async function fetchUserByStripeCustomerId(
+  dbAdapter: PgAdapter,
+  stripeCustomerId: string,
+) {
+  return await query(dbAdapter, [
+    `SELECT * FROM users WHERE stripe_customer_id = `,
+    param(stripeCustomerId),
+  ]);
 }
 
 async function fetchSubscriptionsByUserId(
@@ -404,6 +416,46 @@ module('billing', function (hooks) {
       assert.strictEqual(subscriptions.length, 1);
       assert.strictEqual(subscriptions[0].status, 'canceled');
       assert.strictEqual(subscriptions[0].endedAt, 2);
+    });
+  });
+
+  module('checkout session completed', function () {
+    test('update user stripe customer id when checkout session completed', async function (assert) {
+      await insertUser(dbAdapter, 'testuser', '');
+
+      let stripeCheckoutSessionCompletedEvent = {
+        id: 'evt_1234567890',
+        object: 'event',
+        data: {
+          object: {
+            id: 'cs_test_1234567890',
+            object: 'checkout.session',
+            client_reference_id: 'testuser',
+            customer: 'cus_123',
+          },
+        },
+        type: 'checkout.session.completed',
+      } as StripeCheckoutSessionCompletedWebhookEvent;
+
+      await handleCheckoutSessionCompleted(
+        dbAdapter,
+        stripeCheckoutSessionCompletedEvent,
+      );
+
+      let stripeEvents = await fetchStripeEvents(dbAdapter);
+      assert.strictEqual(stripeEvents.length, 1);
+      assert.strictEqual(
+        stripeEvents[0].stripe_event_id,
+        stripeCheckoutSessionCompletedEvent.id,
+      );
+
+      const updatedUser = await fetchUserByStripeCustomerId(
+        dbAdapter,
+        'cus_123',
+      );
+      assert.strictEqual(updatedUser.length, 1);
+      assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+      assert.strictEqual(updatedUser[0].matrix_user_id, 'testuser');
     });
   });
 });
