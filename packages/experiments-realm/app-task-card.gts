@@ -39,7 +39,6 @@ import Checklist from '@cardstack/boxel-icons/checklist';
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked loadingColumnKey: string | undefined;
-  @tracked isSheetOpen = false;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
@@ -223,10 +222,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           </:content>
         </BoxelDropdown>
 
-        <button class='sheet-toggle' {{on 'click' this.toggleSheet}}>
-          {{if this.isSheetOpen 'Close' 'Open'}}
-          Sheet
-        </button>
       </div>
       <div class='columns-container'>
         <DndKanbanBoard
@@ -259,10 +254,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           </:card>
         </DndKanbanBoard>
       </div>
-      <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
-        <h2>Sheet Content</h2>
-        <p>This is the content of the sheet.</p>
-      </Sheet>
     </div>
 
     <style scoped>
@@ -280,14 +271,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         justify-content: space-between;
         gap: var(--boxel-sp);
         align-items: center;
-      }
-      .sheet-toggle {
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
-        background-color: var(--boxel-purple);
-        color: var(--boxel-light);
-        border: none;
-        border-radius: var(--boxel-border-radius);
-        cursor: pointer;
       }
       .columns-container {
         display: flex;
@@ -307,75 +290,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       /** Need to specify height because fitted field component has a default height**/
       .card {
         height: 150px !important;
-      }
-    </style>
-  </template>
-
-  toggleSheet = () => {
-    this.isSheetOpen = !this.isSheetOpen;
-  };
-}
-
-export interface SheetSignature {
-  Args: {
-    onClose: () => void;
-    isOpen: boolean;
-  };
-  Blocks: {
-    default: [];
-  };
-  Element: HTMLDivElement;
-}
-
-class Sheet extends GlimmerComponent<SheetSignature> {
-  <template>
-    <div class='sheet-overlay {{if @isOpen "is-open"}}'>
-      <div class='sheet-content {{if @isOpen "is-open"}}'>
-        <button class='close-button' {{on 'click' @onClose}}>×</button>
-        {{yield}}
-      </div>
-    </div>
-
-    <style scoped>
-      .sheet-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: rgba(0, 0, 0, 0);
-        display: flex;
-        justify-content: flex-end;
-        pointer-events: none;
-        transition: background-color 0.3s ease-out;
-      }
-      .sheet-overlay.is-open {
-        background-color: rgba(0, 0, 0, 0.5);
-        pointer-events: auto;
-      }
-      .sheet-content {
-        width: 300px;
-        height: 100%;
-        background-color: var(--boxel-light);
-        padding: var(--boxel-sp);
-        box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-        transform: translateX(100%);
-        transition: transform 0.3s ease-out;
-        position: relative;
-      }
-      .sheet-content.is-open {
-        transform: translateX(0);
-      }
-      .close-button {
-        position: absolute;
-        top: var(--boxel-sp-xs);
-        right: var(--boxel-sp-xs);
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        padding: var(--boxel-sp-xxs);
-        line-height: 1;
       }
     </style>
   </template>
