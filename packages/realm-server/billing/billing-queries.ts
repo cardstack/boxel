@@ -8,6 +8,7 @@ import {
   param,
   query,
   separatedByCommas,
+  update,
 } from '@cardstack/runtime-common';
 import { StripeEvent } from './stripe-webhook-handlers';
 
@@ -58,15 +59,28 @@ export async function insertStripeEvent(
   dbAdapter: DBAdapter,
   event: StripeEvent,
 ) {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    stripe_event_id: event.id,
-    event_type: event.type,
-    event_data: event.data,
-  });
-  await query(
-    dbAdapter,
-    insert('stripe_events', nameExpressions, valueExpressions),
-  );
+  try {
+    let { valueExpressions, nameExpressions } = asExpressions({
+      stripe_event_id: event.id,
+      event_type: event.type,
+      event_data: event.data,
+    });
+    await query(
+      dbAdapter,
+      insert('stripe_events', nameExpressions, valueExpressions),
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('duplicate key value')
+    ) {
+      let stripeEvent = await getStripeEventById(dbAdapter, event.id);
+      if (stripeEvent?.is_processed) {
+        throw new Error('Stripe event already processed');
+      }
+    }
+    throw error;
+  }
 }
 
 export async function getPlanByStripeId(
@@ -88,6 +102,22 @@ export async function getPlanByStripeId(
     monthlyPrice: results[0].monthly_price,
     creditsIncluded: results[0].credits_included,
   } as Plan;
+}
+
+export async function updateUserStripeCustomerId(
+  dbAdapter: DBAdapter,
+  userId: string,
+  stripeCustomerId: string,
+) {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    stripe_customer_id: stripeCustomerId,
+  });
+
+  await query(dbAdapter, [
+    ...update('users', nameExpressions, valueExpressions),
+    ` WHERE matrix_user_id = `,
+    param(userId),
+  ]);
 }
 
 export async function getUserByStripeId(
@@ -315,4 +345,45 @@ export async function markStripeEventAsProcessed(
     `UPDATE stripe_events SET is_processed = TRUE WHERE stripe_event_id = `,
     param(stripeEventId),
   ]);
+}
+
+export async function getSubscriptionByStripeSubscriptionId(
+  dbAdapter: DBAdapter,
+  stripeSubscriptionId: string,
+): Promise<Subscription | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM subscriptions WHERE stripe_subscription_id = `,
+    param(stripeSubscriptionId),
+  ]);
+
+  if (results.length === 0) {
+    return null;
+  }
+
+  return {
+    id: results[0].id,
+    userId: results[0].user_id,
+    planId: results[0].plan_id,
+    status: results[0].status,
+  } as Subscription;
+}
+
+export async function updateSubscription(
+  dbAdapter: DBAdapter,
+  subscriptionId: string,
+  params: {
+    status: string;
+    endedAt?: number;
+  },
+) {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    status: params.status,
+    ended_at: params.endedAt,
+  });
+
+  await query(dbAdapter, [
+    ...update('subscriptions', nameExpressions, valueExpressions),
+    `WHERE id =`,
+    param(subscriptionId),
+  ] as Expression);
 }

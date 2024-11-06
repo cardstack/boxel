@@ -3,6 +3,8 @@ import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 import PgAdapter from '../pg-adapter';
 import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
+import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
+import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/checkout-session-completed';
 import {
   LedgerEntry,
   Plan,
@@ -15,7 +17,11 @@ import {
   insertSubscription,
 } from '../billing/billing-queries';
 
-import { StripeInvoicePaymentSucceededWebhookEvent } from '../billing/stripe-webhook-handlers';
+import {
+  StripeInvoicePaymentSucceededWebhookEvent,
+  StripeSubscriptionDeletedWebhookEvent,
+  StripeCheckoutSessionCompletedWebhookEvent,
+} from '../billing/stripe-webhook-handlers';
 
 async function insertUser(
   dbAdapter: PgAdapter,
@@ -68,6 +74,16 @@ async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);
 }
 
+async function fetchUserByStripeCustomerId(
+  dbAdapter: PgAdapter,
+  stripeCustomerId: string,
+) {
+  return await query(dbAdapter, [
+    `SELECT * FROM users WHERE stripe_customer_id = `,
+    param(stripeCustomerId),
+  ]);
+}
+
 async function fetchSubscriptionsByUserId(
   dbAdapter: PgAdapter,
   userId: string,
@@ -90,6 +106,7 @@ async function fetchSubscriptionsByUserId(
     userId: result.user_id,
     planId: result.plan_id,
     startedAt: result.started_at,
+    endedAt: result.ended_at,
     status: result.status,
     stripeSubscriptionId: result.stripe_subscription_id,
   }));
@@ -353,6 +370,92 @@ module('billing', function (hooks) {
         });
         assert.strictEqual(availableCredits, plan.creditsIncluded + 100); // Remaining credits from the previous cycle expired, new credits added, plus 100 from the extra credit
       });
+    });
+  });
+
+  module('subscription deleted', function () {
+    test('handles subscription cancellation and expiration', async function (assert) {
+      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let plan = await insertPlan(
+        dbAdapter,
+        'Creator',
+        12,
+        2500,
+        'prod_creator',
+      );
+
+      await insertSubscription(dbAdapter, {
+        user_id: user.id,
+        plan_id: plan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567890',
+      });
+
+      let stripeSubscriptionDeletedEvent = {
+        id: 'evt_sub_deleted_1',
+        object: 'event',
+        type: 'customer.subscription.deleted',
+        data: {
+          object: {
+            id: 'sub_1234567890',
+            canceled_at: 2,
+            cancellation_details: {
+              reason: 'cancellation_requested',
+            },
+          },
+        },
+      } as StripeSubscriptionDeletedWebhookEvent;
+
+      await handleSubscriptionDeleted(
+        dbAdapter,
+        stripeSubscriptionDeletedEvent,
+      );
+
+      let subscriptions = await fetchSubscriptionsByUserId(dbAdapter, user.id);
+      assert.strictEqual(subscriptions.length, 1);
+      assert.strictEqual(subscriptions[0].status, 'canceled');
+      assert.strictEqual(subscriptions[0].endedAt, 2);
+    });
+  });
+
+  module('checkout session completed', function () {
+    test('update user stripe customer id when checkout session completed', async function (assert) {
+      await insertUser(dbAdapter, 'testuser', '');
+
+      let stripeCheckoutSessionCompletedEvent = {
+        id: 'evt_1234567890',
+        object: 'event',
+        data: {
+          object: {
+            id: 'cs_test_1234567890',
+            object: 'checkout.session',
+            client_reference_id: 'testuser',
+            customer: 'cus_123',
+          },
+        },
+        type: 'checkout.session.completed',
+      } as StripeCheckoutSessionCompletedWebhookEvent;
+
+      await handleCheckoutSessionCompleted(
+        dbAdapter,
+        stripeCheckoutSessionCompletedEvent,
+      );
+
+      let stripeEvents = await fetchStripeEvents(dbAdapter);
+      assert.strictEqual(stripeEvents.length, 1);
+      assert.strictEqual(
+        stripeEvents[0].stripe_event_id,
+        stripeCheckoutSessionCompletedEvent.id,
+      );
+
+      const updatedUser = await fetchUserByStripeCustomerId(
+        dbAdapter,
+        'cus_123',
+      );
+      assert.strictEqual(updatedUser.length, 1);
+      assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+      assert.strictEqual(updatedUser[0].matrix_user_id, 'testuser');
     });
   });
 });

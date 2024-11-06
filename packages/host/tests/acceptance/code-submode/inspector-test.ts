@@ -856,7 +856,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
       .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .hasAttribute('alt', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -915,7 +915,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
       .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Icon for workspace Test Workspace A');
+      .hasAttribute('alt', 'Test Workspace A');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
