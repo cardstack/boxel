@@ -64,7 +64,7 @@ export class CreateProductRequirementsInstance extends Command<
     >('save-card'); // lookupCommand creates the instance and passes in the context
 
     await saveCardCommand.execute(
-      new SaveCardInput({
+      new saveCardCommand.inputType({
         realm: input.realm,
         card: prdCard,
       }),
@@ -87,7 +87,7 @@ export class CreateProductRequirementsInstance extends Command<
     // as tool calls from the AI.
 
     let { roomId } = await this.commandContext.sendAiAssistantMessage({
-      show: true, // maybe? open the side panel
+      show: false, // maybe? open the side panel
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
       skillCards: [this.skillCard],
@@ -96,6 +96,9 @@ export class CreateProductRequirementsInstance extends Command<
 
     // Wait for the PRD command to have been applied
     await patchPRDCommand.waitForNextCompletion();
+    // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
+    // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
+
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;
     result.roomId = roomId;

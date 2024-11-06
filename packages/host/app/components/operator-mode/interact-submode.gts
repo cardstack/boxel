@@ -716,6 +716,9 @@ export default class InteractSubmode extends Component<Signature> {
     openSearchCallback();
   }
 
+  //TODO use create[CommandName] methods to create commands instead of lookupCommand to solve type issues and avoid embroider issues
+  //   OR
+  //TODO use imports and leverage with custom loader maybe import SaveCard from 'http://cardstack.com/host/commannds/save-card'
   lookupCommand = <
     CardInputType extends CardDef | undefined,
     CardResultType extends CardDef | undefined,
