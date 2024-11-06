@@ -7,6 +7,8 @@ import type { Actions } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import OperatorModeStackItem, { CardDefOrId } from './stack-item';
 
 interface Signature {
@@ -27,6 +29,7 @@ interface Signature {
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
       doScrollIntoView: (selector: string) => void,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
   Blocks: {};
 }
@@ -79,6 +82,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}
+            @saveCard={{@saveCard}}
           />
         {{/each}}
       </div>
