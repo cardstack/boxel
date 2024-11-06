@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
@@ -598,8 +599,12 @@ export default class CardCatalogModal extends Component<Signature> {
         let consumingRealmUserId =
           this.realm.info(realmOfConsumer)?.realmUserId;
         if (!consumingRealmUserId) {
+          if (isTesting()) {
+            // we exercise these code paths in our matrix tests which uses the non-test env
+            return;
+          }
           throw new Error(
-            `Cannot determing the realm user id of ${realmOfConsumer}`,
+            `Cannot determine the realm user id of ${realmOfConsumer}`,
           );
         }
         let selectedCardRealmPermissions =
