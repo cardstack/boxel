@@ -600,7 +600,7 @@ export default class CardCatalogModal extends Component<Signature> {
           this.realm.info(realmOfConsumer)?.realmUserId;
         if (!consumingRealmUserId) {
           if (isTesting()) {
-            // we exercise these code paths in our matrix tests which uses the non-test env
+            // we exercise this method in our matrix tests which uses the non-test env
             return;
           }
           throw new Error(
