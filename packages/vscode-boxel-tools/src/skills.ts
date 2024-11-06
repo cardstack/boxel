@@ -1,10 +1,6 @@
 import * as vscode from 'vscode';
 import { RealmAuth } from './realm-auth';
 
-function formatSkillKey(skillId: string): string {
-  return `boxel.skill.content.${skillId}`;
-}
-
 export class SkillsProvider
   implements vscode.TreeDataProvider<vscode.TreeItem>
 {
