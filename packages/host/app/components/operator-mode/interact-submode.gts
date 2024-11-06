@@ -35,7 +35,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
-import type { StackItemComponentAPI } from './stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
@@ -48,6 +47,8 @@ import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
+
+import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
