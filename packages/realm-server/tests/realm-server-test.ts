@@ -2596,7 +2596,7 @@ module('Realm Server', function (hooks) {
     });
   });
 
-  module('_user GET request', function (_hooks) {
+  module('_user GET request', function (hooks) {
     setupPermissionedRealm(hooks, {
       john: ['read', 'write'],
     });
