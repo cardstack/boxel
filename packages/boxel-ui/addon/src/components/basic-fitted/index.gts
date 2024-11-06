@@ -1,12 +1,13 @@
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import cssUrl from 'ember-css-url';
 
 interface Signature {
   Args: {
-    cardTypeIcon: ComponentLike<{
+    description: string;
+    iconComponent: ComponentLike<{
       Element: Element;
     }>;
-    description: string;
     isEmpty?: boolean;
     primary: string;
     secondary: string;
@@ -36,8 +37,8 @@ export default class BasicFitted extends Component<Signature> {
               {{/unless}}
             </div>
           {{else}}
-            {{#let @cardTypeIcon as |CardTypeIcon|}}
-              <CardTypeIcon data-test-card-type-icon class='card-type-icon' />
+            {{#let @iconComponent as |IconComponent|}}
+              <IconComponent data-test-card-type-icon class='card-type-icon' />
             {{/let}}
           {{/if}}
         </div>

@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -6,13 +7,33 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import CardContainer from '../card-container/index.gts';
 import BasicFitted from './index.gts';
 
+const Captions: TemplateOnlyComponent<{ Element: Element }> = <template>
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    class='lucide lucide-captions'
+    viewBox='0 0 24 24'
+    ...attributes
+  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
+      d='M7 15h4m4 0h2M7 11h2m4 0h4'
+    /></svg>
+</template>;
+
 export default class BasicFittedUsage extends Component {
   @tracked primary: string = 'The Primary';
   @tracked secondary: string = 'Secondary';
   @tracked description: string = 'This is the description. It is often longer';
   @tracked thumbnailURL: string = 'https://i.imgur.com/RZ0rsfxt.jpg';
+  iconComponent = Captions;
 
   <template>
+    {{! template-lint-disable no-inline-styles }}
     <FreestyleUsage
       @name='BasicFitted'
       @description='Designed to render well inside a CSS container with container-name: fitted, container-type: size'
@@ -31,6 +52,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -46,6 +68,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -61,6 +84,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -76,6 +100,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -91,6 +116,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -106,6 +132,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -121,6 +148,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -136,6 +164,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -151,6 +180,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -166,6 +196,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -181,6 +212,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -196,6 +228,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -211,6 +244,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -226,6 +260,7 @@ export default class BasicFittedUsage extends Component {
                 @secondary={{this.secondary}}
                 @description={{this.description}}
                 @thumbnailURL={{this.thumbnailURL}}
+                @iconComponent={{this.iconComponent}}
               />
             </CardContainer>
           </div>
@@ -257,9 +292,14 @@ export default class BasicFittedUsage extends Component {
           @value={{this.thumbnailURL}}
           @onInput={{fn (mut this.thumbnailURL)}}
         />
+        <Args.Component
+          @name='iconComponent'
+          @description='Component for the card type icon'
+          @value={{this.iconComponent}}
+        />
       </:api>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .scroller {
         max-height: 40vh;
         overflow-y: scroll;

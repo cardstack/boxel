@@ -795,11 +795,6 @@ module('indexing', function (hooks) {
       },
       {
         pattern:
-          /cardstack.com\/base\/default-templates\/fitted\.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'default-templates/fitted.gts',
-      },
-      {
-        pattern:
           /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
         fileName: 'default-templates/embedded.gts',
       },
