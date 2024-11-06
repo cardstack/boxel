@@ -34,6 +34,8 @@ export class SkillsProvider
     const selectedSkills = allSkills.filter(
       (skill) => skill.checkboxState === vscode.TreeItemCheckboxState.Checked,
     );
+    console.log('All skills: ', allSkills);
+    console.log('Selected skills: ', selectedSkills);
     return selectedSkills;
   }
 
@@ -76,7 +78,7 @@ class Skill extends vscode.TreeItem {
     super(label);
     this.checkboxState = vscode.TreeItemCheckboxState.Unchecked;
   }
-  getChildren(element?: SkillList): Thenable<Skill[]> {
+  getChildren(_element?: SkillList): Thenable<Skill[]> {
     return Promise.resolve([]);
   }
 }
@@ -102,7 +104,11 @@ class SkillList extends vscode.TreeItem {
       Accept: 'application/vnd.card+json',
     };
     if (!this.readOnly) {
-      headers['Authorization'] = `${await realmAuth.getJWT(this.realmUrl)}`;
+      let jwt = await realmAuth.getJWT(this.realmUrl);
+      if (!jwt) {
+        throw new Error(`No JWT found for realm ${this.realmUrl}`);
+      }
+      headers['Authorization'] = jwt;
     }
 
     const searchUrl = new URL('./_search', this.realmUrl);

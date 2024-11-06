@@ -75,6 +75,12 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "codingSkillList",
+        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your realms to assist in editing. [Load skills now](command:boxelrealm.reloadSkills)"
+      }
+    ],
     "configuration": [
       {
         "title": "Matrix Server",
