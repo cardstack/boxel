@@ -27,6 +27,7 @@ import MultiSelectUsage from './components/multi-select/usage.gts';
 import PillUsage from './components/pill/usage.gts';
 import ProgressBarUsage from './components/progress-bar/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
+import RealmIconUsage from './components/realm-icon/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
@@ -60,6 +61,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Pill', PillUsage],
   ['ProgressBar', ProgressBarUsage],
   ['RadioInput', RadioInputUsage],
+  ['RealmIcon', RealmIconUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
   ['Switch', SwitchUsage],
