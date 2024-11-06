@@ -1317,8 +1317,8 @@ importers:
         specifier: ^0.0.30
         version: 0.0.30
       '@types/qs':
-        specifier: ^6.9.14
-        version: 6.9.14
+        specifier: ^6.9.17
+        version: 6.9.17
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.11.3
@@ -1728,8 +1728,8 @@ importers:
         specifier: ^8.11.5
         version: 8.11.5
       '@types/qs':
-        specifier: ^6.9.14
-        version: 6.9.14
+        specifier: ^6.9.17
+        version: 6.9.17
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.11.3
@@ -1932,8 +1932,8 @@ importers:
         specifier: ^0.0.30
         version: 0.0.30
       '@types/qs':
-        specifier: ^6.9.14
-        version: 6.9.14
+        specifier: ^6.9.17
+        version: 6.9.17
       '@types/uuid':
         specifier: ^9.0.8
         version: 9.0.8
@@ -6975,7 +6975,7 @@ packages:
     resolution: {integrity: sha512-BiEUfAiGCOllomsRAZOiMFP7LAnrifHpt56pc4Z7l9K6ACyN06Ns1JLMBxwkfLOjJRlSf06NwWsT7yzfpaVpyQ==}
     dependencies:
       '@types/node': 18.19.54
-      '@types/qs': 6.9.14
+      '@types/qs': 6.9.17
       '@types/range-parser': 1.2.6
       '@types/send': 0.17.3
     dev: true
@@ -6985,7 +6985,7 @@ packages:
     dependencies:
       '@types/body-parser': 1.19.4
       '@types/express-serve-static-core': 4.17.39
-      '@types/qs': 6.9.14
+      '@types/qs': 6.9.17
       '@types/serve-static': 1.15.4
     dev: true
 
@@ -7198,8 +7198,8 @@ packages:
   /@types/pluralize@0.0.30:
     resolution: {integrity: sha512-kVww6xZrW/db5BR9OqiT71J9huRdQ+z/r+LbDuT7/EK50mCmj5FoaIARnVv0rvjUS/YpDox0cDU9lpQT011VBA==}
 
-  /@types/qs@6.9.14:
-    resolution: {integrity: sha512-5khscbd3SwWMhFqylJBLQ0zIu7c1K6Vz0uBIt915BI3zV0q1nfjRQD3RqSBcPaO6PHEF4ov/t9y89fSiyThlPA==}
+  /@types/qs@6.9.17:
+    resolution: {integrity: sha512-rX4/bPcfmvxHDv0XjfJELTTr+iB+tn032nPILqHm5wbthUUUuVtNGGqzhya9XUxjTP8Fpr0qYgSZZKxGY++svQ==}
 
   /@types/qunit@2.11.3:
     resolution: {integrity: sha512-UF/4jDehcpRlMXzKXi2Z59Id48/uYlMeUDhYdjFrVVwy30Eud/e60Ok3yVjSPlHprafj3B315uFTrF6eqQTeSw==}

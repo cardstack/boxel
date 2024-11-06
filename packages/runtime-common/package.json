@@ -25,7 +25,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",
-    "@types/qs": "^6.9.14",
+    "@types/qs": "^6.9.17",
     "@types/uuid": "^9.0.8",
     "babel-import-util": "^1.2.2",
     "babel-plugin-ember-template-compilation": "^2.2.1",

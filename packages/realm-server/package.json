@@ -22,7 +22,7 @@
     "@types/mime-types": "^2.1.1",
     "@types/node": "^18.18.5",
     "@types/pg": "^8.11.5",
-    "@types/qs": "^6.9.14",
+    "@types/qs": "^6.9.17",
     "@types/qunit": "^2.11.3",
     "@types/sane": "^2.0.1",
     "@types/supertest": "^2.0.12",

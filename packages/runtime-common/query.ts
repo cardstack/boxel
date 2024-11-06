@@ -431,6 +431,5 @@ export function assertKey(key: string, pointer: string[]) {
 }
 
 export const parseQuery = (queryString: string) => {
-  // @ts-expect-error no types for qs.parse strictDepth
   return qs.parse(queryString, { depth: 10, strictDepth: true });
 };
