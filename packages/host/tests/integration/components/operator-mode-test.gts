@@ -1258,6 +1258,10 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom(`[data-test-stack-card-index="2"]`).exists();
     await click('[data-test-stack-card-index="0"] [data-test-card-header]');
+
+    await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
+    await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
+
     assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
