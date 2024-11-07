@@ -186,7 +186,7 @@ export default class RealmServerService extends Service {
       throw new Error('Could not login to realm server');
     }
 
-    let response = await this.network.authedFetch(`${this.url.origin}/_user`, {
+    let response = await this.network.fetch(`${this.url.origin}/_user`, {
       headers: {
         Accept: SupportedMimeType.JSONAPI,
         'Content-Type': 'application/json',
