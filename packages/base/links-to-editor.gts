@@ -14,15 +14,14 @@ import {
   type BaseDef,
   type Box,
   type Field,
-  CardContext,
-  realmURL,
-  getContainingCard,
+  type CardContext,
 } from './card-api';
 import {
   chooseCard,
   baseCardRef,
   identifyCard,
   CardContextName,
+  RealmURLContextName,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
@@ -39,6 +38,7 @@ interface Signature {
 
 export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
     <PermissionsConsumer as |permissions|>
@@ -150,12 +150,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         offerToCreate: {
           ref: type,
           relativeTo: undefined,
-          realmURL: this.args.model.value?.[realmURL],
+          realmURL: this.realmURL,
         },
         createNewCard: this.cardContext?.actions?.createCard,
-        consumingCard: this.args.model.containingBox
-          ? getContainingCard(this.args.model.containingBox)
-          : undefined,
+        consumingRealm: this.realmURL,
       },
     );
     if (chosenCard) {

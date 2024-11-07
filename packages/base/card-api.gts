@@ -3023,13 +3023,6 @@ export class Box<T> {
     }
   }
 
-  get containingBox(): Box<any> | undefined {
-    if (this.state.type === 'root') {
-      return undefined;
-    }
-    return this.state.containingBox;
-  }
-
   get name() {
     return this.state.type === 'derived' ? this.state.fieldName : undefined;
   }
@@ -3124,17 +3117,6 @@ export class Box<T> {
     this.prevChildren = newChildren;
     return newChildren;
   }
-}
-
-export function getContainingCard(model: Box<unknown>): CardDef | undefined {
-  if (isCardInstance(model.value)) {
-    return model.value;
-  }
-  let containingModel = model.containingBox;
-  if (containingModel) {
-    return getContainingCard(containingModel);
-  }
-  return undefined;
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;

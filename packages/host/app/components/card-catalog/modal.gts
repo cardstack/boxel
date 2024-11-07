@@ -96,7 +96,7 @@ type State = {
   selectedRealmUrls: string[];
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
-  consumingCard?: CardDef;
+  consumingRealm?: URL;
 };
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -306,7 +306,7 @@ export default class CardCatalogModal extends Component<Signature> {
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
       preselectedCardTypeQuery?: Query;
-      consumingCard?: CardDef;
+      consumingRealm?: URL;
     },
   ): Promise<undefined | T> {
     return (await this._chooseCard.perform(
@@ -340,7 +340,7 @@ export default class CardCatalogModal extends Component<Signature> {
         };
         multiSelect?: boolean;
         preselectedCardTypeQuery?: Query;
-        consumingCard?: CardDef;
+        consumingRealm?: URL;
       } = {},
     ) => {
       this.stateId++;
@@ -384,7 +384,7 @@ export default class CardCatalogModal extends Component<Signature> {
         selectedRealmUrls: this.realmServer.availableRealmURLs,
         selectedCard: preselectedCardUrl,
         hasPreselectedCard: Boolean(preselectedCardUrl),
-        consumingCard: opts.consumingCard,
+        consumingRealm: opts.consumingRealm,
       });
       this.stateStack.push(cardCatalogState);
 
@@ -548,17 +548,9 @@ export default class CardCatalogModal extends Component<Signature> {
           );
         }
 
-        if (this.state.consumingCard) {
-          let realmOfConsumer = (
-            await this.cardService.getRealmURL(this.state.consumingCard)
-          )?.href;
-          if (!realmOfConsumer) {
-            throw new Error(
-              `could not determine realm of consuming card ${this.state.consumingCard.id}`,
-            );
-          }
+        if (this.state.consumingRealm) {
           await this.ensureRealmReadPermissions.perform(
-            realmOfConsumer,
+            this.state.consumingRealm.href,
             realmOfSelectedCard,
           );
         }
