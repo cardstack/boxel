@@ -29,7 +29,7 @@ export default class FileTree extends Component<Signature> {
   <template>
     <WithLoadedRealm @realmURL={{@realmURL.href}} as |realm|>
       <div class='realm-info'>
-        <RealmIcon @realmInfo={{realm.info}} class='icon' />
+        <RealmIcon @realmInfo={{realm.info}} />
         {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
           <span
             class='realm-title'
@@ -89,9 +89,9 @@ export default class FileTree extends Component<Signature> {
       }
       .realm-info {
         position: sticky;
-        top: calc(var(--boxel-sp-xxs) * -1);
+        top: calc(var(--boxel-sp-xs) * -1);
         left: calc(var(--boxel-sp-xs) * -1);
-        margin: calc(var(--boxel-sp-xxs) * -1) calc(var(--boxel-sp-xs) * -1) 0
+        margin: calc(var(--boxel-sp-xs) * -1) calc(var(--boxel-sp-xs) * -1) 0
           calc(var(--boxel-sp-xs) * -1);
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         background-color: var(--boxel-light);
@@ -103,11 +103,6 @@ export default class FileTree extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         font: 600 var(--boxel-font-sm);
-      }
-
-      .realm-info .realm-icon-img {
-        min-width: var(--boxel-icon-sm);
-        min-height: var(--boxel-icon-sm);
       }
 
       .realm-title {
