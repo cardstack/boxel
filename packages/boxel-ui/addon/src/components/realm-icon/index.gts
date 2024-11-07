@@ -58,6 +58,7 @@ export default class RealmIcon extends Component<Signature> {
             transparent
           );
           border-radius: var(--border-radius);
+          flex-shrink: 0;
         }
         .can-animate {
           --border-width: var(--boxel-realm-icon-border-width, 1px);

@@ -92,10 +92,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       data-test-code-mode-card-preview-header={{@card.id}}
       ...attributes
     >
-      <RealmIcon
-        @realmInfo={{this.realm.info @realmURL.href}}
-        class='header-icon'
-      />
+      <RealmIcon @realmInfo={{this.realm.info @realmURL.href}} />
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
       </div>
@@ -210,10 +207,6 @@ export default class CardPreviewPanel extends Component<Signature> {
         display: flex;
         gap: var(--boxel-sp-xxs);
         align-items: center;
-      }
-
-      .header-icon {
-        flex-shrink: 0;
       }
 
       .preview-body {
