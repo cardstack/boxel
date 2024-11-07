@@ -315,10 +315,20 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     await waitFor('[data-test-submode-switcher=code]');
     assert.dom('[data-test-submode-switcher=code]').exists();
-    // TODO: assert the right card JSON is open in code mode
-    // TODO: switch back to interact mode
-    // TODO:     // await click('[data-test-open-ai-assistant]');
-    // TODO: open the session with the bot
-    // TODO: assert the messages can be seen
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${testCard}.json`);
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    await click('[data-test-open-ai-assistant]');
+    assert
+      .dom(
+        '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+      )
+      .containsText('Switch to code mode');
+    assert
+      .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
+      .containsText('Switching to code submode');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists();
   });
 });

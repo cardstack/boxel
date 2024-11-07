@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { Credentials, putEvent, registerUser } from '../docker/synapse';
-import SwitchSubmodeCommand from '../../host/app/commands/switch-submode';
+
 import {
   login,
   getRoomId,

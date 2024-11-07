@@ -4,6 +4,8 @@ import { task } from 'ember-concurrency';
 
 import flatMap from 'lodash/flatMap';
 
+import { IEvent } from 'matrix-js-sdk';
+
 import {
   Command,
   type LooseSingleCardDocument,
@@ -52,6 +54,30 @@ export default class CommandService extends Service {
     let name = `${command.name}_${this.commandNonce++}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
     this.commands.set(name, { command, autoExecute });
     return name;
+  }
+
+  public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+    // examine the tool_call and see if it's a command that we know how to run
+    let toolCall = event?.content?.data?.toolCall;
+    if (!toolCall) {
+      return;
+    }
+    // TODO: check whether this toolCall was already executed and exit if so
+    let { name } = toolCall;
+    let { command, autoExecute } = this.commands.get(name) ?? {};
+    if (!command || !autoExecute) {
+      return;
+    }
+    // Get the input type and validate/construct the payload
+    let InputType = await command.getInputType();
+    // Construct a new instance of the input type with the payload
+    let typedInput = new InputType(toolCall.arguments);
+    await command.execute(typedInput);
+    await this.matrixService.sendReactionEvent(
+      event.room_id!,
+      event.event_id!,
+      'applied',
+    );
   }
 
   //TODO: Convert to non-EC async method after fixing CS-6987

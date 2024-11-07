@@ -1152,6 +1152,12 @@ export default class MatrixService extends Service {
     } else {
       await this.addRoomEvent(event);
     }
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.command'
+    ) {
+      this.commandService.executeCommandEventIfNeeded(event);
+    }
 
     if (room.oldState.paginationToken != null) {
       // we need to scroll back to capture any room events fired before this one
