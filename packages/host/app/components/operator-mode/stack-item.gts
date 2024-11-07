@@ -609,21 +609,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }
       }
 
-      .header {
-        --boxel-card-header-border-radius: var(--boxel-border-radius-xl);
-        --boxel-card-header-background-color: var(--boxel-light);
-        z-index: 1;
-        max-width: max-content;
-        height: fit-content;
-        min-width: 100%;
-        gap: var(--boxel-sp-xxs);
-      }
-
-      .save-indicator {
-        font: var(--boxel-font-xs);
-        opacity: 0.6;
-      }
-
       .item {
         --stack-item-header-height: 3rem;
         justify-self: center;
