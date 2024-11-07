@@ -21,7 +21,7 @@ function render<Params>(
   owner: Owner,
   Content: ComponentLike<{ Args: { params: Params } }>,
   params: Params,
-): void {
+): { rerender: () => void } {
   // this needs to be a template-only component because the way we're invoking it
   // just grabs the template and would drop any associated class.
   const root = <template><Content @params={{params}} /></template>;
@@ -45,7 +45,16 @@ function render<Params>(
   let vm = (iterator as any).vm;
 
   try {
-    inTransaction(_runtime.env, () => vm._execute());
+    let result: any;
+    inTransaction(_runtime.env, () => {
+      result = vm._execute();
+    });
+    return {
+      rerender() {
+        // NEXT: this needs to get wrapped with our own inTransaction just like the initial render so it doesn't interact with the default tracking frames.
+        result.rerender({ alwaysRevalidate: false });
+      },
+    };
   } catch (err: any) {
     // This is to compensate for the commitCacheGroup op code that is not called because
     // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
@@ -87,24 +96,31 @@ export default class ErrorTrap<T> extends Component<{
 }> {
   @tracked failed = false;
 
-  firstRender = true;
+  renderer: { rerender(): void } | undefined;
 
-  render = modifier((element) => {
-    if (!this.firstRender) {
-      return;
-    }
-    this.firstRender = false;
+  attach = modifier((element) => {
     try {
-      render(element, getOwner(this)!, this.args.content, this.args.params);
+      if (this.renderer) {
+        this.renderer.rerender();
+      } else {
+        this.renderer = render(
+          element,
+          getOwner(this)!,
+          this.args.content,
+          this.args.params,
+        );
+      }
       this.failed = false;
     } catch (err) {
+      debugger;
       removeChildren(element);
       this.failed = true;
+      this.renderer = undefined;
     }
   });
 
   <template>
-    <div {{this.render}} />
+    <div {{this.attach}} />
     {{#if this.failed}}
       <div data-test-error-trap>Something went wrong</div>
     {{/if}}
