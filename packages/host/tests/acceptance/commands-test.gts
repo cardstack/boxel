@@ -1,5 +1,8 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
+
+import { waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -16,6 +19,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  delay,
 } from '../helpers';
 
 import {
@@ -32,65 +36,6 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import { waitUntil } from '@ember/test-helpers';
-
-async function assertMessages(
-  assert: Assert,
-  messages: {
-    from: string;
-    message?: string;
-    cards?: { id: string; title?: string; realmIconUrl?: string }[];
-  }[],
-) {
-  assert.dom('[data-test-message-idx]').exists({ count: messages.length });
-  for (let [index, { from, message, cards }] of messages.entries()) {
-    assert
-      .dom(
-        `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
-      )
-      .exists({ count: 1 });
-    if (message != null) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] .content`)
-        .containsText(message);
-    }
-    if (cards?.length) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
-        .exists({ count: 1 });
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
-        .exists({ count: cards.length });
-      cards.map(async (card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
-            throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
-            );
-          }
-          // note: attached cards are in atom format (which display the title by default)
-          assert
-            .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
-            )
-            .containsText(card.title);
-        }
-
-        if (card.realmIconUrl) {
-          assert
-            .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
-            )
-            .exists({ count: 1 });
-        }
-      });
-    } else {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
-        .doesNotExist();
-    }
-  }
-}
 
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -166,7 +111,7 @@ module('Acceptance | Commands tests', function (hooks) {
       });
 
       static isolated = class Isolated extends Component<typeof this> {
-        runSwitchToCodeModeCommandViaAiAssistant = () => {
+        runSwitchToCodeModeCommandViaAiAssistant = (autoExecute: boolean) => {
           let commandContext = this.args.context?.commandContext;
           if (!commandContext) {
             console.error('No command context found');
@@ -178,7 +123,7 @@ module('Acceptance | Commands tests', function (hooks) {
           >('switch-submode');
           commandContext.sendAiAssistantMessage({
             prompt: 'Switch to code mode',
-            commands: [{ command: switchSubmodeCommand, autoExecute: true }],
+            commands: [{ command: switchSubmodeCommand, autoExecute }],
           });
         };
         <template>
@@ -193,9 +138,19 @@ module('Acceptance | Commands tests', function (hooks) {
           Friends:
           <@fields.friends />
           <button
-            {{on 'click' this.runSwitchToCodeModeCommandViaAiAssistant}}
-            data-test-switch-to-code-mode-button
-          >Switch to code-mode</button>
+            {{on
+              'click'
+              (fn this.runSwitchToCodeModeCommandViaAiAssistant true)
+            }}
+            data-test-switch-to-code-mode-with-autoexecute-button
+          >Switch to code-mode with autoExecute</button>
+          <button
+            {{on
+              'click'
+              (fn this.runSwitchToCodeModeCommandViaAiAssistant false)
+            }}
+            data-test-switch-to-code-mode-without-autoexecute-button
+          >Switch to code-mode (no autoExecute)</button>
         </template>
       };
     }
@@ -231,7 +186,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('a command sent via sendAiAssistantMessage with autoExecute flag can be automatically executed by the bot', async function (assert) {
+  test('a command sent via sendAiAssistantMessage with autoExecute flag is automatically executed by the bot', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -245,11 +200,10 @@ module('Acceptance | Commands tests', function (hooks) {
     const testCard = `${testRealmURL}Person/hassan`;
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
-    //Test the scenario where there is an update to the card
     await click(
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
     );
-    await click('[data-test-switch-to-code-mode-button]');
+    await click('[data-test-switch-to-code-mode-with-autoexecute-button]');
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds()[0];
     let message = getRoomEvents(roomId).pop()!;
@@ -313,6 +267,121 @@ module('Acceptance | Commands tests', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
+    await waitFor('[data-test-submode-switcher=code]');
+    assert.dom('[data-test-submode-switcher=code]').exists();
+    assert.dom('[data-test-card-url-bar-input]').hasValue(`${testCard}.json`);
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    await click('[data-test-open-ai-assistant]');
+    assert
+      .dom(
+        '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+      )
+      .containsText('Switch to code mode');
+    assert
+      .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
+      .containsText('Switching to code submode');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists();
+  });
+
+  test('a command sent via sendAiAssistantMessage without autoExecute flag is not automatically executed by the bot', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+    );
+    await click('[data-test-switch-to-code-mode-without-autoexecute-button]');
+    await waitUntil(() => getRoomIds().length > 0);
+    let roomId = getRoomIds()[0];
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    let boxelMessageData = message.content.data;
+    assert.strictEqual(boxelMessageData.context.tools.length, 1);
+    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
+    let toolName = boxelMessageData.context.tools[0].function.name;
+    assert.ok(
+      /^SwitchSubmodeCommand_/.test(toolName),
+      'The function name start with SwitchSubmodeCommand_',
+    );
+    assert.strictEqual(
+      boxelMessageData.context.tools[0].function.description,
+      'Navigate the UI to another submode. Possible values for submode are "interact" and "code".',
+    );
+    // TODO: do we need to include `required: ['attributes'],` in the parameters object? If so, how?
+    assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
+      type: 'object',
+      properties: {
+        attributes: {
+          type: 'object',
+          properties: {
+            submode: {
+              type: 'string',
+            },
+            title: {
+              type: 'string',
+            },
+            description: {
+              type: 'string',
+            },
+            thumbnailURL: {
+              type: 'string',
+            },
+          },
+        },
+        relationships: {
+          properties: {},
+          required: [],
+          type: 'object',
+        },
+      },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Switching to code submode',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'Switching to code submode',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            submode: 'code',
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+    await delay(500);
+    assert.dom('[data-test-submode-switcher=interact]').exists();
+    await click('[data-test-open-ai-assistant]');
+    assert
+      .dom(
+        '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+      )
+      .containsText('Switch to code mode');
+    assert
+      .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
+      .containsText('Switching to code submode');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="ready"]')
+      .exists();
+    await click('[data-test-message-idx="1"] [data-test-command-apply]');
     await waitFor('[data-test-submode-switcher=code]');
     assert.dom('[data-test-submode-switcher=code]').exists();
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${testCard}.json`);
