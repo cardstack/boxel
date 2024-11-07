@@ -63,8 +63,9 @@ export class CreateProductRequirementsInstance extends Command<
       undefined
     >('save-card'); // lookupCommand creates the instance and passes in the context
 
+    let SaveCardInputType = await saveCardCommand.getInputType();
     await saveCardCommand.execute(
-      new saveCardCommand.inputType({
+      new SaveCardInputType({
         realm: input.realm,
         card: prdCard,
       }),

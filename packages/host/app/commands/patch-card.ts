@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { Command, baseRealm } from '@cardstack/runtime-common';
+import { Command, baseRealm, type PatchData } from '@cardstack/runtime-common';
 
 import {
   RelationshipsSchema,
@@ -12,7 +12,24 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
+type PatchPayload = { card_id: string } & PatchData;
+
+function hasPatchData(payload: any): payload is PatchPayload {
+  return (
+    (typeof payload === 'object' &&
+      payload !== null &&
+      'card_id' in payload &&
+      'attributes' in payload) ||
+    (typeof payload === 'object' &&
+      payload !== null &&
+      'card_id' in payload &&
+      'relationships' in payload)
+  );
+}
+
 // import type CardService from '../services/card-service';
+import OperatorModeStateService from '../services/operator-mode-state-service';
+
 import type LoaderService from '../services/loader-service';
 
 export default class PatchCardCommand extends Command<
@@ -21,6 +38,7 @@ export default class PatchCardCommand extends Command<
   { cardType: typeof CardDef }
 > {
   // @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
 
   description = `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`;
@@ -34,11 +52,20 @@ export default class PatchCardCommand extends Command<
   }
 
   protected async run(
-    _input: BaseCommandModule.PatchCardInput,
+    input: BaseCommandModule.PatchCardInput,
   ): Promise<undefined> {
     // await this.cardService.saveModel(this, input.card, input.realm);
     // TODO: delegate to cardService patchCard incoporating OperatorModeStateService#patchCard
-    throw new Error('Not implemented');
+    debugger;
+    if (!hasPatchData(input.patch)) {
+      throw new Error(
+        "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
+      );
+    }
+    await this.operatorModeStateService.patchCard.perform(input.cardId, {
+      attributes: input.patch.attributes,
+      relationships: input.patch.relationships,
+    });
   }
 
   async getInputJsonSchema(
@@ -54,8 +81,16 @@ export default class PatchCardCommand extends Command<
       cardApi,
       mappings,
     );
-    return cardTypeToPatchSchema;
-    // TODO: merge cardTypeToPatchSchema into inputTypeSchema specifying the schema of the "patch" attribute
-    // return inputTypeSchema;
+    const inputTypeSchema = {
+      cardId: { type: 'string' },
+      patch: {
+        type: 'object',
+        properties: {
+          attributes: cardTypeToPatchSchema.attributes,
+        },
+      },
+    };
+    debugger;
+    return inputTypeSchema;
   }
 }

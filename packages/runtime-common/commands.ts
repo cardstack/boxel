@@ -59,7 +59,7 @@ export abstract class Command<
   CommandConfiguration extends any | undefined = undefined,
 > {
   // Is this actually type checking ?
-  abstract getInputType(): Promise<typeof CardDef>;
+  abstract getInputType(): Promise<{ new (args: any): CardInputType }>; // TODO: can we do better than any here?
 
   invocations: CommandInvocation<CardInputType, CardResultType>[] = [];
 

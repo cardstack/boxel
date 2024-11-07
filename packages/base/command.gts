@@ -58,7 +58,7 @@ export class SaveCardInput extends CardDef {
 }
 
 export class PatchCardInput extends CardDef {
-  @field card = linksTo(CardDef);
+  @field cardId = contains(StringField);
   @field patch = contains(FieldDef); //TODO: JSONField ?
 }
 
