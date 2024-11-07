@@ -71,6 +71,8 @@ import {
 } from '../billing/billing-queries';
 import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
 import { StripeInvoicePaymentSucceededWebhookEvent } from '../billing/stripe-webhook-handlers';
+import { createJWT as createRealmServerJWT } from '../utils/jwt';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -141,7 +143,6 @@ module('Realm Server', function (hooks) {
   }
 
   let testRealm: Realm;
-  let testRealmServer: RealmServer;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
@@ -163,20 +164,18 @@ module('Realm Server', function (hooks) {
           copySync(join(__dirname, 'cards'), testRealmDir);
         }
         let virtualNetwork = createVirtualNetwork();
-        dbAdapter = _dbAdapter;
-        ({ testRealm, testRealmHttpServer, testRealmServer } =
-          await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
+        ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_1'),
+          realmURL: testRealmURL,
+          permissions,
+          dbAdapter: _dbAdapter,
+          runner,
+          publisher,
+          matrixURL,
+          fileSystem,
+        }));
 
         request = supertest(testRealmHttpServer);
       },
@@ -199,6 +198,7 @@ module('Realm Server', function (hooks) {
 
   hooks.afterEach(async function () {
     await closeServer(testRealmHttpServer);
+    resetCatalogRealms();
   });
 
   module('permissions requests', function (hooks) {
@@ -2845,7 +2845,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3029,7 +3029,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3101,7 +3101,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
@@ -3238,7 +3238,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send('make a new realm please!');
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
@@ -3253,7 +3253,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3272,7 +3272,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3300,7 +3300,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3327,7 +3327,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3357,7 +3357,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3378,7 +3378,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
@@ -3409,7 +3409,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
@@ -3436,7 +3436,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({

@@ -7,6 +7,12 @@ import {
 import type Koa from 'koa';
 import mime from 'mime-types';
 import { nodeStreamToText } from '../stream';
+import { retrieveTokenClaim } from '../utils/jwt';
+import {
+  AuthenticationError,
+  AuthenticationErrorMessages,
+  SupportedMimeType,
+} from '@cardstack/runtime-common/router';
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -98,6 +104,82 @@ export async function fetchRequestFromContext(
     headers: ctxt.req.headers as { [name: string]: string },
     ...(reqBody ? { body: reqBody } : {}),
   });
+}
+
+export function jwtMiddleware(
+  secretSeed: string,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let authorization = ctxt.req.headers['authorization'];
+    if (!authorization) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
+      return;
+    }
+
+    try {
+      // Currently the only permission possible for the realm-server is the
+      // permission to create a realm which is available for any matrix user,
+      // as such we are only checking that the jwt is valid as opposed to
+      // fetching permissions and comparing the JWT to what is configured on
+      // the server. If we introduce another type of realm-server permission,
+      // then we will need to compare the token with what is configured on the
+      // server.
+      ctxt.state.token = retrieveTokenClaim(authorization, secretSeed);
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        await sendResponseForForbiddenRequest(ctxt, e.message);
+        return;
+      }
+      throw e;
+    }
+
+    await next();
+  };
+}
+
+export async function sendResponseForBadRequest(
+  ctxt: Koa.Context,
+  message: string,
+) {
+  await sendResponseForError(ctxt, 400, 'Bad Request', message);
+}
+
+export async function sendResponseForForbiddenRequest(
+  ctxt: Koa.Context,
+  message: string,
+) {
+  await sendResponseForError(ctxt, 401, 'Forbidden Request', message);
+}
+
+export async function sendResponseForSystemError(
+  ctxt: Koa.Context,
+  message: string,
+) {
+  await sendResponseForError(ctxt, 500, 'System Error', message);
+}
+
+export async function sendResponseForError(
+  ctxt: Koa.Context,
+  status: number,
+  statusText: string,
+  message: string,
+) {
+  await setContextResponse(
+    ctxt,
+    new Response(
+      JSON.stringify({
+        errors: [message],
+      }),
+      {
+        status,
+        statusText,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+    ),
+  );
 }
 
 export async function setContextResponse(
