@@ -300,7 +300,7 @@ export default class CardPreviewPanel extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
-        border-radius: 4px;
+        border-radius: var(--boxel-border-radius-xs);
 
         display: flex;
         align-items: center;

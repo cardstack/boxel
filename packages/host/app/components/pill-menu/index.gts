@@ -101,10 +101,10 @@ export default class PillMenu extends Component<Signature> {
         {{#if @canAttachCard}}
           <footer class='menu-footer'>
             <AddButton
-              class='add-button'
+              class='attach-button'
               @variant='pill'
-              @iconWidth='15px'
-              @iconHeight='15px'
+              @iconWidth='11'
+              @iconHeight='11'
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
               data-test-pill-menu-add-button
@@ -187,26 +187,20 @@ export default class PillMenu extends Component<Signature> {
       .pill-list:deep(.card-content) {
         max-width: initial;
       }
-      .add-button {
-        width: max-content;
-        margin: var(--button-outline);
-        padding: var(--pill-menu-spacing);
+      .menu-footer {
+        padding: var(--boxel-sp-xxs);
+      }
+      .attach-button {
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
+        background: none;
+      }
+      .attach-button:hover:not(:disabled),
+      .attach-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
         background: none;
         box-shadow: none;
-        border-radius: var(--boxel-border-radius-xl);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        transition: color var(--boxel-transition);
-      }
-      .add-button:hover:not(:disabled),
-      .add-button:focus:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
-        color: var(--boxel-highlight-hover);
-        background: none;
-        box-shadow: none;
-      }
-      .add-button:focus:focus-visible {
-        outline-color: var(--boxel-highlight);
       }
     </style>
   </template>

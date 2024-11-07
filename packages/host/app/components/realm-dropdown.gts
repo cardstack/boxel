@@ -97,7 +97,7 @@ export default class RealmDropdown extends Component<Signature> {
         --boxel-menu-item-gap: var(--boxel-sp-xs);
       }
       .realm-dropdown-menu :deep(.menu-item__icon-url) {
-        border-radius: var(--code-mode-realm-icon-border-radius);
+        border-radius: var(--boxel-border-radius-xs);
       }
     </style>
   </template>

@@ -46,7 +46,10 @@ export default class RealmIcon extends Component<Signature> {
     <style scoped>
       @layer {
         .realm-icon-img {
-          --border-radius: var(--boxel-realm-icon-border-radius, 4px);
+          --border-radius: var(
+            --boxel-realm-icon-border-radius,
+            var(--boxel-border-radius-xs)
+          );
           width: var(--boxel-realm-icon-size, var(--boxel-icon-sm));
           height: var(--boxel-realm-icon-size, var(--boxel-icon-sm));
           background-size: contain;
