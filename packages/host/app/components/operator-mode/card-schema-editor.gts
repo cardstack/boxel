@@ -134,9 +134,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .linked-icon {
-        display: flex;
-        align-items: center;
-        height: 20px;
+        align-self: center;
         margin-right: var(--boxel-sp-5xs);
       }
 
@@ -155,13 +153,8 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .realm-icon {
-        --boxel-realm-icon-border: none;
-        --boxel-realm-icon-border-radius: var(
-          --code-mode-realm-icon-border-radius
-        );
-        flex-shrink: 0;
-        min-width: var(--code-mode-realm-icon-size);
-        min-height: var(--code-mode-realm-icon-size);
+        --boxel-realm-icon-size: var(--code-mode-realm-icon-size);
+        align-self: center;
       }
 
       .display-name {
@@ -358,9 +351,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                                 </span>
                               {{/if}}
                               {{#if (this.isLinkedField field)}}
-                                <span class='linked-icon' data-test-linked-icon>
-                                  <IconLink width='16px' height='16px' />
-                                </span>
+                                <IconLink
+                                  class='linked-icon'
+                                  width='16px'
+                                  height='16px'
+                                  data-test-linked-icon
+                                />
                               {{/if}}
                               <RealmIcon
                                 @realmInfo={{this.realm.info moduleUrl}}
