@@ -43,8 +43,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked taskDescription = '';
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
-  //consider which realms you are getting task from
-  liveQuery = getCards(this.getTaskQuery, [this.realmURL]);
+  staticQuery = getCards(this.getTaskQuery, [this.realmURL]);
 
   get realmURL() {
     return this.args.model[realmURL];
@@ -71,11 +70,11 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   get tasks() {
-    if (this.liveQuery === undefined) {
-      return;
+    if (this.staticQuery === undefined) {
+      return [];
     }
 
-    return this.liveQuery?.instances as Task[];
+    return this.staticQuery?.instances as Task[];
   }
 
   get columns() {
@@ -87,10 +86,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   @action getTaskWithStatus(status: string) {
-    if (this.tasks === undefined) {
-      return [];
-    }
-    return this.tasks?.filter((task) => task.status.label === status);
+    return this.tasks.filter((task) => task.status.label === status);
   }
 
   @action
