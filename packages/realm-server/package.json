@@ -91,7 +91,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "drop-all-dbs": "./scripts/drop-all-dbs.sh"
+    "full-reset": "./scripts/full-reset.sh"
   },
   "volta": {
     "extends": "../../package.json"

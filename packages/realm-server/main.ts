@@ -184,7 +184,7 @@ let autoMigrate = migrateDB || undefined;
     manager.getOptions.bind(manager),
   );
 
-  await startWorker();
+  await startWorker({ autoMigrate });
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -305,7 +305,7 @@ let autoMigrate = migrateDB || undefined;
   process.exit(-3);
 });
 
-async function startWorker() {
+async function startWorker(opts?: { autoMigrate?: true }) {
   let worker = spawn(
     'ts-node',
     [
@@ -314,6 +314,7 @@ async function startWorker() {
       `--port=${port}`,
       `--matrixURL='${matrixURL}'`,
       `--distURL='${distURL}'`,
+      ...(opts?.autoMigrate ? [`--migrateDB`] : []),
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
           `--fromUrl='${from}'`,
