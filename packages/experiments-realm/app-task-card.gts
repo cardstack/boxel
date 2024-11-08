@@ -36,6 +36,7 @@ import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
 import Checklist from '@cardstack/boxel-icons/checklist';
+import type Owner from '@ember/owner';
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked loadingColumnKey: string | undefined;
@@ -43,7 +44,32 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked taskDescription = '';
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
-  staticQuery = getCards(this.getTaskQuery, [this.realmURL]);
+  @tracked
+  private declare staticQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+  };
+
+  @tracked columns: DndColumn[] = [];
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    let taskQuery = this.getTaskQuery;
+    this.loadTasks.perform(taskQuery);
+  }
+
+  private loadTasks = restartableTask(async (query: Query) => {
+    this.staticQuery = getCards(query, [this.realmURL]);
+    await this.staticQuery.loaded;
+    let tasks = this.staticQuery?.instances as Task[];
+    this.columns = this.statuses?.map((status: LooseyGooseyData) => {
+      let statusLabel = status.label;
+      let cards = tasks.filter((task) => task.status.label === statusLabel);
+      return new DndColumn(statusLabel, cards);
+    });
+  });
+
+  // staticQuery = getCards(this.getTaskQuery, [this.realmURL]);
 
   get realmURL() {
     return this.args.model[realmURL];
@@ -67,26 +93,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   //static statuses before query
   get statuses() {
     return TaskStatusField.values;
-  }
-
-  get tasks() {
-    if (this.staticQuery === undefined) {
-      return [];
-    }
-
-    return this.staticQuery?.instances as Task[];
-  }
-
-  get columns() {
-    return this.statuses?.map((status: LooseyGooseyData) => {
-      let statusLabel = status.label;
-      let cards = this.getTaskWithStatus(status.label);
-      return new DndColumn(statusLabel, cards);
-    });
-  }
-
-  @action getTaskWithStatus(status: string) {
-    return this.tasks.filter((task) => task.status.label === status);
   }
 
   @action
@@ -183,7 +189,14 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 
   @action async onMoveCardMutation(draggedCard: DndItem, newColumn: DndColumn) {
     // This only updates the value of the card but doesn't commit to fileystem nor server
-    draggedCard.status.label = newColumn.title;
+    let status = TaskStatusField.values.find(
+      (value) => value.label === newColumn.title,
+    );
+    let cardInNewCol = newColumn.cards.find((c) => c.id === draggedCard.id);
+    cardInNewCol.status.label = status.label;
+    cardInNewCol.status.index = status.index;
+    //TODO: save the card!
+    // await this.args.context?.actions?.saveCard?.(cardInNewCol);
   }
 
   <template>
@@ -220,35 +233,40 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 
       </div>
       <div class='columns-container'>
-        <DndKanbanBoard
-          @columns={{this.columns}}
-          @onMove={{this.onMoveCardMutation}}
-        >
-          <:header as |column|>
-            <ColumnHeader
-              @statusLabel={{column.title}}
-              @createNewTask={{this.createNewTask}}
-              @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
-            />
-          </:header>
-          <:card as |card|>
-            {{#let (getComponent card) as |CardComponent|}}
-              <div
-                {{@context.cardComponentModifier
-                  cardId=card.id
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-                data-test-cards-grid-item={{removeFileExtension card.id}}
-                data-cards-grid-item={{removeFileExtension card.id}}
-              >
-                <CardComponent class='card' />
-              </div>
-            {{/let}}
+        {{#if this.loadTasks.isRunning}}
+          Loading..
+        {{else}}
+          <DndKanbanBoard
+            @columns={{this.columns}}
+            @onMove={{this.onMoveCardMutation}}
+          >
+            <:header as |column|>
+              <ColumnHeader
+                @statusLabel={{column.title}}
+                @createNewTask={{this.createNewTask}}
+                @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
+              />
+            </:header>
+            <:card as |card|>
+              {{#let (getComponent card) as |CardComponent|}}
+                <div
+                  {{@context.cardComponentModifier
+                    cardId=card.id
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                  data-test-cards-grid-item={{removeFileExtension card.id}}
+                  data-cards-grid-item={{removeFileExtension card.id}}
+                >
+                  <CardComponent class='card' />
+                </div>
+              {{/let}}
 
-          </:card>
-        </DndKanbanBoard>
+            </:card>
+          </DndKanbanBoard>
+
+        {{/if}}
       </div>
     </div>
 
