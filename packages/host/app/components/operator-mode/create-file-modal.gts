@@ -264,7 +264,7 @@ export default class CreateFileModal extends Component<Signature> {
     </WithKnownRealmsLoaded>
     <style scoped>
       .create-file-modal {
-        --horizontal-gap: var(--boxel-sp-xxs);
+        --horizontal-gap: var(--boxel-sp-xs);
       }
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
@@ -803,16 +803,18 @@ interface SelectedTypePillSignature {
   };
 }
 
-class SelectedTypePill extends Component<SelectedTypePillSignature> {
+export class SelectedTypePill extends Component<SelectedTypePillSignature> {
   @service private declare realm: RealmService;
 
   <template>
     <Pill class='selected-type' data-test-selected-type={{@title}}>
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @id}} class='icon' />
+        <RealmIcon @realmInfo={{this.realm.info @id}} />
       </:iconLeft>
       <:default>
-        {{@title}}
+        <span class='boxel-contents-only' data-test-selected-type-display-name>
+          {{@title}}
+        </span>
       </:default>
     </Pill>
     <style scoped>
@@ -820,9 +822,6 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
         --pill-gap: var(--boxel-sp-xxs);
         --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
         min-height: 2rem;
-      }
-      .selected-type :deep(.icon) {
-        margin-right: 0;
       }
     </style>
   </template>

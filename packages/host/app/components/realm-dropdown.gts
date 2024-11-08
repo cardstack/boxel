@@ -69,10 +69,12 @@ export default class RealmDropdown extends Component<Signature> {
     </BoxelDropdown>
     <style scoped>
       .realm-dropdown-trigger {
+        height: 37px;
         width: 100%;
         max-width: 100%;
-        display: flex;
-        justify-content: flex-start;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        justify-items: flex-start;
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
         border-radius: var(--boxel-border-radius);
@@ -95,6 +97,7 @@ export default class RealmDropdown extends Component<Signature> {
       .realm-dropdown-menu {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);
         --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 13rem;
       }
       .realm-dropdown-menu :deep(.menu-item__icon-url) {
         border-radius: var(--boxel-border-radius-xs);

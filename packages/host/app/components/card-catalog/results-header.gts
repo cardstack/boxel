@@ -1,8 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import cssUrl from 'ember-css-url';
-
-import { cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import { RealmIcon } from '@cardstack/boxel-ui/components';
+import { cn, not, eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
@@ -15,9 +14,9 @@ interface Signature {
 
 const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
   <header class='catalog-results-header'>
-    <div
-      style={{if @realm.iconURL (cssUrl 'background-image' @realm.iconURL)}}
-      class={{cn 'realm-icon' realm-icon--empty=(not @realm.iconURL)}}
+    <RealmIcon
+      class={{cn realm-icon--is-empty=(not @realm.iconURL)}}
+      @realmInfo={{@realm}}
     />
     <span class='realm-name' data-test-realm-name>
       {{@realm.name}}
@@ -36,28 +35,23 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
 
   <style scoped>
     .catalog-results-header {
-      --realm-icon-size: 1.25rem;
       display: flex;
       align-items: center;
-      gap: var(--boxel-sp-xs);
+      gap: var(--boxel-sp-xxs);
     }
-    .realm-icon {
-      width: var(--realm-icon-size);
-      height: var(--realm-icon-size);
-      background-size: contain;
-      background-position: center;
-    }
-    .realm-icon--empty {
-      border: 1px solid var(--boxel-dark);
-      border-radius: 100px;
+    .realm-icon--is-empty {
+      box-shadow: inset 0 0 0 1px var(--boxel-dark);
+      border-radius: 50%;
     }
     .realm-name {
       display: inline-block;
       font: 600 var(--boxel-font);
+      letter-spacing: var(--boxel-lsp-xs);
     }
     .results-count {
       display: inline-block;
       font: var(--boxel-font);
+      letter-spacing: var(--boxel-lsp-xs);
     }
   </style>
 </template>;
