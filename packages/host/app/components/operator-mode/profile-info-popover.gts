@@ -233,8 +233,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   }
 
   private get monthlyCreditText() {
-    return this.creditsAvailableInPlanAllowance &&
-      this.creditsIncludedInPlanAllowance
+    return this.creditsAvailableInPlanAllowance != null &&
+      this.creditsIncludedInPlanAllowance != null
       ? `${this.creditsAvailableInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`
       : null;
   }
@@ -242,15 +242,15 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   private get isOutOfCredit() {
     return (
       this.isOutOfPlanCreditAllowance &&
-      (!this.extraCreditsAvailableInBalance ||
+      (this.extraCreditsAvailableInBalance == null ||
         this.extraCreditsAvailableInBalance == 0)
     );
   }
 
   private get isOutOfPlanCreditAllowance() {
     return (
-      !this.creditsAvailableInPlanAllowance ||
-      !this.creditsIncludedInPlanAllowance ||
+      this.creditsAvailableInPlanAllowance == null ||
+      this.creditsIncludedInPlanAllowance == null ||
       this.creditsAvailableInPlanAllowance <= 0
     );
   }
