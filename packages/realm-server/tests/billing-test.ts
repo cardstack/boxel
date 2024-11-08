@@ -685,6 +685,7 @@ module('billing', function (hooks) {
               lines: {
                 data: [
                   {
+                    amount: 1200,
                     price: { product: 'prod_creator' },
                   },
                 ],
@@ -726,7 +727,7 @@ module('billing', function (hooks) {
   });
 
   module('subscription deleted', function () {
-    test('handles subscription cancellation and expiration', async function (assert) {
+    test('handles subscription cancellation', async function (assert) {
       let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
       let plan = await insertPlan(
         dbAdapter,
@@ -736,12 +737,18 @@ module('billing', function (hooks) {
         'prod_creator',
       );
 
-      await insertSubscription(dbAdapter, {
+      let subscription = await insertSubscription(dbAdapter, {
         user_id: user.id,
         plan_id: plan.id,
         started_at: 1,
         status: 'active',
         stripe_subscription_id: 'sub_1234567890',
+      });
+
+      await insertSubscriptionCycle(dbAdapter, {
+        subscriptionId: subscription.id,
+        periodStart: 1,
+        periodEnd: 2,
       });
 
       let stripeSubscriptionDeletedEvent = {
@@ -768,6 +775,11 @@ module('billing', function (hooks) {
       assert.strictEqual(subscriptions.length, 1);
       assert.strictEqual(subscriptions[0].status, 'canceled');
       assert.strictEqual(subscriptions[0].endedAt, 2);
+
+      let availableCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user.id,
+      });
+      assert.strictEqual(availableCredits, 0);
     });
   });
 });
