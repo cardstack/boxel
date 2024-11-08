@@ -69,8 +69,6 @@ import {
   insertSubscriptionCycle,
   insertSubscription,
 } from '../billing/billing-queries';
-import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
-import { StripeInvoicePaymentSucceededWebhookEvent } from '../billing/stripe-webhook-handlers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
