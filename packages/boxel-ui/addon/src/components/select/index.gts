@@ -65,6 +65,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     .boxel-select__dropdown {
       box-shadow: var(--boxel-box-shadow);
       border-radius: var(--boxel-form-control-border-radius);
+      z-index: var(--boxel-layer-modal-urgent);
     }
     .boxel-select__dropdown ul {
       list-style: none;
