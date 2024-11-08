@@ -2,7 +2,6 @@
 
 For a quickstart, see [here](./QUICKSTART.md)
 
-
 ## Setup
 
 - you will want the [Glint](https://marketplace.visualstudio.com/items?itemName=typed-ember.glint-vscode) vscode extension
