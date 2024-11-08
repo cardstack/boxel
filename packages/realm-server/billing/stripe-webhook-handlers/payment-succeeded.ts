@@ -39,7 +39,7 @@ export async function handlePaymentSucceeded(
     await insertStripeEvent(dbAdapter, event);
 
     let productId = event.data.object.lines.data.find(
-      (line) => line.amount >= 0, // We are only interested in the product of the invoice line where the amount is 0 (free plan) or positive (paid plans). There could be other lines with negative amounts, for example prorations for previous plans
+      (line) => line.amount >= 0, // We are only interested in the product of the invoice line where the amount is 0 (free plan) or positive (paid plans). There could be other lines with negative amounts, for example credits (in money) for unused time on previous plans.
     )?.price?.product;
 
     if (!productId) {
