@@ -2681,35 +2681,12 @@ module('Realm Server', function (hooks) {
         creditType: 'extra_credit',
         subscriptionCycleId: subscriptionCycle.id,
       });
-      let stripeInvoicePaymentSucceededEvent = {
-        id: 'evt_1234567890',
-        object: 'event',
-        type: 'invoice.payment_succeeded',
-        data: {
-          object: {
-            id: 'in_1234567890',
-            object: 'invoice',
-            amount_paid: 12, // creator plan
-            billing_reason: 'subscription_cycle',
-            period_end: 3,
-            period_start: 2,
-            subscription: 'sub_1234567890',
-            customer: 'cus_123',
-            lines: {
-              data: [
-                {
-                  price: { product: 'prod_creator' },
-                },
-              ],
-            },
-          },
-        },
-      } as StripeInvoicePaymentSucceededWebhookEvent;
-
-      await handlePaymentSucceeded(
-        dbAdapter,
-        stripeInvoicePaymentSucceededEvent,
-      );
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 2500,
+        creditType: 'plan_allowance',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
 
       let response = await request
         .get(`/_user`)
