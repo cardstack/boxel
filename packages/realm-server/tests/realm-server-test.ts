@@ -61,7 +61,7 @@ import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/s
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
-import type PgAdapter from '../pg-adapter';
+import { type PgAdapter } from '@cardstack/postgres';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');

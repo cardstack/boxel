@@ -73,6 +73,7 @@ export * from './stream';
 export * from './realm';
 export * from './fetcher';
 export * from './scoped-css';
+export * from './utils';
 export * from './authorization-middleware';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';

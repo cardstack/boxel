@@ -56,7 +56,7 @@ import {
   sign,
   verify,
 } from 'jsonwebtoken';
-import stripeWebhookHandler from './billing/stripe-webhook-handlers';
+import stripeWebhookHandler from '@cardstack/billing/stripe-webhook-handlers';
 
 interface RealmServerTokenClaim {
   user: string;

@@ -10,7 +10,7 @@ import migrate from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
-import postgresConfig from './pg-config';
+import { postgresConfig } from './pg-config';
 
 const log = logger('pg-adapter');
 
@@ -22,7 +22,7 @@ function config() {
 
 type Config = ReturnType<typeof config>;
 
-export default class PgAdapter implements DBAdapter {
+export class PgAdapter implements DBAdapter {
   #isClosed = false;
   private pool: Pool;
   private started = this.#startClient();

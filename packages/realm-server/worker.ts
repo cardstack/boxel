@@ -11,8 +11,7 @@ import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
-import PgAdapter from './pg-adapter';
-import { PgQueueRunner } from './pg-queue';
+import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 
 let log = logger('worker');
 

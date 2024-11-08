@@ -14,7 +14,7 @@ import {
   Deferred,
   Job,
 } from '@cardstack/runtime-common';
-import PgAdapter from './pg-adapter';
+import { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
