@@ -186,6 +186,7 @@ export interface CardChooser {
       };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
+      consumingRealm?: URL;
     },
   ): Promise<undefined | T>;
 }
@@ -201,6 +202,7 @@ export async function chooseCard<T extends BaseDef>(
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
     preselectedCardTypeQuery?: Query;
+    consumingRealm?: URL;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;

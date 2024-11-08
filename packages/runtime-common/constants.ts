@@ -30,6 +30,8 @@ export const DefaultFormatsContextName = 'default-format-context';
 
 export const PermissionsContextName = 'permissions-context';
 
+export const RealmURLContextName = 'realm-url-context';
+
 export interface Permissions {
   readonly canRead: boolean;
   readonly canWrite: boolean;
