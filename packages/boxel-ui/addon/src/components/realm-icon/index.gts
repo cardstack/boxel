@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
+
 import cn from '../../helpers/cn.ts';
 
 export type RealmDisplayInfo = {
