@@ -479,6 +479,7 @@ export async function fetchSubscriptionsByUserId(
     userId: result.user_id,
     planId: result.plan_id,
     startedAt: result.started_at,
+    endedAt: result.ended_at,
     status: result.status,
     stripeSubscriptionId: result.stripe_subscription_id,
   }));

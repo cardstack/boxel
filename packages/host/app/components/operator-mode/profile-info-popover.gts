@@ -217,29 +217,33 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   }
 
   private get planName() {
-    return this.plan?.name ?? '-';
+    return this.plan?.name;
   }
 
   private get creditsIncludedInPlanAllowance() {
-    return this.fetchCreditInfo.value?.plan?.creditsIncluded ?? 0;
+    return this.fetchCreditInfo.value?.plan?.creditsIncluded;
   }
 
   private get creditsAvailableInPlanAllowance() {
-    return this.fetchCreditInfo.value?.creditsAvailableInPlanAllowance ?? 0;
+    return this.fetchCreditInfo.value?.creditsAvailableInPlanAllowance;
   }
 
   private get extraCreditsAvailableInBalance() {
-    return this.fetchCreditInfo.value?.extraCreditsAvailableInBalance ?? 0;
+    return this.fetchCreditInfo.value?.extraCreditsAvailableInBalance;
   }
 
   private get monthlyCreditText() {
-    return `${this.creditsAvailableInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`;
+    return this.creditsAvailableInPlanAllowance &&
+      this.creditsIncludedInPlanAllowance
+      ? `${this.creditsAvailableInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`
+      : null;
   }
 
   private get isOutOfCredit() {
     return (
       this.isOutOfPlanCreditAllowance &&
-      this.extraCreditsAvailableInBalance == 0
+      (!this.extraCreditsAvailableInBalance ||
+        this.extraCreditsAvailableInBalance == 0)
     );
   }
 

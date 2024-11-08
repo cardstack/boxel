@@ -2642,7 +2642,7 @@ module('Realm Server', function (hooks) {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
               creditsAvailableInPlanAllowance: null,
-              extraCreditsAvailableInBalance: 0,
+              extraCreditsAvailableInBalance: null,
             },
             relationships: {
               subscription: null,

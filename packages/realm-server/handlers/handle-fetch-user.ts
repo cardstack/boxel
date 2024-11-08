@@ -80,7 +80,7 @@ export default function handleFetchUserRequest({
 
     let { user: matrixUserId } = token;
     let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-    let mostRecentSubscription: Subscription | null | undefined = undefined;
+    let mostRecentSubscription: Subscription | null = null;
     if (user) {
       mostRecentSubscription = await getMostRecentSubscription(
         dbAdapter,
@@ -88,8 +88,7 @@ export default function handleFetchUserRequest({
       );
     }
 
-    let currentSubscriptionCycle: SubscriptionCycle | null | undefined =
-      undefined;
+    let currentSubscriptionCycle: SubscriptionCycle | null = null;
     let plan: Plan | undefined = undefined;
     if (mostRecentSubscription) {
       [currentSubscriptionCycle, plan] = await Promise.all([
@@ -98,15 +97,19 @@ export default function handleFetchUserRequest({
       ]);
     }
 
-    let extraCreditsAvailableInBalance = await sumUpCreditsLedger(dbAdapter, {
-      creditType: ['extra_credit', 'extra_credit_used'],
-    });
+    let extraCreditsAvailableInBalance: number | null = null;
     let creditsAvailableInPlanAllowance: number | null = null;
     if (currentSubscriptionCycle) {
-      creditsAvailableInPlanAllowance = await sumUpCreditsLedger(dbAdapter, {
-        creditType: ['plan_allowance', 'plan_allowance_used'],
-        subscriptionCycleId: currentSubscriptionCycle.id,
-      });
+      [extraCreditsAvailableInBalance, creditsAvailableInPlanAllowance] =
+        await Promise.all([
+          sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+          }),
+          sumUpCreditsLedger(dbAdapter, {
+            creditType: ['plan_allowance', 'plan_allowance_used'],
+            subscriptionCycleId: currentSubscriptionCycle.id,
+          }),
+        ]);
     }
 
     let responseBody = {

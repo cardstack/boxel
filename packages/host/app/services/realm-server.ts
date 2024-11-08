@@ -52,8 +52,8 @@ interface Plan {
 }
 interface CreditInfo {
   plan: Plan | null;
-  creditsAvailableInPlanAllowance: number;
-  extraCreditsAvailableInBalance: number;
+  creditsAvailableInPlanAllowance: number | null;
+  extraCreditsAvailableInBalance: number | null;
 }
 
 export default class RealmServerService extends Service {
@@ -203,9 +203,9 @@ export default class RealmServerService extends Service {
       (json.included?.find((i: { type: string }) => i.type === 'plan')
         ?.attributes as Plan) ?? null;
     let creditsAvailableInPlanAllowance =
-      json.data?.attributes?.creditsAvailableInPlanAllowance;
+      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
     let extraCreditsAvailableInBalance =
-      json.data?.attributes?.extraCreditsAvailableInBalance;
+      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
     return {
       plan,
       creditsAvailableInPlanAllowance,
