@@ -265,10 +265,6 @@ export default class MatrixService extends Service {
 
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let controller = getOwner(this)!.lookup(
-      'controller:index',
-    ) as IndexController;
-    controller.workspaceChooserOpened = true;
     this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
@@ -281,7 +277,6 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
-    this._isInitializingNewUser = false;
   }
 
   public async createPersonalRealmForUser({

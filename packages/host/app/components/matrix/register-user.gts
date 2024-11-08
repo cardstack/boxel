@@ -36,6 +36,7 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AuthMode } from './auth';
+import PaymentSetup from './payment-setup';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
@@ -69,6 +70,8 @@ export default class RegisterUser extends Component<Signature> {
         @disabled={{this.validateEmail.isRunning}}
         @loading={{this.validateEmail.isRunning}}
       >Resend Email</Button>
+    {{else if (eq this.currentPage 'payment-setup')}}
+      <PaymentSetup @matrixUserId={{this.username}} />
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
         @label='This site is currently invite-only. Enter your invite code here.'
@@ -353,6 +356,10 @@ export default class RegisterUser extends Component<Signature> {
         sid: string;
         sendAttempt: number;
       }
+    | {
+        type: 'paymentSetup';
+        username: string;
+      }
     // TODO we'll need to also add a CAPTCHA state
     // this will be probably impossible to test
     // since the whole point of CAPTCHA is to detect
@@ -373,6 +380,8 @@ export default class RegisterUser extends Component<Signature> {
       return 'registration-form';
     } else if (['askForToken', 'sendToken'].includes(this.state.type)) {
       return 'token-form';
+    } else if (this.state.type === 'paymentSetup') {
+      return 'payment-setup';
     } else {
       return 'waiting-page';
     }
@@ -716,6 +725,12 @@ export default class RegisterUser extends Component<Signature> {
     // If access_token and device_id are present, RegisterResponse matches LoginResponse
     // except for the optional well_known field
     if (auth.access_token && auth.device_id) {
+      this.state = {
+        ...this.state,
+        type: 'paymentSetup',
+        username: this.state.username,
+      };
+      this.args.setMode('payment-setup');
       await this.matrixService.initializeNewUser(
         auth as LoginResponse,
         this.state.name,
