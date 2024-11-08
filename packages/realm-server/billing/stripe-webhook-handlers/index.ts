@@ -22,15 +22,24 @@ export type StripeInvoicePaymentSucceededWebhookEvent = StripeEvent & {
       id: string;
       object: 'invoice';
       amount_paid: number;
-      billing_reason: 'subscription_create' | 'subscription_cycle';
+      billing_reason:
+        | 'subscription_create'
+        | 'subscription_cycle'
+        | 'subscription_update';
       period_start: number;
       period_end: number;
       subscription: string;
       customer: string;
       lines: {
         data: Array<{
+          amount: number;
+          description: string;
           price: {
             product: string;
+          };
+          period: {
+            start: number;
+            end: number;
           };
         }>;
       };
