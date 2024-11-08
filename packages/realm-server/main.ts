@@ -19,6 +19,7 @@ import PgAdapter from './pg-adapter';
 import { PgQueuePublisher } from './pg-queue';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
+import 'decorator-transforms/globals';
 
 let log = logger('main');
 
