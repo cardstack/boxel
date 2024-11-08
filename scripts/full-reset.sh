@@ -38,8 +38,8 @@ window['@cardstack/host'].lookup('service:matrix-service')._client.setAccountDat
 "
 
 if [ ${#errors[@]} -ne 0 ]; then
-    echo "\nThe following errors occurred during execution:"
-    printf '%s\n' "${errors[@]}"
+    echo "\n\033[1;31mThe following errors occurred during execution:\033[0m"
+    printf '\033[1;31m%s\033[0m\n' "${errors[@]}"
     exit 1
 else
     echo "\nAll operations completed successfully."
