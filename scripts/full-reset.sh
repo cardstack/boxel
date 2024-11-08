@@ -11,7 +11,7 @@ run_command() {
     fi
 }
 
-cd ${SCRIPTS_DIR}/../../postgres || errors+=("Failed: changing to postgres directory")
+cd ${SCRIPTS_DIR}/../packages/postgres || errors+=("Failed: changing to postgres directory")
 run_command pnpm run drop-db boxel
 run_command pnpm run drop-db boxel_test
 run_command pnpm run drop-db boxel_base
@@ -20,7 +20,7 @@ if ! rm -rf "${SCRIPTS_DIR}/../realms"; then
     errors+=("Failed: removing realms directory")
 fi
 
-cd "${SCRIPTS_DIR}/../../matrix" || errors+=("Failed: changing to matrix directory")
+cd "${SCRIPTS_DIR}/../packages/matrix" || errors+=("Failed: changing to matrix directory")
 
 run_command pnpm stop:synapse
 

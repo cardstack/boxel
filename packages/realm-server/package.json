@@ -91,7 +91,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "full-reset": "./scripts/full-reset.sh"
+    "full-reset": "echo 'This script has moved to the root package.json'"
   },
   "volta": {
     "extends": "../../package.json"
