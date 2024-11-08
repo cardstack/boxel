@@ -76,8 +76,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         <AddButton
           class={{cn 'attach-button' icon-only=this.cardsToDisplay.length}}
           @variant='pill'
-          @iconWidth='11'
-          @iconHeight='11'
+          @iconWidth='14'
+          @iconHeight='14'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
@@ -101,6 +101,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         --boxel-add-button-pill-font: var(--boxel-font-sm);
         height: var(--pill-height);
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xs);
         background: none;
       }
       .attach-button:hover:not(:disabled),
@@ -112,7 +113,10 @@ export default class AiAssistantCardPicker extends Component<Signature> {
       }
       .attach-button.icon-only {
         width: 30px;
-        height: var(--pill-height);
+        height: var(--pill-height, 30px);
+      }
+      .attach-button > :deep(svg > path) {
+        stroke: none;
       }
     </style>
   </template>

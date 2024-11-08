@@ -103,8 +103,8 @@ export default class PillMenu extends Component<Signature> {
             <AddButton
               class='attach-button'
               @variant='pill'
-              @iconWidth='11'
-              @iconHeight='11'
+              @iconWidth='14'
+              @iconHeight='14'
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
               data-test-pill-menu-add-button
@@ -193,6 +193,7 @@ export default class PillMenu extends Component<Signature> {
       .attach-button {
         --boxel-add-button-pill-font: var(--boxel-font-sm);
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xs);
         background: none;
       }
       .attach-button:hover:not(:disabled),
@@ -201,6 +202,9 @@ export default class PillMenu extends Component<Signature> {
         color: var(--boxel-600);
         background: none;
         box-shadow: none;
+      }
+      .attach-button > :deep(svg > path) {
+        stroke: none;
       }
     </style>
   </template>
