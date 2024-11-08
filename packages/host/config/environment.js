@@ -40,6 +40,7 @@ module.exports = function (environment) {
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
+    stripePaymentLink: process.env.STRIPE_PAYMENT_LINK,
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,

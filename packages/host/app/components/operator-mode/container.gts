@@ -10,7 +10,7 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal } from '@cardstack/boxel-ui/components';
-import { and, not } from '@cardstack/boxel-ui/helpers';
+import { and, not, or } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
 
@@ -127,15 +127,20 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
+      {{#if
+        (or
+          (not this.matrixService.isLoggedIn)
+          this.matrixService.isInitializingNewUser
+        )
+      }}
+        <Auth />
+      {{else if this.isCodeMode}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
           @saveCardOnClose={{perform this.saveCard}}
         />
-      {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
-        <InteractSubmode @saveCard={{perform this.saveCard}} />
       {{else}}
-        <Auth />
+        <InteractSubmode @saveCard={{perform this.saveCard}} />
       {{/if}}
     </Modal>
 
