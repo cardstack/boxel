@@ -69,38 +69,20 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
   {{#if @hasModuleError}}
     <span class='syntax-error'>Fail to parse</span>
   {{else}}
-    <div class='total-fields' data-test-total-fields>
-      <span class='total-fields-value'>{{@totalFields}}</span>
-      <span class='total-fields-label'>{{getPlural 'Field' @totalFields}}</span>
-    </div>
+    <span class='total-fields' data-test-total-fields>
+      {{@totalFields}}
+      {{getPlural 'Field' @totalFields}}
+    </span>
   {{/if}}
 
   <style scoped>
-    .syntax-error {
-      margin-left: auto;
-      color: var(--boxel-400);
-      font-size: var(--boxel-font-size-sm);
-      font-weight: 500;
-      margin-right: var(--boxel-sp-sm);
-      margin-top: 3px;
-    }
+    .syntax-error,
     .total-fields {
-      display: flex;
-      align-items: baseline;
-      gap: var(--boxel-sp-xxxs);
       margin-left: auto;
-    }
-
-    .total-fields > * {
-      margin: 0;
-    }
-
-    .total-fields-value {
-      font: 600 var(--boxel-font);
-    }
-
-    .total-fields-label {
-      font: var(--boxel-font-sm);
+      color: var(--boxel-450);
+      font: 500 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-xl);
+      text-transform: uppercase;
     }
   </style>
 </template>;

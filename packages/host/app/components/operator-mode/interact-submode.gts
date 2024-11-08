@@ -48,6 +48,8 @@ import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
 
+import type { StackItemComponentAPI } from './stack-item';
+
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
@@ -67,14 +69,7 @@ type Values<T> = T[keyof T];
 type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
-const clearSelections = new WeakMap<StackItem, () => void>();
-const stackItemScrollers = new WeakMap<
-  StackItem,
-  {
-    stableScroll: (_changeSizeCallback: () => Promise<void>) => void;
-    scrollIntoView: (_selector: string) => void;
-  }
->();
+const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
 
 interface NeighborStackTriggerButtonSignature {
   Element: HTMLButtonElement;
@@ -139,7 +134,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    write: (card: CardDef) => Promise<CardDef | undefined>;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -251,17 +246,8 @@ export default class InteractSubmode extends Component<Signature> {
         here._copyCard.perform(card, stackIndex, deferred);
         return await deferred.promise;
       },
-      saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
-        let item = here.findCardInStack(card, stackIndex);
-        // WARNING: never await an ember concurrency perform outside of a task.
-        // Inside of a task, the `await` is actually just syntactic sugar for a
-        // `yield`. But if you await `perform()` outside of a task, that will cast
-        // the the task to an uncancellable promise which defeats the point of using
-        // ember concurrency.
-        // https://ember-concurrency.com/docs/task-cancelation-help
-        let deferred = new Deferred<void>();
-        here.save.perform(item, dismissItem, deferred);
-        await deferred.promise;
+      saveCard: async (card: CardDef): Promise<void> => {
+        await here.args.saveCard(card);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
@@ -299,7 +285,7 @@ export default class InteractSubmode extends Component<Signature> {
           stackItem = stack.find((item: StackItem) => item.card === card);
           if (stackItem) {
             let doWithStableScroll =
-              stackItemScrollers.get(stackItem)?.stableScroll;
+              stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
             if (doWithStableScroll) {
               doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
               return;
@@ -357,45 +343,10 @@ export default class InteractSubmode extends Component<Signature> {
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
     if (item.format === 'edit') {
-      let updatedCard = await this.args.write(card);
+      let updatedCard = this.args.saveCard(card);
       request?.fulfill(updatedCard);
     }
   });
-
-  private save = task(
-    async (
-      item: StackItem,
-      dismissStackItem: boolean,
-      done: Deferred<void>,
-    ) => {
-      let { request } = item;
-      let hasRejected = false;
-      try {
-        let updatedCard = await this.args.write(item.card);
-
-        if (updatedCard) {
-          request?.fulfill(updatedCard);
-          if (!dismissStackItem) {
-            return;
-          }
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      } catch (e) {
-        hasRejected = true;
-        done.reject(e);
-      } finally {
-        if (!hasRejected) {
-          done.fulfill();
-        }
-      }
-    },
-  );
 
   private runCommand = restartableTask(
     async (card: CardDef, skillCardId: string, message: string) => {
@@ -534,16 +485,18 @@ export default class InteractSubmode extends Component<Signature> {
             scrollToCard = newCard; // we scroll to the first card lexically by title
           }
         }
-        let clearSelection = clearSelections.get(sourceItem);
+        let clearSelection =
+          stackItemComponentAPI.get(sourceItem)?.clearSelections;
         if (typeof clearSelection === 'function') {
           clearSelection();
         }
         cardSelections.delete(sourceItem);
-        let scroller = stackItemScrollers.get(destinationItem);
+        let scrollIntoView =
+          stackItemComponentAPI.get(destinationItem)?.scrollIntoView;
         if (scrollToCard) {
           // Currently the destination item is always a cards-grid, so we use that
           // fact to be able to scroll to the newly copied item
-          scroller?.scrollIntoView(
+          scrollIntoView?.(
             `[data-stack-card="${destinationItem.card.id}"] [data-cards-grid-item="${scrollToCard.id}"]`,
           );
         }
@@ -595,15 +548,9 @@ export default class InteractSubmode extends Component<Signature> {
 
   private setupStackItem = (
     item: StackItem,
-    doClearSelections: () => void,
-    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-    doScrollIntoView: (selector: string) => void,
+    componentAPI: StackItemComponentAPI,
   ) => {
-    clearSelections.set(item, doClearSelections);
-    stackItemScrollers.set(item, {
-      stableScroll: doWithStableScroll,
-      scrollIntoView: doScrollIntoView,
-    });
+    stackItemComponentAPI.set(item, componentAPI);
   };
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
@@ -775,6 +722,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
+                @saveCard={{@saveCard}}
               />
             {{/let}}
           {{/each}}

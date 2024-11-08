@@ -90,11 +90,11 @@ class File extends Component<FileArgs> {
     {{/unless}}
     <style scoped>
       .recent-file {
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         padding: var(--boxel-sp-xxs);
         font-weight: 600;
         margin-bottom: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--code-mode-container-border-radius);
         display: flex;
         align-items: center;
         overflow-wrap: anywhere;
@@ -102,6 +102,10 @@ class File extends Component<FileArgs> {
       }
 
       .icon {
+        --boxel-realm-icon-border: none;
+        --boxel-realm-icon-border-radius: var(
+          --code-mode-realm-icon-border-radius
+        );
         min-width: var(--boxel-icon-sm);
         min-height: var(--boxel-icon-sm);
         margin-right: var(--boxel-sp-xxxs);

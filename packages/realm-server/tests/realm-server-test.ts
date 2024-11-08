@@ -4119,7 +4119,6 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/fitted.gts',
   'https://cardstack.com/base/default-templates/embedded.gts',
   'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
   'https://cardstack.com/base/default-templates/field-edit.gts',

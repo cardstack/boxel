@@ -101,33 +101,39 @@ export default class DndKanbanBoard extends Component<
       edge,
     },
   }: any) {
-    draggedItemParent.cards = this.removeItem(
-      draggedItemParent.cards,
-      draggedItem,
-    );
-
-    if (!dropTarget) {
+    if (dropTargetParent.cards.length === 0) {
+      draggedItemParent.cards = this.removeItem(
+        draggedItemParent.cards,
+        draggedItem,
+      );
       dropTargetParent.cards = this.insertAt(
         dropTargetParent.cards,
         0,
         draggedItem,
       );
-    } else if (edge === 'top') {
-      dropTargetParent.cards = this.insertBefore(
-        dropTargetParent.cards,
-        dropTarget,
-        draggedItem,
-      );
-    } else if (edge === 'bottom') {
-      dropTargetParent.cards = this.insertAfter(
-        dropTargetParent.cards,
-        dropTarget,
-        draggedItem,
-      );
     } else {
-      throw new Error('Invalid edge');
+      if (dropTarget !== undefined) {
+        draggedItemParent.cards = this.removeItem(
+          draggedItemParent.cards,
+          draggedItem,
+        );
+        if (edge === 'top') {
+          dropTargetParent.cards = this.insertBefore(
+            dropTargetParent.cards,
+            dropTarget,
+            draggedItem,
+          );
+        } else if (edge === 'bottom') {
+          dropTargetParent.cards = this.insertAfter(
+            dropTargetParent.cards,
+            dropTarget,
+            draggedItem,
+          );
+        } else {
+          throw new Error('Invalid edge');
+        }
+      }
     }
-
     if (this.args.onMove) {
       this.args.onMove(draggedItem, dropTargetParent);
     }
