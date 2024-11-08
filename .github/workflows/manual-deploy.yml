@@ -24,7 +24,7 @@ jobs:
       dockerfile: "packages/ai-bot/Dockerfile"
 
   deploy-ai-bot:
-    needs: [build-ai-bot]
+    needs: [build-ai-bot, migrate-db]
     name: Deploy ai-bot to AWS ECS
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
@@ -77,9 +77,30 @@ jobs:
       build-args: |
         "realm_server_script=start:${{ inputs.environment }}"
 
+  build-pg-migration:
+    name: Build pg-migration Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-pg-migration-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/postgres/Dockerfile"
+
+  migrate-db:
+    needs: [build-pg-migration]
+    name: Deploy pg-migrations to AWS ECS and run db migrations
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-pg-migration"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-pg-migration-${{ inputs.environment }}"
+      image: ${{ needs.build-pg-migration.outputs.image }}
+
   deploy-realm-server:
     name: Deploy realm server
-    needs: [build-realm-server, deploy-host]
+    needs: [build-realm-server, deploy-host, migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:

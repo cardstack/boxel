@@ -25,10 +25,15 @@ type Config = ReturnType<typeof config>;
 export class PgAdapter implements DBAdapter {
   #isClosed = false;
   private pool: Pool;
-  private started = this.#startClient();
+  private started: Promise<void>;
   private config: Config;
 
-  constructor() {
+  constructor(opts?: { autoMigrate?: true }) {
+    if (opts?.autoMigrate) {
+      this.started = this.migrateDb();
+    } else {
+      this.started = Promise.resolve();
+    }
     this.config = config();
     let { user, host, database, password, port } = this.config;
     log.info(`connecting to DB ${this.url}`);
@@ -50,10 +55,6 @@ export class PgAdapter implements DBAdapter {
   get url() {
     let { user, host, database, port } = this.config;
     return `${user}@${host}:${port}/${database}`;
-  }
-
-  async #startClient() {
-    await this.migrateDb();
   }
 
   async close() {

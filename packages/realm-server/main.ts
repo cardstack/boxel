@@ -66,6 +66,7 @@ let {
   username: usernames,
   useRegistrationSecretFunction,
   seedPath,
+  migrateDB,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -118,6 +119,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    migrateDB: {
+      description:
+        'When this flag is set the database will automatically migrate when server is started',
+      type: 'boolean',
+    },
     useRegistrationSecretFunction: {
       description:
         'The flag should be set when running matrix tests where the synapse instance is torn down and restarted multiple times during the life of the realm server.',
@@ -166,10 +172,11 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);
+let autoMigrate = migrateDB || undefined;
 
 (async () => {
   let realms: Realm[] = [];
-  let dbAdapter = new PgAdapter();
+  let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
   let manager = new RunnerOptionsManager();
   let { getIndexHTML } = await makeFastBootIndexRunner(

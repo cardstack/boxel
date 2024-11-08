@@ -2,6 +2,7 @@
 CURRENT_DIR="$(pwd)"
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+cd ${SCRIPTS_DIR}/../../postgres
 pnpm run drop-db boxel
 pnpm run drop-db boxel_test
 pnpm run drop-db boxel_base
