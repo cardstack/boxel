@@ -4,16 +4,17 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+import { TrackedObject } from 'tracked-built-ins';
 
 import RealmIcon from './index.gts';
 
 export default class RealmIconUsage extends Component {
   @tracked canAnimate = false;
-  @tracked realmInfo = {
+  realmInfo = new TrackedObject({
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-c.png',
     name: "Carl's Workspace",
     isIndexing: false,
-  };
+  });
 
   <template>
     <FreestyleUsage @name='Realm Icon'>
@@ -22,6 +23,8 @@ export default class RealmIconUsage extends Component {
           @realmInfo={{this.realmInfo}}
           @canAnimate={{this.canAnimate}}
         />
+
+        {{! Below is for preview only }}
         {{#if this.canAnimate}}
           <label>
             Preview animation
@@ -54,6 +57,5 @@ export default class RealmIconUsage extends Component {
 
   @action animate(ev: Event) {
     this.realmInfo.isIndexing = (ev.target as HTMLInputElement).checked;
-    this.realmInfo = this.realmInfo;
   }
 }
