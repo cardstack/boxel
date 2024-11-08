@@ -135,11 +135,13 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toContainText('private', { timeout: 30_000 });
     await expect(
-      page.locator(`[data-test-workspace="Test User's Workspace"] img`),
+      page.locator(
+        `[data-test-workspace="Test User's Workspace"] [data-test-realm-icon-url]`,
+      ),
       'the "T" icon URL is shown',
     ).toHaveAttribute(
-      'src',
-      'https://boxel-images.boxel.ai/icons/Letter-t.png',
+      'style',
+      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-t.png")',
     );
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
