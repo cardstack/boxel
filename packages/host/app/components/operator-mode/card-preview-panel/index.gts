@@ -297,7 +297,6 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .icon-button {
-        --icon-color: var(--boxel-highlight);
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
         border-radius: var(--boxel-border-radius-xs);
@@ -311,9 +310,8 @@ export default class CardPreviewPanel extends Component<Signature> {
         z-index: 1;
       }
 
-      .icon-button:hover {
-        --icon-color: var(--boxel-light);
-        background-color: var(--boxel-highlight);
+      .icon-button:not(:disabled):hover {
+        background-color: var(--boxel-dark-hover);
       }
       .atom-wrapper {
         padding: var(--boxel-sp);

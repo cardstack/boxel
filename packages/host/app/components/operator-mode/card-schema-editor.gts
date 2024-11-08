@@ -157,10 +157,6 @@ export default class CardSchemaEditor extends Component<Signature> {
         align-self: center;
       }
 
-      .display-name {
-        display: contents;
-      }
-
       .field-name {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
@@ -369,7 +365,6 @@ export default class CardSchemaEditor extends Component<Signature> {
                                 as |cardDisplayName|
                               }}
                                 <span
-                                  class='display-name'
                                   data-test-card-display-name={{cardDisplayName}}
                                 >
                                   {{cardDisplayName}}

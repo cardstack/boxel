@@ -52,6 +52,7 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
       display: inline-block;
       font: var(--boxel-font);
       letter-spacing: var(--boxel-lsp-xs);
+      margin-left: var(--boxel-sp-4xs);
     }
   </style>
 </template>;

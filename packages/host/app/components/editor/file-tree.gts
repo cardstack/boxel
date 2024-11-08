@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { RealmIcon, Tooltip } from '@cardstack/boxel-ui/components';
+import { Label, RealmIcon, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   IconPencilNotCrossedOut,
   IconPencilCrossedOut,
@@ -31,41 +31,43 @@ export default class FileTree extends Component<Signature> {
       <div class='realm-info'>
         <RealmIcon @realmInfo={{realm.info}} />
         {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
-          <span
-            class='realm-title'
-            data-test-realm-name={{realm.info.name}}
+          <Label
+            @ellipsize={{true}}
             title={{realmTitle}}
-          >{{realmTitle}}</span>
-          {{#if realm.canWrite}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilNotCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Can edit files in this workspace'
-                  data-test-realm-writable
-                />
-              </:trigger>
-              <:content>
-                Can edit files in this workspace
-              </:content>
-            </Tooltip>
-          {{else}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Cannot edit files in this workspace'
-                  data-test-realm-not-writable
-                />
-              </:trigger>
-              <:content>
-                Cannot edit files in this workspace
-              </:content>
-            </Tooltip>
-          {{/if}}
+            data-test-realm-name={{realm.info.name}}
+          >
+            {{realmTitle}}
+          </Label>
         {{/let}}
+        {{#if realm.canWrite}}
+          <Tooltip @placement='top' class='editability-icon'>
+            <:trigger>
+              <IconPencilNotCrossedOut
+                width='18px'
+                height='18px'
+                aria-label='Can edit files in this workspace'
+                data-test-realm-writable
+              />
+            </:trigger>
+            <:content>
+              Can edit files in this workspace
+            </:content>
+          </Tooltip>
+        {{else}}
+          <Tooltip @placement='top' class='editability-icon'>
+            <:trigger>
+              <IconPencilCrossedOut
+                width='18px'
+                height='18px'
+                aria-label='Cannot edit files in this workspace'
+                data-test-realm-not-writable
+              />
+            </:trigger>
+            <:content>
+              Cannot edit files in this workspace
+            </:content>
+          </Tooltip>
+        {{/if}}
       </div>
       <nav>
         <Directory @relativePath='' @realmURL={{@realmURL}} />
@@ -102,15 +104,7 @@ export default class FileTree extends Component<Signature> {
         grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
-        font: 600 var(--boxel-font-sm);
       }
-
-      .realm-title {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
       .editability-icon {
         display: flex;
       }
