@@ -69,6 +69,12 @@ export type StripeSubscriptionDeletedWebhookEvent = StripeEvent & {
   };
 };
 
+// Make sure Stripe customer portal is configured with the following settings:
+// Cancel at end of billing period: CHECKED
+// Customers can switch plans: CHECKED
+// Prorate subscription changes: CHECKED
+// Invoice immediately (when prorating): CHECKED
+// When switching to a cheaper subscription -> WAIT UNTIL END OF BILLING PERIOD TO UPDATE
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,
   request: Request,
