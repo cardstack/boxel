@@ -36,40 +36,81 @@ import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
 import Checklist from '@cardstack/boxel-icons/checklist';
+
+import { isEqual } from 'lodash';
 import type Owner from '@ember/owner';
+import { Resource } from 'ember-resources';
+
+interface Args {
+  named: {
+    query: Query | undefined;
+  };
+}
+
+class TaskCollection extends Resource<Args> {
+  @tracked private data: DndColumn[] = [];
+  @tracked private query: Query = undefined;
+
+  private run = restartableTask(async (query: Query, realm: string) => {
+    let staticQuery = getCards(query, [realm]); // I hate this
+    await staticQuery.loaded;
+    let cards = staticQuery.instances as Task[];
+    this.update(cards); //update stale data
+    this.query = query;
+  });
+
+  queryHasChanged(query: Query) {
+    return !isEqual(this.query, query);
+  }
+
+  update(cards: CardDef) {
+    this.data = TaskStatusField.values?.map((status: LooseyGooseyData) => {
+      let statusLabel = status.label;
+      let newCards = cards.filter((task) => task.status.label === statusLabel);
+      return new DndColumn(statusLabel, newCards);
+    });
+  }
+
+  get columns() {
+    return this.data;
+  }
+
+  modify(_positional: never[], named: Args['named']) {
+    if (this.query === undefined || this.queryHasChanged(named.query)) {
+      this.run.perform(named.query, named.realm);
+    }
+  }
+}
+
+export function getTaskCollection(
+  parent: object,
+  query: () => Query | undefined,
+  realm: () => string | undefined,
+) {
+  return TaskCollection.from(parent, () => ({
+    named: {
+      realm: realm(),
+      query: query(),
+    },
+  }));
+}
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
+  @tracked newQuery: Query | undefined;
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
-  @tracked
-  private declare staticQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
+  taskCollection = getTaskCollection(
+    this,
+    () => this.query,
+    () => this.realmURL,
+  );
 
-  @tracked columns: DndColumn[] = [];
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    let taskQuery = this.getTaskQuery;
-    this.loadTasks.perform(taskQuery);
+  get query() {
+    return this.newQuery ?? this.getTaskQuery;
   }
-
-  private loadTasks = restartableTask(async (query: Query) => {
-    this.staticQuery = getCards(query, [this.realmURL]);
-    await this.staticQuery.loaded;
-    let tasks = this.staticQuery?.instances as Task[];
-    this.columns = this.statuses?.map((status: LooseyGooseyData) => {
-      let statusLabel = status.label;
-      let cards = tasks.filter((task) => task.status.label === statusLabel);
-      return new DndColumn(statusLabel, cards);
-    });
-  });
-
-  // staticQuery = getCards(this.getTaskQuery, [this.realmURL]);
 
   get realmURL() {
     return this.args.model[realmURL];
@@ -196,11 +237,33 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     cardInNewCol.status.label = status.label;
     cardInNewCol.status.index = status.index;
     //TODO: save the card!
-    // await this.args.context?.actions?.saveCard?.(cardInNewCol);
+    await this.args.context?.actions?.saveCard?.(cardInNewCol);
+  }
+
+  @action changeQuery() {
+    this.newQuery = {
+      filter: {
+        on: this.assignedTaskCodeRef,
+        // this is the column status
+        any: [
+          {
+            eq: {
+              'status.label': 'Backlog',
+            },
+          },
+          {
+            eq: {
+              'status.label': 'Current Sprint',
+            },
+          },
+        ],
+      },
+    };
   }
 
   <template>
     <div class='task-app'>
+      <button {{on 'click' this.changeQuery}}>Change Query</button>
       <div class='filter-section'>
         <BoxelDropdown>
           <:trigger as |bindings|>
@@ -237,7 +300,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           Loading..
         {{else}}
           <DndKanbanBoard
-            @columns={{this.columns}}
+            @columns={{this.taskCollection.columns}}
             @onMove={{this.onMoveCardMutation}}
           >
             <:header as |column|>
