@@ -102,16 +102,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
     }
 
-    .horizontal > .content > :deep(*) {
-      flex: 1;
-    }
-
-    .horizontal
-      > .content
-      :deep(.ember-basic-dropdown-content-wormhole-origin) {
-      display: none;
-    }
-
     .vertical {
       grid-template-rows: auto 1fr;
     }
