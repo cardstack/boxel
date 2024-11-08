@@ -16,7 +16,7 @@ run_command pnpm run drop-db boxel
 run_command pnpm run drop-db boxel_test
 run_command pnpm run drop-db boxel_base
 
-if ! rm -rf "${SCRIPTS_DIR}/../realms"; then
+if ! rm -rf "${SCRIPTS_DIR}/../packages/realm-server/realms"; then
     errors+=("Failed: removing realms directory")
 fi
 
