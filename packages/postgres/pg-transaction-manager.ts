@@ -1,4 +1,4 @@
-import PgAdapter from './pg-adapter';
+import { PgAdapter } from './pg-adapter';
 
 export class TransactionManager {
   private isInTransaction = false;

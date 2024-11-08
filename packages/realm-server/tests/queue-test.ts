@@ -1,8 +1,11 @@
 import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 
-import { PgQueueRunner, PgQueuePublisher } from '../pg-queue';
-import PgAdapter from '../pg-adapter';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
 
 import {
   type QueuePublisher,
