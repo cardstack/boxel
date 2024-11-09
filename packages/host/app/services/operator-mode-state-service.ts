@@ -126,34 +126,24 @@ export default class OperatorModeStateService extends Service {
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    let stackItems = this.state?.stacks.flat() ?? [];
-    if (
-      !stackItems.length ||
-      !this.topMostStackItems().some((item) => item.card.id == id)
-    ) {
-      throw new Error(`Please open card '${id}' to make changes to it.`);
+    let card = await this.cardService.getCard(id);
+    let document = await this.cardService.serializeCard(card);
+    if (patch.attributes) {
+      document.data.attributes = mergeWith(
+        document.data.attributes,
+        patch.attributes,
+      );
     }
-    for (let item of stackItems) {
-      if ('card' in item && item.card.id == id) {
-        let document = await this.cardService.serializeCard(item.card);
-        if (patch.attributes) {
-          document.data.attributes = mergeWith(
-            document.data.attributes,
-            patch.attributes,
-          );
-        }
-        if (patch.relationships) {
-          let mergedRel = mergeRelationships(
-            document.data.relationships,
-            patch.relationships,
-          );
-          if (mergedRel && Object.keys(mergedRel).length !== 0) {
-            document.data.relationships = mergedRel;
-          }
-        }
-        await this.cardService.patchCard(item.card, document, patch);
+    if (patch.relationships) {
+      let mergedRel = mergeRelationships(
+        document.data.relationships,
+        patch.relationships,
+      );
+      if (mergedRel && Object.keys(mergedRel).length !== 0) {
+        document.data.relationships = mergedRel;
       }
     }
+    await this.cardService.patchCard(card, document, patch);
   });
 
   async deleteCard(card: CardDef) {
