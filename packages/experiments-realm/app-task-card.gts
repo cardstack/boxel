@@ -54,14 +54,15 @@ interface Args {
 // 3. When we trigger a server fetch, we need to maintain the sort order of the cards.
 //   Currently, we don't have any mechanism to maintain the sort order but this is good enough for now
 class TaskCollection extends Resource<Args> {
-  @tracked private data: DndColumn[] = [];
+  @tracked private data: Map<string, DndColumn> = new Map();
   @tracked private query: Query = undefined;
 
   private run = restartableTask(async (query: Query, realm: string) => {
     let staticQuery = getCards(query, [realm]); // I hate this
     await staticQuery.loaded;
     let cards = staticQuery.instances as Task[];
-    this.update(cards); //update stale data
+    this.commit(cards); //update stale data
+
     this.query = query;
   });
 
@@ -69,16 +70,16 @@ class TaskCollection extends Resource<Args> {
     return !isEqual(this.query, query);
   }
 
-  update(cards: CardDef) {
-    this.data = TaskStatusField.values?.map((status: LooseyGooseyData) => {
+  commit(cards: CardDef) {
+    TaskStatusField.values?.map((status: LooseyGooseyData) => {
       let statusLabel = status.label;
       let newCards = cards.filter((task) => task.status.label === statusLabel);
-      return new DndColumn(statusLabel, newCards);
+      this.data.set(statusLabel, new DndColumn(statusLabel, newCards));
     });
   }
 
   get columns() {
-    return this.data;
+    return Array.from(this.data.values());
   }
 
   modify(_positional: never[], named: Args['named']) {
