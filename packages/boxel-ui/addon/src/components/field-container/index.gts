@@ -102,6 +102,14 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
     }
 
+    .horizontal > .content > :empty {
+      flex: 0;
+    }
+
+    .horizontal > .content > :not(:empty) {
+      flex: 1;
+    }
+
     .vertical {
       grid-template-rows: auto 1fr;
     }
