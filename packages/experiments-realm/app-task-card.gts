@@ -47,6 +47,12 @@ interface Args {
   };
 }
 
+// This is a resource because we have to consider 3 data mechanism
+// 1. the reactivity of the query. Changes in query should trigger server fetch
+// 2. the drag and drop of cards. When dragging and dropping, we should NOT trigger a server fetch
+//    but rather just update the local data structure
+// 3. When we trigger a server fetch, we need to maintain the sort order of the cards.
+//   Currently, we don't have any mechanism to maintain the sort order but this is good enough for now
 class TaskCollection extends Resource<Args> {
   @tracked private data: DndColumn[] = [];
   @tracked private query: Query = undefined;
