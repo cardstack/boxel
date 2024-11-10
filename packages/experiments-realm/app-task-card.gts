@@ -363,7 +363,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
               />
             </:header>
             <:card as |card|>
-              {{card.id}}
               {{#let (getComponent card) as |CardComponent|}}
                 <div
                   {{@context.cardComponentModifier
