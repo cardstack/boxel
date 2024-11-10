@@ -101,39 +101,34 @@ export default class DndKanbanBoard extends Component<
       edge,
     },
   }: any) {
-    if (dropTargetParent.cards.length === 0) {
-      draggedItemParent.cards = this.removeItem(
-        draggedItemParent.cards,
-        draggedItem,
-      );
-      dropTargetParent.cards = this.insertAt(
-        dropTargetParent.cards,
-        0,
-        draggedItem,
-      );
-    } else {
-      if (dropTarget !== undefined) {
-        draggedItemParent.cards = this.removeItem(
-          draggedItemParent.cards,
+    draggedItemParent.cards = this.removeItem(
+      draggedItemParent.cards,
+      draggedItem,
+    );
+
+    if (dropTarget !== undefined) {
+      if (edge === 'top') {
+        dropTargetParent.cards = this.insertBefore(
+          dropTargetParent.cards,
+          dropTarget,
           draggedItem,
         );
-        if (edge === 'top') {
-          dropTargetParent.cards = this.insertBefore(
-            dropTargetParent.cards,
-            dropTarget,
-            draggedItem,
-          );
-        } else if (edge === 'bottom') {
-          dropTargetParent.cards = this.insertAfter(
-            dropTargetParent.cards,
-            dropTarget,
-            draggedItem,
-          );
-        } else {
-          throw new Error('Invalid edge');
-        }
+      } else if (edge === 'bottom') {
+        dropTargetParent.cards = this.insertAfter(
+          dropTargetParent.cards,
+          dropTarget,
+          draggedItem,
+        );
+      } else {
+        throw new Error('Invalid edge');
+      }
+    } else {
+      if (dropTargetParent !== undefined) {
+        // If the drop target is undefined, but the dropTargetParent is defined,  we are dropping the card into last index of the drop target of the column
+        dropTargetParent.cards = [...dropTargetParent.cards, draggedItem];
       }
     }
+
     if (this.args.onMove) {
       this.args.onMove(draggedItem, dropTargetParent);
     }
