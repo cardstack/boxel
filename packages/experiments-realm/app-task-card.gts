@@ -79,19 +79,22 @@ class TaskCollection extends Resource<Args> {
   }
 
   // Note:
-  // sourceColumn & targetColumn is the column state after the drag and drop
+  // sourceColumnAfterDrag & targetColumnAfterDrag is the column state after the drag and drop
   update(
     draggedCard: DndItem,
-    targetCard: DndItem,
-    sourceColumn: DndColumn,
-    targetColumn: DndColumn,
+    targetCard: DndItem | undefined,
+    sourceColumnAfterDrag: DndColumn,
+    targetColumnAfterDrag: DndColumn,
   ) {
     let status = TaskStatusField.values.find(
-      (value) => value.label === targetColumn.title,
+      (value) => value.label === targetColumnAfterDrag.title,
     );
-    let cardInNewCol = targetColumn.cards.find((c) => c.id === draggedCard.id);
+    let cardInNewCol = targetColumnAfterDrag.cards.find(
+      (c) => c.id === draggedCard.id,
+    );
     cardInNewCol.status.label = status.label;
     cardInNewCol.status.index = status.index;
+    return cardInNewCol;
   }
 
   get columns() {
@@ -253,18 +256,18 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 
   @action async onMoveCardMutation(
     draggedCard: DndItem,
-    targetCard: DndItem,
-    sourceColumn: DndColumn,
-    targetColumn: DndColumn,
+    targetCard: DndItem | undefined,
+    sourceColumnAfterDrag: DndColumn,
+    targetColumnAfterDrag: DndColumn,
   ) {
-    this.taskCollection.update(
+    let updatedCard = this.taskCollection.update(
       draggedCard,
       targetCard,
-      sourceColumn,
-      targetColumn,
+      sourceColumnAfterDrag,
+      targetColumnAfterDrag,
     );
     //TODO: save the card!
-    await this.args.context?.actions?.saveCard?.(targetCard);
+    await this.args.context?.actions?.saveCard?.(updatedCard);
   }
 
   @action changeQuery() {
