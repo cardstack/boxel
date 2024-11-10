@@ -78,6 +78,22 @@ class TaskCollection extends Resource<Args> {
     });
   }
 
+  // Note:
+  // sourceColumn & targetColumn is the column state after the drag and drop
+  update(
+    draggedCard: DndItem,
+    targetCard: DndItem,
+    sourceColumn: DndColumn,
+    targetColumn: DndColumn,
+  ) {
+    let status = TaskStatusField.values.find(
+      (value) => value.label === targetColumn.title,
+    );
+    let cardInNewCol = targetColumn.cards.find((c) => c.id === draggedCard.id);
+    cardInNewCol.status.label = status.label;
+    cardInNewCol.status.index = status.index;
+  }
+
   get columns() {
     return Array.from(this.data.values());
   }
@@ -235,16 +251,20 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     }
   });
 
-  @action async onMoveCardMutation(draggedCard: DndItem, newColumn: DndColumn) {
-    // This only updates the value of the card but doesn't commit to fileystem nor server
-    let status = TaskStatusField.values.find(
-      (value) => value.label === newColumn.title,
+  @action async onMoveCardMutation(
+    draggedCard: DndItem,
+    targetCard: DndItem,
+    sourceColumn: DndColumn,
+    targetColumn: DndColumn,
+  ) {
+    this.taskCollection.update(
+      draggedCard,
+      targetCard,
+      sourceColumn,
+      targetColumn,
     );
-    let cardInNewCol = newColumn.cards.find((c) => c.id === draggedCard.id);
-    cardInNewCol.status.label = status.label;
-    cardInNewCol.status.index = status.index;
     //TODO: save the card!
-    await this.args.context?.actions?.saveCard?.(cardInNewCol);
+    await this.args.context?.actions?.saveCard?.(targetCard);
   }
 
   @action changeQuery() {
