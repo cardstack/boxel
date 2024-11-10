@@ -77,7 +77,13 @@ class TaskCollection extends Resource<Args> {
       let cardIdsFromOrder = this.order.get(statusLabel);
       let newCards: CardDef[] = [];
       if (cardIdsFromOrder) {
-        newCards = cardIdsFromOrder.map((id) => cards.find((c) => c.id === id));
+        newCards = cardIdsFromOrder.reduce((acc, id) => {
+          let card = cards.find((c) => c.id === id);
+          if (card) {
+            acc.push(card);
+          }
+          return acc;
+        }, []);
       } else {
         newCards = cards.filter((task) => task.status.label === statusLabel);
       }
@@ -357,6 +363,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
               />
             </:header>
             <:card as |card|>
+              {{card.id}}
               {{#let (getComponent card) as |CardComponent|}}
                 <div
                   {{@context.cardComponentModifier
