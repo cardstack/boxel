@@ -55,6 +55,7 @@ interface Args {
 //   Currently, we don't have any mechanism to maintain the sort order but this is good enough for now
 class TaskCollection extends Resource<Args> {
   @tracked private data: Map<string, DndColumn> = new Map();
+  @tracked private order: Map<string, string[]> = new Map();
   @tracked private query: Query = undefined;
 
   private run = restartableTask(async (query: Query, realm: string) => {
@@ -73,7 +74,13 @@ class TaskCollection extends Resource<Args> {
   commit(cards: CardDef) {
     TaskStatusField.values?.map((status: LooseyGooseyData) => {
       let statusLabel = status.label;
-      let newCards = cards.filter((task) => task.status.label === statusLabel);
+      let cardIdsFromOrder = this.order.get(statusLabel);
+      let newCards: CardDef[] = [];
+      if (cardIdsFromOrder) {
+        newCards = cardIdsFromOrder.map((id) => cards.find((c) => c.id === id));
+      } else {
+        newCards = cards.filter((task) => task.status.label === statusLabel);
+      }
       this.data.set(statusLabel, new DndColumn(statusLabel, newCards));
     });
   }
@@ -94,6 +101,15 @@ class TaskCollection extends Resource<Args> {
     );
     cardInNewCol.status.label = status.label;
     cardInNewCol.status.index = status.index;
+    //update the order of the cards in the column
+    this.order.set(
+      sourceColumnAfterDrag.title,
+      sourceColumnAfterDrag.cards.map((c) => c.id),
+    );
+    this.order.set(
+      targetColumnAfterDrag.title,
+      targetColumnAfterDrag.cards.map((c) => c.id),
+    );
     return cardInNewCol;
   }
 
