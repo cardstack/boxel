@@ -15,7 +15,12 @@ export interface DndKanbanBoardArgs<DndColumn> {
   columns: DndColumn[];
   isDisabled?: boolean;
   isLoading?: boolean;
-  onMove?: (card: DndItem, column: DndColumn) => void;
+  onMove?: (
+    draggedCard: DndItem,
+    targetCard: DndItem,
+    sourceColumn: DndColumn,
+    targetColumn: DndColumn,
+  ) => void;
 }
 
 export class DndColumn {
@@ -135,7 +140,12 @@ export default class DndKanbanBoard extends Component<
       }
     }
     if (this.args.onMove) {
-      this.args.onMove(draggedItem, dropTargetParent);
+      this.args.onMove(
+        draggedItem,
+        dropTarget,
+        draggedItemParent,
+        dropTargetParent,
+      );
     }
   }
 
