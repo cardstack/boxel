@@ -1,6 +1,10 @@
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import Koa from 'koa';
-import { sendResponseForSystemError, setContextResponse } from '../middleware';
+import {
+  sendResponseForNotFound,
+  sendResponseForSystemError,
+  setContextResponse,
+} from '../middleware';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import {
   getMostRecentSubscription,
@@ -8,7 +12,6 @@ import {
   getPlan,
   getUserByMatrixUserId,
   Plan,
-  Subscription,
   SubscriptionCycle,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
@@ -71,23 +74,21 @@ export default function handleFetchUserRequest({
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token) {
-      await sendResponseForSystemError(
-        ctxt,
-        'token is required to create realm',
-      );
+      await sendResponseForSystemError(ctxt, 'token is required to fetch user');
       return;
     }
 
     let { user: matrixUserId } = token;
     let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-    let mostRecentSubscription: Subscription | null = null;
-    if (user) {
-      mostRecentSubscription = await getMostRecentSubscription(
-        dbAdapter,
-        user.id,
-      );
+    if (!user) {
+      await sendResponseForNotFound(ctxt, 'user is not found');
+      return;
     }
 
+    let mostRecentSubscription = await getMostRecentSubscription(
+      dbAdapter,
+      user.id,
+    );
     let currentSubscriptionCycle: SubscriptionCycle | null = null;
     let plan: Plan | undefined = undefined;
     if (mostRecentSubscription) {
@@ -113,28 +114,26 @@ export default function handleFetchUserRequest({
     }
 
     let responseBody = {
-      data: user
-        ? {
-            type: 'user',
-            id: user.id,
-            attributes: {
-              matrixUserId: user.matrixUserId,
-              stripeCustomerId: user.stripeCustomerId,
-              creditsAvailableInPlanAllowance: creditsAvailableInPlanAllowance,
-              extraCreditsAvailableInBalance: extraCreditsAvailableInBalance,
-            },
-            relationships: {
-              subscription: mostRecentSubscription
-                ? {
-                    data: {
-                      type: 'subscription',
-                      id: mostRecentSubscription.id,
-                    },
-                  }
-                : null,
-            },
-          }
-        : null,
+      data: {
+        type: 'user',
+        id: user.id,
+        attributes: {
+          matrixUserId: user.matrixUserId,
+          stripeCustomerId: user.stripeCustomerId,
+          creditsAvailableInPlanAllowance: creditsAvailableInPlanAllowance,
+          extraCreditsAvailableInBalance: extraCreditsAvailableInBalance,
+        },
+        relationships: {
+          subscription: mostRecentSubscription
+            ? {
+                data: {
+                  type: 'subscription',
+                  id: mostRecentSubscription.id,
+                },
+              }
+            : null,
+        },
+      },
       included: mostRecentSubscription
         ? [
             {

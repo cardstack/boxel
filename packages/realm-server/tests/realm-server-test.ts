@@ -2657,16 +2657,7 @@ module('Realm Server', function (hooks) {
           'Authorization',
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         );
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let json = response.body;
-      assert.deepEqual(
-        json,
-        {
-          data: null,
-          included: null,
-        },
-        '/_user response is correct',
-      );
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
     });
 
     test('subscription is not found', async function (assert) {

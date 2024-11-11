@@ -36,7 +36,7 @@ import {
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
-import { Plan, Subscription, User } from '../../billing/billing-queries';
+import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
 
 export * from '@cardstack/runtime-common/helpers/indexer';
 

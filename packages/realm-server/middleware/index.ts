@@ -147,6 +147,13 @@ export async function sendResponseForBadRequest(
   await sendResponseForError(ctxt, 400, 'Bad Request', message);
 }
 
+export async function sendResponseForNotFound(
+  ctxt: Koa.Context,
+  message: string,
+) {
+  await sendResponseForError(ctxt, 404, 'Not Found', message);
+}
+
 export async function sendResponseForForbiddenRequest(
   ctxt: Koa.Context,
   message: string,
