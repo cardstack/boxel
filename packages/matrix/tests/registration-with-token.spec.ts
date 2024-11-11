@@ -17,6 +17,7 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
+  assertPaymentSetup,
   assertLoggedOut,
   logout,
   login,
@@ -105,17 +106,13 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
 
+    await assertPaymentSetup(page, admin.accessToken, 'user1');
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',
     });
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-    await expect(
-      page.locator(
-        '[data-test-workspace-list] [data-test-workspace-loading-indicator]',
-      ),
-    ).toHaveCount(1);
     await expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]',

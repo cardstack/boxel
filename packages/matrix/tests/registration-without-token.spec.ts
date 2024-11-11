@@ -15,8 +15,10 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
+  assertPaymentSetup,
   registerRealmUsers,
 } from '../helpers';
+import { registerUser } from '../docker/synapse';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
@@ -60,6 +62,11 @@ test.describe('User Registration w/o Token', () => {
     await page.locator('[data-test-register-btn]').click();
     await validateEmail(page, 'user1@example.com');
 
+    await page.bringToFront();
+
+    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+
+    await assertPaymentSetup(page, admin.accessToken, 'user1');
     await assertLoggedIn(page);
   });
 });
