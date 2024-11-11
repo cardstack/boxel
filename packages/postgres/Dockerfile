@@ -6,6 +6,6 @@ WORKDIR /boxel
 COPY . .
 RUN pnpm install --frozen-lockfile
 
-WORKDIR packages/postgres
+WORKDIR /boxel/packages/postgres
 # CMD ./node_modules/.bin/node-pg-migrate --migrations-table migrations up
-CMD /bin/sh
+ENTRYPOINT ["tail", "-f", "/dev/null"]
