@@ -1,0 +1,25 @@
+{
+  "name": "@cardstack/postgres",
+  "version": "0.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "@cardstack/runtime-common": "workspace:*",
+    "@sentry/node": "^8.31.0",
+    "@types/pg": "^8.11.5",
+    "node-pg-migrate": "^6.2.2",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1"
+  },
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:glint": "glint"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

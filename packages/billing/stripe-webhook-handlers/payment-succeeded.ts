@@ -1,4 +1,4 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import { type DBAdapter, retry } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getCurrentActiveSubscription,
@@ -13,9 +13,7 @@ import {
 } from '../billing-queries';
 import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
 
-import PgAdapter from '../../pg-adapter';
-import { retry } from '../../lib/utils';
-import { TransactionManager } from '../../pg-transaction-manager';
+import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 
 // TODOs that will be handled in a separated PRs:
 // - handle plan changes (going from smaller plan to bigger plan, or vice versa) - this will be handled in a separate ticket CS-7444

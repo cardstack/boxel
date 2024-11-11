@@ -7,7 +7,12 @@ import type { Actions } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import OperatorModeStackItem, { CardDefOrId } from './stack-item';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import OperatorModeStackItem, {
+  type StackItemComponentAPI,
+  CardDefOrId,
+} from './stack-item';
 
 interface Signature {
   Element: HTMLElement;
@@ -22,17 +27,19 @@ interface Signature {
       stackItem: StackItem,
     ) => void;
     setupStackItem: (
-      stackItem: StackItem,
-      clearSelections: () => void,
-      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-      doScrollIntoView: (selector: string) => void,
+      model: StackItem,
+      componentAPI: StackItemComponentAPI,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
   Blocks: {};
 }
 
 export default class OperatorModeStack extends Component<Signature> {
-  private closeAnimation = new WeakMap<StackItem, () => void>();
+  private stackItemComponentAPI = new WeakMap<
+    StackItem,
+    StackItemComponentAPI
+  >();
 
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
@@ -40,30 +47,33 @@ export default class OperatorModeStack extends Component<Signature> {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
 
-    // do closing animation on last item
-    const lastItem = this.args.stackItems[this.args.stackItems.length - 1];
-    const closeAnimation = this.closeAnimation.get(lastItem);
-    if (closeAnimation) {
-      await closeAnimation();
+    // Animate closing items
+    const animations = itemsToDismiss
+      .map((item) => {
+        const componentAPI = this.stackItemComponentAPI.get(item);
+        return componentAPI?.startAnimation('closing') ?? undefined;
+      })
+      .filter(Boolean);
+
+    // Animate next top item moving forward
+    const nextTopItem = this.args.stackItems[itemIndex];
+    const nextTopItemAPI = this.stackItemComponentAPI.get(nextTopItem);
+
+    if (nextTopItemAPI) {
+      animations.push(nextTopItemAPI.startAnimation('movingForward'));
     }
+
+    await Promise.all(animations);
 
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
   private setupStackItem = (
     item: StackItem,
-    doClearSelections: () => void,
-    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-    doScrollIntoView: (selector: string) => void,
-    doCloseAnimation: () => void,
+    componentAPI: StackItemComponentAPI,
   ) => {
-    this.args.setupStackItem(
-      item,
-      doClearSelections,
-      doWithStableScroll,
-      doScrollIntoView,
-    );
-    this.closeAnimation.set(item, doCloseAnimation);
+    this.args.setupStackItem(item, componentAPI);
+    this.stackItemComponentAPI.set(item, componentAPI);
   };
 
   <template>
@@ -79,6 +89,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}
+            @saveCard={{@saveCard}}
           />
         {{/each}}
       </div>

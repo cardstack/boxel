@@ -1258,6 +1258,10 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom(`[data-test-stack-card-index="2"]`).exists();
     await click('[data-test-stack-card-index="0"] [data-test-card-header]');
+
+    await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
+    await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
+
     assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -2661,40 +2665,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
   });
 
-  test('can add cards to favourites list', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-cards-grid-item]`).doesNotExist();
-    await click('[data-test-edit-button]');
-
-    await click('[data-test-add-new]');
-    await click(`[data-test-select="${testRealmURL}Person/1"]`);
-    await click(`[data-test-card-catalog-go-button]`);
-
-    await click('[data-test-add-new]');
-    await click(`[data-test-select="${testRealmURL}Person/10"]`);
-    await click(`[data-test-card-catalog-go-button]`);
-
-    await click('[data-test-edit-button]');
-    assert.dom(`[data-test-cards-grid-item]`).exists({ count: 2 });
-    assert
-      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`)
-      .exists();
-    assert
-      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/10"]`)
-      .exists();
-  });
-
   test('CardDef filter is not displayed in filter list', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
@@ -2737,7 +2707,7 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 8 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -2757,7 +2727,7 @@ module('Integration | operator-mode', function (hooks) {
         await click('[data-test-close-button]');
       },
     });
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -2773,10 +2743,10 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 8 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
-      .dom(`[data-test-boxel-filter-list-button="Favorites"]`)
+      .dom(`[data-test-boxel-filter-list-button="All Cards"]`)
       .hasClass('selected');
   });
 });
