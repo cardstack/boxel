@@ -104,7 +104,15 @@ export class CreateProductRequirementsInstance extends Command<
     await patchPRDCommand.waitForNextCompletion();
     // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
     // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
+
     console.log('prdCard after patch', prdCard);
+
+    let reloadCommand = await this.commandContext.lookupCommand<
+      CardDef,
+      undefined
+    >('reload-card');
+    await reloadCommand.execute(prdCard);
+    console.log('prdCard after reload', prdCard);
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;
     result.roomId = roomId;

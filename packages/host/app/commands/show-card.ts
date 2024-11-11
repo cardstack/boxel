@@ -2,14 +2,13 @@ import { service } from '@ember/service';
 
 import { Command, baseRealm } from '@cardstack/runtime-common';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type LoaderService from '../services/loader-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class ShowCardCommand extends Command<
-  BaseCommandModule.SwitchSubmodeInput,
+  BaseCommandModule.ShowCardInput,
   undefined
 > {
   @service private declare operatorModeStateService: OperatorModeStateService;
