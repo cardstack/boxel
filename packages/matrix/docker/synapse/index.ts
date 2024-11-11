@@ -338,12 +338,14 @@ export async function updateUser(
     avatar_url,
     emailAddresses,
     matrixURL,
+    stripeCustomerId,
   }: {
     password?: string;
     displayname?: string;
     avatar_url?: string;
     emailAddresses?: string[];
     matrixURL?: string;
+    stripeCustomerId?: string;
   },
 ) {
   let url = matrixURL
@@ -366,6 +368,7 @@ export async function updateUser(
             })),
           }
         : {}),
+      ...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {}),
     }),
   });
   if (!res.ok) {

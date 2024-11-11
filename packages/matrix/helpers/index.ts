@@ -3,6 +3,7 @@ import {
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
+  updateUser,
   type SynapseInstance,
   sync,
 } from '../docker/synapse';
@@ -573,6 +574,30 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   } else {
     await page.locator('[data-test-profile-icon-button]').click(); // close profile popover
   }
+}
+
+export async function assertPaymentSetup(
+  page: Page,
+  accessToken: string,
+  username: string,
+) {
+  await expect(page.locator('[data-test-email-validated]')).toContainText(
+    'Success! Your email has been validated',
+  );
+
+  const stripeLink = `https://stripe.example.com/payment?client_reference_id=${username}`;
+  await expect(page.locator('[data-test-setup-payment]')).toHaveAttribute(
+    'href',
+    stripeLink,
+  );
+
+  const returnUrl = page.url();
+
+  await updateUser(accessToken, `@${username}:localhost`, {
+    stripeCustomerId: 'cus_test123',
+  });
+
+  await page.goto(returnUrl);
 }
 
 export async function assertLoggedOut(page: Page) {
