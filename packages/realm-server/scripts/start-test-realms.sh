@@ -22,6 +22,7 @@ NODE_ENV=test \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4202' \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
+  --migrateDB \
   \
   --path='./tests/cards' \
   --username='node-test_realm' \

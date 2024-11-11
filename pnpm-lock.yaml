@@ -1692,9 +1692,15 @@ importers:
       '@sentry/node':
         specifier: ^8.31.0
         version: 8.31.0
+      '@types/fs-extra':
+        specifier: ^9.0.13
+        version: 9.0.13
       '@types/pg':
         specifier: ^8.11.5
         version: 8.11.5
+      fs-extra:
+        specifier: ^10.1.0
+        version: 10.1.0
       node-pg-migrate:
         specifier: ^6.2.2
         version: 6.2.2(pg@8.11.5)
@@ -1705,6 +1711,9 @@ importers:
       concurrently:
         specifier: ^8.0.1
         version: 8.2.2
+      sql-parser-cst:
+        specifier: ^0.28.0
+        version: 0.28.0
 
   packages/realm-server:
     devDependencies:
@@ -1858,9 +1867,6 @@ importers:
       sane:
         specifier: ^5.0.1
         version: 5.0.1
-      sql-parser-cst:
-        specifier: ^0.28.0
-        version: 0.28.0
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0
@@ -7039,7 +7045,6 @@ packages:
     resolution: {integrity: sha512-nEnwB++1u5lVDM2UI4c1+5R+FYaKfaAzS4OococimjVm3nQw3TuzH5UNsocrcTBbhnerblyHj4A49qXbIiZdpA==}
     dependencies:
       '@types/node': 18.18.5
-    dev: true
 
   /@types/glob@7.2.0:
     resolution: {integrity: sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA==}

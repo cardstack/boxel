@@ -53,7 +53,6 @@
     "qs": "^6.13.0",
     "qunit": "^2.20.0",
     "sane": "^5.0.1",
-    "sql-parser-cst": "^0.28.0",
     "start-server-and-test": "^1.14.0",
     "supertest": "^6.2.4",
     "testem": "^3.10.1",
@@ -92,10 +91,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate --migrations-table migrations",
-    "make-schema": "./scripts/schema-dump.sh",
-    "drop-db": "docker exec boxel-pg dropdb -U postgres -w",
-    "drop-all-dbs": "./scripts/drop-all-dbs.sh"
+    "full-reset": "./scripts/full-reset.sh"
   },
   "volta": {
     "extends": "../../package.json"

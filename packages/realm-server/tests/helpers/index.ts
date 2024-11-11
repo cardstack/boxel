@@ -120,7 +120,7 @@ export function setupDB(
 
   const runBeforeHook = async () => {
     prepareTestDB();
-    dbAdapter = new PgAdapter();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
     publisher = new PgQueuePublisher(dbAdapter);
     runner = new PgQueueRunner(dbAdapter, 'test-worker');
   };

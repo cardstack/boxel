@@ -82,7 +82,7 @@ module('billing', function (hooks) {
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    dbAdapter = new PgAdapter();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
   });
 
   hooks.afterEach(async function () {
