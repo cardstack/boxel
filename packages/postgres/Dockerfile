@@ -7,5 +7,4 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 
 WORKDIR /boxel/packages/postgres
-# CMD ./node_modules/.bin/node-pg-migrate --migrations-table migrations up
-ENTRYPOINT ["tail", "-f", "/dev/null"]
+CMD ./node_modules/.bin/node-pg-migrate --check-order false --migrations-table migrations up
