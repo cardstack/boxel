@@ -28,6 +28,7 @@ import TagIcon from '@cardstack/boxel-icons/tag';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
+import Calendar from '@cardstack/boxel-icons/calendar';
 
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -277,142 +278,183 @@ function shortenId(id: string): string {
 class Fitted extends Component<typeof Task> {
   <template>
     <div class='task-card'>
-      <div class='header'>
-        <span class='short-id'>{{@model.shortId}}</span>
-        <h3 class='task-title'>{{@model.taskName}}</h3>
-      </div>
-      <div class='footer'>
-        <div class='footer-left'>
+      <div>
+        <div class='main-info'>
+          <span class='short-id'>{{@model.shortId}}</span>
+          <h3 class='task-title'>{{@model.taskName}}</h3>
+        </div>
+
+        <div class='sub-info'>
           {{#if @model.assignee}}
-            <Avatar
-              class='avatar'
-              @userId={{@model.assignee.id}}
-              @displayName={{@model.assignee.name}}
-              @isReady={{true}}
-            />
+            <div class='task-assignee'>
+              <Avatar
+                class='avatar'
+                @userId={{@model.assignee.id}}
+                @displayName={{@model.assignee.name}}
+                @isReady={{true}}
+              />
+              <span class='assignee-name'>
+                {{@model.assignee.name}}
+              </span>
+            </div>
           {{/if}}
-          {{#if @model.project.name}}
-            <Pill>
+
+          <span class='task-date-range'>
+            <Calendar width='14px' height='14px' class='calendar-icon' />
+            {{#if @model.dueDate}}
+              <span class='date-info'><@fields.dueDate /></span>
+            {{else}}
+              <span class='date-info'>No Due Date Assigned</span>
+            {{/if}}
+          </span>
+        </div>
+      </div>
+
+      {{#if @model.tags.length}}
+        <div class='task-tags'>
+          {{#each @model.tags as |tag|}}
+            <Pill class='tag-pill'>
               <:default>
-                {{@model.project.name}}
+                {{tag.name}}
               </:default>
             </Pill>
-          {{/if}}
+          {{/each}}
         </div>
-        <div class='footer-right'>
-          <@fields.dueDate />
-        </div>
-      </div>
+      {{/if}}
     </div>
     <style scoped>
       .task-card {
+        width: 100%;
+        height: 100%;
+        padding: var(--boxel-sp-sm);
         display: flex;
         flex-direction: column;
         justify-content: space-between;
         gap: var(--boxel-sp-sm);
-        height: 100%;
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
-        background-color: #ffffff;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        transition: box-shadow 0.2s ease;
-      }
-      .footer {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .footer-left {
-        display: flex;
-        gap: var(--boxel-sp-xxs);
+        overflow: auto;
       }
       .short-id {
-        color: var(--boxel-purple);
-        font-size: var(--boxel-font-size-sm);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--boxel-red);
       }
       .task-title {
-        font-size: 16px;
-        font-weight: bold;
-        color: #333;
-        margin: 0;
+        margin: var(--boxel-sp-xxxs) 0 0 0;
+        padding: 0;
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        line-height: 1.2;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .sub-info {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        margin-top: var(--boxel-sp-sm);
+      }
+      .task-assignee {
+        display: inline-flex;
+        align-items: center;
+        background-color: var(--boxel-200);
+        border-radius: 100px;
+        overflow: hidden;
+      }
       .avatar {
-        --profile-avatar-icon-size: 25px;
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
+        color: var(--boxel-dark);
+        flex-shrink: 0;
+      }
+      .assignee-name {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--boxel-600);
+        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .task-date-range {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        color: var(--boxel-dark);
+      }
+      .calendar-icon {
+        flex-shrink: 0;
+      }
+      .date-info {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--boxel-600);
+        line-height: 10px;
+      }
+      .task-tags {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        font-size: var(--boxel-font-size-xs);
+        gap: var(--boxel-sp-xxxs);
+      }
+      .tag-pill {
+        font-size: var(--boxel-font-size-xs);
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-4xs);
+        pill-border-color: var(--boxel-400);
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 225px) or ( 100px < height < 120px)) {
-        .footer-right {
-          display: none; /* Hide dueDate when container is narrow */
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 225px) and (height < 120px)) {
-        .footer {
-          display: none;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
-        .footer {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio > 2.0) and (height < 250px) {
-        .footer {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio < 1) and (height < 180px) {
-        .task-title {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      }
-
-      /* New container query for strip-like layout */
-      @container fitted-card (width > 400px) and (aspect-ratio > 6) {
+      @container fitted-card (2.0 < aspect-ratio) {
         .task-card {
-          flex-direction: row;
-          align-items: center;
-          justify-content: space-between;
-          padding: var(--boxel-sp-xxs) var(--boxel-sp);
-        }
-        .header {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
-          min-width: 0; /* Allow flexbox to shrink this item */
-        }
-        .footer {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
-        }
-        .footer-left {
-          margin-left: var(--boxel-sp);
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
-        .footer-right {
-          display: none; /* Hide the date in strip layout */
+          padding: var(--boxel-sp-xxxs);
         }
         .task-title {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: var(--boxel-font-size-sm);
+          -webkit-line-clamp: 1;
+        }
+      }
+      @container fitted-card (1.0 > aspect-ratio) {
+        .task-title {
+          font-size: var(--boxel-font-size-sm);
+          -webkit-line-clamp: 1;
+        }
+        .tag-pill {
+          font-size: 10px;
+        }
+        .sub-info {
+          margin-top: var(--boxel-sp-xs);
         }
         .avatar {
-          order: 2; /* Move avatar after the project name */
+          --profile-avatar-icon-size: 16px;
+        }
+        .assignee-name {
+          font-size: var(--boxel-font-size-xs);
+        }
+        .date-info {
+          font-size: var(--boxel-font-size-xs);
+        }
+      }
+      @container fitted-card (2.0 < aspect-ratio) and (height <= 115px) {
+        .task-card {
+          gap: var(--boxel-sp-6xs);
+        }
+      }
+      @container fitted-card (2.0 < aspect-ratio) and (height <= 58px) {
+        .sub-info,
+        .task-tags {
+          display: none;
+        }
+        .task-card {
+          justify-content: center;
+        }
+      }
+      @container (height <= 29px) {
+        .task-title,
+        .sub-info,
+        .task-tags {
+          display: none;
         }
       }
     </style>
@@ -462,59 +504,30 @@ class TaskIsolated extends Component<typeof Task> {
       </div>
       <div class='task-meta'>
         <div class='row-1'>
-          <Avatar
-            class='avatar'
-            @userId={{@model.assignee.id}}
-            @displayName={{@model.assignee.name}}
-            @isReady={{true}}
-          />
-          {{@model.assignee.name}}
+          {{#if @model.assignee}}
+            <div class='task-assignee'>
+              <Avatar
+                class='avatar'
+                @userId={{@model.assignee.id}}
+                @displayName={{@model.assignee.name}}
+                @isReady={{true}}
+              />
+              <span class='assignee-name'>
+                {{@model.assignee.name}}
+              </span>
+            </div>
+          {{/if}}
           {{#if this.hasDateRange}}
             <div class='task-dates'>
-              <svg
-                class='calendar-icon'
-                width='16'
-                height='16'
-                viewBox='0 0 16 16'
-                fill='none'
-                xmlns='http://www.w3.org/2000/svg'
-              >
-                <path
-                  d='M12.6667 2.66667H3.33333C2.59695 2.66667 2 3.26362 2 4V13.3333C2 14.0697 2.59695 14.6667 3.33333 14.6667H12.6667C13.403 14.6667 14 14.0697 14 13.3333V4C14 3.26362 13.403 2.66667 12.6667 2.66667Z'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-                <path
-                  d='M10.6667 1.33333V4'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-                <path
-                  d='M5.33333 1.33333V4'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-                <path
-                  d='M2 6.66667H14'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-              </svg>
-              <span class='date-range'>
+              <Calendar width='14px' height='14px' class='calendar-icon' />
+              <span class='date-info'>
                 <@fields.dateStarted />
                 -
                 <@fields.dueDate />
               </span>
             </div>
           {{/if}}
+
         </div>
         <div class='row-2'>
           {{#each this.tagNames as |tagLabel|}}
@@ -575,6 +588,7 @@ class TaskIsolated extends Component<typeof Task> {
       }
       .task-header {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
       }
@@ -587,16 +601,35 @@ class TaskIsolated extends Component<typeof Task> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
+      .task-assignee {
+        display: inline-flex;
+        align-items: center;
+        background-color: var(--boxel-200);
+        border-radius: 100px;
+        overflow: hidden;
+      }
       .avatar {
-        --profile-avatar-icon-size: var(--boxel-icon-med);
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
+        flex-shrink: 0;
+      }
+      .assignee-name {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .row-1 {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
       .row-2 {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
       }
       .progress-bar-container {
@@ -604,17 +637,21 @@ class TaskIsolated extends Component<typeof Task> {
         width: 35%;
         max-width: 400px;
       }
+
       .task-dates {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        color: var(--boxel-400); /* Light grey color for the text */
+        color: var(--boxel-600);
       }
       .calendar-icon {
-        color: var(--boxel-400); /* Light grey color for the icon */
+        flex-shrink: 0;
       }
-      .date-range {
-        font-size: var(--boxel-font-size-sm);
+      .date-info {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--boxel-600);
+        line-height: 10px;
       }
       .children-header {
         font-size: var(--boxel-font-size-sm);
