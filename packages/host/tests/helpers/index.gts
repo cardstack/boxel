@@ -561,7 +561,7 @@ export function setupCardLogs(
 }
 
 export function createJWT(
-  claims: TokenClaims,
+  claims: Partial<TokenClaims>,
   expiration: string,
   secret: string,
 ) {
