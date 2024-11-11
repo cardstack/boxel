@@ -11,21 +11,21 @@ export function stringToColor(string: string | null) {
   if (!string) {
     return 'transparent';
   }
-
+  // Generate hash from string
   let hash = 0;
-
   for (let i = 0; i < string.length; i += 1) {
     hash = string.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  let color = '#';
+  // Use HSL color space for better control over brightness
+  // Hue: Use full range (0-360) for variety of colors
+  const hue = Math.abs(hash) % 360;
+  // Saturation: Keep it between 35-85% for vibrant but not overwhelming colors
+  const saturation = 35 + (Math.abs(hash >> 8) % 70);
+  // Lightness: Keep it between 25-45% to ensure contrast with white text
+  const lightness = 25 + (Math.abs(hash >> 16) % 51);
 
-  for (let i = 0; i < 3; i += 1) {
-    const value = (hash >> (i * 8)) & 0xff;
-    color += `00${value.toString(16)}`.slice(-2);
-  }
-
-  return color;
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
 interface Signature {
