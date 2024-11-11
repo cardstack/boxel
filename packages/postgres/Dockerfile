@@ -8,5 +8,4 @@ RUN pnpm install --frozen-lockfile
 
 WORKDIR /boxel/packages/postgres
 
-# after the migration is done the container is available for manual DB introspection
 CMD ./node_modules/.bin/node-pg-migrate --check-order false --migrations-table migrations up && sleep infinity
