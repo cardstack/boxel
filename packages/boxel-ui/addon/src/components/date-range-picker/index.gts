@@ -92,6 +92,7 @@ export default class DateRangePicker extends Component<Signature> {
               <div class='nav-container'>
                 <IconButton
                   @icon={{TriangleLeftIcon}}
+                  aria-label='Previous month'
                   {{on 'click' (fn this.onNavigate 'left' 'previous')}}
                 />
                 <div class='month-name'>
@@ -103,6 +104,7 @@ export default class DateRangePicker extends Component<Signature> {
                 </div>
                 <IconButton
                   @icon={{TriangleRightIcon}}
+                  aria-label='Next month'
                   {{on 'click' (fn this.onNavigate 'left' 'next')}}
                 />
               </div>
@@ -115,6 +117,7 @@ export default class DateRangePicker extends Component<Signature> {
               <div class='nav-container'>
                 <IconButton
                   @icon={{TriangleLeftIcon}}
+                  aria-label='Previous month'
                   {{on 'click' (fn this.onNavigate 'right' 'previous')}}
                 />
                 <div class='month-name'>
@@ -126,6 +129,7 @@ export default class DateRangePicker extends Component<Signature> {
                 </div>
                 <IconButton
                   @icon={{TriangleRightIcon}}
+                  aria-label='Next month'
                   {{on 'click' (fn this.onNavigate 'right' 'next')}}
                 />
               </div>
