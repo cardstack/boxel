@@ -1,11 +1,13 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { buildWaiter } from '@ember/test-waiters';
+
+import { isTesting } from '@embroider/macros';
+
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 
 import {
   SupportedMimeType,

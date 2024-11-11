@@ -263,7 +263,7 @@ module('Acceptance | Commands tests', function (hooks) {
             data-test-switch-to-code-mode-without-autoexecute-button
           >Switch to code-mode (no autoExecute)</button>
           <button
-            {{on 'click' (fn this.runScheduleMeetingCommand)}}
+            {{on 'click' this.runScheduleMeetingCommand}}
             data-test-schedule-meeting-button
           >Schedule meeting</button>
         </template>
