@@ -51,6 +51,8 @@ import {
   matrixRegistrationSecret,
   seedPath,
   testRealmInfo,
+  insertUser,
+  insertPlan,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -62,6 +64,13 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import { type PgAdapter } from '@cardstack/postgres';
+import {
+  addToCreditsLedger,
+  insertSubscriptionCycle,
+  insertSubscription,
+} from '@cardstack/billing/billing-queries';
+import { createJWT as createRealmServerJWT } from '../utils/jwt';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -132,7 +141,6 @@ module('Realm Server', function (hooks) {
   }
 
   let testRealm: Realm;
-  let testRealmServer: RealmServer;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
@@ -154,20 +162,18 @@ module('Realm Server', function (hooks) {
           copySync(join(__dirname, 'cards'), testRealmDir);
         }
         let virtualNetwork = createVirtualNetwork();
-
-        ({ testRealm, testRealmHttpServer, testRealmServer } =
-          await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
+        ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_1'),
+          realmURL: testRealmURL,
+          permissions,
+          dbAdapter: _dbAdapter,
+          runner,
+          publisher,
+          matrixURL,
+          fileSystem,
+        }));
 
         request = supertest(testRealmHttpServer);
       },
@@ -190,6 +196,7 @@ module('Realm Server', function (hooks) {
 
   hooks.afterEach(async function () {
     await closeServer(testRealmHttpServer);
+    resetCatalogRealms();
   });
 
   module('permissions requests', function (hooks) {
@@ -2637,6 +2644,155 @@ module('Realm Server', function (hooks) {
     });
   });
 
+  module('_user GET request', function (hooks) {
+    setupPermissionedRealm(hooks, {
+      john: ['read', 'write'],
+    });
+
+    test('user is not found', async function (assert) {
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+    });
+
+    test('subscription is not found', async function (assert) {
+      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'user',
+            id: user.id,
+            attributes: {
+              matrixUserId: user.matrixUserId,
+              stripeCustomerId: user.stripeCustomerId,
+              creditsAvailableInPlanAllowance: null,
+              creditsIncludedInPlanAllowance: null,
+              extraCreditsAvailableInBalance: null,
+            },
+            relationships: {
+              subscription: null,
+            },
+          },
+          included: null,
+        },
+        '/_user response is correct',
+      );
+    });
+
+    test('user subscibes to a plan and has extra credit', async function (assert) {
+      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let plan = await insertPlan(
+        dbAdapter,
+        'Creator',
+        12,
+        2500,
+        'prod_creator',
+      );
+      let subscription = await insertSubscription(dbAdapter, {
+        user_id: user.id,
+        plan_id: plan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567890',
+      });
+      let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+        subscriptionId: subscription.id,
+        periodStart: 1,
+        periodEnd: 2,
+      });
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 100,
+        creditType: 'extra_credit',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 2500,
+        creditType: 'plan_allowance',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'user',
+            id: user.id,
+            attributes: {
+              matrixUserId: user.matrixUserId,
+              stripeCustomerId: user.stripeCustomerId,
+              creditsAvailableInPlanAllowance: 2500,
+              creditsIncludedInPlanAllowance: 2500,
+              extraCreditsAvailableInBalance: 100,
+            },
+            relationships: {
+              subscription: {
+                data: {
+                  type: 'subscription',
+                  id: subscription.id,
+                },
+              },
+            },
+          },
+          included: [
+            {
+              type: 'subscription',
+              id: subscription.id,
+              attributes: {
+                startedAt: 1,
+                endedAt: null,
+                status: 'active',
+              },
+              relationships: {
+                plan: {
+                  data: {
+                    type: 'plan',
+                    id: plan.id,
+                  },
+                },
+              },
+            },
+            {
+              type: 'plan',
+              id: plan.id,
+              attributes: {
+                name: plan.name,
+                monthlyPrice: plan.monthlyPrice,
+                creditsIncluded: plan.creditsIncluded,
+              },
+            },
+          ],
+        },
+        '/_user response is correct',
+      );
+    });
+  });
+
   module('various other realm tests', function (hooks) {
     let testRealmHttpServer2: Server;
     let testRealmServer2: RealmServer;
@@ -2707,7 +2863,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -2891,7 +3047,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -2963,7 +3119,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
@@ -3100,7 +3256,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send('make a new realm please!');
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
@@ -3115,7 +3271,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3134,7 +3290,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3162,7 +3318,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3189,7 +3345,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3219,7 +3375,7 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
         )
         .send(
           JSON.stringify({
@@ -3240,7 +3396,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
@@ -3271,7 +3427,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
@@ -3298,7 +3454,7 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
           )
           .send(
             JSON.stringify({
