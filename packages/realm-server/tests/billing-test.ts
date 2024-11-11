@@ -6,10 +6,10 @@ import {
   insertUser,
   prepareTestDB,
 } from './helpers';
-import PgAdapter from '../pg-adapter';
-import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
-import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
-import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/checkout-session-completed';
+import { PgAdapter } from '@cardstack/postgres';
+import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
+import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
+import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';
 import {
   LedgerEntry,
   SubscriptionCycle,
@@ -17,13 +17,13 @@ import {
   sumUpCreditsLedger,
   addToCreditsLedger,
   insertSubscription,
-} from '../billing/billing-queries';
+} from '@cardstack/billing/billing-queries';
 
 import {
   StripeInvoicePaymentSucceededWebhookEvent,
   StripeSubscriptionDeletedWebhookEvent,
   StripeCheckoutSessionCompletedWebhookEvent,
-} from '../billing/stripe-webhook-handlers';
+} from '@cardstack/billing/stripe-webhook-handlers';
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);

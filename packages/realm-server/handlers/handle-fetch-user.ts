@@ -11,7 +11,7 @@ import {
   Subscription,
   SubscriptionCycle,
   sumUpCreditsLedger,
-} from '../billing/billing-queries';
+} from '@cardstack/billing/billing-queries';
 import { CreateRoutesArgs } from '../routes';
 
 type FetchUserResponse = {

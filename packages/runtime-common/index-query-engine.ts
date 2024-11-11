@@ -55,6 +55,7 @@ import {
   type CardTypeSummary,
   type RealmVersionsTable,
 } from './index-structure';
+import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
   type: 'module';
@@ -484,7 +485,7 @@ export class IndexQueryEngine {
 
     let prerenderedCards = results.map((card) => {
       card.deps!.forEach((dep: string) => {
-        if (dep.endsWith('glimmer-scoped.css')) {
+        if (isScopedCSSRequest(dep)) {
           scopedCssUrls.add(dep);
         }
       });

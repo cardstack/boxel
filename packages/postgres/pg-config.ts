@@ -1,6 +1,6 @@
 import { type ClientConfig } from 'pg';
 
-export default function postgresConfig(defaultConfig: ClientConfig = {}) {
+export function postgresConfig(defaultConfig: ClientConfig = {}) {
   return Object.assign({}, defaultConfig, {
     host: process.env.PGHOST || 'localhost',
     port: process.env.PGPORT || '5432',

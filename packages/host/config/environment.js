@@ -87,7 +87,7 @@ module.exports = function (environment) {
 
 function getLatestSchemaFile() {
   const migrationsDir = path.resolve(
-    path.join(__dirname, '..', '..', 'realm-server', 'migrations'),
+    path.join(__dirname, '..', '..', 'postgres', 'migrations'),
   );
   let migrations = fs.readdirSync(migrationsDir);
   let lastMigration = migrations

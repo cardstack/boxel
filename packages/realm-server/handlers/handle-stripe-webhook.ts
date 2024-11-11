@@ -1,6 +1,6 @@
 import Koa from 'koa';
 import { fetchRequestFromContext, setContextResponse } from '../middleware';
-import stripeWebhookHandler from '../billing/stripe-webhook-handlers';
+import stripeWebhookHandler from '@cardstack/billing/stripe-webhook-handlers';
 import { CreateRoutesArgs } from '../routes';
 
 export default function handleStripeWebhookRequest({

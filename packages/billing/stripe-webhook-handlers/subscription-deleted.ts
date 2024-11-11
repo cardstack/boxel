@@ -7,8 +7,7 @@ import {
   getSubscriptionByStripeSubscriptionId,
 } from '../billing-queries';
 
-import { TransactionManager } from '../../pg-transaction-manager';
-import PgAdapter from '../../pg-adapter';
+import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 
 export async function handleSubscriptionDeleted(
   dbAdapter: DBAdapter,
