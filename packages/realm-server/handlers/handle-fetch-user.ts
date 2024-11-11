@@ -25,6 +25,7 @@ type FetchUserResponse = {
       matrixUserId: string;
       stripeCustomerId: string;
       creditsAvailableInPlanAllowance: number;
+      creditsIncludedInPlanAllowance: number;
       extraCreditsAvailableInBalance: number;
     };
     relationships: {
@@ -35,7 +36,7 @@ type FetchUserResponse = {
         };
       } | null;
     };
-  } | null;
+  };
   included:
     | [
         {
@@ -98,19 +99,27 @@ export default function handleFetchUserRequest({
       ]);
     }
 
-    let extraCreditsAvailableInBalance: number | null = null;
     let creditsAvailableInPlanAllowance: number | null = null;
+    let creditsIncludedInPlanAllowance: number | null = null;
+    let extraCreditsAvailableInBalance: number | null = null;
     if (currentSubscriptionCycle) {
-      [extraCreditsAvailableInBalance, creditsAvailableInPlanAllowance] =
-        await Promise.all([
-          sumUpCreditsLedger(dbAdapter, {
-            creditType: ['extra_credit', 'extra_credit_used'],
-          }),
-          sumUpCreditsLedger(dbAdapter, {
-            creditType: ['plan_allowance', 'plan_allowance_used'],
-            subscriptionCycleId: currentSubscriptionCycle.id,
-          }),
-        ]);
+      [
+        creditsAvailableInPlanAllowance,
+        creditsIncludedInPlanAllowance,
+        extraCreditsAvailableInBalance,
+      ] = await Promise.all([
+        sumUpCreditsLedger(dbAdapter, {
+          creditType: ['plan_allowance', 'plan_allowance_used'],
+          subscriptionCycleId: currentSubscriptionCycle.id,
+        }),
+        sumUpCreditsLedger(dbAdapter, {
+          creditType: ['plan_allowance'],
+          subscriptionCycleId: currentSubscriptionCycle.id,
+        }),
+        sumUpCreditsLedger(dbAdapter, {
+          creditType: ['extra_credit', 'extra_credit_used'],
+        }),
+      ]);
     }
 
     let responseBody = {
@@ -120,8 +129,9 @@ export default function handleFetchUserRequest({
         attributes: {
           matrixUserId: user.matrixUserId,
           stripeCustomerId: user.stripeCustomerId,
-          creditsAvailableInPlanAllowance: creditsAvailableInPlanAllowance,
-          extraCreditsAvailableInBalance: extraCreditsAvailableInBalance,
+          creditsAvailableInPlanAllowance,
+          creditsIncludedInPlanAllowance,
+          extraCreditsAvailableInBalance,
         },
         relationships: {
           subscription: mostRecentSubscription
@@ -134,36 +144,37 @@ export default function handleFetchUserRequest({
             : null,
         },
       },
-      included: mostRecentSubscription
-        ? [
-            {
-              type: 'subscription',
-              id: mostRecentSubscription.id,
-              attributes: {
-                startedAt: mostRecentSubscription.startedAt,
-                endedAt: mostRecentSubscription.endedAt ?? null,
-                status: mostRecentSubscription.status,
-              },
-              relationships: {
-                plan: {
-                  data: {
-                    type: 'plan',
-                    id: plan!.id,
+      included:
+        mostRecentSubscription && plan
+          ? [
+              {
+                type: 'subscription',
+                id: mostRecentSubscription.id,
+                attributes: {
+                  startedAt: mostRecentSubscription.startedAt,
+                  endedAt: mostRecentSubscription.endedAt ?? null,
+                  status: mostRecentSubscription.status,
+                },
+                relationships: {
+                  plan: {
+                    data: {
+                      type: 'plan',
+                      id: plan.id,
+                    },
                   },
                 },
               },
-            },
-            {
-              type: 'plan',
-              id: plan!.id,
-              attributes: {
-                name: plan!.name,
-                monthlyPrice: plan!.monthlyPrice,
-                creditsIncluded: plan!.creditsIncluded,
+              {
+                type: 'plan',
+                id: plan.id,
+                attributes: {
+                  name: plan.name,
+                  monthlyPrice: plan.monthlyPrice,
+                  creditsIncluded: plan.creditsIncluded,
+                },
               },
-            },
-          ]
-        : null,
+            ]
+          : null,
     } as FetchUserResponse;
 
     return setContextResponse(

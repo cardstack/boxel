@@ -45,14 +45,10 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
-interface Plan {
-  name: string;
-  monthlyPrice: number;
-  creditsIncluded: number;
-}
 interface CreditInfo {
-  plan: Plan | null;
+  plan: string | null;
   creditsAvailableInPlanAllowance: number | null;
+  creditsIncludedInPlanAllowance: number | null;
   extraCreditsAvailableInBalance: number | null;
 }
 
@@ -200,15 +196,18 @@ export default class RealmServerService extends Service {
     }
     let json = await response.json();
     let plan =
-      (json.included?.find((i: { type: string }) => i.type === 'plan')
-        ?.attributes as Plan) ?? null;
+      json.included?.find((i: { type: string }) => i.type === 'plan')
+        ?.attributes?.name ?? null;
     let creditsAvailableInPlanAllowance =
       json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
+    let creditsIncludedInPlanAllowance =
+      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
     let extraCreditsAvailableInBalance =
       json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
     return {
       plan,
       creditsAvailableInPlanAllowance,
+      creditsIncludedInPlanAllowance,
       extraCreditsAvailableInBalance,
     };
   }

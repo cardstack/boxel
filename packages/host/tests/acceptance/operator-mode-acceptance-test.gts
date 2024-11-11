@@ -717,6 +717,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           matrixUserId: '@testuser:staging',
           stripeCustomerId: 'stripe-id-1',
           creditsAvailableInPlanAllowance: 1000,
+          creditsIncludedInPlanAllowance: 1000,
           extraCreditsAvailableInBalance: 100,
         },
         relationships: {

@@ -2681,6 +2681,7 @@ module('Realm Server', function (hooks) {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
               creditsAvailableInPlanAllowance: null,
+              creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: null,
             },
             relationships: {
@@ -2746,6 +2747,7 @@ module('Realm Server', function (hooks) {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
               creditsAvailableInPlanAllowance: 2500,
+              creditsIncludedInPlanAllowance: 2500,
               extraCreditsAvailableInBalance: 100,
             },
             relationships: {

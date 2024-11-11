@@ -144,7 +144,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               {{#if this.isLoading}}
                 <LoadingIndicator />
               {{else}}
-                {{this.planName}}
+                {{this.plan}}
               {{/if}}
             </span>
           </div>
@@ -216,12 +216,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     return this.fetchCreditInfo.value?.plan;
   }
 
-  private get planName() {
-    return this.plan?.name;
-  }
-
   private get creditsIncludedInPlanAllowance() {
-    return this.fetchCreditInfo.value?.plan?.creditsIncluded;
+    return this.fetchCreditInfo.value?.creditsIncludedInPlanAllowance;
   }
 
   private get creditsAvailableInPlanAllowance() {
