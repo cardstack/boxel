@@ -10,6 +10,7 @@ import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CardHeaderUsage from './components/card-header/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
+import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
@@ -44,6 +45,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['CardContentContainer', CardContentContainerUsage],
   ['CardHeader', CardHeaderUsage],
   ['CircleSpinner', CircleSpinnerUsage],
+  ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
