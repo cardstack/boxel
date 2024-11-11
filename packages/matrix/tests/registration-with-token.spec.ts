@@ -149,6 +149,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-workspace-chooser-toggle]`),
       'workspace toggle button is disabled when no workspaces opened',
     ).toBeDisabled();
+    await expect(
+      page.locator(
+        `[data-test-catalog-list] [data-test-workspace="Test Workspace A"]`,
+      ),
+    ).toHaveCount(1);
 
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
@@ -196,6 +201,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(0);
+    await expect(
+      page.locator(
+        `[data-test-catalog-list] [data-test-workspace="Test Workspace A"]`,
+      ),
+    ).toHaveCount(1);
 
     // assert newly registered user can login with their credentials
     await logout(page);
@@ -212,6 +222,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await page.reload();
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        `[data-test-catalog-list] [data-test-workspace="Test Workspace A"]`,
+      ),
     ).toHaveCount(1);
 
     // we're including the following assertions in this test because the
