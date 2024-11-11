@@ -1,5 +1,5 @@
-import Component from '@glimmer/component';
 import { concat } from '@ember/helper';
+import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
 import cn from '../../helpers/cn.ts';
