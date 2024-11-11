@@ -441,6 +441,8 @@ class Isolated extends Component<typeof CardsGrid> {
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
 
+    // Remove all filter items except the first one,
+    // as 'All Cards' is a predefined filter and not a result from the card type summary API.
     this.filters.splice(1, this.filters.length);
     cardTypeSummaries.forEach((summary) => {
       if (excludedCardTypeIds.includes(summary.id)) {
