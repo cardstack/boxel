@@ -62,7 +62,7 @@ test.describe('Create Realm via Dashboard', () => {
       'the "N" icon URL is shown',
     ).toHaveAttribute(
       'style',
-      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-n.png")',
+      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-n.png");',
     );
   });
 });

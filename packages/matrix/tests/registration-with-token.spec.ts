@@ -141,7 +141,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'the "T" icon URL is shown',
     ).toHaveAttribute(
       'style',
-      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-t.png")',
+      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-t.png");',
     );
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
