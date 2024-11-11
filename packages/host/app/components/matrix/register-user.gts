@@ -359,6 +359,7 @@ export default class RegisterUser extends Component<Signature> {
     | {
         type: 'paymentSetup';
         username: string;
+        name: string;
       }
     // TODO we'll need to also add a CAPTCHA state
     // this will be probably impossible to test
@@ -610,7 +611,8 @@ export default class RegisterUser extends Component<Signature> {
     if (
       this.state.type === 'initial' ||
       this.state.type === 'validateEmail' ||
-      this.state.type === 'login'
+      this.state.type === 'login' ||
+      this.state.type === 'paymentSetup'
     ) {
       throw new Error(
         `invalid state: cannot resendValidation() in state ${this.state.type}`,
@@ -676,7 +678,11 @@ export default class RegisterUser extends Component<Signature> {
   // the registration until the final step which results in a new user (and
   // successful HTTP response)
   private doRegistrationFlow = restartableTask(async () => {
-    if (this.state.type === 'initial' || this.state.type === 'validateEmail') {
+    if (
+      this.state.type === 'initial' ||
+      this.state.type === 'validateEmail' ||
+      this.state.type === 'paymentSetup'
+    ) {
       throw new Error(
         `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`,
       );
@@ -726,8 +732,8 @@ export default class RegisterUser extends Component<Signature> {
     // except for the optional well_known field
     if (auth.access_token && auth.device_id) {
       this.state = {
-        ...this.state,
         type: 'paymentSetup',
+        name: this.state.name,
         username: this.state.username,
       };
       this.args.setMode('payment-setup');
@@ -746,7 +752,8 @@ export default class RegisterUser extends Component<Signature> {
     if (
       this.state.type === 'initial' ||
       this.state.type === 'validateEmail' ||
-      this.state.type === 'login'
+      this.state.type === 'login' ||
+      this.state.type === 'paymentSetup'
     ) {
       throw new Error(
         `invalid state: cannot do nextStateFromResponse() in state ${this.state.type}`,

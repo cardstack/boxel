@@ -1,8 +1,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { CardContainer, BoxelHeader } from '@cardstack/boxel-ui/components';
-import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
+import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import type { AuthMode } from './auth';
 
