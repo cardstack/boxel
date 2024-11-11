@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import { concat } from '@ember/helper';
 import { modifier } from 'ember-modifier';
 
 import cn from '../../helpers/cn.ts';
@@ -26,11 +27,16 @@ const setBackgroundImage = modifier(
 
 export default class RealmIcon extends Component<Signature> {
   private get showAnimation() {
-    return this.args.canAnimate && this.args.realmInfo.isIndexing;
+    return this.args.canAnimate && this.args.realmInfo?.isIndexing;
   }
   <template>
     <div
-      alt={{@realmInfo.name}}
+      role='img'
+      aria-label={{if
+        this.showAnimation
+        (concat 'indexing ' @realmInfo.name)
+        @realmInfo.name
+      }}
       class={{cn
         'realm-icon-img'
         can-animate=@canAnimate

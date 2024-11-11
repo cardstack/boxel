@@ -858,7 +858,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom(
         `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
       )
-      .hasAttribute('alt', 'Test Workspace B');
+      .hasAttribute('aria-label', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -919,7 +919,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom(
         `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
       )
-      .hasAttribute('alt', 'Test Workspace A');
+      .hasAttribute('aria-label', 'Test Workspace A');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
