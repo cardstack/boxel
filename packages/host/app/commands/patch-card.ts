@@ -42,6 +42,7 @@ export default class PatchCardCommand extends Command<
   ): Promise<undefined> {
     // await this.cardService.saveModel(this, input.card, input.realm);
     // TODO: delegate to cardService patchCard incoporating OperatorModeStateService#patchCard
+    console.log('input', input);
     if (!input.cardId || !input.patch) {
       throw new Error(
         "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",

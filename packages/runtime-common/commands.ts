@@ -24,7 +24,7 @@ export interface CommandContext {
     attachedCards?: CardDef[];
     skillCards?: SkillCard[];
     commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
-  }) => Promise<{ sessionId: string }>;
+  }) => Promise<{ roomId: string }>;
 }
 
 export class CommandInvocation<

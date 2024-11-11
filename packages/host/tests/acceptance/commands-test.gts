@@ -1,16 +1,29 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { click, waitFor } from '@ember/test-helpers';
-
-import { waitUntil } from '@ember/test-helpers';
+import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
+import { pauseTest } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Command } from '@cardstack/runtime-common';
 
-import type { SwitchSubmodeInput } from 'https://cardstack.com/base/command';
+import type {
+  SwitchSubmodeInput,
+  SaveCardInput,
+  ShowCardInput,
+  PatchCardInput,
+} from 'https://cardstack.com/base/command';
+
+import { getOwner, setOwner } from '@ember/owner';
+
+import type { CommandContext } from '@cardstack/runtime-common';
+
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { service } from '@ember/service';
 
 import {
   setupLocalIndexing,
@@ -90,6 +103,89 @@ module('Acceptance | Commands tests', function (hooks) {
       };
     }
 
+    class ScheduleMeetingInput extends CardDef {
+      @field topic = contains(StringField);
+      @field participants = linksToMany(() => Person);
+    }
+
+    class Meeting extends CardDef {
+      static displayName = 'Meeting';
+      @field participants = linksToMany(() => Person);
+      @field topic = contains(StringField);
+    }
+
+    class ScheduleMeetingCommand extends Command<
+      ScheduleMeetingInput,
+      undefined
+    > {
+      @service private declare loaderService: LoaderService;
+      @service
+      private declare operatorModeStateService: OperatorModeStateService;
+      static displayName = 'ScheduleMeetingCommand';
+
+      async getInputType() {
+        return ScheduleMeetingInput;
+      }
+      async execute(input: ScheduleMeetingInput) {
+        console.log('input', input);
+        let meeting = new Meeting({
+          topic: 'unset topic',
+          participants: input.participants,
+        });
+        console.log('meeting', meeting);
+        let saveCardCommand = this.commandContext.lookupCommand<
+          SaveCardInput,
+          undefined
+        >('save-card');
+        console.log('saveCardCommand', saveCardCommand);
+        console.log('this.loaderService', this.loaderService);
+        const { SaveCardInput, PatchCardInput } =
+          await this.loaderService.loader.import<typeof BaseCommandModule>(
+            `${baseRealm.url}command`,
+          );
+        console.log('SaveCardInput', SaveCardInput);
+        await saveCardCommand.execute(
+          new SaveCardInput({
+            card: meeting,
+            realm: testRealmURL,
+          }),
+        );
+        console.log('saved');
+
+        // Mutate and save again
+        let patchCardCommand = this.commandContext.lookupCommand<
+          PatchCardInput,
+          undefined,
+          Meeting
+        >('patch-card', { cardType: Meeting });
+
+        await this.commandContext.sendAiAssistantMessage({
+          prompt: `Change the topic of the meeting to "${input.topic}"`,
+          attachedCards: [meeting],
+          commands: [{ command: patchCardCommand, autoExecute: true }],
+        });
+
+        await patchCardCommand.waitForNextCompletion();
+
+        let showCardCommand = this.commandContext.lookupCommand<
+          ShowCardInput,
+          undefined
+        >('show-card');
+        console.log('showCardCommand', showCardCommand);
+        const { ShowCardInput } = await this.loaderService.loader.import<
+          typeof BaseCommandModule
+        >(`${baseRealm.url}command`);
+        await showCardCommand.execute(
+          new ShowCardInput({
+            cardToShow: meeting,
+            placement: 'addToStack',
+          }),
+        );
+
+        return undefined;
+      }
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -126,6 +222,24 @@ module('Acceptance | Commands tests', function (hooks) {
             commands: [{ command: switchSubmodeCommand, autoExecute }],
           });
         };
+        runScheduleMeetingCommand = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+          let scheduleMeeting = new ScheduleMeetingCommand(
+            commandContext,
+            undefined,
+          );
+          setOwner(scheduleMeeting, getOwner(this)!);
+          await scheduleMeeting.execute(
+            new ScheduleMeetingInput({
+              topic: 'Meeting with Hassan',
+              participants: [this.model],
+            }),
+          );
+        };
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -151,15 +265,18 @@ module('Acceptance | Commands tests', function (hooks) {
             }}
             data-test-switch-to-code-mode-without-autoexecute-button
           >Switch to code-mode (no autoExecute)</button>
+          <button
+            {{on 'click' (fn this.runScheduleMeetingCommand)}}
+            data-test-schedule-meeting-button
+          >Schedule meeting</button>
         </template>
       };
     }
-
     let mangoPet = new Pet({ name: 'Mango' });
 
     await setupAcceptanceTestRealm({
       contents: {
-        'person.gts': { Person },
+        'person.gts': { Person, Meeting },
         'pet.gts': { Pet },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
         'Person/hassan.json': new Person({
@@ -399,5 +516,85 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();
+  });
+
+  test('a scripted command can create a card, update it and show it', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+    );
+    await click('[data-test-schedule-meeting-button]');
+    await waitUntil(() => getRoomIds().length > 0);
+    let roomId = getRoomIds()[0];
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    let boxelMessageData = message.content.data;
+    assert.strictEqual(boxelMessageData.context.tools.length, 1);
+    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
+    let toolName = boxelMessageData.context.tools[0].function.name;
+    let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
+    console.log('meetingCardEventId', meetingCardEventId);
+    console.log('getRoomEvents(roomId)', getRoomEvents(roomId));
+    console.log(
+      getRoomEvents(roomId).find(
+        (event) => event.event_id === meetingCardEventId,
+      ),
+    );
+    let cardFragment = getRoomEvents(roomId).find(
+      (event) => event.event_id === meetingCardEventId,
+    )!.content.data.cardFragment;
+
+    let parsedCard = JSON.parse(cardFragment);
+    let meetingCardId = parsedCard.data.id;
+    console.log('meetingCardId', meetingCardId);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Update card',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'Update card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            cardId: meetingCardId,
+            patch: {
+              attributes: {
+                topic: 'Meeting with Hassan',
+              },
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    await waitUntil(
+      () => findAll('[data-test-operator-mode-stack]').length === 2,
+    );
+
+    assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+
+    assert
+      .dom(
+        '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
+      )
+      .includesText('Meeting with Hassan');
   });
 });
