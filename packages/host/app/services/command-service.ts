@@ -70,6 +70,7 @@ export default class CommandService extends Service {
     }
     // Get the input type and validate/construct the payload
     let InputType = await command.getInputType();
+
     // Construct a new instance of the input type with the payload
     let typedInput = new InputType(toolCall.arguments);
     await command.execute(typedInput);

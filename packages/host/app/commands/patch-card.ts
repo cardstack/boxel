@@ -12,21 +12,6 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-type PatchPayload = { card_id: string } & PatchData;
-
-function hasPatchData(payload: any): payload is PatchPayload {
-  return (
-    (typeof payload === 'object' &&
-      payload !== null &&
-      'card_id' in payload &&
-      'attributes' in payload) ||
-    (typeof payload === 'object' &&
-      payload !== null &&
-      'card_id' in payload &&
-      'relationships' in payload)
-  );
-}
-
 // import type CardService from '../services/card-service';
 import OperatorModeStateService from '../services/operator-mode-state-service';
 
@@ -37,7 +22,7 @@ export default class PatchCardCommand extends Command<
   undefined,
   { cardType: typeof CardDef }
 > {
-  // @service private declare cardService: CardService;
+  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
 
@@ -48,6 +33,7 @@ export default class PatchCardCommand extends Command<
       typeof BaseCommandModule
     >(`${baseRealm.url}command`);
     const { PatchCardInput } = commandModule;
+    // Can we define one on the fly?
     return PatchCardInput;
   }
 

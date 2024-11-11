@@ -57,12 +57,13 @@ export class CreateProductRequirementsInstance extends Command<
     console.log('Input into the run', input);
     // Create new card
     let prdCard = new ProductRequirementDocument();
+    console.log('prdCard', prdCard);
 
     let saveCardCommand = this.commandContext.lookupCommand<
       SaveCardInput,
       undefined
     >('save-card'); // lookupCommand creates the instance and passes in the context
-
+    console.log('saveCardCommand', saveCardCommand);
     let SaveCardInputType = await saveCardCommand.getInputType();
     await saveCardCommand.execute(
       new SaveCardInputType({
@@ -70,6 +71,7 @@ export class CreateProductRequirementsInstance extends Command<
         card: prdCard,
       }),
     );
+    console.log('prdCard after save', prdCard);
 
     // Get patch command, this takes the card and returns a command that can be used to patch the card
     let patchPRDCommand = this.commandContext.lookupCommand<
@@ -77,6 +79,7 @@ export class CreateProductRequirementsInstance extends Command<
       undefined,
       ProductRequirementDocument
     >('patch-card', { cardType: ProductRequirementDocument });
+    console.log('patchPRDCommand', patchPRDCommand);
 
     // This should return a session ID so that we can potentially send followup messages
     // This should delegate to a matrix service method. Besides actually sending the message,
@@ -95,11 +98,13 @@ export class CreateProductRequirementsInstance extends Command<
       commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking whic
     });
 
+    console.log('roomId', roomId);
+
     // Wait for the PRD command to have been applied
     await patchPRDCommand.waitForNextCompletion();
     // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
     // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
-
+    console.log('prdCard after patch', prdCard);
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;
     result.roomId = roomId;
@@ -185,7 +190,7 @@ export class CreateBoxelApp extends Command<
     let showCardCommand = this.commandContext.lookupCommand<
       ShowCardInput,
       undefined
-    >('showCard');
+    >('show-card');
     let showPRDCardInput = new ShowCardInput();
     showPRDCardInput.cardToShow = prdCard;
     showPRDCardInput.placement = 'addToStack'; // probably want to be able to lookup what stack to add this to, based on where the app card is, if visible

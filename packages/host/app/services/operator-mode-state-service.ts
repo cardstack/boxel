@@ -422,6 +422,21 @@ export default class OperatorModeStateService extends Service {
     return stringify(this.rawStateWithSavedCardsOnly())!;
   }
 
+  async createStackItem(
+    card: CardDef,
+    stackIndex: number,
+    format: 'isolated' | 'edit' = 'isolated',
+  ) {
+    let stackItem = new StackItem({
+      card,
+      stackIndex,
+      owner: this,
+      format,
+    });
+    await stackItem.ready();
+    return stackItem;
+  }
+
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
