@@ -39,9 +39,10 @@ import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
+  type Permissions,
   cardTypeDisplayName,
   PermissionsContextName,
-  type Permissions,
+  RealmURLContextName,
   Deferred,
   cardTypeIcon,
 } from '@cardstack/runtime-common';
@@ -134,6 +135,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get permissions(): Permissions {
     return this.realm.permissions(this.card.id);
   }
+
+  @provide(RealmURLContextName)
+  get realmURL() {
+    let api = this.args.item.api;
+    return this.card[api.realmURL];
+  }
+
   cardTracker = new ElementTracker<{
     cardId?: string;
     card?: CardDef;

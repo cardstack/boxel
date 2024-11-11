@@ -1704,12 +1704,7 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
-
-    return createResponse({
-      body: null,
-      init: { status: 204 },
-      requestContext,
-    });
+    return await this.getRealmPermissions(request, requestContext);
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
