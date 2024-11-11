@@ -1,4 +1,4 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import { type DBAdapter } from '@cardstack/runtime-common';
 import {
   insertStripeEvent,
   markStripeEventAsProcessed,
@@ -6,8 +6,7 @@ import {
 } from '../billing-queries';
 import { StripeCheckoutSessionCompletedWebhookEvent } from '.';
 
-import PgAdapter from '../../pg-adapter';
-import { TransactionManager } from '../../pg-transaction-manager';
+import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,

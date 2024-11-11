@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
@@ -95,6 +96,7 @@ type State = {
   selectedRealmUrls: string[];
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
+  consumingRealm?: URL;
 };
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -312,6 +314,7 @@ export default class CardCatalogModal extends Component<Signature> {
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
       preselectedCardTypeQuery?: Query;
+      consumingRealm?: URL;
     },
   ): Promise<undefined | T> {
     return (await this._chooseCard.perform(
@@ -328,7 +331,6 @@ export default class CardCatalogModal extends Component<Signature> {
             by: 'title',
           },
         ],
-
         ...query,
       },
       opts,
@@ -346,6 +348,7 @@ export default class CardCatalogModal extends Component<Signature> {
         };
         multiSelect?: boolean;
         preselectedCardTypeQuery?: Query;
+        consumingRealm?: URL;
       } = {},
     ) => {
       this.stateId++;
@@ -389,6 +392,7 @@ export default class CardCatalogModal extends Component<Signature> {
         selectedRealmUrls: this.realmServer.availableRealmURLs,
         selectedCard: preselectedCardUrl,
         hasPreselectedCard: Boolean(preselectedCardUrl),
+        consumingRealm: opts.consumingRealm,
       });
       this.stateStack.push(cardCatalogState);
 
@@ -525,22 +529,45 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   pickCard = restartableTask(
-    async (item?: string | CardDef | NewCardArgs, state?: State) => {
+    async (selectedItem?: string | CardDef | NewCardArgs, state?: State) => {
       if (!this.state) {
         return;
       }
       let card: CardDef | undefined;
-
-      if (item) {
-        if (isCardInstance(item)) {
-          card = item;
-        } else if (typeof item === 'string') {
-          card = await this.cardService.getCard(item);
+      if (selectedItem) {
+        let realmOfSelectedCard: string | undefined;
+        let newCard: NewCardArgs | undefined;
+        if (isCardInstance(selectedItem)) {
+          card = selectedItem;
+          realmOfSelectedCard = (await this.cardService.getRealmURL(card))
+            ?.href;
+        } else if (typeof selectedItem === 'string') {
+          card = await this.cardService.getCard(selectedItem);
+          realmOfSelectedCard = (
+            card ? await this.cardService.getRealmURL(card) : undefined
+          )?.href;
         } else {
+          realmOfSelectedCard = selectedItem.realmURL;
+          newCard = selectedItem;
+        }
+        if (!realmOfSelectedCard) {
+          throw new Error(
+            `could not determine realm of selected card ${card?.id}`,
+          );
+        }
+
+        if (this.state.consumingRealm) {
+          await this.ensureRealmReadPermissions.perform(
+            this.state.consumingRealm.href,
+            realmOfSelectedCard,
+          );
+        }
+
+        if (newCard) {
           card = await this.createNewTask.perform(
-            item.ref,
-            item.relativeTo ? new URL(item.relativeTo) : undefined,
-            new URL(item.realmURL),
+            newCard.ref,
+            newCard.relativeTo ? new URL(newCard.relativeTo) : undefined,
+            new URL(newCard.realmURL),
           );
         }
       }
@@ -558,6 +585,48 @@ export default class CardCatalogModal extends Component<Signature> {
         this.stateStack.splice(stateIndex, 1);
       } else {
         this.stateStack.pop();
+      }
+    },
+  );
+
+  private ensureRealmReadPermissions = restartableTask(
+    async (realmOfConsumer: string, realmOfSelectedCard: string) => {
+      if (!this.state) {
+        return;
+      }
+      if (realmOfConsumer !== realmOfSelectedCard) {
+        await this.realm.ensureRealmMeta(realmOfConsumer);
+        let consumingRealmUserId =
+          this.realm.info(realmOfConsumer)?.realmUserId;
+        if (!consumingRealmUserId) {
+          if (isTesting()) {
+            // we exercise this method in our matrix tests which uses the non-test env
+            return;
+          }
+          throw new Error(
+            `Cannot determine the realm user id of ${realmOfConsumer}`,
+          );
+        }
+        let selectedCardRealmPermissions =
+          await this.realm.allUsersPermissions(realmOfSelectedCard);
+        if (selectedCardRealmPermissions == null) {
+          throw new Error(
+            `Unable to ensure that the realm '${
+              this.realm.info(realmOfConsumer).name
+            }' has read permissions to the realm '${
+              this.realm.info(realmOfSelectedCard).name
+            }'`,
+          );
+        }
+        let consumerPermissions =
+          selectedCardRealmPermissions[consumingRealmUserId];
+        if (!consumerPermissions || !consumerPermissions.includes('read')) {
+          await this.realm.setPermissions(
+            realmOfSelectedCard,
+            consumingRealmUserId,
+            ['read'],
+          );
+        }
       }
     },
   );

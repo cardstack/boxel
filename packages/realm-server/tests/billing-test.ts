@@ -1,74 +1,29 @@
-import { asExpressions, insert, param, query } from '@cardstack/runtime-common';
+import { param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
-import { prepareTestDB } from './helpers';
-import PgAdapter from '../pg-adapter';
-import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
-import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
-import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/checkout-session-completed';
+import {
+  fetchSubscriptionsByUserId,
+  insertPlan,
+  insertUser,
+  prepareTestDB,
+} from './helpers';
+import { PgAdapter } from '@cardstack/postgres';
+import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
+import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
+import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';
 import {
   LedgerEntry,
-  Plan,
-  Subscription,
   SubscriptionCycle,
-  User,
   insertSubscriptionCycle,
   sumUpCreditsLedger,
   addToCreditsLedger,
   insertSubscription,
-} from '../billing/billing-queries';
+} from '@cardstack/billing/billing-queries';
 
 import {
   StripeInvoicePaymentSucceededWebhookEvent,
   StripeSubscriptionDeletedWebhookEvent,
   StripeCheckoutSessionCompletedWebhookEvent,
-} from '../billing/stripe-webhook-handlers';
-
-async function insertUser(
-  dbAdapter: PgAdapter,
-  matrixUserId: string,
-  stripeCustomerId: string,
-): Promise<User> {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    matrix_user_id: matrixUserId,
-    stripe_customer_id: stripeCustomerId,
-  });
-  let result = await query(
-    dbAdapter,
-    insert('users', nameExpressions, valueExpressions),
-  );
-
-  return {
-    id: result[0].id,
-    matrixUserId: result[0].matrix_user_id,
-    stripeCustomerId: result[0].stripe_customer_id,
-  } as User;
-}
-
-async function insertPlan(
-  dbAdapter: PgAdapter,
-  name: string,
-  monthlyPrice: number,
-  creditsIncluded: number,
-  stripePlanId: string,
-): Promise<Plan> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
-    name,
-    monthly_price: monthlyPrice,
-    credits_included: creditsIncluded,
-    stripe_plan_id: stripePlanId,
-  });
-  let result = await query(
-    dbAdapter,
-    insert('plans', nameExpressions, valueExpressions),
-  );
-  return {
-    id: result[0].id,
-    name: result[0].name,
-    monthlyPrice: result[0].monthly_price,
-    creditsIncluded: result[0].credits_included,
-    stripePlanId: result[0].stripe_plan_id,
-  } as Plan;
-}
+} from '@cardstack/billing/stripe-webhook-handlers';
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);
@@ -82,34 +37,6 @@ async function fetchUserByStripeCustomerId(
     `SELECT * FROM users WHERE stripe_customer_id = `,
     param(stripeCustomerId),
   ]);
-}
-
-async function fetchSubscriptionsByUserId(
-  dbAdapter: PgAdapter,
-  userId: string,
-): Promise<Subscription[]> {
-  let results = (await query(dbAdapter, [
-    `SELECT * FROM subscriptions WHERE user_id = `,
-    param(userId),
-  ])) as {
-    id: string;
-    user_id: string;
-    plan_id: string;
-    started_at: number;
-    ended_at: number;
-    status: string;
-    stripe_subscription_id: string;
-  }[];
-
-  return results.map((result) => ({
-    id: result.id,
-    userId: result.user_id,
-    planId: result.plan_id,
-    startedAt: result.started_at,
-    endedAt: result.ended_at,
-    status: result.status,
-    stripeSubscriptionId: result.stripe_subscription_id,
-  }));
 }
 
 async function fetchSubscriptionCyclesBySubscriptionId(

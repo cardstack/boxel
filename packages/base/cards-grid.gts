@@ -10,7 +10,6 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
-  linksToMany,
 } from './card-api';
 import {
   AddButton,
@@ -45,7 +44,6 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
 import CardsIcon from '@cardstack/boxel-icons/cards';
-import Star from '@cardstack/boxel-icons/star';
 import { registerDestructor } from '@ember/destroyable';
 
 type IconComponent = typeof Captions;
@@ -149,43 +147,41 @@ class Isolated extends Component<typeof CardsGrid> {
         </div>
 
         <ul class='cards' data-test-cards-grid-cards>
-          {{#if this.isShowingCards}}
-            {{#let
-              (component @context.prerenderedCardSearchComponent)
-              as |PrerenderedCardSearch|
-            }}
-              <PrerenderedCardSearch
-                @query={{this.query}}
-                @format='fitted'
-                @realms={{this.realms}}
-              >
+          {{#let
+            (component @context.prerenderedCardSearchComponent)
+            as |PrerenderedCardSearch|
+          }}
+            <PrerenderedCardSearch
+              @query={{this.query}}
+              @format='fitted'
+              @realms={{this.realms}}
+            >
 
-                <:loading>
-                  Loading...
-                </:loading>
-                <:response as |cards|>
-                  {{#each cards as |card|}}
-                    <li
-                      class='card'
-                      {{@context.cardComponentModifier
-                        cardId=card.url
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                    >
-                      <CardContainer @displayBoundaries='true'>
-                        {{card.component}}
-                      </CardContainer>
-                    </li>
-                  {{/each}}
-                </:response>
-              </PrerenderedCardSearch>
-            {{/let}}
-          {{/if}}
+              <:loading>
+                Loading...
+              </:loading>
+              <:response as |cards|>
+                {{#each cards as |card|}}
+                  <li
+                    class='card'
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
+                    <CardContainer @displayBoundaries='true'>
+                      {{card.component}}
+                    </CardContainer>
+                  </li>
+                {{/each}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/let}}
         </ul>
 
         {{#if @context.actions.createCard}}
@@ -331,18 +327,6 @@ class Isolated extends Component<typeof CardsGrid> {
   filters: { displayName: string; icon: IconComponent; query: any }[] =
     new TrackedArray([
       {
-        displayName: 'Favorites',
-        icon: Star,
-        query: {
-          filter: {
-            any:
-              this.args.model.favorites?.map((card) => {
-                return { eq: { id: card.id } } ?? {};
-              }) ?? [],
-          },
-        },
-      },
-      {
         displayName: 'All Cards',
         icon: CardsIcon,
         query: {
@@ -401,13 +385,6 @@ class Isolated extends Component<typeof CardsGrid> {
     return { ...this.activeFilter.query, sort: this.selectedSortOption.sort };
   }
 
-  private get isShowingCards() {
-    return (
-      this.activeFilter.displayName !== 'Favorites' ||
-      (this.args.model.favorites && this.args.model.favorites.length > 0)
-    );
-  }
-
   private createCard = restartableTask(async () => {
     let preselectedCardTypeQuery: Query | undefined;
     let activeFilterRef = this.activeFilter?.query?.filter?.type;
@@ -464,7 +441,9 @@ class Isolated extends Component<typeof CardsGrid> {
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
 
-    this.filters.splice(2, this.filters.length);
+    // Remove all filter items except the first one,
+    // as 'All Cards' is a predefined filter and not a result from the card type summary API.
+    this.filters.splice(1, this.filters.length);
     cardTypeSummaries.forEach((summary) => {
       if (excludedCardTypeIds.includes(summary.id)) {
         return;
@@ -513,7 +492,6 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
-  @field favorites = linksToMany(CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {

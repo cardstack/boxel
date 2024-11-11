@@ -12,6 +12,8 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
+import { provide } from 'ember-provide-consume-context';
+
 import {
   BoxelDropdown,
   IconButton,
@@ -23,7 +25,10 @@ import {
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  RealmURLContextName,
+} from '@cardstack/runtime-common';
 
 import Preview from '@cardstack/host/components/preview';
 
@@ -68,6 +73,11 @@ export default class CardPreviewPanel extends Component<Signature> {
 
   private get format(): Format {
     return this.args.format ?? 'isolated';
+  }
+
+  @provide(RealmURLContextName)
+  get realmURL() {
+    return this.args.realmURL;
   }
 
   @action setFooterWidthPx(footerWidthPx: number) {
