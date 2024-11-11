@@ -8,3 +8,4 @@ RUN pnpm install --frozen-lockfile
 
 WORKDIR packages/postgres
 # CMD ./node_modules/.bin/node-pg-migrate --migrations-table migrations up
+CMD /bin/sh
