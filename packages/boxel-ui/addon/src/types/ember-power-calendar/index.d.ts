@@ -1,4 +1,3 @@
-import PowerCalendar from 'ember-power-calendar/components/power-calendar';
 import DayComponent from 'ember-power-calendar/components/days';
 import NavComponent from 'ember-power-calendar/components/nav';
 

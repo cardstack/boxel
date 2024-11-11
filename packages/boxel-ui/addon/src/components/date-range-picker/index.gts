@@ -17,10 +17,10 @@ import IconButton from '../icon-button/index.gts';
 
 interface Signature {
   Args: {
-    start?: Date | null;
     end?: Date | null;
     onSelect: TPowerCalendarRangeOnSelect;
     selected?: SelectedPowerCalendarRange;
+    start?: Date | null;
   };
   Element: HTMLElement;
 }
