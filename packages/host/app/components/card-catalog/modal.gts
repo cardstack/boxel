@@ -122,6 +122,7 @@ export default class CardCatalogModal extends Component<Signature> {
         >
           <:header>
             <BoxelInput
+              class='card-catalog-search'
               @type='search'
               @variant='large'
               @value={{this.state.searchKey}}
@@ -205,6 +206,13 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .card-catalog-modal.large {
         --boxel-modal-offset-top: var(--boxel-sp-xxxl);
+      }
+      .card-catalog-modal :deep(.dialog-box__header) {
+        gap: 0;
+      }
+      .card-catalog-search {
+        margin-top: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp-sm);
       }
       .footer {
         display: flex;

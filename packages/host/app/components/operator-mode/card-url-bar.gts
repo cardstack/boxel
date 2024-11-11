@@ -42,9 +42,11 @@ export default class CardURLBar extends Component<Signature> {
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
         {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
-          <div class='realm-icon'>
-            <RealmIcon @realmInfo={{realmInfo}} @canAnimate={{true}} />
-          </div>
+          <RealmIcon
+            class='url-realm-icon'
+            @realmInfo={{realmInfo}}
+            @canAnimate={{true}}
+          />
           <span>in {{realmInfo.name}}</span>
         {{/let}}
       </div>
@@ -86,7 +88,7 @@ export default class CardURLBar extends Component<Signature> {
         align-items: center;
 
         background-color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius-xl);
+        border-radius: var(--boxel-border-radius-xxl);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);
@@ -101,7 +103,7 @@ export default class CardURLBar extends Component<Signature> {
       .realm-info {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxs);
 
         width: max-content;
         color: var(--boxel-light);
@@ -111,23 +113,9 @@ export default class CardURLBar extends Component<Signature> {
 
         white-space: nowrap;
       }
-      .realm-icon {
-        display: flex;
-        align-items: center;
-        background-color: var(--boxel-light);
-        background-image: var(--card-url-bar-realm-icon);
-
-        border: 1px solid var(--boxel-light);
-        border-radius: 4px;
-
-        --icon-color: var(--boxel-light);
-      }
-      .realm-icon .realm-icon-img {
-        min-width: var(--boxel-icon-sm);
-        min-height: var(--boxel-icon-sm);
-      }
-      .realm-icon .realm-icon-img::after {
-        border-radius: 0;
+      .url-realm-icon {
+        --boxel-realm-icon-background-color: currentColor;
+        --boxel-realm-icon-border-color: currentColor;
       }
       .input {
         display: flex;
