@@ -2,7 +2,6 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-import type BillingService from '@cardstack/host/services/billing-service';
 
 import {
   SuccessBordered,
@@ -11,6 +10,8 @@ import {
   IconPlus,
   Lock,
 } from '@cardstack/boxel-ui/icons';
+
+import type BillingService from '@cardstack/host/services/billing-service';
 
 interface Signature {
   Args: {

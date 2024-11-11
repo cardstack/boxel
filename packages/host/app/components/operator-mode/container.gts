@@ -10,7 +10,7 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal } from '@cardstack/boxel-ui/components';
-import { and, not, or } from '@cardstack/boxel-ui/helpers';
+import { not, or } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
 
