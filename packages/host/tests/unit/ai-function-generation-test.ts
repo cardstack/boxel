@@ -94,6 +94,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
         },
       },
+      relationships: {
+        type: 'object',
+        properties: {},
+      },
     });
   });
 
@@ -184,6 +188,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -461,6 +469,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           keepField: { type: 'string' },
         },
       },
+      relationships: {
+        type: 'object',
+        properties: {},
+      },
     });
   });
 
@@ -487,6 +499,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           description: { type: 'string' },
           keepField: { type: 'string' },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -525,6 +541,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
         },
       },
+      relationships: {
+        type: 'object',
+        properties: {},
+      },
     });
   });
 
@@ -557,6 +577,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -797,6 +821,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });

@@ -344,7 +344,7 @@ export default class CardService extends Service {
     return card;
   }
 
-  async getCard(url: URL | string): Promise<CardDef | undefined> {
+  async getCard(url: URL | string): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
     }

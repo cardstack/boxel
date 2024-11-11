@@ -1,13 +1,18 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { getOwner, setOwner } from '@ember/owner';
+import { service } from '@ember/service';
 import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
-import { pauseTest } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type {
   SwitchSubmodeInput,
@@ -16,14 +21,7 @@ import type {
   PatchCardInput,
 } from 'https://cardstack.com/base/command';
 
-import { getOwner, setOwner } from '@ember/owner';
-
-import type { CommandContext } from '@cardstack/runtime-common';
-
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { service } from '@ember/service';
 
 import {
   setupLocalIndexing,
@@ -126,7 +124,7 @@ module('Acceptance | Commands tests', function (hooks) {
       async getInputType() {
         return ScheduleMeetingInput;
       }
-      async execute(input: ScheduleMeetingInput) {
+      protected async run(input: ScheduleMeetingInput) {
         console.log('input', input);
         let meeting = new Meeting({
           topic: 'unset topic',
@@ -139,10 +137,9 @@ module('Acceptance | Commands tests', function (hooks) {
         >('save-card');
         console.log('saveCardCommand', saveCardCommand);
         console.log('this.loaderService', this.loaderService);
-        const { SaveCardInput, PatchCardInput } =
-          await this.loaderService.loader.import<typeof BaseCommandModule>(
-            `${baseRealm.url}command`,
-          );
+        const { SaveCardInput } = await this.loaderService.loader.import<
+          typeof BaseCommandModule
+        >(`${baseRealm.url}command`);
         console.log('SaveCardInput', SaveCardInput);
         await saveCardCommand.execute(
           new SaveCardInput({
@@ -156,7 +153,7 @@ module('Acceptance | Commands tests', function (hooks) {
         let patchCardCommand = this.commandContext.lookupCommand<
           PatchCardInput,
           undefined,
-          Meeting
+          { cardType: typeof Meeting }
         >('patch-card', { cardType: Meeting });
 
         await this.commandContext.sendAiAssistantMessage({
@@ -236,7 +233,7 @@ module('Acceptance | Commands tests', function (hooks) {
           await scheduleMeeting.execute(
             new ScheduleMeetingInput({
               topic: 'Meeting with Hassan',
-              participants: [this.model],
+              participants: [this.args.model],
             }),
           );
         };

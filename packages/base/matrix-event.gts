@@ -2,7 +2,7 @@ import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import {
   FunctionToolCall,
-  type Schema,
+  type AttributesSchema,
 } from '@cardstack/runtime-common/helpers/ai';
 
 interface BaseMatrixEvent {
@@ -166,7 +166,7 @@ export interface Tool {
   function: {
     name: string;
     description: string;
-    parameters: Schema;
+    parameters: AttributesSchema;
   };
 }
 
