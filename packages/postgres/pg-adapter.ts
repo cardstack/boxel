@@ -10,7 +10,7 @@ import migrate from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
-import postgresConfig from './pg-config';
+import { postgresConfig } from './pg-config';
 
 const log = logger('pg-adapter');
 
@@ -22,13 +22,18 @@ function config() {
 
 type Config = ReturnType<typeof config>;
 
-export default class PgAdapter implements DBAdapter {
+export class PgAdapter implements DBAdapter {
   #isClosed = false;
   private pool: Pool;
-  private started = this.#startClient();
+  private started: Promise<void>;
   private config: Config;
 
-  constructor() {
+  constructor(opts?: { autoMigrate?: true }) {
+    if (opts?.autoMigrate) {
+      this.started = this.migrateDb();
+    } else {
+      this.started = Promise.resolve();
+    }
     this.config = config();
     let { user, host, database, password, port } = this.config;
     log.info(`connecting to DB ${this.url}`);
@@ -50,10 +55,6 @@ export default class PgAdapter implements DBAdapter {
   get url() {
     let { user, host, database, port } = this.config;
     return `${user}@${host}:${port}/${database}`;
-  }
-
-  async #startClient() {
-    await this.migrateDb();
   }
 
   async close() {

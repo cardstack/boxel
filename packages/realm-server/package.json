@@ -3,8 +3,10 @@
   "version": "0.0.0",
   "license": "MIT",
   "devDependencies": {
+    "@cardstack/billing": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@koa/cors": "^4.0.0",
     "@koa/router": "^12.0.0",
@@ -21,7 +23,6 @@
     "@types/lodash": "^4.14.182",
     "@types/mime-types": "^2.1.1",
     "@types/node": "^18.18.5",
-    "@types/pg": "^8.11.5",
     "@types/qs": "^6.9.17",
     "@types/qunit": "^2.11.3",
     "@types/sane": "^2.0.1",
@@ -46,17 +47,13 @@
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
     "mime-types": "^2.1.35",
-    "node-pg-migrate": "^6.2.2",
     "npm-run-all": "^4.1.5",
-    "pg": "^8.11.5",
     "prettier": "^2.8.4",
     "prettier-plugin-ember-template-tag": "^1.1.0",
     "qs": "^6.13.0",
     "qunit": "^2.20.0",
     "sane": "^5.0.1",
-    "sql-parser-cst": "^0.28.0",
     "start-server-and-test": "^1.14.0",
-    "stripe": "^17.2.1",
     "supertest": "^6.2.4",
     "testem": "^3.10.1",
     "tmp": "^0.2.1",
@@ -94,10 +91,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate --migrations-table migrations",
-    "make-schema": "./scripts/schema-dump.sh",
-    "drop-db": "docker exec boxel-pg dropdb -U postgres -w",
-    "drop-all-dbs": "./scripts/drop-all-dbs.sh"
+    "full-reset": "./scripts/full-reset.sh"
   },
   "volta": {
     "extends": "../../package.json"

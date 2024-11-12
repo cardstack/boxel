@@ -12,6 +12,8 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
+import { provide } from 'ember-provide-consume-context';
+
 import {
   BoxelDropdown,
   IconButton,
@@ -23,7 +25,10 @@ import {
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  RealmURLContextName,
+} from '@cardstack/runtime-common';
 
 import Preview from '@cardstack/host/components/preview';
 
@@ -70,6 +75,11 @@ export default class CardPreviewPanel extends Component<Signature> {
     return this.args.format ?? 'isolated';
   }
 
+  @provide(RealmURLContextName)
+  get realmURL() {
+    return this.args.realmURL;
+  }
+
   @action setFooterWidthPx(footerWidthPx: number) {
     this.footerWidthPx = footerWidthPx;
   }
@@ -92,9 +102,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       data-test-code-mode-card-preview-header={{@card.id}}
       ...attributes
     >
-      <div class='header-icon'>
-        <RealmIcon @realmInfo={{this.realm.info @realmURL.href}} class='icon' />
-      </div>
+      <RealmIcon @realmInfo={{this.realm.info @realmURL.href}} />
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
       </div>
@@ -204,20 +212,11 @@ export default class CardPreviewPanel extends Component<Signature> {
 
     <style scoped>
       .preview-header {
-        background: white;
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-lg);
+        background-color: var(--boxel-light);
+        padding: var(--boxel-sp);
         display: flex;
-      }
-
-      .header-icon > .realm-icon-img {
-        min-height: 25px;
-        min-width: 25px;
-      }
-
-      .header-icon {
-        margin-right: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxs);
+        align-items: center;
       }
 
       .preview-body {
@@ -239,8 +238,8 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .header-title {
-        font-weight: 600;
-        font-size: 1.2rem;
+        font: 600 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .preview-footer {
@@ -308,10 +307,9 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .icon-button {
-        --icon-color: var(--boxel-highlight);
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
-        border-radius: 4px;
+        border-radius: var(--boxel-border-radius-xs);
 
         display: flex;
         align-items: center;
@@ -322,9 +320,8 @@ export default class CardPreviewPanel extends Component<Signature> {
         z-index: 1;
       }
 
-      .icon-button:hover {
-        --icon-color: var(--boxel-light);
-        background-color: var(--boxel-highlight);
+      .icon-button:not(:disabled):hover {
+        background-color: var(--boxel-dark-hover);
       }
       .atom-wrapper {
         padding: var(--boxel-sp);

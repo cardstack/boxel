@@ -15,8 +15,7 @@ import { spawn } from 'child_process';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
-import PgAdapter from './pg-adapter';
-import { PgQueuePublisher } from './pg-queue';
+import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
 
@@ -67,6 +66,7 @@ let {
   username: usernames,
   useRegistrationSecretFunction,
   seedPath,
+  migrateDB,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -119,6 +119,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    migrateDB: {
+      description:
+        'When this flag is set the database will automatically migrate when server is started',
+      type: 'boolean',
+    },
     useRegistrationSecretFunction: {
       description:
         'The flag should be set when running matrix tests where the synapse instance is torn down and restarted multiple times during the life of the realm server.',
@@ -167,10 +172,11 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);
+let autoMigrate = migrateDB || undefined;
 
 (async () => {
   let realms: Realm[] = [];
-  let dbAdapter = new PgAdapter();
+  let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
   let manager = new RunnerOptionsManager();
   let { getIndexHTML } = await makeFastBootIndexRunner(
@@ -178,7 +184,7 @@ let dist: URL = new URL(distURL);
     manager.getOptions.bind(manager),
   );
 
-  await startWorker();
+  await startWorker({ autoMigrate });
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -299,7 +305,7 @@ let dist: URL = new URL(distURL);
   process.exit(-3);
 });
 
-async function startWorker() {
+async function startWorker(opts?: { autoMigrate?: true }) {
   let worker = spawn(
     'ts-node',
     [
@@ -308,6 +314,7 @@ async function startWorker() {
       `--port=${port}`,
       `--matrixURL='${matrixURL}'`,
       `--distURL='${distURL}'`,
+      ...(opts?.autoMigrate ? [`--migrateDB`] : []),
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
           `--fromUrl='${from}'`,

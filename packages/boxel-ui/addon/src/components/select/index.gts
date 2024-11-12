@@ -54,10 +54,14 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       display: flex;
       align-items: stretch;
-      flex-grow: 1;
       overflow: hidden;
       border: 1px solid var(--boxel-border-color);
       border-radius: var(--boxel-border-radius-sm);
+      max-width: 100%;
+      width: 100%;
+    }
+    .ember-power-select-trigger {
+      padding: 0;
     }
   </style>
   {{! template-lint-disable require-scoped-style }}
@@ -65,6 +69,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     .boxel-select__dropdown {
       box-shadow: var(--boxel-box-shadow);
       border-radius: var(--boxel-form-control-border-radius);
+      z-index: var(--boxel-layer-modal-urgent);
     }
     .boxel-select__dropdown ul {
       list-style: none;

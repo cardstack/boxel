@@ -7,7 +7,7 @@ import {
   Menu,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { RealmPaths } from '@cardstack/runtime-common';
@@ -26,7 +26,6 @@ interface Signature {
     selectedRealmURL: URL | undefined;
     disabled?: boolean;
     contentClass?: string;
-    dropdownWidth?: string;
   };
   Element: HTMLElement;
 }
@@ -43,10 +42,6 @@ export default class RealmDropdown extends Component<Signature> {
           @kind='secondary-light'
           @size='small'
           @disabled={{@disabled}}
-          style={{if
-            @dropdownWidth
-            (cssVar realm-dropdown-width=@dropdownWidth)
-          }}
           {{bindings}}
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
@@ -66,10 +61,6 @@ export default class RealmDropdown extends Component<Signature> {
       <:content as |dd|>
         <Menu
           class='realm-dropdown-menu'
-          style={{if
-            @dropdownWidth
-            (cssVar realm-dropdown-width=@dropdownWidth)
-          }}
           @items={{this.menuItems}}
           @closeMenu={{dd.close}}
           data-test-realm-dropdown-menu
@@ -77,36 +68,39 @@ export default class RealmDropdown extends Component<Signature> {
       </:content>
     </BoxelDropdown>
     <style scoped>
-      .icon {
-        min-width: var(--boxel-icon-sm);
-        min-height: var(--boxel-icon-sm);
-      }
       .realm-dropdown-trigger {
-        width: var(--realm-dropdown-width, auto);
-        display: flex;
-        justify-content: flex-start;
-        gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs) var(--boxel-sp-5xs)
-          var(--boxel-sp-5xs);
+        height: 37px;
+        width: 100%;
+        max-width: 100%;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        justify-items: flex-start;
+        gap: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
         border-radius: var(--boxel-border-radius);
       }
+      .realm-dropdown-trigger > * {
+        flex-shrink: 0;
+      }
       .arrow-icon {
-        --icon-color: var(--boxel-highlight);
         margin-left: auto;
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
         transform: scaleY(-1);
       }
       .selected-item {
+        max-width: 100%;
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
       }
       .realm-dropdown-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
-          var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxxs);
-        --boxel-menu-item-gap: var(--boxel-sp-4xs);
-        width: var(--realm-dropdown-width, auto);
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 13rem;
+      }
+      .realm-dropdown-menu :deep(.menu-item__icon-url) {
+        border-radius: var(--boxel-border-radius-xs);
       }
     </style>
   </template>

@@ -74,6 +74,7 @@ export * from './stream';
 export * from './realm';
 export * from './fetcher';
 export * from './scoped-css';
+export * from './utils';
 export * from './authorization-middleware';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
@@ -187,6 +188,7 @@ export interface CardChooser {
       };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
+      consumingRealm?: URL;
     },
   ): Promise<undefined | T>;
 }
@@ -202,6 +204,7 @@ export async function chooseCard<T extends BaseDef>(
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
     preselectedCardTypeQuery?: Query;
+    consumingRealm?: URL;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;

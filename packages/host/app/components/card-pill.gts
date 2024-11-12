@@ -34,20 +34,30 @@ export default class CardPill extends Component<CardPillSignature> {
     return this.args.card.constructor.getComponent(this.args.card);
   }
 
+  get hideIconRight() {
+    return !this.args.onToggle && !this.args.removeCard;
+  }
+
   <template>
     <Pill
-      class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
+      class={{cn
+        'card-pill'
+        is-autoattached=@isAutoAttachedCard
+        hide-icon-right=this.hideIconRight
+      }}
       data-test-attached-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
       ...attributes
     >
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @card.id}} class='icon' />
+        <RealmIcon @realmInfo={{this.realm.info @card.id}} />
       </:iconLeft>
       <:default>
         <div class='card-content' title={{@card.title}}>
           <this.component @format='atom' @displayContainer={{false}} />
         </div>
+      </:default>
+      <:iconRight>
         {{#if @onToggle}}
           <Switch
             @isEnabled={{@isEnabled}}
@@ -64,24 +74,27 @@ export default class CardPill extends Component<CardPillSignature> {
           <IconButton
             class='remove-button'
             @icon={{IconX}}
+            @height='10'
+            @width='10'
             {{on 'click' (fn @removeCard @card)}}
             data-test-remove-card-btn
           />
         {{/if}}
-      </:default>
+      </:iconRight>
     </Pill>
     <style scoped>
-      .icon {
-        min-width: var(--boxel-icon-sm);
-        min-height: var(--boxel-icon-sm);
-      }
       .card-pill {
+        --pill-gap: var(--boxel-sp-xxxs);
         --pill-icon-size: 18px;
+        --boxel-realm-icon-size: var(--pill-icon-size);
         border: 1px solid var(--boxel-400);
         height: var(--pill-height, 1.875rem);
       }
       .is-autoattached {
         border-style: dashed;
+      }
+      .hide-icon-right :deep(figure.icon):last-child {
+        display: none;
       }
       .card-content {
         display: flex;
@@ -98,17 +111,12 @@ export default class CardPill extends Component<CardPillSignature> {
         text-overflow: inherit;
       }
       .remove-button {
-        --boxel-icon-button-width: 12px;
-        --boxel-icon-button-height: 25px;
+        --boxel-icon-button-width: var(--boxel-icon-sm);
+        --boxel-icon-button-height: var(--boxel-icon-sm);
         display: flex;
         align-items: center;
         justify-content: center;
-        outline: 0;
-        margin-right: var(--boxel-sp-5xs);
-      }
-      .remove-button:focus:not(:disabled),
-      .remove-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
+        border-radius: var(--boxel-border-radius-xs);
       }
       .toggle {
         margin-left: auto;

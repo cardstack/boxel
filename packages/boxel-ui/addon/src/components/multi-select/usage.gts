@@ -14,6 +14,7 @@ import pluralize from 'pluralize';
 import cn from '../../helpers/cn.ts';
 import cssVar from '../../helpers/css-var.ts';
 import CheckMark from '../../icons/check-mark.gts';
+import BoxelField from '../field-container/index.gts';
 import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
 import BoxelSelectedItem from './selected-item.gts';
 
@@ -391,6 +392,28 @@ export default class BoxelMultiSelectUsage extends Component {
             you should use this.
           </p>
         </:description>
+      </FreestyleUsage>
+      <FreestyleUsage @name='Usage with FieldContainer'>
+        <:example>
+          <BoxelField @label='Country'>
+            <BoxelMultiSelect
+              @options={{this.items}}
+              @selected={{this.selectedItems}}
+              @onChange={{this.onSelectItems}}
+              @placeholder={{this.placeholder}}
+              @disabled={{this.disabled}}
+              @renderInPlace={{this.renderInPlace}}
+              @matchTriggerWidth={{this.matchTriggerWidth}}
+              @searchField='name'
+              @searchEnabled={{true}}
+              @closeOnSelect={{false}}
+              @ariaLabel='Select countries'
+              as |option|
+            >
+              {{option.name}}
+            </BoxelMultiSelect>
+          </BoxelField>
+        </:example>
       </FreestyleUsage>
     </div>
   </template>

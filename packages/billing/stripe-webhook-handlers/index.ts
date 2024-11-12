@@ -24,15 +24,24 @@ export type StripeInvoicePaymentSucceededWebhookEvent = StripeEvent & {
       id: string;
       object: 'invoice';
       amount_paid: number;
-      billing_reason: 'subscription_create' | 'subscription_cycle';
+      billing_reason:
+        | 'subscription_create'
+        | 'subscription_cycle'
+        | 'subscription_update';
       period_start: number;
       period_end: number;
       subscription: string;
       customer: string;
       lines: {
         data: Array<{
+          amount: number;
+          description: string;
           price: {
             product: string;
+          };
+          period: {
+            start: number;
+            end: number;
           };
         }>;
       };
@@ -74,6 +83,13 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
     };
   };
 };
+
+// Make sure Stripe customer portal is configured with the following settings:
+// Cancel at end of billing period: CHECKED
+// Customers can switch plans: CHECKED
+// Prorate subscription changes: CHECKED
+// Invoice immediately (when prorating): CHECKED
+// When switching to a cheaper subscription -> WAIT UNTIL END OF BILLING PERIOD TO UPDATE
 
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,

@@ -1,12 +1,14 @@
 import Accordion from './components/accordion/index.gts';
 import AddButton from './components/add-button/index.gts';
 import Avatar from './components/avatar/index.gts';
+import BasicFitted from './components/basic-fitted/index.gts';
 import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
+import DateRangePicker from './components/date-range-picker/index.gts';
 import DndKanbanBoard, {
   type DndItem,
   DndColumn,
@@ -53,6 +55,7 @@ export {
   Accordion,
   AddButton,
   Avatar,
+  BasicFitted,
   BoxelButton,
   BoxelDropdown,
   BoxelDropdownAPI,
@@ -72,6 +75,7 @@ export {
   CardContentContainer,
   CardHeader,
   CircleSpinner,
+  DateRangePicker,
   DndColumn,
   DndItem,
   DndKanbanBoard,

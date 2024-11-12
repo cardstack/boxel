@@ -4,11 +4,13 @@
 import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
 import AvatarUsage from './components/avatar/usage.gts';
+import BasicFittedUsage from './components/basic-fitted/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CardHeaderUsage from './components/card-header/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
+import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
@@ -27,6 +29,7 @@ import MultiSelectUsage from './components/multi-select/usage.gts';
 import PillUsage from './components/pill/usage.gts';
 import ProgressBarUsage from './components/progress-bar/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
+import RealmIconUsage from './components/realm-icon/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
@@ -37,11 +40,13 @@ export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
   ['AddButton', AddButtonUsage],
   ['Avatar', AvatarUsage],
+  ['BasicFitted', BasicFittedUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
   ['CardContentContainer', CardContentContainerUsage],
   ['CardHeader', CardHeaderUsage],
   ['CircleSpinner', CircleSpinnerUsage],
+  ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
@@ -60,6 +65,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Pill', PillUsage],
   ['ProgressBar', ProgressBarUsage],
   ['RadioInput', RadioInputUsage],
+  ['RealmIcon', RealmIconUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
   ['Switch', SwitchUsage],

@@ -15,7 +15,12 @@ export interface DndKanbanBoardArgs<DndColumn> {
   columns: DndColumn[];
   isDisabled?: boolean;
   isLoading?: boolean;
-  onMove?: (card: DndItem, column: DndColumn) => void;
+  onMove?: (
+    draggedCard: DndItem,
+    targetCard: DndItem,
+    sourceColumn: DndColumn,
+    targetColumn: DndColumn,
+  ) => void;
 }
 
 export class DndColumn {
@@ -106,30 +111,36 @@ export default class DndKanbanBoard extends Component<
       draggedItem,
     );
 
-    if (!dropTarget) {
-      dropTargetParent.cards = this.insertAt(
-        dropTargetParent.cards,
-        0,
-        draggedItem,
-      );
-    } else if (edge === 'top') {
-      dropTargetParent.cards = this.insertBefore(
-        dropTargetParent.cards,
-        dropTarget,
-        draggedItem,
-      );
-    } else if (edge === 'bottom') {
-      dropTargetParent.cards = this.insertAfter(
-        dropTargetParent.cards,
-        dropTarget,
-        draggedItem,
-      );
+    if (dropTarget !== undefined) {
+      if (edge === 'top') {
+        dropTargetParent.cards = this.insertBefore(
+          dropTargetParent.cards,
+          dropTarget,
+          draggedItem,
+        );
+      } else if (edge === 'bottom') {
+        dropTargetParent.cards = this.insertAfter(
+          dropTargetParent.cards,
+          dropTarget,
+          draggedItem,
+        );
+      } else {
+        throw new Error('Invalid edge');
+      }
     } else {
-      throw new Error('Invalid edge');
+      if (dropTargetParent !== undefined) {
+        // If the drop target is undefined, but the dropTargetParent is defined,  we are dropping the card into last index of the drop target of the column
+        dropTargetParent.cards = [...dropTargetParent.cards, draggedItem];
+      }
     }
 
     if (this.args.onMove) {
-      this.args.onMove(draggedItem, dropTargetParent);
+      this.args.onMove(
+        draggedItem,
+        dropTarget,
+        draggedItemParent,
+        dropTargetParent,
+      );
     }
   }
 
