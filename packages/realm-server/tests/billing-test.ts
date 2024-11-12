@@ -419,10 +419,14 @@ module('billing', function (hooks) {
     });
   });
 
-  module('checkout session completed', function () {
-    test('update user stripe customer id when checkout session completed', async function (assert) {
-      await insertUser(dbAdapter, 'testuser', '');
+  module('checkout session completed', function (hooks) {
+    let user: User;
 
+    hooks.beforeEach(async function () {
+      user = await insertUser(dbAdapter, 'testuser', 'cus_123');
+    });
+
+    test('update user stripe customer id when checkout session completed', async function (assert) {
       let stripeCheckoutSessionCompletedEvent = {
         id: 'evt_1234567890',
         object: 'event',
@@ -432,6 +436,7 @@ module('billing', function (hooks) {
             object: 'checkout.session',
             client_reference_id: 'testuser',
             customer: 'cus_123',
+            metadata: {},
           },
         },
         type: 'checkout.session.completed',
@@ -456,6 +461,35 @@ module('billing', function (hooks) {
       assert.strictEqual(updatedUser.length, 1);
       assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
       assert.strictEqual(updatedUser[0].matrix_user_id, 'testuser');
+    });
+
+    test('add extra credits to user ledger when checkout session completed', async function (assert) {
+      let stripeCheckoutSessionCompletedEvent = {
+        id: 'evt_1234567890',
+        object: 'event',
+        data: {
+          object: {
+            id: 'cs_test_1234567890',
+            object: 'checkout.session',
+            customer: 'cus_123',
+            metadata: {
+              credit_reload_amount: '25000',
+            },
+          },
+        },
+        type: 'checkout.session.completed',
+      } as StripeCheckoutSessionCompletedWebhookEvent;
+
+      await handleCheckoutSessionCompleted(
+        dbAdapter,
+        stripeCheckoutSessionCompletedEvent,
+      );
+
+      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditType: 'extra_credit',
+      });
+      assert.strictEqual(availableExtraCredits, 25000);
     });
   });
 });

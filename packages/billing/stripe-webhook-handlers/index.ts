@@ -71,6 +71,11 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
       object: 'checkout.session';
       client_reference_id: string;
       customer: string;
+      metadata:
+        | {
+            credit_reload_amount: string;
+          }
+        | {};
     };
   };
 };
