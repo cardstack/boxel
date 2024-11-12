@@ -8,7 +8,6 @@ import {
   BaseDef,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import { getCard, getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { TrackedMap } from 'tracked-built-ins';
@@ -37,7 +36,8 @@ import { action } from '@ember/object';
 import {
   LooseSingleCardDocument,
   ResolvedCodeRef,
-  type Query,
+  Query,
+  getCards,
 } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
@@ -55,7 +55,7 @@ import { isEqual } from 'lodash';
 import type Owner from '@ember/owner';
 import { Resource } from 'ember-resources';
 
-type FilterType = 'Status' | 'Assignee' | 'Project';
+type FilterType = 'status' | 'assignee' | 'project';
 
 interface FilterObject {
   label?: string;
@@ -68,7 +68,6 @@ interface SelectedItem {
 }
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
-  @tracked newQuery: Query | undefined;
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType;
   private declare assigneeQuery: {
@@ -81,9 +80,8 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     isLoading: boolean;
     loaded: Promise<void>;
   };
-  filterTypes: FilterType[] = ['Status', 'Assignee', 'Project'];
   filters = {
-    Status: {
+    status: {
       label: 'Status',
       codeRef: {
         module: `${this.realmURL?.href}productivity/task`,
@@ -98,7 +96,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         };
       },
     },
-    Assignee: {
+    assignee: {
       label: 'Assignee',
       codeRef: {
         module: `${this.realmURL?.href}productivity/task`,
@@ -113,7 +111,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       },
       options: () => this.assigneeCards,
     },
-    Project: {
+    project: {
       label: 'Project',
       codeRef: {
         module: `${this.realmURL?.href}productivity/task`,
@@ -135,9 +133,13 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     this.initializeDropdownData.perform();
   }
 
+  get filterTypes() {
+    return Object.keys(this.filters);
+  }
+
   taskCollection = getTaskCardsResource(
     this,
-    () => this.query,
+    () => this.getTaskQuery,
     () => this.realmURL,
   );
 
@@ -145,7 +147,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     this.assigneeQuery = getCards(
       {
         filter: {
-          type: this.filters.Assignee.codeRef,
+          type: this.filters.assignee.codeRef,
         },
       },
       [this.realmURL],
@@ -154,7 +156,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     this.projectQuery = getCards(
       {
         filter: {
-          type: this.filters.Project.codeRef,
+          type: this.filters.project.codeRef,
         },
       },
       [this.realmURL],
@@ -171,15 +173,24 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     return this.projectQuery.instances;
   }
 
-  filterArr(filterType: FilterType) {
-    let filterObject = this.filters.get(filterType);
-    let selectedItems = this.selectedItems.get(filterType);
-    return items.map((item) => {
-      return {
-        eq: {
-          [filterObject.codeRef.name]: item.name,
-        },
-      };
+  filterObject(filterType: FilterType) {
+    let filterObject = this.filters[filterType];
+    let selectedItems = this.selectedItems.get(filterType) ?? [];
+    return selectedItems.map((item) => {
+      if (filterType === 'status') {
+        return {
+          eq: {
+            'status.label': item.label,
+          },
+        };
+      } else {
+        let key = filterType + '.name';
+        return {
+          eq: {
+            [key]: item.name,
+          },
+        };
+      }
     });
   }
 
@@ -197,10 +208,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     return this.selectedItems.get(this.selectedFilter) ?? [];
   }
 
-  get query() {
-    return this.newQuery ?? this.getTaskQuery;
-  }
-
   get realmURL() {
     return this.args.model[realmURL];
   }
@@ -216,12 +223,30 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
-  get getTaskQuery(): Query {
-    return {
-      filter: {
-        type: this.assignedTaskCodeRef,
-      },
-    };
+  get getTaskQuery() {
+    let everyArr = [];
+    this.filterTypes.forEach((filterType) => {
+      let anyFilter = this.filterObject(filterType);
+      console.log(anyFilter);
+      if (anyFilter.length > 0) {
+        everyArr.push({
+          any: anyFilter,
+        });
+      }
+    });
+
+    return everyArr.length > 0
+      ? {
+          filter: {
+            on: this.assignedTaskCodeRef,
+            every: everyArr,
+          },
+        }
+      : {
+          filter: {
+            type: this.assignedTaskCodeRef,
+          },
+        };
   }
 
   @action isSelectedItem(item: SelectedItem) {
@@ -363,7 +388,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @action removeFilter(key: FilterType, item: SelectedItem) {
     let items = this.selectedItems.get(key);
     let itemIndex: number;
-    if (key === 'Status') {
+    if (key === 'status') {
       itemIndex = items.findIndex((o) => item.index === o.index);
     } else {
       itemIndex = items.findIndex((o) => item === o);
@@ -381,7 +406,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 
   <template>
     <div class='task-app'>
-      <button {{on 'click' this.changeQuery}}>Change Query</button>
       <div class='filter-section'>
         {{#if this.initializeDropdownData.isRunning}}
           isLoading...
@@ -397,7 +421,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
                 as |item|
               >
                 {{#let (this.isSelectedItem item) as |isSelected|}}
-                  {{#if (eq this.selectedFilter 'Status')}}
+                  {{#if (eq this.selectedFilter 'status')}}
                     <StatusPill
                       @isSelected={{isSelected}}
                       @label={{item.label}}
@@ -434,7 +458,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
                   @removeItem={{this.removeFilter}}
                   as |item|
                 >
-                  {{#if (eq filterType 'Status')}}
+                  {{#if (eq filterType 'status')}}
                     {{item.label}}
                   {{else}}
                     {{item.name}}
