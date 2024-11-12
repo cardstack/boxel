@@ -10,6 +10,7 @@ import {
 import { getCard, getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
 import {
   CardContainer,
@@ -22,6 +23,7 @@ import {
   DndColumn,
   BoxelSelect,
   IconButton,
+  BoxelMultiSelectBasic,
 } from '@cardstack/boxel-ui/components';
 import {
   DropdownArrowFilled,
@@ -39,7 +41,11 @@ import {
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
+import { FilterDropdownCard } from './productivity/filter-dropdown';
+import { FilterTrigger } from './productivity/filter-trigger';
 import Checklist from '@cardstack/boxel-icons/checklist';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { isEqual } from 'lodash';
 import type Owner from '@ember/owner';
@@ -147,35 +153,70 @@ export function getTaskCollection(
   }));
 }
 
-interface TriggerSignature {
-  Args: {};
-  Element: HTMLDivElement;
-}
-
-class FilterTrigger extends GlimmerComponent<TriggerSignature> {
-  <template>
-    <div class='filter-trigger'>
-      <IconButton @icon={{IconFunnel}} width='15px' height='15px' />
-      Filter
-    </div>
-
-    <style scoped>
-      .filter-trigger {
-        display: flex;
-        align-items: center;
-      }
-    </style>
-    {{! template-lint-disable require-scoped-style }}
-  </template>
-}
-
 type FilterType = 'Status' | 'Assignee' | 'Project';
+
+interface FilterObject {
+  label?: string;
+  codeRef: ResolvedCodeRef;
+  filter: any;
+}
+
+interface SelectedItem {
+  name: string;
+}
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked newQuery: Query | undefined;
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType;
   filterTypes: FilterType[] = ['Status', 'Assignee', 'Project'];
+  filters = {
+    Status: {
+      label: 'Status',
+      codeRef: {
+        module: `${this.realmURL?.href}productivity/task`,
+        name: 'Status',
+      },
+      options: TaskStatusField.values,
+      filter: (item: SelectedItem) => {
+        return {
+          eq: {
+            'status.label': item.label,
+          },
+        };
+      },
+    },
+    Assignee: {
+      label: 'Assignee',
+      codeRef: {
+        module: `${this.realmURL?.href}productivity/task`,
+        name: 'TeamMember',
+      },
+      filter: (item: SelectedItem) => {
+        return {
+          eq: {
+            'assignee.name': item.name,
+          },
+        };
+      },
+    },
+    Project: {
+      label: 'Project',
+      codeRef: {
+        module: `${this.realmURL?.href}productivity/task`,
+        name: 'Project',
+      },
+      options: [],
+      filter: (item: SelectedItem) => {
+        return {
+          eq: {
+            'project.name': item.name,
+          },
+        };
+      },
+    },
+  };
+  selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
 
   taskCollection = getTaskCollection(
     this,
@@ -183,12 +224,42 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     () => this.realmURL,
   );
 
+  filterArr(filterType: FilterType) {
+    let filterObject = this.filters.get(filterType);
+    let selectedItems = this.selectedItems.get(filterType);
+    return items.map((item) => {
+      return {
+        eq: {
+          [filterObject.codeRef.name]: item.name,
+        },
+      };
+    });
+  }
+
+  get selectedFilterConfig() {
+    if (this.selectedFilter === undefined) {
+      return undefined;
+    }
+    return this.filters[this.selectedFilter];
+  }
+
+  get selectedItemsForFilter() {
+    if (this.selectedFilter === undefined) {
+      return [];
+    }
+    return this.selectedItems.get(this.selectedFilter);
+  }
+
   get query() {
     return this.newQuery ?? this.getTaskQuery;
   }
 
   get realmURL() {
     return this.args.model[realmURL];
+  }
+
+  get realmURLs() {
+    return [this.realmURL];
   }
 
   get assignedTaskCodeRef() {
@@ -204,11 +275,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         type: this.assignedTaskCodeRef,
       },
     };
-  }
-
-  //static statuses before query
-  get statuses() {
-    return TaskStatusField.values;
   }
 
   @action createNewTask(statusLabel: string) {
@@ -327,22 +393,49 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     this.selectedFilter = item;
   }
 
+  @action onChange(value: SelectedItem) {
+    this.selectedItems.set(this.selectedFilter, value);
+  }
+
+  @action onClose() {
+    this.selectedFilter = undefined;
+    return true;
+  }
+
   <template>
     <div class='task-app'>
       <button {{on 'click' this.changeQuery}}>Change Query</button>
       <div class='filter-section'>
-        <BoxelSelect
-          class='status-select'
-          @selected={{this.selectedFilter}}
-          @options={{this.filterTypes}}
-          @onChange={{this.onSelectFilter}}
-          @placeholder={{'Choose a Filter'}}
-          @matchTriggerWidth={{false}}
-          @triggerComponent={{FilterTrigger}}
-          as |item|
-        >
-          {{item}}
-        </BoxelSelect>
+        {{#if this.selectedFilterConfig}}
+          {{#if this.selectedFilterConfig.options}}
+            Implement Field Dropdown
+          {{else}}
+            <FilterDropdownCard
+              @codeRef={{this.selectedFilterConfig.codeRef}}
+              @realmURLs={{this.realmURLs}}
+              @selected={{this.selectedItemsForFilter}}
+              @onChange={{this.onChange}}
+              @onClose={{this.onClose}}
+              as |item|
+            >
+              {{item.name}}
+            </FilterDropdownCard>
+          {{/if}}
+
+        {{else}}
+          <BoxelSelect
+            class='status-select'
+            @selected={{this.selectedFilter}}
+            @options={{this.filterTypes}}
+            @onChange={{this.onSelectFilter}}
+            @placeholder={{'Choose a Filter'}}
+            @matchTriggerWidth={{false}}
+            @triggerComponent={{FilterTrigger}}
+            as |item|
+          >
+            {{item}}
+          </BoxelSelect>
+        {{/if}}
 
       </div>
       <div class='columns-container'>
@@ -486,4 +579,97 @@ function removeFileExtension(cardUrl: string) {
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
+}
+
+interface CheckBoxArgs {
+  Args: {
+    isSelected: boolean;
+  };
+  Element: Element;
+}
+
+class CheckboxIndicator extends GlimmerComponent<CheckBoxArgs> {
+  <template>
+    <div class='checkbox-indicator'>
+      <span class={{cn 'check-icon' check-icon--selected=@isSelected}}>
+        <CheckMark width='12' height='12' />
+      </span>
+    </div>
+    <style scoped>
+      .checkbox-indicator {
+        width: 16px;
+        height: 16px;
+        border: 1px solid var(--boxel-500);
+        border-radius: 3px;
+        margin-right: var(--boxel-sp-xs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .checkbox-indicator:hover,
+      .checkbox-indicator:focus {
+        box-shadow: 0 0 0 2px var(--boxel-dark-teal);
+      }
+      .check-icon {
+        --icon-color: var(--boxel-dark-teal);
+        visibility: collapse;
+        display: contents;
+      }
+      .check-icon--selected {
+        visibility: visible;
+      }
+    </style>
+  </template>
+}
+
+interface StatusPillArgs {
+  Args: {
+    isSelected: boolean;
+    label: string;
+  };
+  Element: Element;
+}
+
+class StatusPill extends GlimmerComponent<StatusPillArgs> {
+  <template>
+    <span class='status-pill'>
+      <div class='status-pill-content'>
+        <CheckboxIndicator @isSelected={{@isSelected}} />
+        <div class='status-name'>{{@label}}</div>
+      </div>
+    </span>
+
+    <style scoped>
+      .status-pill {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: var(--boxel-font-size-sm);
+        cursor: pointer;
+        width: 100%;
+      }
+      .status-pill.selected {
+        background-color: var(--boxel-highlight);
+      }
+      .status-pill-content {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+      }
+      .status-avatar {
+        width: var(--boxel-sp-sm);
+        height: var(--boxel-sp-sm);
+        border-radius: 50%;
+        background-color: var(--avatar-bg-color, var(--boxel-light));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .status-name {
+        flex-grow: 1;
+      }
+    </style>
+  </template>
 }

@@ -6,6 +6,7 @@ import type {
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
+import { MatcherFn } from 'ember-power-select/utils/group-utils';
 
 import { BoxelAfterOptionsComponent } from './after-options.gts';
 import BoxelSelectedItem, {
@@ -32,6 +33,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   selected: ItemT[];
   selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
   triggerComponent?: ComponentLike<TriggerComponentSignature<ItemT>>;
+  matcher?: MatcherFn;
 }
 
 export interface Signature<ItemT> {
@@ -74,6 +76,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}
       @dropdownClass={{'boxel-multi-select__dropdown'}}
+      @matcher={{@matcher}}
       {{! actions  }}
       @onOpen={{@onOpen}}
       @onClose={{@onClose}}
@@ -93,6 +96,9 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       .boxel-multi-select__dropdown {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
+        z-index: var(
+          --boxel-layer-modal-urgent
+        ); /* TODO: Investigate why this is needed */
       }
       .boxel-multi-select__dropdown ul {
         list-style: none;
@@ -168,6 +174,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @registerAPI={{@registerAPI}}
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}
+      @matcher={{@matcher}}
       {{! Do not remove eventType argument 
     This is to ensure that the click event from selected item does not bubble up to the trigger
      and cause the dropdown to close
@@ -187,9 +194,9 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @beforeOptionsComponent={{component BeforeOptions}}
       @afterOptionsComponent={{component BoxelAfterOptionsComponent}}
       ...attributes
-      as |option|
+      as |option select|
     >
-      {{yield option}}
+      {{yield option select}}
     </BoxelMultiSelectBasic>
   </template>
 }
