@@ -88,7 +88,7 @@ export default class DateRangePicker extends Component<Signature> {
       >
         <div class='months-container'>
           <div>
-            <calendar.Nav>
+            <calendar.Nav aria-label='Left Calendar'>
               <div class='nav-container'>
                 <IconButton
                   @icon={{TriangleLeftIcon}}
@@ -113,7 +113,7 @@ export default class DateRangePicker extends Component<Signature> {
           </div>
 
           <div>
-            <calendar.Nav>
+            <calendar.Navi aria-label="Right Calendar">
               <div class='nav-container'>
                 <IconButton
                   @icon={{TriangleLeftIcon}}
@@ -175,5 +175,10 @@ export default class DateRangePicker extends Component<Signature> {
         gap: var(--boxel-sp-xxs);
       }
     </style>
+
+
+
+
+
   </template>
 }
