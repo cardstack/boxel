@@ -14,15 +14,11 @@ import ForgotPassword, { ResetPasswordParams } from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
 
-export type AuthMode =
-  | 'login'
-  | 'register'
-  | 'forgot-password'
-  | 'payment-setup';
+export type AuthMode = 'login' | 'register' | 'forgot-password';
 
 export default class Auth extends Component {
   <template>
-    <AuthContainer @mode={{this.mode}}>
+    <AuthContainer>
       {{#if
         (or (eq this.mode 'forgot-password') (bool this.resetPasswordParams))
       }}
@@ -31,7 +27,7 @@ export default class Auth extends Component {
           @nullifyResetPasswordParams={{this.nullifyResetPasswordParams}}
           @resetPasswordParams={{this.resetPasswordParams}}
         />
-      {{else if (or (eq this.mode 'register') (eq this.mode 'payment-setup'))}}
+      {{else if (eq this.mode 'register')}}
         <RegisterUser @setMode={{this.setMode}} />
       {{else}}
         <Login @setMode={{this.setMode}} />

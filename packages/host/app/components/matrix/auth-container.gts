@@ -1,36 +1,29 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { CardContainer, BoxelHeader } from '@cardstack/boxel-ui/components';
-import { eq, cn } from '@cardstack/boxel-ui/helpers';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
-
-import type { AuthMode } from './auth';
 
 interface Signature {
   Element: HTMLDivElement;
-  Args: {
-    mode: AuthMode;
-  };
+  Args: {};
   Blocks: { default: [] };
 }
 
 const AuthContainer: TemplateOnlyComponent<Signature> = <template>
   <div class='auth'>
     <div class='container'>
-      <CardContainer
-        class={{cn 'auth-container' no-background=(eq @mode 'payment-setup')}}
-      >
+      <CardContainer class='auth-container'>
         <BoxelHeader
           @title='Boxel'
           @displayBorder={{true}}
           @hasBackground={{false}}
-          class={{cn 'header' light=(eq @mode 'payment-setup')}}
+          class='header'
         >
           <:icon>
             <BoxelIcon />
           </:icon>
         </BoxelHeader>
-        <div class={{cn 'content' no-padding=(eq @mode 'payment-setup')}}>
+        <div class='content'>
           {{yield}}
         </div>
       </CardContainer>
@@ -60,10 +53,6 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       width: 550px;
       position: relative;
     }
-    .auth-container.no-background {
-      background-color: transparent;
-      border: none;
-    }
 
     .header {
       --boxel-header-padding: var(--boxel-sp);
@@ -76,19 +65,12 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-xxs);
       letter-spacing: var(--boxel-lsp-lg);
     }
-    .header.light {
-      color: var(--boxel-light);
-      background-color: transparent;
-    }
 
     .content {
       display: flex;
       flex-direction: column;
       padding: var(--boxel-sp) var(--boxel-sp-xl) calc(var(--boxel-sp) * 2)
         var(--boxel-sp-xl);
-    }
-    .content.no-padding {
-      padding: 0;
     }
   </style>
 </template>;

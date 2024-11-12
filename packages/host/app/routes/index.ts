@@ -14,6 +14,7 @@ import { getCard } from '../resources/card-resource';
 import CardService from '../services/card-service';
 import MatrixService from '../services/matrix-service';
 import RealmService from '../services/realm';
+import RealmServerService from '../services/realm-server';
 
 const { hostsOwnAssets } = ENV;
 
@@ -33,7 +34,7 @@ export default class Index extends Route<void> {
   @service private declare router: RouterService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
-
+  @service declare realmServer: RealmServerService;
   didMatrixServiceStart = false;
 
   async fetchCard(url: string) {
@@ -53,6 +54,7 @@ export default class Index extends Route<void> {
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
       await this.matrixService.start();
+      await this.realmServer.fetchUser();
       this.didMatrixServiceStart = true;
     }
 

@@ -45,6 +45,12 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
+interface User {
+  matrixUserId: string;
+  stripeCustomerId: string;
+  plan: string | null;
+}
+
 interface CreditInfo {
   plan: string | null;
   creditsAvailableInPlanAllowance: number | null;
@@ -61,6 +67,7 @@ export default class RealmServerService extends Service {
     { type: 'base', url: baseRealm.url },
   ]);
   private ready = new Deferred<void>();
+  private _user: User | undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -173,9 +180,9 @@ export default class RealmServerService extends Service {
       });
   }
 
-  async fetchCreditInfo(): Promise<CreditInfo> {
+  private async authenticatedUserRequest(): Promise<any> {
     if (!this.client) {
-      throw new Error(`Cannot fetch credit info without matrix client`);
+      throw new Error(`Cannot fetch user data without matrix client`);
     }
     await this.login();
     if (this.auth.type !== 'logged-in') {
@@ -194,7 +201,11 @@ export default class RealmServerService extends Service {
         `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
     }
-    let json = await response.json();
+    return await response.json();
+  }
+
+  async fetchCreditInfo(): Promise<CreditInfo> {
+    const json = await this.authenticatedUserRequest();
     let plan =
       json.included?.find((i: { type: string }) => i.type === 'plan')
         ?.attributes?.name ?? null;
@@ -210,6 +221,24 @@ export default class RealmServerService extends Service {
       creditsIncludedInPlanAllowance,
       extraCreditsAvailableInBalance,
     };
+  }
+
+  async fetchUser() {
+    if (this.auth.type !== 'logged-in') {
+      this._user = undefined;
+      return;
+    }
+    const json = await this.authenticatedUserRequest();
+    this._user = {
+      matrixUserId: json.data.attributes.matrixUserId,
+      stripeCustomerId: json.data.attributes.stripeCustomerId,
+      plan: json.data.attributes.plan,
+    };
+  }
+
+  @cached
+  get user() {
+    return this._user;
   }
 
   async fetchCatalogRealms() {
