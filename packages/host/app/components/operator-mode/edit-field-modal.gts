@@ -18,7 +18,6 @@ import {
   BoxelInput,
   FieldContainer,
   RadioInput,
-  Pill,
 } from '@cardstack/boxel-ui/components';
 import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
@@ -41,9 +40,10 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
+import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { SelectedTypePill } from './create-file-modal';
 
 interface Signature {
   Args: {
@@ -294,34 +294,47 @@ export default class EditFieldModal extends Component<Signature> {
 
   <template>
     <style scoped>
+      .edit-field-modal {
+        --horizontal-gap: var(--boxel-sp-xs);
+      }
       .edit-field-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
       :deep(.edit-field) {
-        height: 530px;
+        height: 32rem;
+      }
+      .field + .field {
+        margin-top: var(--boxel-sp-sm);
+      }
+      .field {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxxs) var(--horizontal-gap);
+      }
+      .field :deep(.label-container) {
+        width: 8rem;
+      }
+      .field :deep(.content) {
+        flex-grow: 1;
+        max-width: 100%;
+        min-width: 13rem;
+      }
+      .card-chooser-area {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--horizontal-gap);
       }
       .footer-buttons {
         display: flex;
-        height: 100%;
         margin-left: auto;
+        gap: var(--horizontal-gap);
+        align-self: center;
       }
-      .footer-buttons > div {
-        margin-top: auto;
-        margin-bottom: auto;
-        margin-left: auto;
-      }
-
-      .card-chooser-area {
-        display: flex;
-      }
-
-      .card-chooser-area button.pull-right {
-        margin-left: auto;
-        height: auto;
-      }
-
-      :global(.edit-field-modal .boxel-field.horizontal) {
-        margin-bottom: var(--boxel-sp-lg);
+      fieldset.field {
+        border: none;
+        padding: 0;
+        margin-inline: 0;
       }
     </style>
 
@@ -340,30 +353,15 @@ export default class EditFieldModal extends Component<Signature> {
       data-test-edit-field-modal
     >
       <:content>
-        <FieldContainer @label='Field Type'>
+        <FieldContainer class='field' @label='Field Type'>
           <div class='card-chooser-area'>
-            {{#if this.fieldCard}}
-              <Pill data-test-selected-field-realm-icon>
-                <:iconLeft>
-                  {{#if this.fieldModuleURL.href}}
-                    {{#let
-                      (this.realm.info this.fieldModuleURL.href)
-                      as |realmInfo|
-                    }}
-                      <img
-                        src={{realmInfo.iconURL}}
-                        alt='Workspace icon'
-                        data-test-realm-icon-url={{realmInfo.iconURL}}
-                      />
-                    {{/let}}
-                  {{/if}}
-                </:iconLeft>
-                <:default>
-                  <span data-test-selected-field-display-name>
-                    {{this.fieldCard.displayName}}
-                  </span>
-                </:default>
-              </Pill>
+            {{#if this.fieldCard.displayName}}
+              {{#if this.fieldModuleURL.href}}
+                <SelectedTypePill
+                  @title={{this.fieldCard.displayName}}
+                  @id={{this.fieldModuleURL.href}}
+                />
+              {{/if}}
             {{/if}}
 
             <BoxelButton
@@ -377,8 +375,7 @@ export default class EditFieldModal extends Component<Signature> {
             </BoxelButton>
           </div>
         </FieldContainer>
-
-        <FieldContainer @label='Field Name'>
+        <FieldContainer class='field' @label='Field Name' @tag='label'>
           <BoxelInput
             @value={{this.fieldName}}
             @onInput={{this.onFieldNameInput}}
@@ -387,8 +384,8 @@ export default class EditFieldModal extends Component<Signature> {
             data-test-field-name-input
           />
         </FieldContainer>
-
-        <FieldContainer @label=''>
+        <FieldContainer class='field' @tag='fieldset'>
+          <legend class='boxel-sr-only'>Field Cardinality</legend>
           <RadioInput
             @groupDescription='Field cardinality'
             @items={{this.cardinalityItems}}
@@ -408,41 +405,38 @@ export default class EditFieldModal extends Component<Signature> {
           </RadioInput>
         </FieldContainer>
       </:content>
-
       <:footer>
         <div class='footer-buttons'>
-          <div>
-            <BoxelButton
-              @kind='secondary-light'
-              {{on 'click' @onClose}}
-              {{onKeyMod 'Escape'}}
-              data-test-cancel-adding-field-button
-            >
-              Cancel
-            </BoxelButton>
-
-            <BoxelButton
-              @kind='primary'
-              {{on 'click' this.saveField}}
-              {{onKeyMod 'Enter'}}
-              @disabled={{this.submitDisabled}}
-              data-test-save-field-button
-            >
-              {{#if this.writeTask.isRunning}}
-                {{#if this.isNewField}}
-                  Adding…
-                {{else}}
-                  Saving…
-                {{/if}}
+          <BoxelButton
+            @size='tall'
+            {{on 'click' @onClose}}
+            {{onKeyMod 'Escape'}}
+            data-test-cancel-adding-field-button
+          >
+            Cancel
+          </BoxelButton>
+          <BoxelButton
+            @kind='primary'
+            @size='tall'
+            {{on 'click' this.saveField}}
+            {{onKeyMod 'Enter'}}
+            @disabled={{this.submitDisabled}}
+            data-test-save-field-button
+          >
+            {{#if this.writeTask.isRunning}}
+              {{#if this.isNewField}}
+                Adding…
               {{else}}
-                {{#if this.isNewField}}
-                  Add
-                {{else}}
-                  Save
-                {{/if}}
+                Saving…
               {{/if}}
-            </BoxelButton>
-          </div>
+            {{else}}
+              {{#if this.isNewField}}
+                Add
+              {{else}}
+                Save
+              {{/if}}
+            {{/if}}
+          </BoxelButton>
         </div>
       </:footer>
     </ModalContainer>

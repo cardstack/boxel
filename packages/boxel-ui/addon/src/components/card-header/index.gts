@@ -293,7 +293,7 @@ export default class CardHeader extends Component<Signature> {
         .icon-save {
           --boxel-icon-button-width: 26px;
           --boxel-icon-button-height: 26px;
-          border-radius: 4px;
+          border-radius: var(--boxel-border-radius-xs);
 
           display: flex;
           align-items: center;

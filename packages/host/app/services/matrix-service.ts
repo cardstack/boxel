@@ -268,12 +268,15 @@ export default class MatrixService extends Service {
     this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
-    await this.createPersonalRealmForUser({
-      endpoint: 'personal',
-      name: `${displayName}'s Workspace`,
-      iconURL: iconURLFor(displayName),
-      backgroundURL: getRandomBackgroundURL(),
-    });
+    await Promise.all([
+      this.createPersonalRealmForUser({
+        endpoint: 'personal',
+        name: `${displayName}'s Workspace`,
+        iconURL: iconURLFor(displayName),
+        backgroundURL: getRandomBackgroundURL(),
+      }),
+      this.realmServer.fetchCatalogRealms(),
+    ]);
     this._isInitializingNewUser = false;
   }
 
@@ -377,7 +380,10 @@ export default class MatrixService extends Service {
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );
-        await this.loginToRealms();
+        await Promise.all([
+          this.loginToRealms(),
+          this.realmServer.fetchCatalogRealms(),
+        ]);
         this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);

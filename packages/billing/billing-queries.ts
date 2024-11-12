@@ -106,6 +106,24 @@ export async function getPlanByStripeId(
   } as Plan;
 }
 
+export async function getPlan(dbAdapter: DBAdapter, id: string): Promise<Plan> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM plans WHERE id = `,
+    param(id),
+  ]);
+
+  if (results.length !== 1) {
+    throw new Error(`No plan found with id: ${id}`);
+  }
+
+  return {
+    id: results[0].id,
+    name: results[0].name,
+    monthlyPrice: results[0].monthly_price,
+    creditsIncluded: results[0].credits_included,
+  } as Plan;
+}
+
 export async function updateUserStripeCustomerId(
   dbAdapter: DBAdapter,
   userId: string,
@@ -129,6 +147,26 @@ export async function getUserByStripeId(
   let results = await query(dbAdapter, [
     `SELECT * FROM users WHERE stripe_customer_id = `,
     param(stripeCustomerId),
+  ]);
+
+  if (results.length !== 1) {
+    return null;
+  }
+
+  return {
+    id: results[0].id,
+    matrixUserId: results[0].matrix_user_id,
+    stripeCustomerId: results[0].stripe_customer_id,
+  } as User;
+}
+
+export async function getUserByMatrixUserId(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+): Promise<User | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM users WHERE matrix_user_id = `,
+    param(matrixUserId),
   ]);
 
   if (results.length !== 1) {
@@ -306,6 +344,29 @@ export async function getCurrentActiveSubscription(
     throw new Error(
       `There must be only one active subscription for user: ${userId}, found ${results.length}`,
     );
+  }
+
+  return {
+    id: results[0].id,
+    userId: results[0].user_id,
+    planId: results[0].plan_id,
+    startedAt: results[0].started_at,
+    status: results[0].status,
+    stripeSubscriptionId: results[0].stripe_subscription_id,
+  } as Subscription;
+}
+
+export async function getMostRecentSubscription(
+  dbAdapter: DBAdapter,
+  userId: string,
+) {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM subscriptions WHERE user_id = `,
+    param(userId),
+    `ORDER BY started_at DESC`,
+  ]);
+  if (results.length === 0) {
+    return null;
   }
 
   return {
