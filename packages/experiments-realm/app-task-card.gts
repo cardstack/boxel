@@ -88,26 +88,12 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         name: 'Status',
       },
       options: () => TaskStatusField.values,
-      filter: (item: SelectedItem) => {
-        return {
-          eq: {
-            'status.label': item.label,
-          },
-        };
-      },
     },
     assignee: {
       label: 'Assignee',
       codeRef: {
         module: `${this.realmURL?.href}productivity/task`,
         name: 'TeamMember',
-      },
-      filter: (item: SelectedItem) => {
-        return {
-          eq: {
-            'assignee.name': item.name,
-          },
-        };
       },
       options: () => this.assigneeCards,
     },
@@ -116,13 +102,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       codeRef: {
         module: `${this.realmURL?.href}productivity/task`,
         name: 'Project',
-      },
-      filter: (item: SelectedItem) => {
-        return {
-          eq: {
-            'project.name': item.name,
-          },
-        };
       },
       options: () => this.projectCards,
     },
@@ -227,7 +206,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     let everyArr = [];
     this.filterTypes.forEach((filterType) => {
       let anyFilter = this.filterObject(filterType);
-      console.log(anyFilter);
       if (anyFilter.length > 0) {
         everyArr.push({
           any: anyFilter,

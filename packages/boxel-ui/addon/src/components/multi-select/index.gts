@@ -6,7 +6,6 @@ import type {
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
-import { MatcherFn } from 'ember-power-select/utils/group-utils';
 
 import { BoxelAfterOptionsComponent } from './after-options.gts';
 import BoxelSelectedItem, {
@@ -22,7 +21,6 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   disabled?: boolean;
   extra?: any;
   matchTriggerWidth?: boolean;
-  matcher?: MatcherFn;
   onBlur?: (select: Select, e: Event) => boolean | undefined;
   onClose?: (select: Select, e: Event) => boolean | undefined;
   onOpen?: (select: Select, e: Event) => boolean | undefined;
@@ -194,9 +192,9 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @beforeOptionsComponent={{component BeforeOptions}}
       @afterOptionsComponent={{component BoxelAfterOptionsComponent}}
       ...attributes
-      as |option select|
+      as |option|
     >
-      {{yield option select}}
+      {{yield option}}
     </BoxelMultiSelectBasic>
   </template>
 }

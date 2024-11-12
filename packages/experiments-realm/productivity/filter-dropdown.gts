@@ -17,10 +17,6 @@ interface FilterDropdownSignature {
 }
 
 export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
-  matchById(item: any, selected: any) {
-    return item.id === selected.id;
-  }
-
   <template>
     <BoxelMultiSelectBasic
       class='multi-select'
@@ -32,7 +28,6 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
       @initiallyOpened={{true}}
       @closeOnSelect={{false}}
       @onClose={{@onClose}}
-      @matcher={{this.matchById}}
       @matchTriggerWidth={{false}}
       ...attributes
       as |item|
