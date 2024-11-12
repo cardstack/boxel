@@ -46,6 +46,7 @@ import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
 import getTaskCardsResource from './productivity/task-cards-resource';
+import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
@@ -359,6 +360,25 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     );
   }
 
+  @action removeFilter(key: FilterType, item: SelectedItem) {
+    let items = this.selectedItems.get(key);
+    let itemIndex: number;
+    if (key === 'Status') {
+      itemIndex = items.findIndex((o) => item.index === o.index);
+    } else {
+      itemIndex = items.findIndex((o) => item === o);
+    }
+
+    if (itemIndex > -1) {
+      items.splice(itemIndex, 1);
+      this.selectedItems.set(key, items);
+    }
+  }
+
+  @action selectedFilterItems(filterType: FilterType) {
+    return this.selectedItems.get(filterType);
+  }
+
   <template>
     <div class='task-app'>
       <button {{on 'click' this.changeQuery}}>Change Query</button>
@@ -405,8 +425,25 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
               {{item}}
             </BoxelSelect>
           {{/if}}
+          <div class='filter-display'>
+            {{#each this.filterTypes as |filterType|}}
+              {{#let (this.selectedFilterItems filterType) as |items|}}
+                <FilterDisplay
+                  @key={{filterType}}
+                  @items={{items}}
+                  @removeItem={{this.removeFilter}}
+                  as |item|
+                >
+                  {{#if (eq filterType 'Status')}}
+                    {{item.label}}
+                  {{else}}
+                    {{item.name}}
+                  {{/if}}
+                </FilterDisplay>
+              {{/let}}
+            {{/each}}
+          </div>
         {{/if}}
-
       </div>
       <div class='columns-container'>
         {{#if this.loadTasks.isRunning}}
