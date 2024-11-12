@@ -2,6 +2,7 @@ import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
+import { setOwner } from '@ember/owner';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -60,7 +61,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type Realm from '../../services/realm';
 
 import type { Submode } from '../submode-switcher';
-import { setOwner } from '@ember/owner';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -678,10 +678,10 @@ export default class InteractSubmode extends Component<Signature> {
   lookupCommand = <
     CardInputType extends CardDef | undefined,
     CardResultType extends CardDef | undefined,
-    CommandConfiguration,
+    CommandConfiguration extends any | undefined,
   >(
     name: string,
-    configuration: CommandConfiguration = undefined,
+    configuration: CommandConfiguration | undefined,
   ): Command<CardInputType, CardResultType, CommandConfiguration> => {
     let owner = getOwner(this)!;
     let commandFactory = owner.factoryFor(`command:${name}`);
@@ -691,6 +691,7 @@ export default class InteractSubmode extends Component<Signature> {
     let CommandClass = commandFactory.class as unknown as {
       new (
         commandContext: CommandContext,
+        commandConfiguration: CommandConfiguration | undefined,
       ): Command<CardInputType, CardResultType, CommandConfiguration>;
     };
     let instance = new CommandClass(
@@ -701,7 +702,7 @@ export default class InteractSubmode extends Component<Signature> {
     return instance;
   };
 
-  private get commandContext() {
+  private get commandContext(): CommandContext {
     return {
       lookupCommand: this.lookupCommand,
       sendAiAssistantMessage: (

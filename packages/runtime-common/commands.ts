@@ -3,9 +3,9 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import {
-  Schema,
+  AttributesSchema,
+  CardSchema,
   generateJsonSchemaForCardType,
-  RelationshipsSchema,
 } from './helpers/ai';
 
 export interface CommandContext {
@@ -15,6 +15,7 @@ export interface CommandContext {
     CommandConfiguration extends any | undefined = undefined,
   >(
     name: string,
+    commandConfiguration?: CommandConfiguration,
   ): Command<CardInputType, CardResultType, CommandConfiguration>;
 
   sendAiAssistantMessage: (params: {
@@ -106,13 +107,11 @@ export abstract class Command<
 
   async getInputJsonSchema(
     cardApi: typeof CardAPI,
-    mappings: Map<typeof CardAPI.FieldDef, Schema>,
-  ): Promise<{
-    attributes: Schema;
-    relationships: RelationshipsSchema;
-  }> {
+    mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+  ): Promise<CardSchema> {
+    let InputType = await this.getInputType();
     return generateJsonSchemaForCardType(
-      await this.getInputType(),
+      InputType as unknown as typeof CardDef, // TODO: can we do better type-wise?
       cardApi,
       mappings,
     );

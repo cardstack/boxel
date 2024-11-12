@@ -77,7 +77,7 @@ export class CreateProductRequirementsInstance extends Command<
     let patchPRDCommand = this.commandContext.lookupCommand<
       PatchCardInput,
       undefined,
-      ProductRequirementDocument
+      { cardType: typeof ProductRequirementDocument }
     >('patch-card', { cardType: ProductRequirementDocument });
     console.log('patchPRDCommand', patchPRDCommand);
 
@@ -104,11 +104,25 @@ export class CreateProductRequirementsInstance extends Command<
     await patchPRDCommand.waitForNextCompletion();
     // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
     // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
+
     console.log('prdCard after patch', prdCard);
+
+    let reloadCommand = await this.commandContext.lookupCommand<
+      CardDef,
+      undefined
+    >('reload-card');
+    await reloadCommand.execute(prdCard);
+    console.log('prdCard after reload', prdCard);
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;
     result.roomId = roomId;
     return result;
+  }
+
+  async getInputType(): Promise<
+    new (args: any) => CreateProductRequirementsInput
+  > {
+    return CreateProductRequirementsInput;
   }
 }
 
@@ -139,7 +153,11 @@ export class GenerateCodeFromPRDCommand extends Command<
     });
   }
 
-  createPrompt(prdCard: ProductRequirementDocument) {
+  async getInputType(): Promise<new (args: any) => GenerateAppInput> {
+    return GenerateAppInput;
+  }
+
+  createPrompt(_prdCard: ProductRequirementDocument) {
     // TODO: use this PRD card value?
     return `Please analyze the provided product requirements and generate appropriate code to implement them. Consider best practices, maintainability, and performance.`;
   }
@@ -213,7 +231,7 @@ export class CreateBoxelApp extends Command<
       CardDef
     >('createInstance');
     let createInstanceInput = new CreateInstanceInput();
-    createInstanceInput.module = moduleCard.module;
+    createInstanceInput.module = moduleCard;
     createInstanceInput.realm = input.realm;
     let appCard = await createInstanceCommand.execute(createInstanceInput);
     // open new app card
@@ -225,5 +243,11 @@ export class CreateBoxelApp extends Command<
     //   // Notes:
     //   //  - We're going to need to look through the module and get the types?
     return appCard;
+  }
+
+  async getInputType(): Promise<
+    new (args: any) => CreateProductRequirementsInput
+  > {
+    return CreateProductRequirementsInput;
   }
 }

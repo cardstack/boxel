@@ -72,7 +72,10 @@ export default class CommandService extends Service {
     let InputType = await command.getInputType();
 
     // Construct a new instance of the input type with the payload
-    let typedInput = new InputType(toolCall.arguments);
+    let typedInput = new InputType({
+      ...toolCall.arguments.attributes,
+      ...toolCall.arguments.relationships,
+    });
     await command.execute(typedInput);
     await this.matrixService.sendReactionEvent(
       event.room_id!,

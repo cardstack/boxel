@@ -1,6 +1,10 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { buildWaiter } from '@ember/test-waiters';
+
+import { isTesting } from '@embroider/macros';
+
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -46,12 +50,29 @@ export type CardSaveSubscriber = (
 
 const { environment } = ENV;
 
+const waiter = buildWaiter('card-service:waiter');
+
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
   @service private declare network: NetworkService;
   @service private declare realm: Realm;
   @service private declare reset: ResetService;
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
@@ -153,6 +174,26 @@ export default class CardService extends Service {
     let serialized = api.serializeCard(card, opts);
     delete serialized.included;
     return serialized;
+  }
+
+  async reloadCard(card: CardDef): Promise<void> {
+    // we don't await this in the realm subscription callback, so this test
+    // waiter should catch otherwise leaky async in the tests
+    await this.withTestWaiters(async () => {
+      let incomingDoc: SingleCardDocument = (await this.fetchJSON(
+        card.id,
+        undefined,
+      )) as SingleCardDocument;
+
+      if (!isSingleCardDocument(incomingDoc)) {
+        throw new Error(
+          `bug: server returned a non card document for ${card.id}:
+        ${JSON.stringify(incomingDoc, null, 2)}`,
+        );
+      }
+      let api = await this.getAPI();
+      await api.updateFromSerialized<typeof CardDef>(card, incomingDoc);
+    });
   }
 
   // we return undefined if the card changed locally while the save was in-flight
@@ -305,7 +346,7 @@ export default class CardService extends Service {
     return card;
   }
 
-  async getCard(url: URL | string): Promise<CardDef | undefined> {
+  async getCard(url: URL | string): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
     }

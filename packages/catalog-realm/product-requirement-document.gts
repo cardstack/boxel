@@ -13,8 +13,7 @@ import {
 import { Button } from '@cardstack/boxel-ui/components';
 import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
+import { on } from '@ember/modifier'; // TODO: why is this a type error???
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from './app-card';
@@ -248,12 +247,12 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     return this.args.model[realmURL];
   }
 
-  @action generateApp() {
+  generateApp = () => {
     this._generateCode.perform();
-  }
-  @action createInstance() {
+  };
+  createInstance = () => {
     this._createInstance.perform();
-  }
+  };
 
   private _generateCode = restartableTask(async () => {
     this.errorMessage = '';
@@ -317,7 +316,10 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                 title: this.args.model.appTitle,
                 moduleId: moduleURL,
               },
-              meta: { adoptsFrom: moduleRef, realmURL: this.currentRealm },
+              meta: {
+                adoptsFrom: moduleRef,
+                realmURL: this.currentRealm.href,
+              },
             },
           },
           cardModeAfterCreation: 'isolated',
@@ -336,7 +338,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     }
   });
 
-  @action viewModule() {
+  viewModule = () => {
     this.errorMessage = '';
     if (!this.args.model.moduleURL) {
       this.errorMessage = 'Module url is not available';
@@ -351,12 +353,12 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       new URL(this.args.model.moduleURL),
       'code',
     );
-  }
+  };
 
-  @action reset() {
+  reset = () => {
     this.args.model.moduleURL = undefined;
     this.args.model.appInstances = undefined;
-  }
+  };
 }
 
 export class ProductRequirementDocument extends CardDef {
