@@ -6,6 +6,7 @@ import {
   contains,
   field,
   BaseDef,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import { getCard, getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -41,7 +42,8 @@ import {
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
-import { FilterDropdownCard } from './productivity/filter-dropdown';
+import { FilterDropdown } from './productivity/filter-dropdown';
+import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
@@ -169,6 +171,16 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked newQuery: Query | undefined;
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType;
+  private declare assigneeQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+    loaded: Promise<void>;
+  };
+  private declare projectQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+    loaded: Promise<void>;
+  };
   filterTypes: FilterType[] = ['Status', 'Assignee', 'Project'];
   filters = {
     Status: {
@@ -177,7 +189,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         module: `${this.realmURL?.href}productivity/task`,
         name: 'Status',
       },
-      options: TaskStatusField.values,
+      options: () => TaskStatusField.values,
       filter: (item: SelectedItem) => {
         return {
           eq: {
@@ -199,6 +211,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           },
         };
       },
+      options: () => this.assigneeCards,
     },
     Project: {
       label: 'Project',
@@ -206,7 +219,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         module: `${this.realmURL?.href}productivity/task`,
         name: 'Project',
       },
-      options: [],
       filter: (item: SelectedItem) => {
         return {
           eq: {
@@ -214,15 +226,50 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           },
         };
       },
+      options: () => this.projectCards,
     },
   };
   selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.initializeDropdownData.perform();
+  }
 
   taskCollection = getTaskCollection(
     this,
     () => this.query,
     () => this.realmURL,
   );
+
+  initializeDropdownData = restartableTask(async () => {
+    this.assigneeQuery = getCards(
+      {
+        filter: {
+          type: this.filters.Assignee.codeRef,
+        },
+      },
+      [this.realmURL],
+    );
+
+    this.projectQuery = getCards(
+      {
+        filter: {
+          type: this.filters.Project.codeRef,
+        },
+      },
+      [this.realmURL],
+    );
+    await this.assigneeQuery.loaded;
+    await this.projectQuery.loaded;
+  });
+
+  get assigneeCards() {
+    return this.assigneeQuery.instances;
+  }
+
+  get projectCards() {
+    return this.projectQuery.instances;
+  }
 
   filterArr(filterType: FilterType) {
     let filterObject = this.filters.get(filterType);
@@ -247,7 +294,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     if (this.selectedFilter === undefined) {
       return [];
     }
-    return this.selectedItems.get(this.selectedFilter);
+    return this.selectedItems.get(this.selectedFilter) ?? [];
   }
 
   get query() {
@@ -275,6 +322,13 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         type: this.assignedTaskCodeRef,
       },
     };
+  }
+
+  @action isSelectedItem(item: SelectedItem) {
+    let selectedItems = this.selectedItemsForFilter;
+    console.log('selected items');
+    console.log(selectedItems);
+    return selectedItems.includes(item);
   }
 
   @action createNewTask(statusLabel: string) {
@@ -402,39 +456,58 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     return true;
   }
 
+  get options() {
+    return (
+      this.selectedFilterConfig.getCards() ?? this.selectedFilterConfig?.options
+    );
+  }
+
   <template>
     <div class='task-app'>
       <button {{on 'click' this.changeQuery}}>Change Query</button>
       <div class='filter-section'>
-        {{#if this.selectedFilterConfig}}
-          {{#if this.selectedFilterConfig.options}}
-            Implement Field Dropdown
+        {{#if this.initializeDropdownData.isRunning}}
+          isLoading...
+        {{else}}
+          {{#if this.selectedFilterConfig}}
+            {{#let (this.selectedFilterConfig.options) as |options|}}
+              <FilterDropdown
+                @options={{options}}
+                @realmURLs={{this.realmURLs}}
+                @selected={{this.selectedItemsForFilter}}
+                @onChange={{this.onChange}}
+                @onClose={{this.onClose}}
+                as |item|
+              >
+                {{#let (this.isSelectedItem item) as |isSelected|}}
+                  {{#if (eq this.selectedFilter 'Status')}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{item.label}}
+                    />
+                  {{else}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{item.name}}
+                    />
+                  {{/if}}
+                {{/let}}
+              </FilterDropdown>
+            {{/let}}
           {{else}}
-            <FilterDropdownCard
-              @codeRef={{this.selectedFilterConfig.codeRef}}
-              @realmURLs={{this.realmURLs}}
-              @selected={{this.selectedItemsForFilter}}
-              @onChange={{this.onChange}}
-              @onClose={{this.onClose}}
+            <BoxelSelect
+              class='status-select'
+              @selected={{this.selectedFilter}}
+              @options={{this.filterTypes}}
+              @onChange={{this.onSelectFilter}}
+              @placeholder={{'Choose a Filter'}}
+              @matchTriggerWidth={{false}}
+              @triggerComponent={{FilterTrigger}}
               as |item|
             >
-              {{item.name}}
-            </FilterDropdownCard>
+              {{item}}
+            </BoxelSelect>
           {{/if}}
-
-        {{else}}
-          <BoxelSelect
-            class='status-select'
-            @selected={{this.selectedFilter}}
-            @options={{this.filterTypes}}
-            @onChange={{this.onSelectFilter}}
-            @placeholder={{'Choose a Filter'}}
-            @matchTriggerWidth={{false}}
-            @triggerComponent={{FilterTrigger}}
-            as |item|
-          >
-            {{item}}
-          </BoxelSelect>
         {{/if}}
 
       </div>
@@ -579,97 +652,4 @@ function removeFileExtension(cardUrl: string) {
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
-}
-
-interface CheckBoxArgs {
-  Args: {
-    isSelected: boolean;
-  };
-  Element: Element;
-}
-
-class CheckboxIndicator extends GlimmerComponent<CheckBoxArgs> {
-  <template>
-    <div class='checkbox-indicator'>
-      <span class={{cn 'check-icon' check-icon--selected=@isSelected}}>
-        <CheckMark width='12' height='12' />
-      </span>
-    </div>
-    <style scoped>
-      .checkbox-indicator {
-        width: 16px;
-        height: 16px;
-        border: 1px solid var(--boxel-500);
-        border-radius: 3px;
-        margin-right: var(--boxel-sp-xs);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .checkbox-indicator:hover,
-      .checkbox-indicator:focus {
-        box-shadow: 0 0 0 2px var(--boxel-dark-teal);
-      }
-      .check-icon {
-        --icon-color: var(--boxel-dark-teal);
-        visibility: collapse;
-        display: contents;
-      }
-      .check-icon--selected {
-        visibility: visible;
-      }
-    </style>
-  </template>
-}
-
-interface StatusPillArgs {
-  Args: {
-    isSelected: boolean;
-    label: string;
-  };
-  Element: Element;
-}
-
-class StatusPill extends GlimmerComponent<StatusPillArgs> {
-  <template>
-    <span class='status-pill'>
-      <div class='status-pill-content'>
-        <CheckboxIndicator @isSelected={{@isSelected}} />
-        <div class='status-name'>{{@label}}</div>
-      </div>
-    </span>
-
-    <style scoped>
-      .status-pill {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: var(--boxel-font-size-sm);
-        cursor: pointer;
-        width: 100%;
-      }
-      .status-pill.selected {
-        background-color: var(--boxel-highlight);
-      }
-      .status-pill-content {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-      }
-      .status-avatar {
-        width: var(--boxel-sp-sm);
-        height: var(--boxel-sp-sm);
-        border-radius: 50%;
-        background-color: var(--avatar-bg-color, var(--boxel-light));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: var(--boxel-sp-xs);
-        font-size: var(--boxel-font-size-xs);
-      }
-      .status-name {
-        flex-grow: 1;
-      }
-    </style>
-  </template>
 }

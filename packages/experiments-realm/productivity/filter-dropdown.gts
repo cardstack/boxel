@@ -1,26 +1,12 @@
-import { getCards } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { BoxelMultiSelectBasic } from '@cardstack/boxel-ui/components';
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { FilterTrigger } from './filter-trigger';
-import { action } from '@ember/object';
 
 interface FilterDropdownSignature {
   Element: HTMLDivElement;
   Args: {
-    options: any;
-    selected: any;
-    onChange: (value: any) => void;
-  };
-  Blocks: {
-    default: [any];
-  };
-}
-interface FilterDropdownCardSignature {
-  Element: HTMLDivElement;
-  Args: {
-    codeRef: ResolvedCodeRef;
     realmURLs: string[];
+    options: any;
     selected: any;
     onChange: (value: any) => void;
     onClose: () => boolean | undefined;
@@ -30,43 +16,15 @@ interface FilterDropdownCardSignature {
   };
 }
 
-export class FilterDropdownCard extends GlimmerComponent<FilterDropdownCardSignature> {
-  get query() {
-    return {
-      filter: {
-        type: this.args.codeRef,
-      },
-    };
-  }
-  cards = getCards(this.query, this.args.realmURLs); //load cards first
-
-  get data() {
-    if (!this.cards || this.args.codeRef === undefined) {
-      return [];
-    }
-    return this.cards.instances;
-  }
-
-  @action onChange(value: any) {
-    this.args.onChange(value);
-  }
-
+export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
   matchById(item: any, selected: any) {
     return item.id === selected.id;
-  }
-
-  isSelected(item: any) {
-    console.log('selected arr');
-    console.log(this.args.selected);
-    return this.args.selected.some((selectedItem: any) => {
-      return this.matchById(item, selectedItem);
-    });
   }
 
   <template>
     <BoxelMultiSelectBasic
       class='multi-select'
-      @options={{this.data}}
+      @options={{@options}}
       @selected={{@selected}}
       @onChange={{@onChange}}
       @triggerComponent={{FilterTrigger}}
