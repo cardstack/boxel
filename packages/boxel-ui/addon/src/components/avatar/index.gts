@@ -1,5 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
+
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
 
@@ -14,8 +15,22 @@ function rgbToHex(r: number, g: number, b: number): string {
   );
 }
 
+function calculateContrast(lum1: number, lum2: number): number {
+  return (Math.max(lum1, lum2) + 0.05) / (Math.min(lum1, lum2) + 0.05);
+}
+
+function getLuminance(r: number, g: number, b: number): number {
+  const [red, green, blue]: any = [r, g, b].map((c) => {
+    const val = c / 255;
+    return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
 export function deterministicColorFromString(str: string): string {
-  if (!str) return 'transparent';
+  if (!str) {
+    return 'transparent';
+  }
 
   // Generate hash value between 0-1
   let hash = 0;
@@ -24,46 +39,58 @@ export function deterministicColorFromString(str: string): string {
   }
   hash = Math.abs(hash);
 
-  // Convert to HSL (using same logic as getContrastColor)
   const hue = hash % 360;
-  const saturation = 85 + (hash % 15); // 85-100% - very high saturation for vivid colors
+  const saturation = 65 + (hash % 15); // 65-80% for better contrast
 
-  // Adjust lightness based on hue ranges
-  let lightness;
-  if (hue >= 50 && hue <= 70) {
-    lightness = 60 + (hash % 15); // 60-75% - brighter for yellows
-  } else if (hue >= 270 && hue <= 310) {
-    lightness = 25 + (hash % 15); // 25-40% - darker for purples
-  } else {
-    lightness = 45 + (hash % 20); // 45-65% - medium range for other colors
-  }
+  // Adjust lightness for WCAG contrast
+  let lightness = 50; // Starting lightness value
 
   // Convert HSL to RGB
-  const c = ((1 - Math.abs((2 * lightness) / 100 - 1)) * saturation) / 100;
-  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = lightness / 100 - c / 2;
+  function hslToRgb(h: number, s: number, l: number) {
+    const c = ((1 - Math.abs((2 * l) / 100 - 1)) * s) / 100;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l / 100 - c / 2;
 
-  let r, g, b;
-  if (hue < 60) {
-    [r, g, b] = [c, x, 0];
-  } else if (hue < 120) {
-    [r, g, b] = [x, c, 0];
-  } else if (hue < 180) {
-    [r, g, b] = [0, c, x];
-  } else if (hue < 240) {
-    [r, g, b] = [0, x, c];
-  } else if (hue < 300) {
-    [r, g, b] = [x, 0, c];
-  } else {
-    [r, g, b] = [c, 0, x];
+    let [r, g, b] = [0, 0, 0];
+    if (h < 60) {
+      [r, g, b] = [c, x, 0];
+    } else if (h < 120) {
+      [r, g, b] = [x, c, 0];
+    } else if (h < 180) {
+      [r, g, b] = [0, c, x];
+    } else if (h < 240) {
+      [r, g, b] = [0, x, c];
+    } else if (h < 300) {
+      [r, g, b] = [x, 0, c];
+    } else {
+      [r, g, b] = [c, 0, x];
+    }
+
+    return {
+      r: Math.round((r + m) * 255),
+      g: Math.round((g + m) * 255),
+      b: Math.round((b + m) * 255),
+    };
   }
 
-  // Convert to final RGB values
-  const rgb = {
-    r: Math.round((r + m) * 255),
-    g: Math.round((g + m) * 255),
-    b: Math.round((b + m) * 255),
-  };
+  // Adjust lightness to ensure contrast ratio of 4.5:1 or above
+  const targetContrast = 4.5;
+  let rgb: any;
+  while (lightness <= 100) {
+    rgb = hslToRgb(hue, saturation, lightness);
+    const luminance = getLuminance(rgb.r, rgb.g, rgb.b);
+    const contrastWithBlack = calculateContrast(luminance, 0); // Black luminance = 0
+    const contrastWithWhite = calculateContrast(luminance, 1); // White luminance = 1
+
+    // Check if the color meets contrast requirements against black or white
+    if (
+      contrastWithBlack >= targetContrast ||
+      contrastWithWhite >= targetContrast
+    ) {
+      break;
+    }
+    lightness += 1; // Increase lightness to improve contrast if needed
+  }
 
   return rgbToHex(rgb.r, rgb.g, rgb.b);
 }
