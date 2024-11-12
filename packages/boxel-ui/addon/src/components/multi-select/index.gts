@@ -22,6 +22,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   disabled?: boolean;
   extra?: any;
   matchTriggerWidth?: boolean;
+  matcher?: MatcherFn;
   onBlur?: (select: Select, e: Event) => boolean | undefined;
   onClose?: (select: Select, e: Event) => boolean | undefined;
   onOpen?: (select: Select, e: Event) => boolean | undefined;
@@ -33,7 +34,6 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   selected: ItemT[];
   selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
   triggerComponent?: ComponentLike<TriggerComponentSignature<ItemT>>;
-  matcher?: MatcherFn;
 }
 
 export interface Signature<ItemT> {
