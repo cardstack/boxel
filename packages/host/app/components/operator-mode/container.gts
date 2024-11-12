@@ -10,11 +10,13 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal } from '@cardstack/boxel-ui/components';
-import { not, or } from '@cardstack/boxel-ui/helpers';
+
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
+import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
@@ -34,6 +36,7 @@ import { Submodes } from '../submode-switcher';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmServerService from '../../services/realm-server';
 
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
@@ -48,6 +51,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare messageService: MessageService;
+  @service declare realmServer: RealmServerService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -117,6 +121,22 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  private get isUserSubscribed() {
+    if (!this.realmServer.user) {
+      return false;
+    }
+    return (
+      !!this.realmServer.user.stripeCustomerId && !!this.realmServer.user.plan
+    );
+  }
+
+  private get matrixUserId() {
+    if (!this.realmServer.user) {
+      return '';
+    }
+    return this.realmServer.user.matrixUserId;
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -127,13 +147,17 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if
-        (or
-          (not this.matrixService.isLoggedIn)
-          this.matrixService.isInitializingNewUser
-        )
-      }}
+      {{#if (not this.matrixService.isLoggedIn)}}
         <Auth />
+      {{else if (not this.isUserSubscribed)}}
+        <PaymentSetup
+          @matrixUserId={{this.matrixUserId}}
+          @flow={{if
+            this.matrixService.isInitializingNewUser
+            'register'
+            'logged-in'
+          }}
+        />
       {{else if this.isCodeMode}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
@@ -176,6 +200,14 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       .operator-mode > div {
         align-items: flex-start;
+      }
+      .payment-setup-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100%;
+        padding: var(--boxel-sp-lg);
       }
       .loading {
         display: flex;

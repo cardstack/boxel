@@ -36,7 +36,6 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AuthMode } from './auth';
-import PaymentSetup from './payment-setup';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
@@ -70,8 +69,6 @@ export default class RegisterUser extends Component<Signature> {
         @disabled={{this.validateEmail.isRunning}}
         @loading={{this.validateEmail.isRunning}}
       >Resend Email</Button>
-    {{else if (eq this.currentPage 'payment-setup')}}
-      <PaymentSetup @matrixUserId={{this.username}} />
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
         @label='This site is currently invite-only. Enter your invite code here.'
@@ -356,11 +353,6 @@ export default class RegisterUser extends Component<Signature> {
         sid: string;
         sendAttempt: number;
       }
-    | {
-        type: 'paymentSetup';
-        username: string;
-        name: string;
-      }
     // TODO we'll need to also add a CAPTCHA state
     // this will be probably impossible to test
     // since the whole point of CAPTCHA is to detect
@@ -381,8 +373,6 @@ export default class RegisterUser extends Component<Signature> {
       return 'registration-form';
     } else if (['askForToken', 'sendToken'].includes(this.state.type)) {
       return 'token-form';
-    } else if (this.state.type === 'paymentSetup') {
-      return 'payment-setup';
     } else {
       return 'waiting-page';
     }
@@ -611,8 +601,7 @@ export default class RegisterUser extends Component<Signature> {
     if (
       this.state.type === 'initial' ||
       this.state.type === 'validateEmail' ||
-      this.state.type === 'login' ||
-      this.state.type === 'paymentSetup'
+      this.state.type === 'login'
     ) {
       throw new Error(
         `invalid state: cannot resendValidation() in state ${this.state.type}`,
@@ -678,11 +667,7 @@ export default class RegisterUser extends Component<Signature> {
   // the registration until the final step which results in a new user (and
   // successful HTTP response)
   private doRegistrationFlow = restartableTask(async () => {
-    if (
-      this.state.type === 'initial' ||
-      this.state.type === 'validateEmail' ||
-      this.state.type === 'paymentSetup'
-    ) {
+    if (this.state.type === 'initial' || this.state.type === 'validateEmail') {
       throw new Error(
         `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`,
       );
@@ -735,12 +720,6 @@ export default class RegisterUser extends Component<Signature> {
         auth as LoginResponse,
         this.state.name,
       );
-      this.state = {
-        type: 'paymentSetup',
-        name: this.state.name,
-        username: this.state.username,
-      };
-      this.args.setMode('payment-setup');
     }
   });
 
@@ -752,8 +731,7 @@ export default class RegisterUser extends Component<Signature> {
     if (
       this.state.type === 'initial' ||
       this.state.type === 'validateEmail' ||
-      this.state.type === 'login' ||
-      this.state.type === 'paymentSetup'
+      this.state.type === 'login'
     ) {
       throw new Error(
         `invalid state: cannot do nextStateFromResponse() in state ${this.state.type}`,

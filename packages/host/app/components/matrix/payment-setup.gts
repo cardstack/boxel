@@ -1,7 +1,14 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import InfoCircleIcon from '@cardstack/boxel-icons/info-circle';
+
+import {
+  BoxelButton,
+  BoxelHeader,
+  CardContainer,
+} from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   SuccessBordered,
@@ -15,6 +22,7 @@ import type BillingService from '@cardstack/host/services/billing-service';
 
 interface Signature {
   Args: {
+    flow: 'register' | 'logged-in';
     matrixUserId: string;
   };
 }
@@ -27,70 +35,121 @@ export default class PaymentSetup extends Component<Signature> {
   }
 
   <template>
-    <div class='container'>
-      <div class='success-banner' data-test-email-validated>
-        <SuccessBordered class='check-icon' />
-        Success! Your email has been validated
-      </div>
+    <div class='payment-setup'>
+      <div class='container'>
+        <CardContainer class='payment-setup-container'>
+          <BoxelHeader
+            @title='Boxel'
+            @displayBorder={{true}}
+            @hasBackground={{false}}
+            class='header'
+          >
+            <:icon>
+              <BoxelIcon />
+            </:icon>
+          </BoxelHeader>
 
-      <div class='offer-section'>
-        <h2>EARLY ACCESS OFFER</h2>
+          {{#if (eq @flow 'register')}}
+            <div class='success-banner' data-test-email-validated>
+              <SuccessBordered class='check-icon' />
+              Success! Your email has been validated
+            </div>
+          {{else}}
+            <div class='success-banner' data-test-setup-payment>
+              <InfoCircleIcon class='info-icon' />
+              Setup your payment method now to enjoy Boxel
+            </div>
+          {{/if}}
 
-        <p class='offer-title'>
-          Claim
-          <span class='credit-icon'><IconHexagon
-              class='credit-icon-svg'
-              width='24px'
-              height='24px'
-            />
-            1000</span>
-          Boxel Credits a month by setting up a payment method.
-        </p>
+          <div class='offer-section'>
+            <h2>EARLY ACCESS OFFER</h2>
 
-        <div class='credit-icon-container'>
-          <span class='boxel-icon'><BoxelIcon
-              width='50px'
-              height='50px'
-            /></span>
-          <span class='plus'><IconPlus width='16px' height='16px' /></span>
-          <span class='boxel-credits-icon'><IconHexagon
-              width='50px'
-              height='50px'
-            /></span>
-        </div>
+            <p class='offer-title'>
+              Claim
+              <span class='credit-icon'><IconHexagon
+                  class='credit-icon-svg'
+                  width='24px'
+                  height='24px'
+                />
+                1000</span>
+              Boxel Credits a month by setting up a payment method.
+            </p>
 
-        <div class='benefits-container'>
-          <ul class='benefits-list'>
-            <li>To use Boxel you need Boxel Credits for platform & AI access</li>
-            <li>You can top up your credit if you run out</li>
-            <li>You won't be charged anything to try Boxel</li>
-          </ul>
-        </div>
+            <div class='credit-icon-container'>
+              <span class='boxel-icon'><BoxelIcon
+                  width='50px'
+                  height='50px'
+                /></span>
+              <span class='plus'><IconPlus width='16px' height='16px' /></span>
+              <span class='boxel-credits-icon'><IconHexagon
+                  width='50px'
+                  height='50px'
+                /></span>
+            </div>
 
-        <BoxelButton
-          @as='anchor'
-          @kind='primary'
-          @href={{this.stripePaymentLink}}
-          data-test-setup-payment
-          class='setup-button'
-        >
-          Set up Secure Payment Method
-          <span class='lock-icon'><Lock width='16cpx' height='16px' /></span>
-        </BoxelButton>
+            <div class='benefits-container'>
+              <ul class='benefits-list'>
+                <li>To use Boxel you need Boxel Credits for platform & AI access</li>
+                <li>You can top up your credit if you run out</li>
+                <li>You won't be charged anything to try Boxel</li>
+              </ul>
+            </div>
 
-        <p class='payment-note'>
-          We currently support credit card as the payment method, additional
-          payment method using web 3 wallet coming soon
-        </p>
+            <BoxelButton
+              @as='anchor'
+              @kind='primary'
+              @href={{this.stripePaymentLink}}
+              data-test-setup-payment
+              class='setup-button'
+            >
+              Set up Secure Payment Method
+              <span class='lock-icon'><Lock
+                  width='16cpx'
+                  height='16px'
+                /></span>
+            </BoxelButton>
+
+            <p class='payment-note'>
+              We currently support credit card as the payment method, additional
+              payment method using web 3 wallet coming soon
+            </p>
+          </div>
+        </CardContainer>
       </div>
     </div>
 
     <style scoped>
+      .payment-setup {
+        height: 100%;
+        overflow: auto;
+      }
+
       .container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100%;
+        padding: var(--boxel-sp-lg);
+      }
+
+      .payment-setup-container {
         display: flex;
         flex-direction: column;
         align-items: center;
-        min-height: 100%;
+        width: 550px;
+        background-color: transparent;
+      }
+
+      .header {
+        --boxel-header-padding: var(--boxel-sp);
+        --boxel-header-text-font: var(--boxel-font);
+
+        color: var(--boxel-light);
+        text-transform: uppercase;
+        max-width: max-content;
+        min-width: 100%;
+        gap: var(--boxel-sp-xxs);
+        letter-spacing: var(--boxel-lsp-lg);
       }
 
       .success-banner {

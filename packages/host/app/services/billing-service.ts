@@ -5,7 +5,8 @@ const { stripePaymentLink } = ENV;
 
 export default class BillingService extends Service {
   getStripePaymentLink(matrixUserId: string): string {
-    const clientReferenceId = encodeURIComponent(matrixUserId);
+    const username = matrixUserId.split(':')[0].slice(1);
+    const clientReferenceId = encodeURIComponent(username);
     return `${stripePaymentLink}?client_reference_id=${clientReferenceId}`;
   }
 }
