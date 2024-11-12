@@ -20,6 +20,7 @@ import {
 } from '../billing-queries';
 import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
 import { PgAdapter, TransactionManager } from '@cardstack/postgres';
+import { ProrationCalculator } from '../proration-calculator';
 
 // TODOs that will be handled in a separated PRs:
 // - signal to frontend that subscription has been created and credits have been added
@@ -180,6 +181,7 @@ async function updateSubscription(
   } else {
     await handlePlanUpgrade(dbAdapter, {
       user,
+      currentPlan,
       currentCycle,
       newPlan,
       existingActiveSubscription,
@@ -236,6 +238,8 @@ async function createSubscriptionCycle(
   });
 }
 
+// When users downgrade their plan, Stripe will apply that change at the end of the current billing period (because we configured it that way in the customer portal settings)
+// This means we don't have to prorate the change, we can just create a new subscription with the new plan's allowance
 async function handlePlanDowngrade(
   dbAdapter: DBAdapter,
   {
@@ -280,67 +284,31 @@ async function handlePlanUpgrade(
   dbAdapter: DBAdapter,
   {
     user,
+    currentPlan,
     currentCycle,
     newPlan,
     existingActiveSubscription,
-
     event,
   }: {
     user: User;
+    currentPlan: Plan;
     currentCycle: SubscriptionCycle;
     newPlan: Plan;
     existingActiveSubscription: Subscription;
     event: StripeInvoicePaymentSucceededWebhookEvent;
   },
 ) {
-  let centsToCredits = (cents: number, plan: Plan) =>
-    Math.round((cents / (plan.monthlyPrice * 100)) * plan.creditsIncluded);
-
-  // Sum up monetary credit given to the user by Stripe for unused time on previous plans
-  // (there can be multiple such lines if user switches to larger plans multiple times in the same billing period)
-  // and convert it to credits. In other words, take away the credits calculated from the money that Stripe
-  // returned to the user for unused time.
-  let creditsToExpireforUnusedTimeOnPreviousPlans = 0;
-  for (const line of event.data.object.lines.data) {
-    if (line.amount > 0) {
-      continue;
-    }
-    let plan = await getPlanByStripeId(dbAdapter, line.price.product);
-    if (plan) {
-      creditsToExpireforUnusedTimeOnPreviousPlans += centsToCredits(
-        -line.amount,
-        plan,
-      );
-    }
-  }
-
-  let newPlanInvoiceLine = event.data.object.lines.data.find(
-    (line) => line.price.product === newPlan.stripePlanId,
-  );
-
-  if (!newPlanInvoiceLine) {
-    throw new Error(
-      `No new plan subscription line found in invoice for plan ${newPlan.name} (stripe id: ${newPlan.stripePlanId})`,
-    );
-  }
-
-  // Convert the amount Stripe charged the user for the remaining time on the new plan into credits
-  // Stripe will charge the user in a prorated way for the new plan, meaning that the user will be
-  // charged for the time that is left in the billing period proportionally to the plan price
-  let creditsToAddForRemainingTimeOnNewPlan = centsToCredits(
-    newPlanInvoiceLine.amount,
-    newPlan,
-  );
-
   let currentAllowance = await sumUpCreditsLedger(dbAdapter, {
     creditType: ['plan_allowance', 'plan_allowance_used'],
     subscriptionCycleId: currentCycle.id,
   });
 
-  let creditsToAddToNewSubscriptionAllowance =
-    currentAllowance -
-    creditsToExpireforUnusedTimeOnPreviousPlans +
-    creditsToAddForRemainingTimeOnNewPlan;
+  let proration = ProrationCalculator.calculateUpgradeProration({
+    currentPlan,
+    newPlan,
+    invoiceLines: event.data.object.lines.data,
+    currentAllowance,
+  });
 
   await expireRemainingPlanAllowanceInSubscriptionCycle(
     dbAdapter,
@@ -350,15 +318,15 @@ async function handlePlanUpgrade(
 
   await updateSubscriptionQuery(dbAdapter, existingActiveSubscription.id, {
     status: 'ended_due_to_plan_change',
-    endedAt: event.data.object.period_end,
+    endedAt: proration.periodStart,
   });
 
   await createSubscription(dbAdapter, {
     user,
     plan: newPlan,
-    creditAllowance: creditsToAddToNewSubscriptionAllowance,
-    periodStart: newPlanInvoiceLine.period.start,
-    periodEnd: newPlanInvoiceLine.period.end,
+    creditAllowance: proration.creditsToAdd,
+    periodStart: proration.periodStart,
+    periodEnd: proration.periodEnd,
     event,
   });
 }
