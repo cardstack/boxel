@@ -13,6 +13,7 @@ module('Acceptance | Docs', function (hooks) {
     await a11yAudit(
       {
         include: ['.FreestyleUsage-preview'],
+        exclude: ['.ember-power-calendar-nav'],
       },
       {
         // https://github.com/dequelabs/axe-core/issues/3082

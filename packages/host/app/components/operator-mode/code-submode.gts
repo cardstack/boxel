@@ -960,7 +960,6 @@ export default class CodeSubmode extends Component<Signature> {
         --code-mode-panel-background-color: #ebeaed;
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
-        --code-mode-realm-icon-border-radius: 4px;
         --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
         --code-mode-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +

@@ -12,7 +12,7 @@ module('index-writer', function (hooks) {
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    adapter = new PgAdapter();
+    adapter = new PgAdapter({ autoMigrate: true });
     indexWriter = new IndexWriter(adapter);
     indexQueryEngine = new IndexQueryEngine(adapter);
   });
