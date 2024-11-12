@@ -102,7 +102,11 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
     }
     /* TODO: refactor field-container so it doesn't impose flex on field contents */
-    .horizontal > .content > :deep(*):not(.ember-basic-dropdown-trigger) {
+    .horizontal
+      > .content
+      > :deep(*):not(.ember-basic-dropdown-trigger):not(
+        .realm-dropdown-trigger
+      ) {
       flex: 1;
     }
 
