@@ -17,6 +17,7 @@ import {
   sumUpCreditsLedger,
   addToCreditsLedger,
   insertSubscription,
+  User,
 } from '@cardstack/billing/billing-queries';
 
 import {
