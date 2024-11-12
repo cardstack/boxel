@@ -15,7 +15,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
@@ -24,7 +24,6 @@ import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
-import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
@@ -278,7 +277,11 @@ export default class SubmodeLayout extends Component<Signature> {
             {{on 'click' this.toggleProfileSummary}}
             data-test-profile-icon-button
           >
-            <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+            <Avatar
+              @isReady={{this.matrixService.profile.loaded}}
+              @userId={{this.matrixService.userId}}
+              @displayName={{this.matrixService.profile.displayName}}
+            />
           </button>
           <SearchSheet
             @mode={{this.searchSheetMode}}

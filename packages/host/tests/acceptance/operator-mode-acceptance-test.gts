@@ -828,10 +828,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
       assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
-
       assert
         .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
+        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
       assert
         .dom('[data-test-profile-icon-handle]')
         .hasText('@testuser:staging');
@@ -877,7 +876,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-profile-icon]').hasText('T');
       assert
         .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
+        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
 
       assert.dom('[data-test-profile-popover]').doesNotExist();
 
