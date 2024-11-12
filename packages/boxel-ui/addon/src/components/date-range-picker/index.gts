@@ -88,7 +88,8 @@ export default class DateRangePicker extends Component<Signature> {
       >
         <div class='months-container'>
           <div>
-            <calendar.Nav aria-label='Left Calendar'>
+            {{! template-lint-disable no-duplicate-landmarks }}
+            <calendar.Nav>
               <div class='nav-container'>
                 <IconButton
                   @icon={{TriangleLeftIcon}}
@@ -113,7 +114,8 @@ export default class DateRangePicker extends Component<Signature> {
           </div>
 
           <div>
-            <calendar.Nav aria-label='Right Calendar'>
+            {{! template-lint-disable no-duplicate-landmarks }}
+            <calendar.Nav>
               <div class='nav-container'>
                 <IconButton
                   @icon={{TriangleLeftIcon}}
