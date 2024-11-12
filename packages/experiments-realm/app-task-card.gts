@@ -17,13 +17,17 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   BoxelButton,
-  BoxelDropdown,
-  Menu as BoxelMenu,
   CircleSpinner,
   DndKanbanBoard,
   DndColumn,
+  BoxelSelect,
+  IconButton,
 } from '@cardstack/boxel-ui/components';
-import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
+import {
+  DropdownArrowFilled,
+  IconPlus,
+  IconFunnel,
+} from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import { fn, array } from '@ember/helper';
 import { action } from '@ember/object';
@@ -143,12 +147,35 @@ export function getTaskCollection(
   }));
 }
 
+interface TriggerSignature {
+  Args: {};
+  Element: HTMLDivElement;
+}
+
+class FilterTrigger extends GlimmerComponent<TriggerSignature> {
+  <template>
+    <div class='filter-trigger'>
+      <IconButton @icon={{IconFunnel}} width='15px' height='15px' />
+      Filter
+    </div>
+
+    <style scoped>
+      .filter-trigger {
+        display: flex;
+        align-items: center;
+      }
+    </style>
+    {{! template-lint-disable require-scoped-style }}
+  </template>
+}
+
+type FilterType = 'Status' | 'Assignee' | 'Project';
+
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked newQuery: Query | undefined;
   @tracked loadingColumnKey: string | undefined;
-  @tracked selectedFilter = '';
-  @tracked taskDescription = '';
-  filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
+  @tracked selectedFilter: FilterType;
+  filterTypes: FilterType[] = ['Status', 'Assignee', 'Project'];
 
   taskCollection = getTaskCollection(
     this,
@@ -182,23 +209,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   //static statuses before query
   get statuses() {
     return TaskStatusField.values;
-  }
-
-  @action
-  updateFilter(type: string, value: string) {
-    switch (type) {
-      case 'Status':
-        this.selectedFilter = value;
-        break;
-      case 'Assignee':
-        this.selectedFilter = value;
-        break;
-      case 'Project':
-        this.selectedFilter = value;
-        break;
-      default:
-        console.warn(`Unknown filter type: ${type}`);
-    }
   }
 
   @action createNewTask(statusLabel: string) {
@@ -313,38 +323,26 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
+  @action onSelectFilter(item: FilterType) {
+    this.selectedFilter = item;
+  }
+
   <template>
     <div class='task-app'>
       <button {{on 'click' this.changeQuery}}>Change Query</button>
       <div class='filter-section'>
-        <BoxelDropdown>
-          <:trigger as |bindings|>
-            <BoxelButton {{bindings}} class='dropdown-filter-button'>
-              {{#if this.selectedFilter.length}}
-                {{this.selectedFilter}}
-              {{else}}
-                <span class='dropdown-filter-text'>Filter</span>
-                <DropdownArrowFilled
-                  width='10'
-                  height='10'
-                  class='dropdown-arrow'
-                />
-              {{/if}}
-            </BoxelButton>
-          </:trigger>
-          <:content as |dd|>
-            <BoxelMenu
-              @closeMenu={{dd.close}}
-              @items={{array
-                (menuItem
-                  'Status Type' (fn this.updateFilter 'Status' 'Status Type')
-                )
-                (menuItem 'Assignee' (fn this.updateFilter 'Status' 'Assignee'))
-                (menuItem 'Project' (fn this.updateFilter 'Status' 'Project'))
-              }}
-            />
-          </:content>
-        </BoxelDropdown>
+        <BoxelSelect
+          class='status-select'
+          @selected={{this.selectedFilter}}
+          @options={{this.filterTypes}}
+          @onChange={{this.onSelectFilter}}
+          @placeholder={{'Choose a Filter'}}
+          @matchTriggerWidth={{false}}
+          @triggerComponent={{FilterTrigger}}
+          as |item|
+        >
+          {{item}}
+        </BoxelSelect>
 
       </div>
       <div class='columns-container'>
@@ -419,6 +417,10 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       /** Need to specify height because fitted field component has a default height**/
       .card {
         height: 150px !important;
+      }
+
+      .status-select {
+        border: none;
       }
     </style>
   </template>
