@@ -110,7 +110,7 @@ export default class CreateFileModal extends Component<Signature> {
               {{else}}
                 <FieldContainer @label='Create In' @tag='label' class='field'>
                   <RealmDropdown
-                    @dropdownWidth='15rem'
+                    class='realm-dropdown'
                     @selectedRealmURL={{this.selectedRealmURL}}
                     @onSelect={{this.onSelectRealm}}
                   />
@@ -127,20 +127,18 @@ export default class CreateFileModal extends Component<Signature> {
                   >
                     <div class='field-contents'>
                       {{#if this.definitionClass}}
-                        <Pill class='definition-pill'>
-                          {{this.definitionClass.displayName}}
-                        </Pill>
+                        <SelectedTypePill
+                          @title={{this.definitionClass.displayName}}
+                          @id={{this.definitionClass.ref.module}}
+                        />
                       {{else}}
                         {{#if this.selectedCatalogEntry}}
                           <SelectedTypePill
-                            @entry={{this.selectedCatalogEntry}}
+                            @title={{this.selectedCatalogEntry.title}}
+                            @id={{this.selectedCatalogEntry.id}}
                           />
                         {{/if}}
                         <Button
-                          class={{if
-                            this.selectedCatalogEntry
-                            'change-trigger'
-                          }}
                           @kind='text-only'
                           @size='small'
                           @disabled={{this.isCreateRunning}}
@@ -265,59 +263,67 @@ export default class CreateFileModal extends Component<Signature> {
       <:loading></:loading>
     </WithKnownRealmsLoaded>
     <style scoped>
+      .create-file-modal {
+        --horizontal-gap: var(--boxel-sp-xs);
+      }
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
       :deep(.create-file) {
         height: 32rem;
       }
-      .boxel-field + .boxel-field {
-        margin-top: var(--boxel-sp);
+      .field + .field {
+        margin-top: var(--boxel-sp-sm);
       }
       .field {
-        --boxel-field-label-size: 8rem;
-        padding-right: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxxs) var(--horizontal-gap);
+      }
+      .field :deep(.label-container) {
+        width: 8rem;
+      }
+      .field :deep(.content) {
+        flex-grow: 1;
+        max-width: 100%;
+        min-width: 13rem;
+      }
+      .field .realm-dropdown {
+        flex: initial;
       }
       .field-contents {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .change-trigger {
-        margin-left: auto;
+        justify-content: space-between;
+        gap: var(--horizontal-gap);
       }
       .footer-buttons {
         display: flex;
         margin-left: auto;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--horizontal-gap);
       }
       .gts-extension {
+        --gts-label-width: var(--boxel-sp-xxl);
         position: relative;
       }
       .gts-extension input {
-        padding-right: var(--boxel-sp-xxl);
+        padding-right: var(--gts-label-width);
       }
       .gts-extension:after {
         content: '.gts';
-        width: var(--boxel-sp-xxl);
-        height: 20px;
+        width: var(--gts-label-width);
         position: absolute;
         display: block;
-        right: -5px;
-        top: 10px;
+        right: 0;
+        top: var(--boxel-sp-sm);
         color: var(--boxel-450);
-        font: var(--boxel-font-sm);
-        font-weight: 500;
+        font: 500 var(--boxel-font-sm);
         text-transform: uppercase;
         letter-spacing: var(--boxel-lsp-lg);
-        line-height: 1.82;
       }
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
-      }
-      .definition-pill {
-        padding-left: var(--boxel-sp-xxxs);
       }
     </style>
   </template>
@@ -792,33 +798,30 @@ export function convertToClassName(input: string) {
 
 interface SelectedTypePillSignature {
   Args: {
-    entry: CatalogEntry;
+    title: string;
+    id: string;
   };
 }
 
-class SelectedTypePill extends Component<SelectedTypePillSignature> {
+export class SelectedTypePill extends Component<SelectedTypePillSignature> {
   @service private declare realm: RealmService;
 
   <template>
-    <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
+    <Pill class='selected-type' data-test-selected-type={{@title}}>
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @entry.id}} class='icon' />
+        <RealmIcon @realmInfo={{this.realm.info @id}} />
       </:iconLeft>
       <:default>
-        {{@entry.title}}
+        <span class='boxel-contents-only' data-test-selected-type-display-name>
+          {{@title}}
+        </span>
       </:default>
     </Pill>
     <style scoped>
-      .icon {
-        min-height: var(--boxel-icon-sm);
-        min-width: var(--boxel-icon-sm);
-      }
       .selected-type {
-        padding: var(--boxel-sp-xxxs);
-        gap: var(--boxel-sp-xxxs);
-      }
-      .selected-type :deep(.icon) {
-        margin-right: 0;
+        --pill-gap: var(--boxel-sp-xxs);
+        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+        min-height: 2rem;
       }
     </style>
   </template>

@@ -119,7 +119,7 @@ module('query', function (hooks) {
     ]);
     loader = new Loader(fetch, virtualNetwork.resolveImport);
 
-    dbAdapter = new PgAdapter();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
     indexQueryEngine = new IndexQueryEngine(dbAdapter);
   });
 

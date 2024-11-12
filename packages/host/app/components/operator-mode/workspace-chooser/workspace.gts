@@ -6,6 +6,7 @@ import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
+import { RealmIcon } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { Group, IconGlobe, Lock } from '@cardstack/boxel-ui/icons';
 
@@ -38,7 +39,10 @@ export default class Workspace extends Component<Signature> {
             workspace-background-image-url=this.backgroundImageURL
           }}
         >
-          <img src={{this.iconURL}} alt='Workspace Icon' />
+          <RealmIcon
+            class='workspace-realm-icon'
+            @realmInfo={{this.realmInfo}}
+          />
           <div class='visibility-icon'>
             <this.visibilityIcon width='100%' height='100%' />
           </div>
@@ -68,9 +72,13 @@ export default class Workspace extends Component<Signature> {
         justify-content: center;
         align-items: center;
       }
-      .icon > img {
-        width: 60px;
-        height: 60px;
+      .workspace-realm-icon {
+        --boxel-realm-icon-size: var(--boxel-icon-xl);
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xl) - 1px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+        box-shadow: inset 0 0 0 2px rgba(0 0 0 / 15%);
       }
       .visibility-icon {
         position: absolute;
@@ -134,10 +142,6 @@ export default class Workspace extends Component<Signature> {
 
   private get name() {
     return this.realmInfo.name;
-  }
-
-  private get iconURL() {
-    return this.realmInfo.iconURL;
   }
 
   private get backgroundURL() {
