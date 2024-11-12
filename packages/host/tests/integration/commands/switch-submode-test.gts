@@ -3,8 +3,11 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
+
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import type { SwitchSubmodeInput } from 'https://cardstack.com/base/command';
 
 import {
   setupIntegrationTestRealm,
@@ -13,8 +16,6 @@ import {
   lookupService,
 } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { SwitchSubmodeInput } from 'https://cardstack.com/base/command';
 
 let loader: Loader;
 

@@ -1,8 +1,6 @@
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { getOwner } from '@ember/owner';
-import { setOwner } from '@ember/owner';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -34,8 +32,6 @@ import {
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
-  Command,
-  CommandContext,
 } from '@cardstack/runtime-common';
 
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';

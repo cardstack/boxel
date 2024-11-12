@@ -1,5 +1,5 @@
-import Service, { service } from '@ember/service';
 import { getOwner, setOwner } from '@ember/owner';
+import Service, { service } from '@ember/service';
 
 import { task } from 'ember-concurrency';
 
