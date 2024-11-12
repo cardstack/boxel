@@ -212,7 +212,10 @@ export default class RealmServerService extends Service {
     };
   }
 
-  private async fetchCatalogRealms() {
+  async fetchCatalogRealms() {
+    if (this.catalogRealmURLs.length > 0) {
+      return;
+    }
     let response = await this.network.authedFetch(
       `${this.url.origin}/_catalog-realms`,
     );

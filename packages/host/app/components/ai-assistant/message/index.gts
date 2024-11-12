@@ -255,7 +255,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
       .content-container {
         margin-top: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius-xs)
+        border-radius: var(--boxel-border-radius-xxs)
           var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl);
         overflow: hidden;

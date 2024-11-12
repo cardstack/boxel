@@ -56,11 +56,13 @@ test.describe('Create Realm via Dashboard', () => {
 
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(
-      page.locator(`[data-test-workspace="1New Workspace"] img`),
+      page.locator(
+        `[data-test-workspace="1New Workspace"] [data-test-realm-icon-url]`,
+      ),
       'the "N" icon URL is shown',
     ).toHaveAttribute(
-      'src',
-      'https://boxel-images.boxel.ai/icons/Letter-n.png',
+      'style',
+      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-n.png");',
     );
   });
 });
