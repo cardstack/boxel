@@ -20,6 +20,7 @@ export interface User {
 
 export interface Plan {
   id: string;
+  stripePlanId: string;
   name: string;
   monthlyPrice: number;
   creditsIncluded: number;
@@ -86,14 +87,14 @@ export async function insertStripeEvent(
 export async function getPlanByStripeId(
   dbAdapter: DBAdapter,
   stripePlanId: string,
-): Promise<Plan> {
+): Promise<Plan | null> {
   let results = await query(dbAdapter, [
     `SELECT * FROM plans WHERE stripe_plan_id = `,
     param(stripePlanId),
   ]);
 
   if (results.length !== 1) {
-    throw new Error(`No plan found with stripe plan id: ${stripePlanId}`);
+    return null;
   }
 
   return {
@@ -101,6 +102,7 @@ export async function getPlanByStripeId(
     name: results[0].name,
     monthlyPrice: results[0].monthly_price,
     creditsIncluded: results[0].credits_included,
+    stripePlanId: results[0].stripe_plan_id,
   } as Plan;
 }
 
@@ -321,7 +323,8 @@ export async function sumUpCreditsLedger(
 
   let results = await query(dbAdapter, ledgerQuery);
 
-  return results[0].sum != null ? parseInt(results[0].sum as string) : 0;
+  // Sum can be null if there are no matching rows in the credits_ledger table
+  return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
 }
 
 export async function getCurrentActiveSubscription(
@@ -447,4 +450,43 @@ export async function updateSubscription(
     `WHERE id =`,
     param(subscriptionId),
   ] as Expression);
+}
+
+export async function getPlanById(
+  dbAdapter: DBAdapter,
+  planId: string,
+): Promise<Plan | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM plans WHERE id = `,
+    param(planId),
+  ]);
+
+  if (results.length !== 1) {
+    return null;
+  }
+
+  return {
+    id: results[0].id,
+    name: results[0].name,
+    monthlyPrice: results[0].monthly_price,
+    creditsIncluded: results[0].credits_included,
+  } as Plan;
+}
+
+export async function expireRemainingPlanAllowanceInSubscriptionCycle(
+  dbAdapter: DBAdapter,
+  userId: string,
+  subscriptionCycleId: string,
+) {
+  let creditsToExpire = await sumUpCreditsLedger(dbAdapter, {
+    creditType: ['plan_allowance', 'plan_allowance_used'],
+    subscriptionCycleId,
+  });
+
+  await addToCreditsLedger(dbAdapter, {
+    userId: userId,
+    creditAmount: -creditsToExpire,
+    creditType: 'plan_allowance_expired',
+    subscriptionCycleId,
+  });
 }
