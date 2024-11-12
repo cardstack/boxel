@@ -44,6 +44,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
         border: none;
       }
     </style>
+    {{! template-lint-disable require-scoped-style }}
     <style>
       .ember-power-select-dropdown.ember-basic-dropdown-content--below {
         border: 2px solid var(--boxel-border-color);
