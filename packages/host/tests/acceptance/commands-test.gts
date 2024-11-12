@@ -125,29 +125,23 @@ module('Acceptance | Commands tests', function (hooks) {
         return ScheduleMeetingInput;
       }
       protected async run(input: ScheduleMeetingInput) {
-        console.log('input', input);
         let meeting = new Meeting({
           topic: 'unset topic',
           participants: input.participants,
         });
-        console.log('meeting', meeting);
         let saveCardCommand = this.commandContext.lookupCommand<
           SaveCardInput,
           undefined
         >('save-card');
-        console.log('saveCardCommand', saveCardCommand);
-        console.log('this.loaderService', this.loaderService);
         const { SaveCardInput } = await this.loaderService.loader.import<
           typeof BaseCommandModule
         >(`${baseRealm.url}command`);
-        console.log('SaveCardInput', SaveCardInput);
         await saveCardCommand.execute(
           new SaveCardInput({
             card: meeting,
             realm: testRealmURL,
           }),
         );
-        console.log('saved');
 
         // Mutate and save again
         let patchCardCommand = this.commandContext.lookupCommand<
@@ -168,7 +162,6 @@ module('Acceptance | Commands tests', function (hooks) {
           ShowCardInput,
           undefined
         >('show-card');
-        console.log('showCardCommand', showCardCommand);
         const { ShowCardInput } = await this.loaderService.loader.import<
           typeof BaseCommandModule
         >(`${baseRealm.url}command`);
@@ -357,7 +350,6 @@ module('Acceptance | Commands tests', function (hooks) {
         },
         relationships: {
           properties: {},
-          required: [],
           type: 'object',
         },
       },
@@ -371,7 +363,9 @@ module('Acceptance | Commands tests', function (hooks) {
         toolCall: {
           name: toolName,
           arguments: {
-            submode: 'code',
+            attributes: {
+              submode: 'code',
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -457,7 +451,6 @@ module('Acceptance | Commands tests', function (hooks) {
         },
         relationships: {
           properties: {},
-          required: [],
           type: 'object',
         },
       },
@@ -471,7 +464,9 @@ module('Acceptance | Commands tests', function (hooks) {
         toolCall: {
           name: toolName,
           arguments: {
-            submode: 'code',
+            attributes: {
+              submode: 'code',
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -542,20 +537,12 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
     let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
-    console.log('meetingCardEventId', meetingCardEventId);
-    console.log('getRoomEvents(roomId)', getRoomEvents(roomId));
-    console.log(
-      getRoomEvents(roomId).find(
-        (event) => event.event_id === meetingCardEventId,
-      ),
-    );
     let cardFragment = getRoomEvents(roomId).find(
       (event) => event.event_id === meetingCardEventId,
     )!.content.data.cardFragment;
 
     let parsedCard = JSON.parse(cardFragment);
     let meetingCardId = parsedCard.data.id;
-    console.log('meetingCardId', meetingCardId);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Update card',
@@ -566,10 +553,12 @@ module('Acceptance | Commands tests', function (hooks) {
         toolCall: {
           name: toolName,
           arguments: {
-            cardId: meetingCardId,
-            patch: {
-              attributes: {
-                topic: 'Meeting with Hassan',
+            attributes: {
+              cardId: meetingCardId,
+              patch: {
+                attributes: {
+                  topic: 'Meeting with Hassan',
+                },
               },
             },
           },

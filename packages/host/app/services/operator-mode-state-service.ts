@@ -144,7 +144,18 @@ export default class OperatorModeStateService extends Service {
       }
     }
     await this.cardService.patchCard(card, document, patch);
+    // TODO: if we introduce an identity map, we would not need this
+    await this.reloadCardIfOpen(card.id);
   });
+
+  async reloadCardIfOpen(id: string) {
+    let stackItems = this.state?.stacks.flat() ?? [];
+    for (let item of stackItems) {
+      if ('card' in item && item.card.id == id) {
+        this.cardService.reloadCard(item.card);
+      }
+    }
+  }
 
   async deleteCard(card: CardDef) {
     // remove all stack items for the deleted card

@@ -89,7 +89,6 @@ export default class CommandService extends Service {
   //TODO use create[CommandName] methods to create commands instead of lookupCommand to solve type issues and avoid embroider issues
   //   OR
   //TODO use imports and leverage with custom loader maybe import SaveCard from 'http://cardstack.com/host/commannds/save-card'
-
   lookupCommand = <
     CardInputType extends CardDef | undefined,
     CardResultType extends CardDef | undefined,
@@ -156,10 +155,10 @@ export default class CommandService extends Service {
           );
         }
         res = await this.operatorModeStateService.patchCard.perform(
-          payload.card_id,
+          payload?.attributes?.cardId,
           {
-            attributes: payload.attributes,
-            relationships: payload.relationships,
+            attributes: payload?.attributes?.patch?.attributes,
+            relationships: payload?.attributes?.patch?.relationships,
           },
         );
       } else if (command.name === 'searchCard') {
@@ -168,7 +167,7 @@ export default class CommandService extends Service {
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        let query = { filter: payload.filter };
+        let query = { filter: payload.attributes.filter };
         let realmUrls = this.realmServer.availableRealmURLs;
         let instances: CardDef[] = flatMap(
           await Promise.all(
@@ -277,23 +276,20 @@ export default class CommandService extends Service {
   }
 }
 
-type PatchPayload = { card_id: string } & PatchData;
-type SearchPayload = { card_id: string; filter: CardTypeFilter | EqFilter };
+type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
+type SearchPayload = {
+  attributes: { cardId: string; filter: CardTypeFilter | EqFilter };
+};
 
 function hasPatchData(payload: any): payload is PatchPayload {
   return (
-    (typeof payload === 'object' &&
-      payload !== null &&
-      'card_id' in payload &&
-      'attributes' in payload) ||
-    (typeof payload === 'object' &&
-      payload !== null &&
-      'card_id' in payload &&
-      'relationships' in payload)
+    payload.attributes?.cardId &&
+    (payload.attributes?.patch?.attributes ||
+      payload.attributes?.patch?.relationships)
   );
 }
 
 function hasSearchData(payload: any): payload is SearchPayload {
-  assertQuery({ filter: payload.filter });
+  assertQuery({ filter: payload.attributes.filter });
   return payload;
 }

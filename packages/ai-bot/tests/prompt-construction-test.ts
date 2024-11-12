@@ -769,7 +769,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  firstName: { type: 'string' },
+                  attributes: {
+                    firstName: { type: 'string' },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -928,7 +930,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  firstName: { type: 'string' },
+                  attributes: {
+                    firstName: { type: 'string' },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -989,7 +993,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  firstName: { type: 'string' },
+                  attributes: {
+                    firstName: { type: 'string' },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -1018,7 +1024,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Meeting/2', {
-                  location: { type: 'string' },
+                  attributes: {
+                    location: { type: 'string' },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -1867,11 +1875,13 @@ module('getModifyPrompt', () => {
               id: 'tool-call-id-1',
               name: 'searchCard',
               arguments: {
-                description: "Search for card instances of type 'Author'",
-                filter: {
-                  type: {
-                    module: 'http://localhost:4201/drafts/author',
-                    name: 'Author',
+                attributes: {
+                  description: "Search for card instances of type 'Author'",
+                  filter: {
+                    type: {
+                      module: 'http://localhost:4201/drafts/author',
+                      name: 'Author',
+                    },
                   },
                 },
               },

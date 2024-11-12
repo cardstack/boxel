@@ -263,7 +263,6 @@ function generateJsonSchemaForLinksToFields(
   let schema: RelationshipsSchema = {
     type: 'object',
     properties: {},
-    required: [],
   };
   for (let rel of relationships) {
     let relSchema: LinksToSchema = {
@@ -370,7 +369,7 @@ export function generateJsonSchemaForCardType(
     ) {
       return {
         attributes: schema,
-        relationships: { type: 'object', properties: {}, required: [] },
+        relationships: { type: 'object', properties: {} },
       };
     }
     return {
@@ -392,16 +391,18 @@ export function getPatchTool(
       parameters: {
         type: 'object',
         properties: {
-          card_id: {
-            type: 'string',
-            const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
+          attributes: {
+            cardId: {
+              type: 'string',
+              const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
+            },
+            description: {
+              type: 'string',
+            },
+            ...patchSpec,
           },
-          description: {
-            type: 'string',
-          },
-          ...patchSpec,
         },
-        required: ['card_id', 'attributes', 'description'],
+        required: ['attributes', 'description'],
       },
     },
   };

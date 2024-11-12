@@ -225,10 +225,14 @@ module('Responding', (hooks) => {
           id: 'some-tool-call-id',
           name: 'patchCard',
           arguments: {
-            card_id: 'card/1',
-            description: 'A new thing',
             attributes: {
-              some: 'thing',
+              cardId: 'card/1',
+              description: 'A new thing',
+              patch: {
+                attributes: {
+                  some: 'thing',
+                },
+              },
             },
           },
         },
@@ -293,10 +297,14 @@ module('Responding', (hooks) => {
           id: 'some-tool-call-id',
           name: 'patchCard',
           arguments: {
-            card_id: 'card/1',
-            description: 'A new thing',
             attributes: {
-              some: 'thing',
+              cardId: 'card/1',
+              description: 'A new thing',
+              patch: {
+                attributes: {
+                  some: 'thing',
+                },
+              },
             },
           },
         },

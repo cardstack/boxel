@@ -226,7 +226,7 @@ test.describe('Commands', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    let card_id = `${testHost}/hassan`;
+    let cardId = `${testHost}/hassan`;
     let content = {
       msgtype: 'org.boxel.command',
       format: 'org.matrix.custom.html',
@@ -236,9 +236,13 @@ test.describe('Commands', () => {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id,
             attributes: {
-              firstName: 'Dave',
+              cardId,
+              patch: {
+                attributes: {
+                  firstName: 'Dave',
+                },
+              },
             },
           },
         },
@@ -279,11 +283,13 @@ test.describe('Commands', () => {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testHost}person`,
-                name: 'Person',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testHost}person`,
+                  name: 'Person',
+                },
               },
             },
           },
