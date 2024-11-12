@@ -57,6 +57,7 @@ import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 
@@ -153,6 +154,7 @@ interface Signature {
 
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: Realm;
@@ -672,45 +674,6 @@ export default class InteractSubmode extends Component<Signature> {
     openSearchCallback();
   }
 
-  //TODO use create[CommandName] methods to create commands instead of lookupCommand to solve type issues and avoid embroider issues
-  //   OR
-  //TODO use imports and leverage with custom loader maybe import SaveCard from 'http://cardstack.com/host/commannds/save-card'
-  lookupCommand = <
-    CardInputType extends CardDef | undefined,
-    CardResultType extends CardDef | undefined,
-    CommandConfiguration extends any | undefined,
-  >(
-    name: string,
-    configuration: CommandConfiguration | undefined,
-  ): Command<CardInputType, CardResultType, CommandConfiguration> => {
-    let owner = getOwner(this)!;
-    let commandFactory = owner.factoryFor(`command:${name}`);
-    if (!commandFactory) {
-      throw new Error(`Could not find command "${name}"`);
-    }
-    let CommandClass = commandFactory.class as unknown as {
-      new (
-        commandContext: CommandContext,
-        commandConfiguration: CommandConfiguration | undefined,
-      ): Command<CardInputType, CardResultType, CommandConfiguration>;
-    };
-    let instance = new CommandClass(
-      this.commandContext,
-      configuration,
-    ) as Command<CardInputType, CardResultType, CommandConfiguration>;
-    setOwner(instance, owner);
-    return instance;
-  };
-
-  private get commandContext(): CommandContext {
-    return {
-      lookupCommand: this.lookupCommand,
-      sendAiAssistantMessage: (
-        ...args: Parameters<MatrixService['sendAiAssistantMessage']>
-      ) => this.matrixService.sendAiAssistantMessage(...args),
-    };
-  }
-
   @provide(CardContextName)
   // @ts-ignore "cardContext is declared but not used"
   private get cardContext(): Omit<
@@ -720,7 +683,7 @@ export default class InteractSubmode extends Component<Signature> {
     return {
       actions: this.publicAPI(this, 0),
       // TODO: should we include this here??
-      commandContext: this.commandContext,
+      commandContext: this.commandService.commandContext,
     };
   }
 
@@ -780,7 +743,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
-                @commandContext={{this.commandContext}}
+                @commandContext={{this.commandService.commandContext}}
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}

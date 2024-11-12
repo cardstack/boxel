@@ -43,6 +43,7 @@ import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
+import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -463,6 +464,11 @@ export async function setupIntegrationTestRealm({
 export function lookupLoaderService(): LoaderService {
   let owner = (getContext() as TestContext).owner;
   return owner.lookup('service:loader-service') as LoaderService;
+}
+
+export function lookupService<T extends Service>(name: string): T {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup(`service:${name}`) as T;
 }
 
 export function lookupNetworkService(): NetworkService {

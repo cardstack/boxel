@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { getOwner, setOwner } from '@ember/owner';
 
 import { task } from 'ember-concurrency';
 
@@ -11,6 +12,7 @@ import {
   type LooseSingleCardDocument,
   type PatchData,
   baseRealm,
+  CommandContext,
 } from '@cardstack/runtime-common';
 import {
   type CardTypeFilter,
@@ -84,6 +86,46 @@ export default class CommandService extends Service {
     );
   }
 
+  //TODO use create[CommandName] methods to create commands instead of lookupCommand to solve type issues and avoid embroider issues
+  //   OR
+  //TODO use imports and leverage with custom loader maybe import SaveCard from 'http://cardstack.com/host/commannds/save-card'
+
+  lookupCommand = <
+    CardInputType extends CardDef | undefined,
+    CardResultType extends CardDef | undefined,
+    CommandConfiguration extends any | undefined,
+  >(
+    name: string,
+    configuration: CommandConfiguration | undefined,
+  ): Command<CardInputType, CardResultType, CommandConfiguration> => {
+    let owner = getOwner(this)!;
+    let commandFactory = owner.factoryFor(`command:${name}`);
+    if (!commandFactory) {
+      throw new Error(`Could not find command "${name}"`);
+    }
+    let CommandClass = commandFactory.class as unknown as {
+      new (
+        commandContext: CommandContext,
+        commandConfiguration: CommandConfiguration | undefined,
+      ): Command<CardInputType, CardResultType, CommandConfiguration>;
+    };
+    let instance = new CommandClass(
+      this.commandContext,
+      configuration,
+    ) as Command<CardInputType, CardResultType, CommandConfiguration>;
+    setOwner(instance, owner);
+    return instance;
+  };
+
+  get commandContext(): CommandContext {
+    return {
+      lookupCommand: this.lookupCommand,
+      sendAiAssistantMessage: (
+        ...args: Parameters<MatrixService['sendAiAssistantMessage']>
+      ) => this.matrixService.sendAiAssistantMessage(...args),
+    };
+  }
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandCard, roomId: string) => {
     let { payload, eventId } = command;
@@ -100,7 +142,12 @@ export default class CommandService extends Service {
         // Get the input type and validate/construct the payload
         let InputType = await commandToRun.getInputType();
         // Construct a new instance of the input type with the payload
-        let typedInput = new InputType(payload);
+        console.log('payload', payload);
+        let typedInput = new InputType({
+          ...payload.attributes,
+          ...payload.relationships,
+        });
+        console.log('typedInput', typedInput);
         res = await commandToRun.execute(typedInput);
       } else if (command.name === 'patchCard') {
         if (!hasPatchData(payload)) {
