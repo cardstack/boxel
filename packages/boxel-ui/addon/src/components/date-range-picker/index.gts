@@ -87,7 +87,7 @@ export default class DateRangePicker extends Component<Signature> {
         as |calendar|
       >
         <div class='months-container'>
-          <div data-axe-ignore='true'>
+          <div>
             <calendar.Nav>
               <div class='nav-container'>
                 <IconButton
@@ -112,7 +112,7 @@ export default class DateRangePicker extends Component<Signature> {
             <calendar.Days @center={{this.leftCenter}} />
           </div>
 
-          <div data-axe-ignore='true'>
+          <div>
             <calendar.Nav>
               <div class='nav-container'>
                 <IconButton
