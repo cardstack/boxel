@@ -20,7 +20,7 @@ export default class DndUsage extends Component {
       { assignee: 'Richard', task: 'Design a Chess App' },
       { assignee: 'Chuan', task: 'Research on Bug' },
     ]),
-    new DndColumn('In progress', []),
+    new DndColumn('In Progress', []),
     new DndColumn('Done', []),
   ];
   @tracked isLoading = false;
@@ -53,20 +53,25 @@ export default class DndUsage extends Component {
         designs with custom styles.
       </:description>
       <:example>
-        <DndKanbanBoard @columns={{this.columns}} @isLoading={{this.isLoading}}>
-          <:header as |column|>
-            {{column.title}}
-          </:header>
-          <:card as |card column|>
-            <div class='custom-card'>
-              <Pill @kind='default' class='column-info'>
-                {{column.title}}
-              </Pill>
-              <h3>{{get card 'assignee'}}</h3>
-              <p>{{get card 'task'}}</p>
-            </div>
-          </:card>
-        </DndKanbanBoard>
+        <div class='dnd-wrapper'>
+          <DndKanbanBoard
+            @columns={{this.columns}}
+            @isLoading={{this.isLoading}}
+          >
+            <:header as |column|>
+              {{column.title}}
+            </:header>
+            <:card as |card column|>
+              <div class='custom-card'>
+                <Pill @kind='default' class='column-info'>
+                  {{column.title}}
+                </Pill>
+                <h3>{{get card 'assignee'}}</h3>
+                <p>{{get card 'task'}}</p>
+              </div>
+            </:card>
+          </DndKanbanBoard>
+        </div>
       </:example>
       <:api as |Args|>
         <Args.Array
@@ -122,6 +127,9 @@ export default class DndUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
     <style scoped>
+      .dnd-wrapper {
+        height: 600px;
+      }
       .custom-card {
         padding: var(--boxel-sp);
       }
