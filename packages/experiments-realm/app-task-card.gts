@@ -388,6 +388,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         {{#if this.initializeDropdownData.isRunning}}
           isLoading...
         {{else}}
+          <h2 class='project-title'>Project</h2>
           {{#if this.selectedFilterConfig}}
             {{#let (this.selectedFilterConfig.options) as |options|}}
               <FilterDropdown
@@ -490,21 +491,25 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         display: flex;
         position: relative;
         flex-direction: column;
-        height: 100vh;
         font: var(--boxel-font);
-        overflow: hidden;
+        margin-left: var(--boxel-sp);
+        height: 100%;
       }
       .filter-section {
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        padding: var(--boxel-sp-xs) 0;
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp);
         align-items: center;
       }
+      .project-title {
+        font-size: var(-- --boxel-sp-lg);
+        font-weight: 600;
+      }
       .columns-container {
-        display: flex;
-        overflow-x: auto;
-        flex-grow: 1;
+        display: block;
+        height: calc(100vh - 58px);
+        overflow: hidden;
       }
       .dropdown-filter-button {
         display: flex;
@@ -519,6 +524,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       /** Need to specify height because fitted field component has a default height**/
       .card {
         height: 150px !important;
+        box-shadow: none;
       }
 
       .status-select {
@@ -556,7 +562,7 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp-xxs);
-        font: var(--boxel-font-sm);
+        font-size: 0.9rem;
       }
       .create-new-task-button {
         all: unset;
