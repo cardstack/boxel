@@ -37,7 +37,7 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
     <:body>
       {{#if @sessions}}
         <ul class='past-sessions'>
-          {{#each @sessions as |session|}}
+          {{#each @sessions key='roomId' as |session|}}
             <PastSessionItem @session={{session}} @actions={{@roomActions}} />
           {{/each}}
         </ul>
