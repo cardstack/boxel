@@ -32,7 +32,7 @@ patchedDependencies:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
   matrix-js-sdk@31.0.0:
-    hash: igcckcqmkyc37qn7cofjntczfm
+    hash: 5fxoq6o42simiavsj5daibqlfy
     path: patches/matrix-js-sdk@31.0.0.patch
   style-loader@2.0.0:
     hash: xqjji5denmqrswdovljl2t3yv4
@@ -134,7 +134,7 @@ importers:
         version: 1.7.3
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
+        version: 31.0.0(patch_hash=5fxoq6o42simiavsj5daibqlfy)
       openai:
         specifier: 4.47.1
         version: 4.47.1
@@ -220,7 +220,7 @@ importers:
         version: 6.6.2
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
+        version: 31.0.0(patch_hash=5fxoq6o42simiavsj5daibqlfy)
       super-fast-md5:
         specifier: ^1.0.1
         version: 1.0.1
@@ -1583,7 +1583,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
+        version: 31.0.0(patch_hash=5fxoq6o42simiavsj5daibqlfy)
       moment:
         specifier: ^2.29.4
         version: 2.29.4
@@ -2131,7 +2131,7 @@ importers:
     dependencies:
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
+        version: 31.0.0(patch_hash=5fxoq6o42simiavsj5daibqlfy)
     devDependencies:
       '@babel/preset-typescript':
         specifier: ^7.24.7
@@ -19719,7 +19719,7 @@ packages:
   /matrix-events-sdk@0.0.1:
     resolution: {integrity: sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==}
 
-  /matrix-js-sdk@31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm):
+  /matrix-js-sdk@31.0.0(patch_hash=5fxoq6o42simiavsj5daibqlfy):
     resolution: {integrity: sha512-2TqDwEK34NFS0uiOti02CBCupwJcAIxWarOSD0yIrgMpIwSVNB795jEnXxNXz+bgPKsepDmiqeg2DrlinIoW1w==}
     engines: {node: '>=18.0.0'}
     dependencies:
