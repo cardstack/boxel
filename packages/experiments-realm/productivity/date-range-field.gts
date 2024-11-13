@@ -55,14 +55,13 @@ class Edit extends Component<typeof DateRangeField> {
           {{this.formatted}}
         </Pill>
       </:trigger>
-      <:content as |dd|>
+      <:content>
         <DateRangePicker
           @start={{this.selected.start}}
           @end={{this.selected.end}}
           @onSelect={{this.onSelect}}
           @selected={{this.selected}}
         />
-        <button {{on 'click' dd.close}}>Close</button>
       </:content>
     </BoxelDropdown>
   </template>
