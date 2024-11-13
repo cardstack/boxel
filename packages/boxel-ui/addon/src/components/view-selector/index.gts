@@ -7,7 +7,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import {
   Card as CardIcon,
   Grid3x3 as GridIcon,
-  Rows3 as StripIcon,
+  Rows4 as StripIcon,
 } from '../../icons.gts';
 import RadioInput from '../radio-input/index.gts';
 
@@ -79,7 +79,7 @@ export default class ViewSelector extends Component<Signature> {
       }
       .view-option {
         display: flex;
-        color: rgba(0 0 0 / 25%);
+        color: var(--boxel-450);
         box-shadow: none;
         transition: none;
       }

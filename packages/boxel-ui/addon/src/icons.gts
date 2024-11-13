@@ -49,7 +49,7 @@ import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
-import Rows3 from './icons/rows-3.gts';
+import Rows4 from './icons/rows-4.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
@@ -106,7 +106,7 @@ export const ALL_ICON_COMPONENTS = [
   LoadingIndicator,
   Lock,
   Profile,
-  Rows3,
+  Rows4,
   Send,
   Sparkle,
   SuccessBordered,
@@ -164,7 +164,7 @@ export {
   LoadingIndicator,
   Lock,
   Profile,
-  Rows3,
+  Rows4,
   Send,
   Sparkle,
   SuccessBordered,
