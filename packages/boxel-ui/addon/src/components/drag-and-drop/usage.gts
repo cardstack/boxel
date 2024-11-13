@@ -24,20 +24,24 @@ export default class DndUsage extends Component {
     new DndColumn('Done', []),
   ];
   @tracked isLoading = false;
-  @tracked isDisabled = false;
 
-  @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
-  declare dndKanbanHeaderBg: CSSVariableInfo;
-
-  @cssVariable({ cssClassName: 'dnd-kanban-freestyle-container' })
-  declare dndKanbanDropZoneBg: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'dnd-freestyle-container' })
+  declare dndContainerGap: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'dnd-freestyle-container' })
+  declare dndColumnBorderRadius: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'dnd-freestyle-container' })
+  declare dndHeaderBg: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'dnd-freestyle-container' })
+  declare dndDropZoneBg: CSSVariableInfo;
 
   <template>
     <FreestyleUsage
       @name='Dnd Kanban Board'
       style={{cssVar
-        dnd-kanban-header-bg=this.dndKanbanHeaderBg.value
-        dnd-kanban-drop-zone-bg=this.dndKanbanDropZoneBg.value
+        dnd-container-gap=this.dndContainerGap.value
+        dnd-column-border-radius=this.dndColumnBorderRadius.value
+        dnd-header-bg=this.dndHeaderBg.value
+        dnd-drop-zone-bg=this.dndDropZoneBg.value
       }}
     >
       <:description>
@@ -49,13 +53,8 @@ export default class DndUsage extends Component {
         designs with custom styles.
       </:description>
       <:example>
-        <DndKanbanBoard
-          @columns={{this.columns}}
-          @isLoading={{this.isLoading}}
-          @isDisabled={{this.isDisabled}}
-        >
+        <DndKanbanBoard @columns={{this.columns}} @isLoading={{this.isLoading}}>
           <:header as |column|>
-            Usage
             {{column.title}}
           </:header>
           <:card as |card column|>
@@ -82,13 +81,6 @@ export default class DndUsage extends Component {
           @onInput={{fn (mut this.isLoading)}}
           @value={{this.isLoading}}
         />
-        <Args.Bool
-          @name='isDisabled'
-          @description='Disables all drag and drop features on the DndKanban board'
-          @optional={{true}}
-          @onInput={{fn (mut this.isDisabled)}}
-          @value={{this.isDisabled}}
-        />
         <Args.Action
           @name='onMove'
           @description='Custom callback function triggered when a card is moved'
@@ -96,20 +88,36 @@ export default class DndUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='dnd-kanban-header-bg'
-          @type='color'
-          @description='Background color for kanban board headers'
-          @defaultValue={{this.dndKanbanHeaderBg.defaults}}
-          @value={{this.dndKanbanHeaderBg.value}}
-          @onInput={{this.dndKanbanHeaderBg.update}}
+          @name='dnd-container-gap'
+          @type='length'
+          @description='Gap between columns in the kanban board - px'
+          @defaultValue={{this.dndContainerGap.defaults}}
+          @value={{this.dndContainerGap.value}}
+          @onInput={{this.dndContainerGap.update}}
         />
         <Css.Basic
-          @name='dnd-kanban-drop-zone-bg'
+          @name='dnd-column-border-radius'
+          @type='length'
+          @description='Border radius for kanban board columns'
+          @defaultValue={{this.dndColumnBorderRadius.defaults}}
+          @value={{this.dndColumnBorderRadius.value}}
+          @onInput={{this.dndColumnBorderRadius.update}}
+        />
+        <Css.Basic
+          @name='dnd-header-bg'
+          @type='color'
+          @description='Background color for kanban board headers'
+          @defaultValue={{this.dndHeaderBg.defaults}}
+          @value={{this.dndHeaderBg.value}}
+          @onInput={{this.dndHeaderBg.update}}
+        />
+        <Css.Basic
+          @name='dnd-drop-zone-bg'
           @type='color'
           @description='Background color for kanban board drop zones'
-          @defaultValue={{this.dndKanbanDropZoneBg.defaults}}
-          @value={{this.dndKanbanDropZoneBg.value}}
-          @onInput={{this.dndKanbanDropZoneBg.update}}
+          @defaultValue={{this.dndDropZoneBg.defaults}}
+          @value={{this.dndDropZoneBg.value}}
+          @onInput={{this.dndDropZoneBg.update}}
         />
       </:cssVars>
     </FreestyleUsage>
