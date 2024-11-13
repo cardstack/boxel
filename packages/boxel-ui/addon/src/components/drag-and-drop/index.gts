@@ -205,6 +205,7 @@ export default class DndKanbanBoard extends Component<
 
     <style scoped>
       .draggable-container {
+        --draggable-overlay-z-index: 5;
         display: flex;
         overflow-x: auto;
         flex-grow: 1;
@@ -236,7 +237,7 @@ export default class DndKanbanBoard extends Component<
         width: 100%;
         height: 100%;
         background-color: rgb(38 38 38 / 50%);
-        z-index: 1;
+        z-index: var(--draggable-overlay-z-index);
         border-radius: var(--boxel-border-radius);
       }
       .draggable-card.is-loading > .loader {
@@ -244,7 +245,7 @@ export default class DndKanbanBoard extends Component<
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 2;
+        z-index: calc(var(--draggable-overlay-z-index) + 1);
       }
       .draggable-card.is-on-target {
         transform: scale(0.95);
@@ -268,7 +269,7 @@ export default class DndKanbanBoard extends Component<
       }
       .column-header {
         position: sticky;
-        z-index: 12;
+        z-index: calc(var(--draggable-overlay-z-index) +2);
         top: 0;
         background-color: var(--dnd-header-bg, transparent);
         font-weight: 600;
@@ -282,7 +283,6 @@ export default class DndKanbanBoard extends Component<
         align-content: flex-start;
         gap: var(--boxel-sp-xs);
         height: 100%;
-        z-index: 0;
         overflow-y: auto;
       }
       .column-drop-zone:has(.draggable-card.is-dragging)
