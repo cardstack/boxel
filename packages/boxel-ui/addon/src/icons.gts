@@ -25,6 +25,7 @@ import Group from './icons/group.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
+import IconFunnel from './icons/icon-funnel.gts';
 import IconGlobe from './icons/icon-globe.gts';
 import IconGrid from './icons/icon-grid.gts';
 import IconHexagon from './icons/icon-hexagon.gts';
@@ -50,6 +51,8 @@ import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import ThreeDotsHorizontal from './icons/three-dots-horizontal.gts';
+import TriangleLeft from './icons/triangle-left.gts';
+import TriangleRight from './icons/triangle-right.gts';
 import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
 
@@ -76,6 +79,7 @@ export const ALL_ICON_COMPONENTS = [
   IconCircle,
   IconCircleSelected,
   IconCode,
+  IconFunnel,
   IconGlobe,
   IconGrid,
   IconHexagon,
@@ -101,6 +105,8 @@ export const ALL_ICON_COMPONENTS = [
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,
+  TriangleLeft,
+  TriangleRight,
   Upload,
   Warning,
 ];
@@ -128,6 +134,7 @@ export {
   IconCircle,
   IconCircleSelected,
   IconCode,
+  IconFunnel,
   IconGlobe,
   IconGrid,
   IconHexagon,
@@ -153,6 +160,8 @@ export {
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,
+  TriangleLeft,
+  TriangleRight,
   Upload,
   Warning,
 };

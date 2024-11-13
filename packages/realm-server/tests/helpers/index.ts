@@ -18,17 +18,25 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
+  asExpressions,
+  query,
+  insert,
+  param,
 } from '@cardstack/runtime-common';
 import { dirSync } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmServer } from '../../server';
-import PgAdapter from '../../pg-adapter';
-import { PgQueueRunner, PgQueuePublisher } from '../../pg-queue';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
+import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
 
 export * from '@cardstack/runtime-common/helpers/indexer';
 
@@ -112,7 +120,7 @@ export function setupDB(
 
   const runBeforeHook = async () => {
     prepareTestDB();
-    dbAdapter = new PgAdapter();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
     publisher = new PgQueuePublisher(dbAdapter);
     runner = new PgQueueRunner(dbAdapter, 'test-worker');
   };
@@ -403,4 +411,79 @@ export function setupCardLogs(
     let api = await apiThunk();
     await api.flushLogs();
   });
+}
+
+export async function insertUser(
+  dbAdapter: PgAdapter,
+  matrixUserId: string,
+  stripeCustomerId: string,
+): Promise<User> {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    matrix_user_id: matrixUserId,
+    stripe_customer_id: stripeCustomerId,
+  });
+  let result = await query(
+    dbAdapter,
+    insert('users', nameExpressions, valueExpressions),
+  );
+
+  return {
+    id: result[0].id,
+    matrixUserId: result[0].matrix_user_id,
+    stripeCustomerId: result[0].stripe_customer_id,
+  } as User;
+}
+
+export async function insertPlan(
+  dbAdapter: PgAdapter,
+  name: string,
+  monthlyPrice: number,
+  creditsIncluded: number,
+  stripePlanId: string,
+): Promise<Plan> {
+  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+    name,
+    monthly_price: monthlyPrice,
+    credits_included: creditsIncluded,
+    stripe_plan_id: stripePlanId,
+  });
+  let result = await query(
+    dbAdapter,
+    insert('plans', nameExpressions, valueExpressions),
+  );
+  return {
+    id: result[0].id,
+    name: result[0].name,
+    monthlyPrice: result[0].monthly_price,
+    creditsIncluded: result[0].credits_included,
+    stripePlanId: result[0].stripe_plan_id,
+  } as Plan;
+}
+
+export async function fetchSubscriptionsByUserId(
+  dbAdapter: PgAdapter,
+  userId: string,
+): Promise<Subscription[]> {
+  let results = (await query(dbAdapter, [
+    `SELECT * FROM subscriptions WHERE user_id = `,
+    param(userId),
+  ])) as {
+    id: string;
+    user_id: string;
+    plan_id: string;
+    started_at: number;
+    ended_at: number;
+    status: string;
+    stripe_subscription_id: string;
+  }[];
+
+  return results.map((result) => ({
+    id: result.id,
+    userId: result.user_id,
+    planId: result.plan_id,
+    startedAt: result.started_at,
+    endedAt: result.ended_at,
+    status: result.status,
+    stripeSubscriptionId: result.stripe_subscription_id,
+  }));
 }

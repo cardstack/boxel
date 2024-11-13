@@ -11,8 +11,7 @@ import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
-import PgAdapter from './pg-adapter';
-import { PgQueueRunner } from './pg-queue';
+import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 
 let log = logger('worker');
 
@@ -39,6 +38,7 @@ let {
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
   toUrl: toUrls,
+  migrateDB,
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
@@ -61,6 +61,11 @@ let {
       description:
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
       type: 'string',
+    },
+    migrateDB: {
+      description:
+        'When this flag is set the database will automatically migrate when server is started',
+      type: 'boolean',
     },
     matrixURL: {
       description: 'The matrix homeserver for the realm',
@@ -91,9 +96,10 @@ for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
 }
 let dist: URL = new URL(distURL);
+let autoMigrate = migrateDB || undefined;
 
 (async () => {
-  let dbAdapter = new PgAdapter();
+  let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner(dbAdapter, workerId);
   let manager = new RunnerOptionsManager();
   let { getRunner } = await makeFastBootIndexRunner(

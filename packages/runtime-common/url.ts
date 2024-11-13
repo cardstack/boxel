@@ -40,19 +40,22 @@ export function relativeURL(
     return url.pathname;
   }
 
+  let lastPart: string | undefined;
   while (
     ourParts[0] === theirParts[0] &&
     ourParts.length > 0 &&
     theirParts.length > 0
   ) {
-    ourParts.shift();
+    lastPart = ourParts.shift();
     theirParts.shift();
   }
   if (theirParts.length > 1) {
     theirParts.shift();
-    return [...theirParts.map(() => '..'), ...ourParts].join('/');
+    let relative = [...theirParts.map(() => '..'), ...ourParts].join('/');
+    return relative === '.' && lastPart ? `./${lastPart}` : relative;
   } else {
-    return ['.', ...ourParts].join('/');
+    let relative = ['.', ...ourParts].join('/');
+    return relative === '.' && lastPart ? `./${lastPart}` : relative;
   }
 }
 

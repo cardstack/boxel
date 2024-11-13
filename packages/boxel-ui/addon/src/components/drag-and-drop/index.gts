@@ -13,9 +13,13 @@ export type DndItem = Record<string, any>;
 
 export interface DndKanbanBoardArgs<DndColumn> {
   columns: DndColumn[];
-  isDisabled?: boolean;
   isLoading?: boolean;
-  onMove?: (card: DndItem, column: DndColumn) => void;
+  onMove?: (
+    draggedCard: DndItem,
+    targetCard: DndItem,
+    sourceColumn: DndColumn,
+    targetColumn: DndColumn,
+  ) => void;
 }
 
 export class DndColumn {
@@ -101,41 +105,41 @@ export default class DndKanbanBoard extends Component<
       edge,
     },
   }: any) {
-    if (dropTargetParent.cards.length === 0) {
-      draggedItemParent.cards = this.removeItem(
-        draggedItemParent.cards,
-        draggedItem,
-      );
-      dropTargetParent.cards = this.insertAt(
-        dropTargetParent.cards,
-        0,
-        draggedItem,
-      );
-    } else {
-      if (dropTarget !== undefined) {
-        draggedItemParent.cards = this.removeItem(
-          draggedItemParent.cards,
+    draggedItemParent.cards = this.removeItem(
+      draggedItemParent.cards,
+      draggedItem,
+    );
+
+    if (dropTarget !== undefined) {
+      if (edge === 'top') {
+        dropTargetParent.cards = this.insertBefore(
+          dropTargetParent.cards,
+          dropTarget,
           draggedItem,
         );
-        if (edge === 'top') {
-          dropTargetParent.cards = this.insertBefore(
-            dropTargetParent.cards,
-            dropTarget,
-            draggedItem,
-          );
-        } else if (edge === 'bottom') {
-          dropTargetParent.cards = this.insertAfter(
-            dropTargetParent.cards,
-            dropTarget,
-            draggedItem,
-          );
-        } else {
-          throw new Error('Invalid edge');
-        }
+      } else if (edge === 'bottom') {
+        dropTargetParent.cards = this.insertAfter(
+          dropTargetParent.cards,
+          dropTarget,
+          draggedItem,
+        );
+      } else {
+        throw new Error('Invalid edge');
+      }
+    } else {
+      if (dropTargetParent !== undefined) {
+        // If the drop target is undefined, but the dropTargetParent is defined,  we are dropping the card into last index of the drop target of the column
+        dropTargetParent.cards = [...dropTargetParent.cards, draggedItem];
       }
     }
+
     if (this.args.onMove) {
-      this.args.onMove(draggedItem, dropTargetParent);
+      this.args.onMove(
+        draggedItem,
+        dropTarget,
+        draggedItemParent,
+        dropTargetParent,
+      );
     }
   }
 
@@ -169,36 +173,29 @@ export default class DndKanbanBoard extends Component<
 
             <div class='column-drop-zone'>
               {{#each column.cards as |card|}}
-                {{#if @isDisabled}}
-                  <div class='draggable-card is-disabled'>
+                <div
+                  class='draggable-card {{if @isLoading "is-loading"}}'
+                  {{this.DndSortableItemModifier
+                    group='cards'
+                    data=(hash item=card parent=column)
+                    onDrop=this.moveCard
+                    isOnTargetClass='is-on-target'
+                    onDragStart=(fn this.onDragStart card)
+                  }}
+                >
+                  {{#if (and @isLoading (eq card this.draggedCard))}}
                     <div class='overlay'></div>
                     {{yield card column to='card'}}
-                  </div>
-                {{else}}
-                  <div
-                    class='draggable-card {{if @isLoading "is-loading"}}'
-                    {{this.DndSortableItemModifier
-                      group='cards'
-                      data=(hash item=card parent=column)
-                      onDrop=this.moveCard
-                      isOnTargetClass='is-on-target'
-                      onDragStart=(fn this.onDragStart card)
-                    }}
-                  >
-                    {{#if (and @isLoading (eq card this.draggedCard))}}
-                      <div class='overlay'></div>
-                      {{yield card column to='card'}}
-                      <LoadingIndicator
-                        width='18'
-                        height='18'
-                        @color='var(--boxel-light)'
-                        class='loader'
-                      />
-                    {{else}}
-                      {{yield card column to='card'}}
-                    {{/if}}
-                  </div>
-                {{/if}}
+                    <LoadingIndicator
+                      width='18'
+                      height='18'
+                      @color='var(--boxel-light)'
+                      class='loader'
+                    />
+                  {{else}}
+                    {{yield card column to='card'}}
+                  {{/if}}
+                </div>
               {{/each}}
             </div>
           </div>
@@ -208,11 +205,13 @@ export default class DndKanbanBoard extends Component<
 
     <style scoped>
       .draggable-container {
+        --draggable-overlay-z-index: 5;
         display: flex;
         overflow-x: auto;
         flex-grow: 1;
+        gap: var(--dnd-container-gap, var(--boxel-sp));
         transition: transform 0.5s ease;
-        height: 100vh;
+        height: 100%;
       }
       .draggable-card {
         border: 2px solid var(--boxel-100);
@@ -224,7 +223,7 @@ export default class DndKanbanBoard extends Component<
         cursor: grab;
       }
       .draggable-card.is-dragging {
-        border: 2px solid var(--boxel-highlight);
+        border: 2px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius);
         filter: brightness(0.7);
       }
@@ -238,28 +237,15 @@ export default class DndKanbanBoard extends Component<
         width: 100%;
         height: 100%;
         background-color: rgb(38 38 38 / 50%);
-        z-index: 1;
+        z-index: var(--draggable-overlay-z-index);
+        border-radius: var(--boxel-border-radius);
       }
       .draggable-card.is-loading > .loader {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 2;
-      }
-      .draggable-card.is-disabled {
-        position: relative;
-      }
-      .draggable-card.is-disabled > .overlay {
-        position: absolute;
-        top: 0%;
-        left: 0%;
-        width: 100%;
-        height: 100%;
-        background-color: rgb(38 38 38 / 5%);
-        z-index: 1;
-        filter: grayscale(100%);
-        cursor: not-allowed;
+        z-index: calc(var(--draggable-overlay-z-index) + 1);
       }
       .draggable-card.is-on-target {
         transform: scale(0.95);
@@ -276,25 +262,27 @@ export default class DndKanbanBoard extends Component<
         display: flex;
         flex-direction: column;
         flex: 0 0 var(--boxel-xs-container);
-        border-right: var(--boxel-border);
         height: 100%;
-        transition: background-color 0.3s ease;
+        border-radius: var(--dnd-column-border-radius, 14px);
+        overflow: hidden;
+        background-color: var(--dnd-drop-zone-bg, var(--boxel-200));
       }
       .column-header {
         position: sticky;
+        z-index: calc(var(--draggable-overlay-z-index) +2);
         top: 0;
-        background-color: var(--dnd-kanban-header-bg, var(--boxel-100));
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        background-color: var(--dnd-header-bg, transparent);
+        font-weight: 600;
+        padding: var(--boxel-sp-sm) var(--boxel-sp) var(--boxel-sp-xxs)
+          var(--boxel-sp);
       }
       .column-drop-zone {
         position: relative;
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xs);
         display: grid;
         align-content: flex-start;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-xs);
         height: 100%;
-        background-color: var(--dnd-kanban-drop-zone-bg, var(--boxel-600));
-        z-index: 0;
         overflow-y: auto;
       }
       .column-drop-zone:has(.draggable-card.is-dragging)

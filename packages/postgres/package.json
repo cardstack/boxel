@@ -1,0 +1,33 @@
+{
+  "name": "@cardstack/postgres",
+  "version": "0.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "@cardstack/runtime-common": "workspace:*",
+    "@sentry/node": "^8.31.0",
+    "@types/fs-extra": "^9.0.13",
+    "@types/pg": "^8.11.5",
+    "fs-extra": "^10.1.0",
+    "node-pg-migrate": "^6.2.2",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1",
+    "sql-parser-cst": "^0.28.0"
+  },
+  "scripts": {
+    "start:pg": "./scripts/start-pg.sh",
+    "stop:pg": "./scripts/stop-pg.sh",
+    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate --migrations-table migrations",
+    "make-schema": "./scripts/schema-dump.sh",
+    "drop-db": "docker exec boxel-pg dropdb -U postgres -w",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:glint": "glint"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

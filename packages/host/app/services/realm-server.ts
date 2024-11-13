@@ -46,13 +46,10 @@ interface AvailableRealm {
 }
 
 interface CreditInfo {
-  plan: {
-    name: string;
-    monthlyPrice: number;
-  };
-  creditsIncludedInPlanAllowance: number;
-  creditsUsedInPlanAllowance: number;
-  extraCreditsAvailableInBalance: number;
+  plan: string | null;
+  creditsAvailableInPlanAllowance: number | null;
+  creditsIncludedInPlanAllowance: number | null;
+  extraCreditsAvailableInBalance: number | null;
 }
 
 export default class RealmServerService extends Service {
@@ -177,30 +174,48 @@ export default class RealmServerService extends Service {
   }
 
   async fetchCreditInfo(): Promise<CreditInfo> {
-    let response = await this.network.authedFetch(`${this.url.origin}/_user`);
+    if (!this.client) {
+      throw new Error(`Cannot fetch credit info without matrix client`);
+    }
+    await this.login();
+    if (this.auth.type !== 'logged-in') {
+      throw new Error('Could not login to realm server');
+    }
+
+    let response = await this.network.fetch(`${this.url.origin}/_user`, {
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
     if (response.status !== 200) {
       throw new Error(
         `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
     }
     let json = await response.json();
-    let plan = json.included.find((i: { type: string }) => i.type === 'plan');
-    let creditsUsedInPlanAllowance =
-      json.data.attributes.creditsUsedInPlanAllowance;
+    let plan =
+      json.included?.find((i: { type: string }) => i.type === 'plan')
+        ?.attributes?.name ?? null;
+    let creditsAvailableInPlanAllowance =
+      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
+    let creditsIncludedInPlanAllowance =
+      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
     let extraCreditsAvailableInBalance =
-      json.data.attributes.extraCreditsAvailableInBalance;
+      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
     return {
-      plan: {
-        name: plan.attributes.name,
-        monthlyPrice: plan.attributes.monthlyPrice,
-      },
-      creditsIncludedInPlanAllowance: plan.attributes.creditsIncluded,
-      creditsUsedInPlanAllowance,
+      plan,
+      creditsAvailableInPlanAllowance,
+      creditsIncludedInPlanAllowance,
       extraCreditsAvailableInBalance,
     };
   }
 
-  private async fetchCatalogRealms() {
+  async fetchCatalogRealms() {
+    if (this.catalogRealmURLs.length > 0) {
+      return;
+    }
     let response = await this.network.authedFetch(
       `${this.url.origin}/_catalog-realms`,
     );

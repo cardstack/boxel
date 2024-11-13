@@ -1,16 +1,12 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import Router from '@koa/router';
 import { Memoize } from 'typescript-memoize';
 import {
   Realm,
   logger,
   SupportedMimeType,
   insertPermissions,
-  createResponse,
   Deferred,
-  fetchPublicRealms,
-  RealmInfo,
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
@@ -20,8 +16,6 @@ import {
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
-  livenessCheck,
-  healthCheck,
   httpLogging,
   ecsMetadata,
   setContextResponse,
@@ -35,32 +29,14 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import './lib/externals';
-import {
-  extractSupportedMimeType,
-  AuthenticationError,
-  AuthenticationErrorMessages,
-} from '@cardstack/runtime-common/router';
+import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import {
   MatrixClient,
   passwordFromSeed,
   getMatrixUsername,
 } from '@cardstack/runtime-common/matrix-client';
-import {
-  MatrixBackendAuthentication,
-  Utils,
-} from '@cardstack/runtime-common/matrix-backend-authentication';
-import {
-  TokenExpiredError,
-  JsonWebTokenError,
-  sign,
-  verify,
-} from 'jsonwebtoken';
-import stripeWebhookHandler from './billing/stripe-webhook-handlers';
-
-interface RealmServerTokenClaim {
-  user: string;
-}
+import { createRoutes } from './routes';
 
 const DEFAULT_PERMISSIONS = Object.freeze([
   'read',
@@ -77,12 +53,6 @@ const IGNORE_SEED_FILES = [
   'TODO.md',
   'tsconfig.json',
 ];
-
-type CatalogRealm = {
-  type: 'catalog-realm';
-  id: string;
-  attributes: RealmInfo;
-};
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -102,7 +72,6 @@ export class RealmServer {
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
-  private catalogRealms: CatalogRealm[] | null = null;
 
   constructor({
     serverURL,
@@ -158,14 +127,6 @@ export class RealmServer {
 
   @Memoize()
   get app() {
-    let router = new Router();
-    router.head('/', livenessCheck);
-    router.get('/', healthCheck, this.serveIndex, this.serveFromRealm);
-    router.post('/_server-session', this.createSession());
-    router.post('/_create-realm', this.handleCreateRealmRequest);
-    router.get('/_catalog-realms', this.fetchCatalogRealms);
-    router.post('/_stripe-webhook', this.handleStripeWebhook);
-
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
       .use(ecsMetadata)
@@ -195,7 +156,17 @@ export class RealmServer {
       })
       .use(convertAcceptHeaderQueryParam)
       .use(convertAuthHeaderQueryParam)
-      .use(router.routes())
+      .use(
+        createRoutes({
+          dbAdapter: this.dbAdapter,
+          matrixClient: this.matrixClient,
+          secretSeed: this.secretSeed,
+          virtualNetwork: this.virtualNetwork,
+          createRealm: this.createRealm,
+          serveIndex: this.serveIndex,
+          serveFromRealm: this.serveFromRealm,
+        }),
+      )
       .use(this.serveIndex)
       .use(this.serveFromRealm);
 
@@ -233,49 +204,6 @@ export class RealmServer {
     for (let realm of this.realms) {
       this.virtualNetwork.unmount(realm.handle);
     }
-  }
-
-  private createSession(): (
-    ctxt: Koa.Context,
-    next: Koa.Next,
-  ) => Promise<void> {
-    let matrixBackendAuthentication = new MatrixBackendAuthentication(
-      this.matrixClient,
-      this.secretSeed,
-      {
-        badRequest: function (message: string) {
-          return new Response(JSON.stringify({ errors: message }), {
-            status: 400,
-            statusText: 'Bad Request',
-            headers: { 'content-type': SupportedMimeType.Session },
-          });
-        },
-        createResponse: function (
-          body: BodyInit | null | undefined,
-          init: ResponseInit | undefined,
-        ) {
-          return new Response(body, init);
-        },
-        createJWT: async (user: string) => this.createJWT(user),
-      } as Utils,
-    );
-
-    return async (ctxt: Koa.Context, _next: Koa.Next) => {
-      try {
-        let request = await fetchRequestFromContext(ctxt);
-        let response = await matrixBackendAuthentication.createSession(request);
-        await setContextResponse(ctxt, response);
-      } catch (e: any) {
-        this.log.error(`Exception while creating a session on realm server`, e);
-        await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
-      }
-    };
-  }
-
-  createJWT(userId: string): string {
-    return sign({ user: userId } as RealmServerTokenClaim, this.secretSeed, {
-      expiresIn: '7d',
-    });
   }
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
@@ -335,148 +263,7 @@ export class RealmServer {
     await setContextResponse(ctxt, realmResponse);
   };
 
-  private handleCreateRealmRequest = async (
-    ctxt: Koa.Context,
-    _next: Koa.Next,
-  ) => {
-    let request = await fetchRequestFromContext(ctxt);
-
-    let token: RealmServerTokenClaim;
-    try {
-      // Currently the only permission possible for the realm-server is the
-      // permission to create a realm which is available for any matrix user,
-      // as such we are only checking that the jwt is valid as opposed to
-      // fetching permissions and comparing the JWT to what is configured on
-      // the server. If we introduce another type of realm-server permission,
-      // then we will need to compare the token with what is configured on the
-      // server.
-      token = this.getJwtToken(request);
-    } catch (e) {
-      if (e instanceof AuthenticationError) {
-        await sendResponseForForbiddenRequest(ctxt, e.message);
-        return;
-      }
-      throw e;
-    }
-
-    let { user: ownerUserId } = token;
-    let body = await request.text();
-    let json: Record<string, any>;
-    try {
-      json = JSON.parse(body);
-    } catch (e) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'Request body is not valid JSON-API - invalid JSON',
-      );
-      return;
-    }
-    try {
-      assertIsRealmCreationJSON(json);
-    } catch (e: any) {
-      await sendResponseForBadRequest(
-        ctxt,
-        `Request body is not valid JSON-API - ${e.message}`,
-      );
-      return;
-    }
-
-    let realm: Realm | undefined;
-    let start = Date.now();
-    let indexStart: number | undefined;
-    try {
-      realm = await this.createRealm({
-        ownerUserId,
-        ...json.data.attributes,
-      });
-      this.log.debug(
-        `created new realm ${realm.url} in ${Date.now() - start} ms`,
-      );
-      this.log.debug(`indexing new realm ${realm.url}`);
-      indexStart = Date.now();
-      await realm.start();
-    } catch (e: any) {
-      if ('status' in e && e.status === 400) {
-        await sendResponseForBadRequest(ctxt, e.message);
-      } else {
-        this.log.error(
-          `Error creating realm '${json.data.attributes.name}' for user ${ownerUserId}`,
-          e,
-        );
-        await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
-      }
-      return;
-    } finally {
-      if (realm != null && indexStart != null) {
-        this.log.debug(
-          `indexing of new realm ${realm.url} ended in ${
-            Date.now() - indexStart
-          } ms`,
-        );
-      }
-
-      let creationTimeMs = Date.now() - start;
-      if (creationTimeMs > 15_000) {
-        let msg = `it took a long time, ${creationTimeMs} ms, to create realm for ${ownerUserId}, ${JSON.stringify(
-          json.data.attributes,
-        )}`;
-        console.error(msg);
-        Sentry.captureMessage(msg);
-      }
-    }
-
-    let response = createResponse({
-      body: JSON.stringify(
-        {
-          data: {
-            type: 'realm',
-            id: realm.url,
-            attributes: { ...json.data.attributes },
-          },
-        },
-        null,
-        2,
-      ),
-      init: {
-        status: 201,
-        headers: {
-          'content-type': SupportedMimeType.JSONAPI,
-        },
-      },
-      requestContext: {
-        realm,
-        permissions: {
-          [ownerUserId]: DEFAULT_PERMISSIONS,
-        },
-      },
-    });
-    await setContextResponse(ctxt, response);
-    return;
-  };
-
-  private getJwtToken(request: Request) {
-    let authorizationString = request.headers.get('Authorization');
-    if (!authorizationString) {
-      throw new AuthenticationError(
-        AuthenticationErrorMessages.MissingAuthHeader,
-      );
-    }
-    let tokenString = authorizationString.replace('Bearer ', '');
-    try {
-      return verify(tokenString, this.secretSeed) as RealmServerTokenClaim;
-    } catch (e) {
-      if (e instanceof TokenExpiredError) {
-        throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
-      }
-
-      if (e instanceof JsonWebTokenError) {
-        throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
-      }
-      throw e;
-    }
-  }
-
-  private async createRealm({
+  private createRealm = async ({
     ownerUserId,
     endpoint,
     name,
@@ -488,7 +275,7 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<Realm> {
+  }): Promise<Realm> => {
     if (
       this.realms.find(
         (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
@@ -579,7 +366,7 @@ export class RealmServer {
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
-  }
+  };
 
   // TODO consider refactoring this into main.ts after createRealm() becomes
   // private and realm creation happens as part of user creation. Then the
@@ -657,61 +444,6 @@ export class RealmServer {
 
     throw new Error(`Can not determine the matrix registration secret`);
   }
-
-  private handleStripeWebhook = async (ctxt: Koa.Context, _next: Koa.Next) => {
-    let request = await fetchRequestFromContext(ctxt);
-
-    let response = await stripeWebhookHandler(this.dbAdapter, request);
-    await setContextResponse(ctxt, response);
-  };
-
-  private fetchCatalogRealms = async (ctxt: Koa.Context, _next: Koa.Next) => {
-    let catalogRealms = this.catalogRealms;
-    if (!catalogRealms) {
-      let publicRealms = await fetchPublicRealms(this.dbAdapter);
-      catalogRealms = (
-        await Promise.all(
-          publicRealms.map(async ({ realm_url: realmURL }) => {
-            let realmInfoResponse = await this.virtualNetwork.handle(
-              new Request(`${realmURL}_info`, {
-                headers: {
-                  Accept: SupportedMimeType.RealmInfo,
-                },
-              }),
-            );
-            if (realmInfoResponse.status != 200) {
-              this.log.warn(
-                `Failed to fetch realm info for public realm ${realmURL}: ${realmInfoResponse.status}`,
-              );
-              return null;
-            }
-            let json = await realmInfoResponse.json();
-            let attributes = json.data.attributes;
-            if (
-              attributes.showAsCatalog != null &&
-              attributes.showAsCatalog == false
-            ) {
-              return null;
-            }
-
-            return {
-              type: 'catalog-realm',
-              id: realmURL,
-              attributes: json.data.attributes,
-            };
-          }),
-        )
-      ).filter(Boolean) as CatalogRealm[];
-      this.catalogRealms = catalogRealms;
-    }
-
-    return setContextResponse(
-      ctxt,
-      new Response(JSON.stringify({ data: catalogRealms }), {
-        headers: { 'content-type': SupportedMimeType.JSONAPI },
-      }),
-    );
-  };
 }
 
 function detectRealmCollision(realms: Realm[]): void {
@@ -738,18 +470,6 @@ function detectRealmCollision(realms: Realm[]): void {
   }
 }
 
-interface RealmCreationJSON {
-  data: {
-    type: 'realm';
-    attributes: {
-      endpoint: string;
-      name: string;
-      backgroundURL?: string;
-      iconURL?: string;
-    };
-  };
-}
-
 function errorWithStatus(
   status: number,
   message: string,
@@ -757,77 +477,4 @@ function errorWithStatus(
   let error = new Error(message);
   (error as Error & { status: number }).status = status;
   return error as Error & { status: number };
-}
-
-function assertIsRealmCreationJSON(
-  json: any,
-): asserts json is RealmCreationJSON {
-  if (typeof json !== 'object') {
-    throw new Error(`json must be an object`);
-  }
-  if (!('data' in json) || typeof json.data !== 'object') {
-    throw new Error(`json is missing "data" object`);
-  }
-  let { data } = json;
-  if (!('type' in data) || data.type !== 'realm') {
-    throw new Error('json.data.type must be "realm"');
-  }
-  if (!('attributes' in data || typeof data.attributes !== 'object')) {
-    throw new Error(`json.data is missing "attributes" object`);
-  }
-  let { attributes } = data;
-  if (!('name' in attributes) || typeof attributes.name !== 'string') {
-    throw new Error(
-      `json.data.attributes.name is required and must be a string`,
-    );
-  }
-  if (!('endpoint' in attributes) || typeof attributes.endpoint !== 'string') {
-    throw new Error(
-      `json.data.attributes.endpoint is required and must be a string`,
-    );
-  }
-  if (
-    'backgroundURL' in attributes &&
-    typeof attributes.backgroundURL !== 'string'
-  ) {
-    throw new Error(`json.data.attributes.backgroundURL must be a string`);
-  }
-  if ('iconURL' in attributes && typeof attributes.iconURL !== 'string') {
-    throw new Error(`json.data.attributes.iconURL must be a string`);
-  }
-}
-
-async function sendResponseForBadRequest(ctxt: Koa.Context, message: string) {
-  await sendResponseForError(ctxt, 400, 'Bad Request', message);
-}
-
-async function sendResponseForForbiddenRequest(
-  ctxt: Koa.Context,
-  message: string,
-) {
-  await sendResponseForError(ctxt, 401, 'Forbidden Request', message);
-}
-async function sendResponseForSystemError(ctxt: Koa.Context, message: string) {
-  await sendResponseForError(ctxt, 500, 'System Error', message);
-}
-
-async function sendResponseForError(
-  ctxt: Koa.Context,
-  status: number,
-  statusText: string,
-  message: string,
-) {
-  await setContextResponse(
-    ctxt,
-    new Response(
-      JSON.stringify({
-        errors: [message],
-      }),
-      {
-        status,
-        statusText,
-        headers: { 'content-type': SupportedMimeType.JSONAPI },
-      },
-    ),
-  );
 }

@@ -17,9 +17,10 @@ export default class AvatarUsage extends Component {
 
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
   declare profileAvatarIconSize: CSSVariableInfo;
-
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
   declare profileAvatarIconBorder: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'avatar-freestyle-container' })
+  declare profileAvatarTextColor: CSSVariableInfo;
 
   <template>
     <div
@@ -44,6 +45,7 @@ export default class AvatarUsage extends Component {
         <:api as |Args|>
           <Args.String
             @name='userId'
+            @required={{true}}
             @description='Unique identifier for the user'
             @value={{this.userId}}
             @onInput={{fn (mut this.userId)}}
@@ -51,13 +53,14 @@ export default class AvatarUsage extends Component {
           <Args.String
             @name='displayName'
             @description='User display name'
+            @defaultValue='userId'
             @value={{this.displayName}}
             @onInput={{fn (mut this.displayName)}}
           />
           <Args.Bool
             @name='isReady'
-            @description='Whether the avatar is ready to display'
-            @defaultValue={{true}}
+            @required={{true}}
+            @description='Shows initials on the avatar once this is true'
             @value={{this.isReady}}
             @onInput={{fn (mut this.isReady)}}
           />
@@ -65,15 +68,15 @@ export default class AvatarUsage extends Component {
         <:cssVars as |Css|>
           <Css.Basic
             @name='profile-avatar-icon-size'
-            @type='size'
-            @description='Size of the avatar (CSS length value)'
+            @type='length'
+            @description='Size of the avatar (CSS length value).'
             @value={{this.profileAvatarIconSize.value}}
             @onInput={{this.profileAvatarIconSize.update}}
           />
           <Css.Basic
             @name='profile-avatar-icon-border'
-            @type='size'
-            @description='Border of the avatar (CSS border value)'
+            @type='<line-width> || <line-style> || <color>'
+            @description='Border of the avatar (CSS border value).'
             @value={{this.profileAvatarIconBorder.value}}
             @onInput={{this.profileAvatarIconBorder.update}}
           />

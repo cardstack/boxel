@@ -1,7 +1,8 @@
 import Component from '@glimmer/component';
 
-import { BoxelDropdown, Menu } from '@cardstack/boxel-ui/components';
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { RealmInfo } from '@cardstack/runtime-common';
 
@@ -54,59 +55,67 @@ export default class CardCatalogFilters extends Component<Signature> {
   }
 
   <template>
-    <div class='filter-container'>
-      <div class='filter'>
-        <BoxelDropdown>
-          <:trigger as |bindings|>
-            <button
-              {{bindings}}
-              disabled={{@disableRealmFilter}}
-              data-test-realm-filter-button
-            >
-              Workspace:
-              {{this.realmFilterSummary}}
-            </button>
-          </:trigger>
-          <:content as |dd|>
-            <Menu @closeMenu={{dd.close}} @items={{this.realmMenuItems}} />
-          </:content>
-        </BoxelDropdown>
-      </div>
-    </div>
-
+    <BoxelDropdown>
+      <:trigger as |bindings|>
+        <Button
+          class='filter-dropdown-trigger'
+          @kind='secondary-light'
+          @size='small'
+          @disabled={{@disableRealmFilter}}
+          {{bindings}}
+          data-test-realm-filter-button
+        >
+          <div class='selected-item'>
+            Workspace:
+            {{this.realmFilterSummary}}
+          </div>
+          <DropdownArrowDown
+            class='dropdown-arrow'
+            width='13px'
+            height='13px'
+          />
+        </Button>
+      </:trigger>
+      <:content as |dd|>
+        <Menu
+          class='filter-menu'
+          @closeMenu={{dd.close}}
+          @items={{this.realmMenuItems}}
+        />
+      </:content>
+    </BoxelDropdown>
     <style scoped>
-      .filter-container {
-        --filter-height: 30px;
+      .filter-dropdown-trigger {
+        height: 37px;
+        width: fit-content;
+        min-width: 15rem;
+        max-width: 100%;
         display: flex;
-        gap: var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-sm);
+        justify-content: flex-start;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius-xxl);
       }
-      .add-filter-button {
-        --icon-color: var(--boxel-highlight);
-        border: 1px solid var(--boxel-400);
-        border-radius: 100px;
-        width: var(--filter-height);
-        height: var(--filter-height);
-        display: flex;
-        justify-content: center;
-        align-items: center;
+      .dropdown-arrow {
+        flex-shrink: 0;
+        margin-left: auto;
       }
-      .add-filter-button {
-        border-color: var(--boxel-dark);
+      .filter-dropdown-trigger[aria-expanded='true'] .dropdown-arrow {
+        transform: scaleY(-1);
       }
-      .filter {
-        position: relative;
-        height: var(--filter-height);
-        border: 1px solid var(--boxel-400);
-        border-radius: 20px;
-        padding-right: var(--boxel-sp-lg);
-        padding-left: var(--boxel-sp-sm);
-        display: flex;
-        align-items: center;
+      .selected-item {
+        max-width: 100%;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
       }
-      .filter > button {
-        border: none;
-        background: inherit;
+      .filter-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 15rem;
+      }
+      .filter-menu :deep(.menu-item__icon-url) {
+        border-radius: var(--boxel-border-radius-xs);
       }
     </style>
   </template>

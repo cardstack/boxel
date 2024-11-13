@@ -1,74 +1,29 @@
-import { asExpressions, insert, param, query } from '@cardstack/runtime-common';
+import { param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
-import { prepareTestDB } from './helpers';
-import PgAdapter from '../pg-adapter';
-import { handlePaymentSucceeded } from '../billing/stripe-webhook-handlers/payment-succeeded';
-import { handleSubscriptionDeleted } from '../billing/stripe-webhook-handlers/subscription-deleted';
-import { handleCheckoutSessionCompleted } from '../billing/stripe-webhook-handlers/checkout-session-completed';
+import {
+  fetchSubscriptionsByUserId,
+  insertPlan,
+  insertUser,
+  prepareTestDB,
+} from './helpers';
+import { PgAdapter } from '@cardstack/postgres';
+import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
+import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
+import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';
 import {
   LedgerEntry,
-  Plan,
-  Subscription,
   SubscriptionCycle,
-  User,
   insertSubscriptionCycle,
   sumUpCreditsLedger,
   addToCreditsLedger,
   insertSubscription,
-} from '../billing/billing-queries';
+} from '@cardstack/billing/billing-queries';
 
 import {
   StripeInvoicePaymentSucceededWebhookEvent,
   StripeSubscriptionDeletedWebhookEvent,
   StripeCheckoutSessionCompletedWebhookEvent,
-} from '../billing/stripe-webhook-handlers';
-
-async function insertUser(
-  dbAdapter: PgAdapter,
-  matrixUserId: string,
-  stripeCustomerId: string,
-): Promise<User> {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    matrix_user_id: matrixUserId,
-    stripe_customer_id: stripeCustomerId,
-  });
-  let result = await query(
-    dbAdapter,
-    insert('users', nameExpressions, valueExpressions),
-  );
-
-  return {
-    id: result[0].id,
-    matrixUserId: result[0].matrix_user_id,
-    stripeCustomerId: result[0].stripe_customer_id,
-  } as User;
-}
-
-async function insertPlan(
-  dbAdapter: PgAdapter,
-  name: string,
-  monthlyPrice: number,
-  creditsIncluded: number,
-  stripePlanId: string,
-): Promise<Plan> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
-    name,
-    monthly_price: monthlyPrice,
-    credits_included: creditsIncluded,
-    stripe_plan_id: stripePlanId,
-  });
-  let result = await query(
-    dbAdapter,
-    insert('plans', nameExpressions, valueExpressions),
-  );
-  return {
-    id: result[0].id,
-    name: result[0].name,
-    monthlyPrice: result[0].monthly_price,
-    creditsIncluded: result[0].credits_included,
-    stripePlanId: result[0].stripe_plan_id,
-  } as Plan;
-}
+} from '@cardstack/billing/stripe-webhook-handlers';
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);
@@ -82,34 +37,6 @@ async function fetchUserByStripeCustomerId(
     `SELECT * FROM users WHERE stripe_customer_id = `,
     param(stripeCustomerId),
   ]);
-}
-
-async function fetchSubscriptionsByUserId(
-  dbAdapter: PgAdapter,
-  userId: string,
-): Promise<Subscription[]> {
-  let results = (await query(dbAdapter, [
-    `SELECT * FROM subscriptions WHERE user_id = `,
-    param(userId),
-  ])) as {
-    id: string;
-    user_id: string;
-    plan_id: string;
-    started_at: number;
-    ended_at: number;
-    status: string;
-    stripe_subscription_id: string;
-  }[];
-
-  return results.map((result) => ({
-    id: result.id,
-    userId: result.user_id,
-    planId: result.plan_id,
-    startedAt: result.started_at,
-    endedAt: result.ended_at,
-    status: result.status,
-    stripeSubscriptionId: result.stripe_subscription_id,
-  }));
 }
 
 async function fetchSubscriptionCyclesBySubscriptionId(
@@ -155,7 +82,7 @@ module('billing', function (hooks) {
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    dbAdapter = new PgAdapter();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
   });
 
   hooks.afterEach(async function () {
@@ -166,7 +93,13 @@ module('billing', function (hooks) {
     module('new subscription without any previous subscription', function () {
       test('creates a new subscription and adds plan allowance in credits', async function (assert) {
         let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
-        let plan = await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_123');
+        let plan = await insertPlan(
+          dbAdapter,
+          'Free plan',
+          0,
+          100,
+          'prod_free',
+        );
 
         // Omitted version of a real stripe invoice.payment_succeeded event
         let stripeInvoicePaymentSucceededEvent = {
@@ -186,7 +119,8 @@ module('billing', function (hooks) {
               lines: {
                 data: [
                   {
-                    price: { product: 'prod_123' },
+                    amount: 0,
+                    price: { product: 'prod_free' },
                   },
                 ],
               },
@@ -262,6 +196,363 @@ module('billing', function (hooks) {
       });
     });
 
+    module('subscription update', function () {
+      test('updates the subscription and prorates credits', async function (assert) {
+        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let freePlan = await insertPlan(
+          dbAdapter,
+          'Free plan',
+          0,
+          1000,
+          'prod_free',
+        );
+        let creatorPlan = await insertPlan(
+          dbAdapter,
+          'Creator',
+          12,
+          5000,
+          'prod_creator',
+        );
+        let powerUserPlan = await insertPlan(
+          dbAdapter,
+          'Power User',
+          49,
+          25000,
+          'prod_power_user',
+        );
+
+        let subscription = await insertSubscription(dbAdapter, {
+          user_id: user.id,
+          plan_id: freePlan.id,
+          started_at: 1,
+          status: 'active',
+          stripe_subscription_id: 'sub_1234567890',
+        });
+
+        let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+          subscriptionId: subscription.id,
+          periodStart: 1,
+          periodEnd: 2,
+        });
+
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 1000,
+          creditType: 'plan_allowance',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
+
+        // User spent 500 credits from his plan allowance, now he has 500 left
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: -500,
+          creditType: 'plan_allowance_used',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
+
+        let stripeInvoicePaymentSucceededEvent = {
+          id: 'evt_1234567890',
+          object: 'event',
+          type: 'invoice.payment_succeeded',
+          data: {
+            object: {
+              id: 'in_1234567890',
+              object: 'invoice',
+              amount_paid: creatorPlan.monthlyPrice * 100,
+              billing_reason: 'subscription_update',
+              period_start: 1,
+              period_end: 2,
+              subscription: 'sub_1234567890',
+              customer: 'cus_123',
+              lines: {
+                data: [
+                  {
+                    amount: creatorPlan.monthlyPrice * 100,
+                    price: { product: 'prod_creator' },
+                    period: { start: 1, end: 2 },
+                  },
+                ],
+              },
+            },
+          },
+        } as StripeInvoicePaymentSucceededWebhookEvent;
+
+        // User upgraded to the creator plan for $12
+        await handlePaymentSucceeded(
+          dbAdapter,
+          stripeInvoicePaymentSucceededEvent,
+        );
+
+        // Assert that new subscription was created
+        let subscriptions = await fetchSubscriptionsByUserId(
+          dbAdapter,
+          user.id,
+        );
+        assert.strictEqual(subscriptions.length, 2);
+
+        // Assert that old subscription was ended due to plan change
+        assert.strictEqual(subscriptions[0].status, 'ended_due_to_plan_change');
+        assert.ok(subscriptions[0].endedAt);
+
+        // Assert that new subscription is active
+        assert.strictEqual(subscriptions[1].status, 'active');
+
+        // Assert that there is a new subscription cycle
+        let subscriptionCycles = await fetchSubscriptionCyclesBySubscriptionId(
+          dbAdapter,
+          subscriptions[1].id,
+        );
+        assert.strictEqual(subscriptionCycles.length, 1);
+        assert.strictEqual(
+          subscriptionCycles[0].periodStart,
+          stripeInvoicePaymentSucceededEvent.data.object.period_start,
+        );
+        assert.strictEqual(
+          subscriptionCycles[0].periodEnd,
+          stripeInvoicePaymentSucceededEvent.data.object.period_end,
+        );
+
+        let creditsBalance = await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        });
+
+        subscriptionCycle = subscriptionCycles[0];
+
+        // User received 5000 credits from the creator plan, plus 500 from the plan allowance they had left from the free plan
+        assert.strictEqual(creditsBalance, 5500);
+
+        // User spent 2000 credits from the plan allowance
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: -2000,
+          creditType: 'plan_allowance_used',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
+
+        // Assert that the user now has 3500 credits left
+        creditsBalance = await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        });
+        assert.strictEqual(creditsBalance, 3500);
+
+        // Now, user upgrades to power user plan ($49 monthly) in the middle of the month:
+
+        let amountCreditedForUnusedTimeOnPreviousPlan = 200;
+        let amountCreditedForRemainingTimeOnNewPlan = 3800;
+
+        stripeInvoicePaymentSucceededEvent = {
+          id: 'evt_1234567891',
+          object: 'event',
+          type: 'invoice.payment_succeeded',
+          data: {
+            object: {
+              id: 'in_1234567890',
+              object: 'invoice',
+              amount_paid: 3400, // prorated amount for going from creator to power user plan
+              billing_reason: 'subscription_update',
+              period_start: 3,
+              period_end: 4,
+              subscription: 'sub_1234567890',
+              customer: 'cus_123',
+              lines: {
+                data: [
+                  {
+                    amount: -amountCreditedForUnusedTimeOnPreviousPlan,
+                    description: 'Unused time on Creator plan',
+                    price: { product: 'prod_creator' },
+                    period: { start: 3, end: 4 },
+                  },
+                  {
+                    amount: amountCreditedForRemainingTimeOnNewPlan,
+                    description: 'Remaining time on Power User plan',
+                    price: { product: 'prod_power_user' },
+                    period: { start: 4, end: 5 },
+                  },
+                ],
+              },
+            },
+          },
+        } as StripeInvoicePaymentSucceededWebhookEvent;
+
+        await handlePaymentSucceeded(
+          dbAdapter,
+          stripeInvoicePaymentSucceededEvent,
+        );
+
+        // Assert there are now three subscriptions and last one is active
+        subscriptions = await fetchSubscriptionsByUserId(dbAdapter, user.id);
+        assert.strictEqual(subscriptions.length, 3);
+        assert.strictEqual(subscriptions[0].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[1].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[2].status, 'active');
+
+        // Assert that subscriptions have correct plan ids
+        assert.strictEqual(subscriptions[0].planId, freePlan.id);
+        assert.strictEqual(subscriptions[1].planId, creatorPlan.id);
+        assert.strictEqual(subscriptions[2].planId, powerUserPlan.id);
+
+        // Assert that the new subscription has the correct period start and end
+        assert.strictEqual(subscriptions[2].startedAt, 4);
+        assert.strictEqual(subscriptions[2].endedAt, null);
+
+        subscriptionCycles = await fetchSubscriptionCyclesBySubscriptionId(
+          dbAdapter,
+          subscriptions[2].id,
+        );
+
+        // Assert that latest subscription cycle has the correct period start and end
+        assert.strictEqual(subscriptionCycles.length, 1);
+        assert.strictEqual(subscriptionCycles[0].periodStart, 4);
+        assert.strictEqual(subscriptionCycles[0].periodEnd, 5);
+
+        let previousCreditsBalance = creditsBalance;
+
+        creditsBalance = await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        });
+
+        // Assert that the credits balance is the prorated amount for going from creator to power user plan
+        let creditsToExpireforUnusedTimeOnPreviousPlan = Math.round(
+          (amountCreditedForUnusedTimeOnPreviousPlan /
+            (creatorPlan.monthlyPrice * 100)) *
+            creatorPlan.creditsIncluded,
+        );
+        let creditsToAddForRemainingTime = Math.round(
+          (amountCreditedForRemainingTimeOnNewPlan /
+            (powerUserPlan.monthlyPrice * 100)) *
+            powerUserPlan.creditsIncluded,
+        );
+        assert.strictEqual(
+          creditsBalance,
+          previousCreditsBalance -
+            creditsToExpireforUnusedTimeOnPreviousPlan +
+            creditsToAddForRemainingTime,
+        );
+
+        // Downgrade to creator plan
+        stripeInvoicePaymentSucceededEvent = {
+          id: 'evt_12345678901',
+          object: 'event',
+          type: 'invoice.payment_succeeded',
+          data: {
+            object: {
+              id: 'in_1234567890',
+              object: 'invoice',
+              amount_paid: creatorPlan.monthlyPrice * 100,
+              billing_reason: 'subscription_update',
+              period_start: 5,
+              period_end: 6,
+              subscription: 'sub_1234567890',
+              customer: 'cus_123',
+              lines: {
+                data: [
+                  {
+                    amount: creatorPlan.monthlyPrice * 100,
+                    price: { product: 'prod_creator' },
+                    period: { start: 5, end: 6 },
+                  },
+                ],
+              },
+            },
+          },
+        } as StripeInvoicePaymentSucceededWebhookEvent;
+
+        await handlePaymentSucceeded(
+          dbAdapter,
+          stripeInvoicePaymentSucceededEvent,
+        );
+
+        // Assert there are now four subscriptions and last one is active
+        subscriptions = await fetchSubscriptionsByUserId(dbAdapter, user.id);
+        assert.strictEqual(subscriptions.length, 4);
+        assert.strictEqual(subscriptions[0].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[1].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[2].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[3].status, 'active');
+
+        // Assert that subscriptions have correct plan ids
+        assert.strictEqual(subscriptions[0].planId, freePlan.id);
+        assert.strictEqual(subscriptions[1].planId, creatorPlan.id);
+        assert.strictEqual(subscriptions[2].planId, powerUserPlan.id);
+        assert.strictEqual(subscriptions[3].planId, creatorPlan.id);
+
+        // Assert that the new subscription has the correct period start and end
+        assert.strictEqual(subscriptions[3].startedAt, 5);
+        assert.strictEqual(subscriptions[3].endedAt, null);
+
+        subscriptionCycles = await fetchSubscriptionCyclesBySubscriptionId(
+          dbAdapter,
+          subscriptions[3].id,
+        );
+
+        // Assert that latest subscription cycle has the correct period start and end
+        assert.strictEqual(subscriptionCycles.length, 1);
+        assert.strictEqual(subscriptionCycles[0].periodStart, 5);
+        assert.strictEqual(subscriptionCycles[0].periodEnd, 6);
+
+        // Assert that user now has the plan's allowance (No proration will happen because Stripe assures us that downgrading to a cheaper plan will happen at the end of the billing period)
+        // (This is a setting in Stripe's customer portal)
+        creditsBalance = await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        });
+
+        assert.strictEqual(creditsBalance, creatorPlan.creditsIncluded);
+
+        // Now user switches back to free plan
+        stripeInvoicePaymentSucceededEvent = {
+          id: 'evt_123456789011',
+          object: 'event',
+          type: 'invoice.payment_succeeded',
+          data: {
+            object: {
+              id: 'in_1234567890',
+              object: 'invoice',
+              amount_paid: 0,
+              billing_reason: 'subscription_update',
+              period_start: 1635873600,
+              period_end: 1638465600,
+              subscription: 'sub_1234567890',
+              customer: 'cus_123',
+              lines: {
+                data: [
+                  {
+                    amount: 0,
+                    price: { product: 'prod_free' },
+                  },
+                ],
+              },
+            },
+          },
+        } as StripeInvoicePaymentSucceededWebhookEvent;
+
+        await handlePaymentSucceeded(
+          dbAdapter,
+          stripeInvoicePaymentSucceededEvent,
+        );
+
+        // Assert there are now 5 subscriptions and last one is active
+        subscriptions = await fetchSubscriptionsByUserId(dbAdapter, user.id);
+        assert.strictEqual(subscriptions.length, 5);
+        assert.strictEqual(subscriptions[0].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[1].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[2].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[3].status, 'ended_due_to_plan_change');
+        assert.strictEqual(subscriptions[4].status, 'active');
+
+        // Assert that subscriptions have correct plan ids
+        assert.strictEqual(subscriptions[0].planId, freePlan.id);
+        assert.strictEqual(subscriptions[1].planId, creatorPlan.id);
+        assert.strictEqual(subscriptions[2].planId, powerUserPlan.id);
+        assert.strictEqual(subscriptions[3].planId, creatorPlan.id);
+        assert.strictEqual(subscriptions[4].planId, freePlan.id);
+
+        creditsBalance = await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        });
+        assert.strictEqual(creditsBalance, freePlan.creditsIncluded);
+      });
+    });
+
     module('subscription cycle', function () {
       test('renews the subscription', async function (assert) {
         let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
@@ -333,6 +624,7 @@ module('billing', function (hooks) {
               lines: {
                 data: [
                   {
+                    amount: 1200,
                     price: { product: 'prod_creator' },
                   },
                 ],
@@ -374,7 +666,7 @@ module('billing', function (hooks) {
   });
 
   module('subscription deleted', function () {
-    test('handles subscription cancellation and expiration', async function (assert) {
+    test('handles subscription cancellation', async function (assert) {
       let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
       let plan = await insertPlan(
         dbAdapter,
@@ -384,12 +676,18 @@ module('billing', function (hooks) {
         'prod_creator',
       );
 
-      await insertSubscription(dbAdapter, {
+      let subscription = await insertSubscription(dbAdapter, {
         user_id: user.id,
         plan_id: plan.id,
         started_at: 1,
         status: 'active',
         stripe_subscription_id: 'sub_1234567890',
+      });
+
+      await insertSubscriptionCycle(dbAdapter, {
+        subscriptionId: subscription.id,
+        periodStart: 1,
+        periodEnd: 2,
       });
 
       let stripeSubscriptionDeletedEvent = {
@@ -416,6 +714,11 @@ module('billing', function (hooks) {
       assert.strictEqual(subscriptions.length, 1);
       assert.strictEqual(subscriptions[0].status, 'canceled');
       assert.strictEqual(subscriptions[0].endedAt, 2);
+
+      let availableCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user.id,
+      });
+      assert.strictEqual(availableCredits, 0);
     });
   });
 

@@ -8,6 +8,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import BoxelField from '../field-container/index.gts';
 import BoxelSelect from './index.gts';
 
 interface Country {
@@ -47,7 +48,6 @@ export default class BoxelSelectUsage extends Component {
   <template>
     <FreestyleUsage @name='Select'>
       <:example>
-
         <BoxelSelect
           @placeholder={{this.placeholder}}
           @searchEnabled={{this.searchEnabled}}
@@ -137,6 +137,29 @@ export default class BoxelSelectUsage extends Component {
           @description='Tells the component what property of the options should be used to filter'
         />
       </:api>
+    </FreestyleUsage>
+    <FreestyleUsage @name='Usage with FieldContainer'>
+      <:example>
+        <BoxelField @label='Country'>
+          <BoxelSelect
+            @placeholder={{this.placeholder}}
+            @searchEnabled={{this.searchEnabled}}
+            @searchField={{this.searchField}}
+            @selected={{this.selectedItem}}
+            @onChange={{this.onSelectItem}}
+            @options={{this.items}}
+            @verticalPosition={{this.verticalPosition}}
+            @renderInPlace={{this.renderInPlace}}
+            @disabled={{this.disabled}}
+            @dropdownClass='boxel-select-usage'
+            @matchTriggerWidth={{this.matchTriggerWidth}}
+            aria-label={{this.placeholder}}
+            as |item|
+          >
+            <div>{{item.name}}</div>
+          </BoxelSelect>
+        </BoxelField>
+      </:example>
     </FreestyleUsage>
   </template>
 }
