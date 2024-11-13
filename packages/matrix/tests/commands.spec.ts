@@ -61,32 +61,39 @@ test.describe('Commands', () => {
               description: {
                 type: 'string',
               },
-              card_id: {
-                type: 'string',
-                const: `${testHost}/mango`,
-              },
               attributes: {
-                type: 'object',
-                properties: {
-                  firstName: {
-                    type: 'string',
-                  },
-                  lastName: {
-                    type: 'string',
-                  },
-                  email: {
-                    type: 'string',
-                  },
-                  posts: {
-                    type: 'number',
-                  },
-                  thumbnailURL: {
-                    type: 'string',
+                cardId: {
+                  type: 'string',
+                  const: `${testHost}/mango`,
+                },
+                patch: {
+                  type: 'object',
+                  properties: {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        firstName: {
+                          type: 'string',
+                        },
+                        lastName: {
+                          type: 'string',
+                        },
+                        email: {
+                          type: 'string',
+                        },
+                        posts: {
+                          type: 'number',
+                        },
+                        thumbnailURL: {
+                          type: 'string',
+                        },
+                      },
+                    },
                   },
                 },
               },
             },
-            required: ['card_id', 'attributes', 'description'],
+            required: ['attributes', 'description'],
           },
         },
       },
@@ -102,33 +109,35 @@ test.describe('Commands', () => {
               description: {
                 type: 'string',
               },
-              filter: {
-                type: 'object',
-                properties: {
-                  contains: {
-                    type: 'object',
-                    properties: {
-                      title: {
-                        type: 'string',
-                        description: 'title of the card',
+              attributes: {
+                filter: {
+                  type: 'object',
+                  properties: {
+                    contains: {
+                      type: 'object',
+                      properties: {
+                        title: {
+                          type: 'string',
+                          description: 'title of the card',
+                        },
                       },
+                      required: ['title'],
                     },
-                    required: ['title'],
-                  },
-                  eq: {
-                    type: 'object',
-                    properties: {
-                      _cardType: {
-                        type: 'string',
-                        description: 'name of the card type',
+                    eq: {
+                      type: 'object',
+                      properties: {
+                        _cardType: {
+                          type: 'string',
+                          description: 'name of the card type',
+                        },
                       },
+                      required: ['_cardType'],
                     },
-                    required: ['_cardType'],
                   },
                 },
               },
             },
-            required: ['filter', 'description'],
+            required: ['attributes', 'description'],
           },
         },
       },

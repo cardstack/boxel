@@ -184,9 +184,15 @@ module('Responding', (hooks) => {
 
   test('Sends tool call event and replaces thinking message when tool call happens with no content', async () => {
     const patchArgs = {
-      card_id: 'card/1',
-      description: 'A new thing',
-      attributes: { some: 'thing' },
+      attributes: {
+        cardId: 'card/1',
+        description: 'A new thing',
+        patch: {
+          attributes: {
+            some: 'thing',
+          },
+        },
+      },
     };
 
     await responder.initialize();
@@ -256,9 +262,15 @@ module('Responding', (hooks) => {
 
   test('Sends tool call event separately when content is sent before tool call', async () => {
     const patchArgs = {
-      card_id: 'card/1',
-      description: 'A new thing',
-      attributes: { some: 'thing' },
+      attributes: {
+        cardId: 'card/1',
+        description: 'A new thing',
+        patch: {
+          attributes: {
+            some: 'thing',
+          },
+        },
+      },
     };
     await responder.initialize();
 

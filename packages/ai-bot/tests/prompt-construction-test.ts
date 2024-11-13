@@ -896,20 +896,24 @@ module('getModifyPrompt', () => {
             description: {
               type: 'string',
             },
-            card_id: {
-              type: 'string',
-              const: 'http://localhost:4201/experiments/Friend/1',
-            },
             attributes: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
+              cardId: {
+                type: 'string',
+                const: 'http://localhost:4201/experiments/Friend/1',
+              },
+              patch: {
+                attributes: {
+                  type: 'object',
+                  properties: {
+                    firstName: {
+                      type: 'string',
+                    },
+                  },
                 },
               },
             },
           },
-          required: ['card_id', 'attributes', 'description'],
+          required: ['attributes', 'description'],
         },
       },
     });
@@ -930,8 +934,10 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  attributes: {
-                    firstName: { type: 'string' },
+                  patch: {
+                    attributes: {
+                      firstName: { type: 'string' },
+                    },
                   },
                 }),
               ],
@@ -961,18 +967,24 @@ module('getModifyPrompt', () => {
         parameters: {
           type: 'object',
           properties: {
+            attributes: {
+              cardId: {
+                type: 'string',
+                const: 'http://localhost:4201/experiments/Friend/1',
+              },
+            },
             description: {
               type: 'string',
             },
-            card_id: {
-              type: 'string',
-              const: 'http://localhost:4201/experiments/Friend/1',
-            },
-            firstName: {
-              type: 'string',
+            patch: {
+              attributes: {
+                firstName: {
+                  type: 'string',
+                },
+              },
             },
           },
-          required: ['card_id', 'attributes', 'description'],
+          required: ['attributes', 'description'],
         },
       },
     });
