@@ -15,13 +15,21 @@ import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
+const Format = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+
 class Edit extends Component<typeof DateRangeField> {
   @tracked range: any | undefined;
-  get dateRange() {
+  get formatted() {
     if (!this.args.model.start || !this.args.model.end) {
-      return 'No date range selected';
+      return '[no date range]';
     }
-    return `${this.args.model.start} - ${this.args.model.end}`;
+    let start = Format.format(this.args.model.start);
+    let end = Format.format(this.args.model.end);
+    return `${start} - ${end}`;
   }
 
   @action onSelect(selected: any) {
@@ -43,8 +51,8 @@ class Edit extends Component<typeof DateRangeField> {
   <template>
     <BoxelDropdown @onClose={{this.onClose}}>
       <:trigger as |bindings|>
-        <Pill {{bindings}} @kind='button' @label={{this.dateRange}}>
-          {{this.dateRange}}
+        <Pill {{bindings}} @kind='button'>
+          {{this.formatted}}
         </Pill>
       </:trigger>
       <:content as |dd|>
