@@ -2177,10 +2177,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const roomId = await renderAiAssistantPanel(id);
     const toolArgs = {
       description: 'Search for Person cards',
-      filter: {
-        type: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
+      attributes: {
+        filter: {
+          type: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
         },
       },
     };
@@ -2236,7 +2238,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasText(`Description ${toolArgs.description}`);
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
@@ -2250,10 +2252,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const roomId = await renderAiAssistantPanel(id);
     const toolArgs = {
       description: 'Search for Person cards',
-      filter: {
-        type: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
+      attributes: {
+        filter: {
+          type: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
         },
       },
     };
@@ -2311,7 +2315,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasText(`Description ${toolArgs.description}`);
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
