@@ -17,9 +17,10 @@ export default class AvatarUsage extends Component {
 
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
   declare profileAvatarIconSize: CSSVariableInfo;
-
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
   declare profileAvatarIconBorder: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'avatar-freestyle-container' })
+  declare profileAvatarTextColor: CSSVariableInfo;
 
   <template>
     <div
@@ -27,6 +28,7 @@ export default class AvatarUsage extends Component {
       style={{cssVar
         profile-avatar-icon-size=this.profileAvatarIconSize.value
         profile-avatar-icon-border=this.profileAvatarIconBorder.value
+        profile-avatar-text-color=this.profileAvatarTextColor.value
       }}
     >
       <FreestyleUsage @name='Avatar'>
