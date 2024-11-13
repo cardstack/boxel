@@ -2759,7 +2759,6 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
-    debugger;
     assert.codeEqual(
       stripScopedCSSGlimmerAttributes(compiledJS),
       compiledCard(),
