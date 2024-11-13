@@ -496,7 +496,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         height: 100%;
       }
       .filter-section {
-        padding: var(--boxel-sp-xs) 0;
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp);

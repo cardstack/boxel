@@ -1,7 +1,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { cn, element, eq } from '../../helpers.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
-import { cn, element, eq } from '../../helpers.ts';
 
 export type BoxelPillKind = 'button' | 'default';
 

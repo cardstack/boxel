@@ -277,14 +277,17 @@ function shortenId(id: string): string {
 
 class Fitted extends Component<typeof Task> {
   get visibleTags() {
-    return this.args.model.tags.slice(0, 2) ?? [];
+    if (!this.args.model.tags) return [];
+    return this.args.model.tags.slice(0, 2);
   }
 
   get hasMoreTags() {
+    if (!this.args.model.tags) return false;
     return this.args.model.tags.length > 2;
   }
 
   get remainingTagsCount() {
+    if (!this.args.model.tags) return '';
     return this.args.model.tags.length - 2;
   }
 
