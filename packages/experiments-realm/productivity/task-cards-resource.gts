@@ -70,7 +70,7 @@ class TaskCollection extends Resource<Args> {
   @tracked private query: Query = undefined;
 
   private run = restartableTask(async (query: Query, realm: string) => {
-    let staticQuery = getCards(query, [realm]); // I hate this
+    let staticQuery = getCards(query, [realm]);
     await staticQuery.loaded;
     let cards = staticQuery.instances as Task[];
     this.commit(cards); //update stale data
