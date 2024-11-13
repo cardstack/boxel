@@ -1164,14 +1164,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
     click('[data-test-send-message-btn]');
 
-    await this.pauseTest();
     await waitFor('[data-test-ai-assistant-message].is-pending');
     assert.dom('[data-test-message-field]').hasValue('');
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
 
-    await this.pauseTest();
     await waitFor('[data-test-ai-assistant-message].is-error');
     await waitUntil(
       () =>

@@ -49,7 +49,6 @@ class Assistant {
     let messages = getModifyPrompt(history, this.id, tools);
 
     // Write out tools and messages to a log file
-    const fs = require('fs');
     const logData = {
       timestamp: new Date().toISOString(),
       tools,

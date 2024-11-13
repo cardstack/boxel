@@ -252,7 +252,7 @@ test.describe('Commands', () => {
     await showAllCards(page);
     await page
       .locator(
-        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${cardId}"]`,
       )
       .click();
     await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
