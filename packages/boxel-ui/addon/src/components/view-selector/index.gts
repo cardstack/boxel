@@ -58,6 +58,7 @@ export default class ViewSelector extends Component<Signature> {
             @checked={{eq this.selectedId id}}
             @onChange={{fn @onChange id}}
           >
+            <span class='boxel-sr-only'>{{id}}</span>
             <item.data.icon width='20' height='20' alt={{id}} />
           </item.component>
         {{/let}}
@@ -72,10 +73,8 @@ export default class ViewSelector extends Component<Signature> {
         text-wrap: nowrap;
       }
       .view-options {
-        --boxel-radio-gap: var(--boxel-sp-4xs);
-      }
-      .view-options > :deep(div) {
-        flex-wrap: nowrap;
+        display: flex;
+        gap: 0 var(--boxel-sp-4xs);
       }
       .view-option {
         display: flex;
@@ -83,6 +82,7 @@ export default class ViewSelector extends Component<Signature> {
         box-shadow: none;
         transition: none;
       }
+      .view-options > :deep(div),
       .view-option > :deep(div) {
         display: contents;
       }
