@@ -276,51 +276,66 @@ function shortenId(id: string): string {
 }
 
 class Fitted extends Component<typeof Task> {
+  get visibleTags() {
+    return this.args.model.tags.slice(0, 2) ?? [];
+  }
+
+  get hasMoreTags() {
+    return this.args.model.tags.length > 2;
+  }
+
+  get remainingTagsCount() {
+    return this.args.model.tags.length - 2;
+  }
+
   <template>
     <div class='task-card'>
-      <div>
-        <div class='main-info'>
-          <span class='short-id'>{{@model.shortId}}</span>
-          <h3 class='task-title'>{{@model.taskName}}</h3>
-        </div>
-
-        <div class='sub-info'>
-          {{#if @model.assignee}}
-            <div class='task-assignee'>
-              <Avatar
-                class='avatar'
-                @userId={{@model.assignee.id}}
-                @displayName={{@model.assignee.name}}
-                @isReady={{true}}
-              />
-              <span class='assignee-name'>
-                {{@model.assignee.name}}
-              </span>
-            </div>
-          {{/if}}
-
-          <span class='task-date-range'>
-            <Calendar width='14px' height='14px' class='calendar-icon' />
-            {{#if @model.dueDate}}
-              <span class='date-info'><@fields.dueDate /></span>
-            {{else}}
-              <span class='date-info'>No Due Date Assigned</span>
-            {{/if}}
-          </span>
-        </div>
+      <div class='main-info'>
+        <span class='short-id'>{{@model.shortId}}</span>
+        <h3 class='task-title'>{{@model.taskName}}</h3>
       </div>
 
-      {{#if @model.tags.length}}
-        <div class='task-tags'>
-          {{#each @model.tags as |tag|}}
-            <Pill class='tag-pill'>
-              <:default>
-                {{tag.name}}
-              </:default>
-            </Pill>
-          {{/each}}
-        </div>
-      {{/if}}
+      <div class='sub-info'>
+        {{#if @model.assignee}}
+          <div class='task-assignee'>
+            <Avatar
+              class='avatar'
+              @userId={{@model.assignee.id}}
+              @displayName={{@model.assignee.name}}
+              @isReady={{true}}
+            />
+            <span class='assignee-name'>
+              {{@model.assignee.name}}
+            </span>
+          </div>
+        {{/if}}
+
+        {{#if @model.tags.length}}
+          <div class='task-tags'>
+            {{#each this.visibleTags as |tag|}}
+              <Pill class='tag-pill' @pillBackgroundColor={{tag.color}}>
+                <:default>
+                  {{tag.name}}
+                </:default>
+              </Pill>
+            {{/each}}
+            {{#if this.hasMoreTags}}
+              +{{this.remainingTagsCount}}
+            {{/if}}
+          </div>
+        {{/if}}
+      </div>
+
+      <div class='spacer'></div>
+
+      <span class='task-date-range'>
+        <Calendar width='14px' height='14px' class='calendar-icon' />
+        {{#if @model.dueDate}}
+          <span class='date-info'><@fields.dueDate /></span>
+        {{else}}
+          <span class='no-date-info'>No Due Date Assigned</span>
+        {{/if}}
+      </span>
     </div>
     <style scoped>
       .task-card {
@@ -329,9 +344,8 @@ class Fitted extends Component<typeof Task> {
         padding: var(--boxel-sp-sm);
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
         gap: var(--boxel-sp-sm);
-        overflow: auto;
+        overflow-y: auto;
       }
       .short-id {
         font-size: var(--boxel-font-size-xs);
@@ -350,11 +364,10 @@ class Fitted extends Component<typeof Task> {
         text-overflow: ellipsis;
       }
       .sub-info {
-        display: flex;
+        display: inline-flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        margin-top: var(--boxel-sp-sm);
       }
       .task-assignee {
         display: inline-flex;
@@ -377,6 +390,9 @@ class Fitted extends Component<typeof Task> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .spacer {
+        flex-grow: 1;
+      }
       .task-date-range {
         display: inline-flex;
         align-items: center;
@@ -392,67 +408,120 @@ class Fitted extends Component<typeof Task> {
         color: var(--boxel-600);
         line-height: 10px;
       }
+      .no-date-info {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--boxel-400);
+        line-height: 10px;
+      }
       .task-tags {
         display: inline-flex;
-        flex-wrap: wrap;
         align-items: center;
         font-size: var(--boxel-font-size-xs);
         gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
+        flex-wrap: nowrap;
       }
       .tag-pill {
         font-size: var(--boxel-font-size-xs);
         padding: var(--boxel-sp-6xs) var(--boxel-sp-4xs);
-        pill-border-color: var(--boxel-400);
+        border: transparent;
+        border-radius: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       @container fitted-card (2.0 < aspect-ratio) {
         .task-card {
-          padding: var(--boxel-sp-xxxs);
+          padding: var(--boxel-sp-xxs);
         }
         .task-title {
-          font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 1;
         }
-      }
-      @container fitted-card (1.0 > aspect-ratio) {
-        .task-title {
-          font-size: var(--boxel-font-size-sm);
-          -webkit-line-clamp: 1;
-        }
-        .tag-pill {
-          font-size: 10px;
-        }
-        .sub-info {
-          margin-top: var(--boxel-sp-xs);
-        }
-        .avatar {
-          --profile-avatar-icon-size: 16px;
-        }
-        .assignee-name {
-          font-size: var(--boxel-font-size-xs);
-        }
-        .date-info {
-          font-size: var(--boxel-font-size-xs);
+        .spacer {
+          display: none;
         }
       }
       @container fitted-card (2.0 < aspect-ratio) and (height <= 115px) {
         .task-card {
-          gap: var(--boxel-sp-6xs);
+          gap: var(--boxel-sp-xxs);
+        }
+        .task-date-range {
+          display: none;
+        }
+        .spacer {
+          display: none;
         }
       }
-      @container fitted-card (2.0 < aspect-ratio) and (height <= 58px) {
-        .sub-info,
+      @container fitted-card (2.0 < aspect-ratio) and (aspect-ratio > 3.9) and (height <= 58px) {
+        .task-card,
+        .main-info {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xs);
+        }
+        .sub-info {
+          margin-top: 0;
+        }
+        .task-date-range {
+          display: none;
+        }
+        .task-title {
+          margin: 0;
+          -webkit-line-clamp: 1;
+        }
+        .task-date-range,
         .task-tags {
           display: none;
         }
-        .task-card {
+        .spacer {
+          display: none;
+        }
+      }
+      @container fitted-card (2.0 < aspect-ratio) and (width <= 150px) {
+        .task-card,
+        .main-info {
+          align-items: center;
           justify-content: center;
+        }
+        .sub-info,
+        .task-title,
+        .task-date-range,
+        .task-tags {
+          display: none;
+        }
+        .spacer {
+          display: none;
+        }
+      }
+      @container fitted-card (1.0 > aspect-ratio) {
+        .task-tags,
+        .task-date-range {
+          display: none;
+        }
+        .task-card {
+          display: flex;
+          flex-direction: column;
+        }
+        .sub-info {
+          order: 1;
+          margin-top: auto;
+        }
+        .spacer {
+          display: none;
         }
       }
       @container (height <= 29px) {
         .task-title,
         .sub-info,
-        .task-tags {
+        .task-tags,
+        .task-date-range {
+          display: none;
+        }
+        .spacer {
           display: none;
         }
       }
@@ -469,6 +538,7 @@ export class Tag extends CardDef {
       return this.name;
     },
   });
+  @field color = contains(StringField);
 
   static atom = class Atom extends Component<typeof this> {
     <template>

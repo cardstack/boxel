@@ -2,7 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "DX",
+      "name": "Card",
+      "color": "#00ac3d",
       "description": null,
       "thumbnailURL": null
     },
