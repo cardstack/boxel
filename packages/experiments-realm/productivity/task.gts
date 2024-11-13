@@ -29,6 +29,7 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
+import DateRangeField from './date-range-field';
 
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -808,6 +809,7 @@ export class Task extends CardDef {
   @field dueDate = contains(DateField);
   @field children = linksToMany(() => Task);
   @field tags = linksToMany(() => Tag);
+  @field dateRange = contains(DateRangeField);
   @field title = contains(StringField, {
     computeVia: function (this: Task) {
       return this.taskName;
