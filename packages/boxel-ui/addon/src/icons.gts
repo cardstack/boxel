@@ -25,6 +25,7 @@ import Group from './icons/group.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
+import IconFunnel from './icons/icon-funnel.gts';
 import IconGlobe from './icons/icon-globe.gts';
 import IconGrid from './icons/icon-grid.gts';
 import IconHexagon from './icons/icon-hexagon.gts';
@@ -78,6 +79,7 @@ export const ALL_ICON_COMPONENTS = [
   IconCircle,
   IconCircleSelected,
   IconCode,
+  IconFunnel,
   IconGlobe,
   IconGrid,
   IconHexagon,
@@ -132,6 +134,7 @@ export {
   IconCircle,
   IconCircleSelected,
   IconCode,
+  IconFunnel,
   IconGlobe,
   IconGrid,
   IconHexagon,

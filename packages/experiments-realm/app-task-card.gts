@@ -6,10 +6,11 @@ import {
   contains,
   field,
   BaseDef,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
-import { getCard, getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
 import {
   CardContainer,
@@ -17,151 +18,181 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   BoxelButton,
-  BoxelDropdown,
-  Menu as BoxelMenu,
   CircleSpinner,
   DndKanbanBoard,
   DndColumn,
+  BoxelSelect,
+  IconButton,
+  BoxelMultiSelectBasic,
 } from '@cardstack/boxel-ui/components';
-import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
+import {
+  DropdownArrowFilled,
+  IconPlus,
+  IconFunnel,
+} from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import { fn, array } from '@ember/helper';
 import { action } from '@ember/object';
 import {
   LooseSingleCardDocument,
   ResolvedCodeRef,
-  type Query,
+  Query,
+  getCards,
 } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
+import { FilterDropdown } from './productivity/filter-dropdown';
+import { StatusPill } from './productivity/filter-dropdown-item';
+import { FilterTrigger } from './productivity/filter-trigger';
+import getTaskCardsResource from './productivity/task-cards-resource';
+import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { isEqual } from 'lodash';
 import type Owner from '@ember/owner';
 import { Resource } from 'ember-resources';
 
-interface Args {
-  named: {
-    query: Query | undefined;
-  };
+type FilterType = 'status' | 'assignee' | 'project';
+
+interface FilterObject {
+  label?: string;
+  codeRef: ResolvedCodeRef;
+  filter: any;
 }
 
-// This is a resource because we have to consider 3 data mechanism
-// 1. the reactivity of the query. Changes in query should trigger server fetch
-// 2. the drag and drop of cards. When dragging and dropping, we should NOT trigger a server fetch
-//    but rather just update the local data structure
-// 3. When we trigger a server fetch, we need to maintain the sort order of the cards.
-//   Currently, we don't have any mechanism to maintain the sort order but this is good enough for now
-class TaskCollection extends Resource<Args> {
-  @tracked private data: Map<string, DndColumn> = new Map();
-  @tracked private order: Map<string, string[]> = new Map();
-  @tracked private query: Query = undefined;
-
-  private run = restartableTask(async (query: Query, realm: string) => {
-    let staticQuery = getCards(query, [realm]); // I hate this
-    await staticQuery.loaded;
-    let cards = staticQuery.instances as Task[];
-    this.commit(cards); //update stale data
-
-    this.query = query;
-  });
-
-  queryHasChanged(query: Query) {
-    return !isEqual(this.query, query);
-  }
-
-  commit(cards: CardDef) {
-    TaskStatusField.values?.map((status: LooseyGooseyData) => {
-      let statusLabel = status.label;
-      let cardIdsFromOrder = this.order.get(statusLabel);
-      let newCards: CardDef[] = [];
-      if (cardIdsFromOrder) {
-        newCards = cardIdsFromOrder.reduce((acc, id) => {
-          let card = cards.find((c) => c.id === id);
-          if (card) {
-            acc.push(card);
-          }
-          return acc;
-        }, []);
-      } else {
-        newCards = cards.filter((task) => task.status.label === statusLabel);
-      }
-      this.data.set(statusLabel, new DndColumn(statusLabel, newCards));
-    });
-  }
-
-  // Note:
-  // sourceColumnAfterDrag & targetColumnAfterDrag is the column state after the drag and drop
-  update(
-    draggedCard: DndItem,
-    targetCard: DndItem | undefined,
-    sourceColumnAfterDrag: DndColumn,
-    targetColumnAfterDrag: DndColumn,
-  ) {
-    let status = TaskStatusField.values.find(
-      (value) => value.label === targetColumnAfterDrag.title,
-    );
-    let cardInNewCol = targetColumnAfterDrag.cards.find(
-      (c) => c.id === draggedCard.id,
-    );
-    cardInNewCol.status.label = status.label;
-    cardInNewCol.status.index = status.index;
-    //update the order of the cards in the column
-    this.order.set(
-      sourceColumnAfterDrag.title,
-      sourceColumnAfterDrag.cards.map((c) => c.id),
-    );
-    this.order.set(
-      targetColumnAfterDrag.title,
-      targetColumnAfterDrag.cards.map((c) => c.id),
-    );
-    return cardInNewCol;
-  }
-
-  get columns() {
-    return Array.from(this.data.values());
-  }
-
-  modify(_positional: never[], named: Args['named']) {
-    if (this.query === undefined || this.queryHasChanged(named.query)) {
-      this.run.perform(named.query, named.realm);
-    }
-  }
-}
-
-export function getTaskCollection(
-  parent: object,
-  query: () => Query | undefined,
-  realm: () => string | undefined,
-) {
-  return TaskCollection.from(parent, () => ({
-    named: {
-      realm: realm(),
-      query: query(),
-    },
-  }));
+interface SelectedItem {
+  name: string;
 }
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
-  @tracked newQuery: Query | undefined;
   @tracked loadingColumnKey: string | undefined;
-  @tracked selectedFilter = '';
-  @tracked taskDescription = '';
-  filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
+  @tracked selectedFilter: FilterType;
+  private declare assigneeQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+    loaded: Promise<void>;
+  };
+  private declare projectQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+    loaded: Promise<void>;
+  };
+  filters = {
+    status: {
+      label: 'Status',
+      codeRef: {
+        module: `${this.realmURL?.href}productivity/task`,
+        name: 'Status',
+      },
+      options: () => TaskStatusField.values,
+    },
+    assignee: {
+      label: 'Assignee',
+      codeRef: {
+        module: `${this.realmURL?.href}productivity/task`,
+        name: 'TeamMember',
+      },
+      options: () => this.assigneeCards,
+    },
+    project: {
+      label: 'Project',
+      codeRef: {
+        module: `${this.realmURL?.href}productivity/task`,
+        name: 'Project',
+      },
+      options: () => this.projectCards,
+    },
+  };
+  selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.initializeDropdownData.perform();
+  }
 
-  taskCollection = getTaskCollection(
+  get filterTypes() {
+    return Object.keys(this.filters);
+  }
+
+  taskCollection = getTaskCardsResource(
     this,
-    () => this.query,
+    () => this.getTaskQuery,
     () => this.realmURL,
   );
 
-  get query() {
-    return this.newQuery ?? this.getTaskQuery;
+  initializeDropdownData = restartableTask(async () => {
+    this.assigneeQuery = getCards(
+      {
+        filter: {
+          type: this.filters.assignee.codeRef,
+        },
+      },
+      [this.realmURL],
+    );
+
+    this.projectQuery = getCards(
+      {
+        filter: {
+          type: this.filters.project.codeRef,
+        },
+      },
+      [this.realmURL],
+    );
+    await this.assigneeQuery.loaded;
+    await this.projectQuery.loaded;
+  });
+
+  get assigneeCards() {
+    return this.assigneeQuery.instances;
+  }
+
+  get projectCards() {
+    return this.projectQuery.instances;
+  }
+
+  filterObject(filterType: FilterType) {
+    let filterObject = this.filters[filterType];
+    let selectedItems = this.selectedItems.get(filterType) ?? [];
+    return selectedItems.map((item) => {
+      if (filterType === 'status') {
+        return {
+          eq: {
+            'status.label': item.label,
+          },
+        };
+      } else {
+        let key = filterType + '.name';
+        return {
+          eq: {
+            [key]: item.name,
+          },
+        };
+      }
+    });
+  }
+
+  get selectedFilterConfig() {
+    if (this.selectedFilter === undefined) {
+      return undefined;
+    }
+    return this.filters[this.selectedFilter];
+  }
+
+  get selectedItemsForFilter() {
+    if (this.selectedFilter === undefined) {
+      return [];
+    }
+    return this.selectedItems.get(this.selectedFilter) ?? [];
   }
 
   get realmURL() {
     return this.args.model[realmURL];
+  }
+
+  get realmURLs() {
+    return [this.realmURL];
   }
 
   get assignedTaskCodeRef() {
@@ -171,34 +202,34 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
-  get getTaskQuery(): Query {
-    return {
-      filter: {
-        type: this.assignedTaskCodeRef,
-      },
-    };
+  get getTaskQuery() {
+    let everyArr = [];
+    this.filterTypes.forEach((filterType) => {
+      let anyFilter = this.filterObject(filterType);
+      if (anyFilter.length > 0) {
+        everyArr.push({
+          any: anyFilter,
+        });
+      }
+    });
+
+    return everyArr.length > 0
+      ? {
+          filter: {
+            on: this.assignedTaskCodeRef,
+            every: everyArr,
+          },
+        }
+      : {
+          filter: {
+            type: this.assignedTaskCodeRef,
+          },
+        };
   }
 
-  //static statuses before query
-  get statuses() {
-    return TaskStatusField.values;
-  }
-
-  @action
-  updateFilter(type: string, value: string) {
-    switch (type) {
-      case 'Status':
-        this.selectedFilter = value;
-        break;
-      case 'Assignee':
-        this.selectedFilter = value;
-        break;
-      case 'Project':
-        this.selectedFilter = value;
-        break;
-      default:
-        console.warn(`Unknown filter type: ${type}`);
-    }
+  @action isSelectedItem(item: SelectedItem) {
+    let selectedItems = this.selectedItemsForFilter;
+    return selectedItems.includes(item);
   }
 
   @action createNewTask(statusLabel: string) {
@@ -313,39 +344,108 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     };
   }
 
+  @action onSelectFilter(item: FilterType) {
+    this.selectedFilter = item;
+  }
+
+  @action onChange(value: SelectedItem) {
+    this.selectedItems.set(this.selectedFilter, value);
+  }
+
+  @action onClose() {
+    this.selectedFilter = undefined;
+    return true;
+  }
+
+  get options() {
+    return (
+      this.selectedFilterConfig.getCards() ?? this.selectedFilterConfig?.options
+    );
+  }
+
+  @action removeFilter(key: FilterType, item: SelectedItem) {
+    let items = this.selectedItems.get(key);
+    let itemIndex: number;
+    if (key === 'status') {
+      itemIndex = items.findIndex((o) => item.index === o.index);
+    } else {
+      itemIndex = items.findIndex((o) => item === o);
+    }
+
+    if (itemIndex > -1) {
+      items.splice(itemIndex, 1);
+      this.selectedItems.set(key, items);
+    }
+  }
+
+  @action selectedFilterItems(filterType: FilterType) {
+    return this.selectedItems.get(filterType);
+  }
+
   <template>
     <div class='task-app'>
-      <button {{on 'click' this.changeQuery}}>Change Query</button>
       <div class='filter-section'>
-        <BoxelDropdown>
-          <:trigger as |bindings|>
-            <BoxelButton {{bindings}} class='dropdown-filter-button'>
-              {{#if this.selectedFilter.length}}
-                {{this.selectedFilter}}
-              {{else}}
-                <span class='dropdown-filter-text'>Filter</span>
-                <DropdownArrowFilled
-                  width='10'
-                  height='10'
-                  class='dropdown-arrow'
-                />
-              {{/if}}
-            </BoxelButton>
-          </:trigger>
-          <:content as |dd|>
-            <BoxelMenu
-              @closeMenu={{dd.close}}
-              @items={{array
-                (menuItem
-                  'Status Type' (fn this.updateFilter 'Status' 'Status Type')
-                )
-                (menuItem 'Assignee' (fn this.updateFilter 'Status' 'Assignee'))
-                (menuItem 'Project' (fn this.updateFilter 'Status' 'Project'))
-              }}
-            />
-          </:content>
-        </BoxelDropdown>
-
+        {{#if this.initializeDropdownData.isRunning}}
+          isLoading...
+        {{else}}
+          {{#if this.selectedFilterConfig}}
+            {{#let (this.selectedFilterConfig.options) as |options|}}
+              <FilterDropdown
+                @options={{options}}
+                @realmURLs={{this.realmURLs}}
+                @selected={{this.selectedItemsForFilter}}
+                @onChange={{this.onChange}}
+                @onClose={{this.onClose}}
+                as |item|
+              >
+                {{#let (this.isSelectedItem item) as |isSelected|}}
+                  {{#if (eq this.selectedFilter 'status')}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{item.label}}
+                    />
+                  {{else}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{item.name}}
+                    />
+                  {{/if}}
+                {{/let}}
+              </FilterDropdown>
+            {{/let}}
+          {{else}}
+            <BoxelSelect
+              class='status-select'
+              @selected={{this.selectedFilter}}
+              @options={{this.filterTypes}}
+              @onChange={{this.onSelectFilter}}
+              @placeholder={{'Choose a Filter'}}
+              @matchTriggerWidth={{false}}
+              @triggerComponent={{FilterTrigger}}
+              as |item|
+            >
+              {{item}}
+            </BoxelSelect>
+          {{/if}}
+          <div class='filter-display'>
+            {{#each this.filterTypes as |filterType|}}
+              {{#let (this.selectedFilterItems filterType) as |items|}}
+                <FilterDisplay
+                  @key={{filterType}}
+                  @items={{items}}
+                  @removeItem={{this.removeFilter}}
+                  as |item|
+                >
+                  {{#if (eq filterType 'status')}}
+                    {{item.label}}
+                  {{else}}
+                    {{item.name}}
+                  {{/if}}
+                </FilterDisplay>
+              {{/let}}
+            {{/each}}
+          </div>
+        {{/if}}
       </div>
       <div class='columns-container'>
         {{#if this.loadTasks.isRunning}}
@@ -419,6 +519,10 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       /** Need to specify height because fitted field component has a default height**/
       .card {
         height: 150px !important;
+      }
+
+      .status-select {
+        border: none;
       }
     </style>
   </template>
