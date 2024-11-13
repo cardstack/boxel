@@ -6,11 +6,14 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  Avatar,
+  BoxelButton,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
@@ -257,7 +260,11 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
 
   <template>
     <div class='profile-popover-body' data-test-profile-icon-container>
-      <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+      <Avatar
+        @isReady={{this.matrixService.profile.loaded}}
+        @userId={{this.matrixService.userId}}
+        @displayName={{this.matrixService.profile.displayName}}
+      />
 
       <div class='display-name' data-test-profile-display-name>
         {{this.matrixService.profile.displayName}}

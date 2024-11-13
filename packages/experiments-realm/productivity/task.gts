@@ -366,7 +366,6 @@ class Fitted extends Component<typeof Task> {
       .avatar {
         --profile-avatar-icon-size: 20px;
         --profile-avatar-icon-border: 0px;
-        color: var(--boxel-dark);
         flex-shrink: 0;
       }
       .assignee-name {

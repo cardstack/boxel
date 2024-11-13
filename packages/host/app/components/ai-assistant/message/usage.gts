@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { ProfileAvatarIconVisual } from '../../operator-mode/profile-avatar-icon';
+import { Avatar } from '@cardstack/boxel-ui/components';
 
 import AiAssistantMessage, { AiAssistantConversation } from './index';
 export default class AiAssistantMessageUsage extends Component {
@@ -36,10 +36,6 @@ export default class AiAssistantMessageUsage extends Component {
   oneMinutesAgo = new Date(Date.now() - 60 * 1000);
   twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
 
-  get profileInitials() {
-    return this.userId[0].toUpperCase();
-  }
-
   noop = () => {};
 
   <template>
@@ -60,10 +56,9 @@ export default class AiAssistantMessageUsage extends Component {
               @index={{0}}
               @registerScroller={{this.noop}}
               @profileAvatar={{component
-                ProfileAvatarIconVisual
+                Avatar
                 userId=this.userId
                 isReady=true
-                profileInitials=this.profileInitials
               }}
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
@@ -83,7 +78,7 @@ export default class AiAssistantMessageUsage extends Component {
         />
         <Args.String
           @name='profileAvatar'
-          @description='The component reference used to display the user avatar when isFromAssistant is false. In this component explorer, you can vary the userId passed to ProfileAvatarIcon.'
+          @description='The component reference used to display the user avatar when isFromAssistant is false. In this component explorer, you can vary the userId passed to Avatar.'
           @onInput={{fn (mut this.userId)}}
           @value={{this.userId}}
         />
@@ -136,10 +131,9 @@ export default class AiAssistantMessageUsage extends Component {
               @index={{0}}
               @registerScroller={{this.noop}}
               @profileAvatar={{component
-                ProfileAvatarIconVisual
+                Avatar
                 userId=this.userId
                 isReady=true
-                profileInitials=this.profileInitials
               }}
               @isStreaming={{false}}
             />
