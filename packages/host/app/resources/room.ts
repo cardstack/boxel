@@ -331,13 +331,20 @@ export class RoomResource extends Resource<Args> {
       if (messageField) {
         // if the message is a replacement for other messages,
         // use `created` from the oldest one.
-        if (this._messageCache.has(event_id)) {
-          let d1 = this._messageCache.get(event_id)!.created!;
+        let existingMessage =
+          this._messageCache.get(event_id) ||
+          (messageField.clientGeneratedId &&
+            this._messageCache.get(messageField.clientGeneratedId));
+        if (existingMessage) {
+          let d1 = existingMessage.created!;
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
+          this._messageCache.delete(existingMessage.eventId);
+          existingMessage.clientGeneratedId &&
+            this._messageCache.delete(existingMessage.clientGeneratedId!);
         }
         this._messageCache.set(
-          (event.content as CardMessageContent).clientGeneratedId ?? event_id,
+          messageField.clientGeneratedId ?? event_id,
           messageField as any,
         );
       }
