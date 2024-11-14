@@ -1659,9 +1659,6 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: ^5.2.0
         version: 5.2.0
-      '@cardstack/postgres':
-        specifier: workspace:*
-        version: link:../postgres
       '@playwright/test':
         specifier: ^1.48.0
         version: 1.48.0

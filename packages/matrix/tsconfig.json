@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "moduleResolution": "nodenext",
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -21,8 +21,6 @@
     "module": "CommonJS",
     "esModuleInterop": true,
     "experimentalDecorators": true,
-    "skipLibCheck": true,
-    "noResolve": true,
     "strict": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
