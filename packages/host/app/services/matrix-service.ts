@@ -1198,21 +1198,9 @@ export default class MatrixService extends Service {
         `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let oldEvent = room.events.find((e) => e.event_id === oldEventId);
-    if (oldEvent) {
-      // If the event was already added with the new ID, remove it since the original will be updated
-      let alreadyPresentNewEventIndex = room.events.findIndex(
-        (e) => e.event_id === event.event_id,
-      );
-      if (alreadyPresentNewEventIndex >= 0) {
-        room.events.splice(alreadyPresentNewEventIndex, 1);
-      }
-
-      // Update the old event being updated
-      room.events[room.events.indexOf(oldEvent)] =
-        event as unknown as DiscreteMatrixEvent;
-
-      // This triggers reactivity that is based on the @tracked room.events
+    let oldEventIndex = room.events.findIndex((e) => e.event_id === oldEventId);
+    if (oldEventIndex >= 0) {
+      room.events[oldEventIndex] = event as unknown as DiscreteMatrixEvent;
       room.events = [...room.events];
     }
   }
