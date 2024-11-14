@@ -106,7 +106,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
 
-    await assertPaymentSetup(page, admin.accessToken, 'user1');
+    await assertPaymentSetup(page, 'user1');
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',

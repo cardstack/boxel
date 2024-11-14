@@ -4,6 +4,7 @@
   "license": "MIT",
   "devDependencies": {
     "@aws-crypto/sha256-js": "^5.2.0",
+    "@cardstack/postgres": "workspace:*",
     "@playwright/test": "^1.48.0",
     "@types/fs-extra": "^9.0.13",
     "@types/jsonwebtoken": "^9.0.5",

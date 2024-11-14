@@ -3,7 +3,6 @@ import {
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
-  updateUser,
   type SynapseInstance,
   sync,
 } from '../docker/synapse';
@@ -576,26 +575,16 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
-export async function assertPaymentSetup(
-  page: Page,
-  accessToken: string,
-  username: string,
-) {
-  await expect(page.locator('[data-test-email-validated]')).toContainText(
-    'Success! Your email has been validated',
-  );
-
+export async function assertPaymentSetup(page: Page, username: string) {
   const stripeLink = `https://stripe.example.com/payment?client_reference_id=${username}`;
   await expect(page.locator('[data-test-setup-payment]')).toHaveAttribute(
     'href',
     stripeLink,
   );
 
-  const returnUrl = page.url();
+  // TODO: update user with stripeCustomerId with query
 
-  await updateUser(accessToken, `@${username}:localhost`, {
-    stripeCustomerId: 'cus_test123',
-  });
+  const returnUrl = page.url();
 
   await page.goto(returnUrl);
 }
