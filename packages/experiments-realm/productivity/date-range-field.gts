@@ -110,18 +110,36 @@ class Edit extends Component<typeof DateRangeField> {
         </Pill>
       </:trigger>
       <:content as |dd|>
-        <DateRangePicker
-          @start={{this.range.start}}
-          @end={{this.range.end}}
-          @onSelect={{this.onSelect}}
-          @selected={{this.range}}
-        />
-        <BoxelButton
-          @kind='primary'
-          {{on 'click' (fn this.cancel dd.close)}}
-        >Cancel</BoxelButton>
+        <div class='dropdown-content'>
+          <div>
+            <DateRangePicker
+              @start={{this.range.start}}
+              @end={{this.range.end}}
+              @onSelect={{this.onSelect}}
+              @selected={{this.range}}
+            />
+          </div>
+          <div class='dropdown-actions'>
+            <BoxelButton
+              @kind='primary'
+              {{on 'click' (fn this.cancel dd.close)}}
+            >Cancel</BoxelButton>
+          </div>
+        </div>
       </:content>
     </BoxelDropdown>
+    <style scoped>
+      .dropdown-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
+      }
+      .dropdown-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+    </style>
   </template>
 }
 
