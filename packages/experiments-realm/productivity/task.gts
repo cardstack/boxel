@@ -244,7 +244,9 @@ export class TeamMember extends User {
         </span>
       </div>
 
+      {{! can be changed to scoped if needed }}
       {{! template-lint-disable require-scoped-style }}
+
       <style>
         .assignee-display {
           display: flex;
@@ -253,6 +255,7 @@ export class TeamMember extends User {
           border-radius: 100px;
           overflow: hidden;
           max-width: 100px;
+          width: fit-content;
         }
         .avatar {
           --profile-avatar-icon-size: 26px;
