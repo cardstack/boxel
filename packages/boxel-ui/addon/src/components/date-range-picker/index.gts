@@ -14,7 +14,6 @@ import {
 import TriangleLeftIcon from '../../icons/triangle-left.gts';
 import TriangleRightIcon from '../../icons/triangle-right.gts';
 import IconButton from '../icon-button/index.gts';
-
 import { setupDateLibrary } from './setup.gts';
 
 setupDateLibrary();

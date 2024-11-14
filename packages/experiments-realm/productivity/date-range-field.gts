@@ -21,8 +21,8 @@ const Format = new Intl.DateTimeFormat('en-US', {
 });
 
 interface DateRange {
-  start?: Date | null;
-  end?: Date | null;
+  start: Date | null | undefined;
+  end: Date | null | undefined;
 }
 
 class Edit extends Component<typeof DateRangeField> {
@@ -72,8 +72,12 @@ class Edit extends Component<typeof DateRangeField> {
   }
 
   save() {
-    this.args.model.start = this.range.start;
-    this.args.model.end = this.range.end;
+    if (this.range.start) {
+      this.args.model.start = this.range.start;
+    }
+    if (this.range.end) {
+      this.args.model.end = this.range.end;
+    }
   }
 
   @action onClose() {
