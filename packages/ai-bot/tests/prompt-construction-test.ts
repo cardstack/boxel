@@ -964,23 +964,26 @@ module('getModifyPrompt', () => {
           type: 'object',
           properties: {
             attributes: {
-              cardId: {
-                type: 'string',
-                const: 'http://localhost:4201/experiments/Friend/1',
-              },
-              description: {
-                type: 'string',
-              },
-              patch: {
-                attributes: {
-                  firstName: {
-                    type: 'string',
+              type: 'object',
+              properties: {
+                cardId: {
+                  type: 'string',
+                  const: 'http://localhost:4201/experiments/Friend/1',
+                },
+                description: {
+                  type: 'string',
+                },
+                patch: {
+                  attributes: {
+                    firstName: {
+                      type: 'string',
+                    },
                   },
                 },
               },
             },
           },
-          required: ['attributes', 'description'],
+          required: ['attributes'],
         },
       },
     });
@@ -1065,21 +1068,24 @@ module('getModifyPrompt', () => {
             type: 'object',
             properties: {
               attributes: {
-                cardId: {
-                  type: 'string',
-                  const: 'http://localhost:4201/experiments/Meeting/2',
-                },
-                description: {
-                  type: 'string',
-                },
-                attributes: {
-                  location: {
+                type: 'object',
+                properties: {
+                  cardId: {
                     type: 'string',
+                    const: 'http://localhost:4201/experiments/Meeting/2',
+                  },
+                  description: {
+                    type: 'string',
+                  },
+                  attributes: {
+                    location: {
+                      type: 'string',
+                    },
                   },
                 },
               },
             },
-            required: ['attributes', 'description'],
+            required: ['attributes'],
           },
         },
       });
