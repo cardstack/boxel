@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { task } from 'ember-concurrency';
+
 import {
   Avatar,
   BoxelButton,
@@ -198,8 +200,17 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     </div>
   </template>
 
+  constructor(...args: [any, any]) {
+    super(...args);
+    this.fetchCreditInfo.perform();
+  }
+
   @service private declare realmServer: RealmServerService;
   @service declare matrixService: MatrixService;
+
+  private fetchCreditInfo = task(async () => {
+    await this.realmServer.fetchCreditInfo();
+  });
 
   @action private logout() {
     this.matrixService.logout();

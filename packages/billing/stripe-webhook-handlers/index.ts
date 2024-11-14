@@ -4,7 +4,6 @@ import { handleCheckoutSessionCompleted } from './checkout-session-completed';
 
 import Stripe from 'stripe';
 import { handleSubscriptionDeleted } from './subscription-deleted';
-import { getUserByStripeId } from '../billing-queries';
 
 export type StripeEvent = {
   id: string;

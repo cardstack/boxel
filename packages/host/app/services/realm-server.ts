@@ -67,6 +67,7 @@ export default class RealmServerService extends Service {
   ]);
   private ready = new Deferred<void>();
   private sessionRoomId: string | null = null;
+  private isCreditInfoRefresherRegistered = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -83,9 +84,6 @@ export default class RealmServerService extends Service {
     this.sdk = sdk;
     this.token =
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
-
-    this.fetchCreditInfo.perform();
-    this.registerCreditInfoRefresher.perform();
   }
 
   async createRealm(args: {
@@ -183,12 +181,17 @@ export default class RealmServerService extends Service {
       });
   }
 
+  async fetchCreditInfo() {
+    await this.fetchCreditInfoTask.perform();
+    await this.registerCreditInfoRefresher.perform();
+  }
+
   get creditInfo() {
     return this._creditInfo;
   }
 
   get fetchingCreditInfo() {
-    return this.fetchCreditInfo.isRunning;
+    return this.fetchCreditInfoTask.isRunning;
   }
 
   async fetchCatalogRealms() {
@@ -224,7 +227,11 @@ export default class RealmServerService extends Service {
     return new URL(url);
   }
 
-  private registerCreditInfoRefresher = task(async () => {
+  private registerCreditInfoRefresher = dropTask(async () => {
+    if (this.isCreditInfoRefresherRegistered) {
+      return;
+    }
+
     if (!this.client || !this.sdk) {
       throw new Error(
         `Cannot register credit info refresher without matrix client or sdk`,
@@ -247,11 +254,13 @@ export default class RealmServerService extends Service {
         return;
       }
 
-      await this.fetchCreditInfo.perform();
+      await this.fetchCreditInfoTask.perform();
     });
+
+    this.isCreditInfoRefresherRegistered = true;
   });
 
-  private fetchCreditInfo = dropTask(async () => {
+  private fetchCreditInfoTask = dropTask(async () => {
     if (!this.client) {
       throw new Error(`Cannot fetch credit info without matrix client`);
     }
