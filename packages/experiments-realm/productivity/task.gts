@@ -249,7 +249,6 @@ export class TeamMember extends User {
         .assignee-display {
           display: flex;
           align-items: center;
-          flex: none;
           background-color: var(--boxel-200);
           border-radius: 100px;
           overflow: hidden;
