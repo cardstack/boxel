@@ -247,7 +247,7 @@ module('Responding', (hooks) => {
     );
     assert.deepEqual(
       sentEvents[1].content.body,
-      patchArgs.description,
+      patchArgs.attributes.description,
       'Body text should be the description',
     );
     assert.deepEqual(

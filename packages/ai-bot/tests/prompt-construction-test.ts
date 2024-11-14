@@ -893,27 +893,23 @@ module('getModifyPrompt', () => {
         parameters: {
           type: 'object',
           properties: {
+            card_id: {
+              type: 'string',
+              const: 'http://localhost:4201/experiments/Friend/1',
+            },
             description: {
               type: 'string',
             },
             attributes: {
-              cardId: {
-                type: 'string',
-                const: 'http://localhost:4201/experiments/Friend/1',
-              },
-              patch: {
-                attributes: {
-                  type: 'object',
-                  properties: {
-                    firstName: {
-                      type: 'string',
-                    },
-                  },
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
                 },
               },
             },
           },
-          required: ['attributes', 'description'],
+          required: ['card_id', 'attributes', 'description'],
         },
       },
     });
@@ -972,14 +968,14 @@ module('getModifyPrompt', () => {
                 type: 'string',
                 const: 'http://localhost:4201/experiments/Friend/1',
               },
-            },
-            description: {
-              type: 'string',
-            },
-            patch: {
-              attributes: {
-                firstName: {
-                  type: 'string',
+              description: {
+                type: 'string',
+              },
+              patch: {
+                attributes: {
+                  firstName: {
+                    type: 'string',
+                  },
                 },
               },
             },
@@ -1068,18 +1064,22 @@ module('getModifyPrompt', () => {
           parameters: {
             type: 'object',
             properties: {
-              card_id: {
-                type: 'string',
-                const: 'http://localhost:4201/experiments/Meeting/2',
-              },
-              description: {
-                type: 'string',
-              },
-              location: {
-                type: 'string',
+              attributes: {
+                cardId: {
+                  type: 'string',
+                  const: 'http://localhost:4201/experiments/Meeting/2',
+                },
+                description: {
+                  type: 'string',
+                },
+                attributes: {
+                  location: {
+                    type: 'string',
+                  },
+                },
               },
             },
-            required: ['card_id', 'attributes', 'description'],
+            required: ['attributes', 'description'],
           },
         },
       });
