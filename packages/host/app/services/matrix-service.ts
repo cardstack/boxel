@@ -368,7 +368,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.client.isLoggedIn()) {
-      this.realmServer.setClient(this.client);
+      this.realmServer.setClientAndSDK(this.client, this.matrixSDK);
       saveAuth(auth);
       this.bindEventListeners();
 

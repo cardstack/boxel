@@ -4,8 +4,6 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { trackedFunction } from 'ember-resources/util/function';
-
 import {
   Avatar,
   BoxelButton,
@@ -207,28 +205,24 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     this.matrixService.logout();
   }
 
-  private fetchCreditInfo = trackedFunction(this, async () => {
-    return await this.realmServer.fetchCreditInfo();
-  });
-
   private get isLoading() {
-    return this.fetchCreditInfo.isLoading;
+    return this.realmServer.fetchingCreditInfo;
   }
 
   private get plan() {
-    return this.fetchCreditInfo.value?.plan;
+    return this.realmServer.creditInfo?.plan;
   }
 
   private get creditsIncludedInPlanAllowance() {
-    return this.fetchCreditInfo.value?.creditsIncludedInPlanAllowance;
+    return this.realmServer.creditInfo?.creditsIncludedInPlanAllowance;
   }
 
   private get creditsAvailableInPlanAllowance() {
-    return this.fetchCreditInfo.value?.creditsAvailableInPlanAllowance;
+    return this.realmServer.creditInfo?.creditsAvailableInPlanAllowance;
   }
 
   private get extraCreditsAvailableInBalance() {
-    return this.fetchCreditInfo.value?.extraCreditsAvailableInBalance;
+    return this.realmServer.creditInfo?.extraCreditsAvailableInBalance;
   }
 
   private get monthlyCreditText() {

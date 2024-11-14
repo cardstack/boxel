@@ -29,6 +29,7 @@ export type CreateRoutesArgs = {
   }) => Promise<Realm>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
+  sendEvent: (user: string, eventName: string) => Promise<void>;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {

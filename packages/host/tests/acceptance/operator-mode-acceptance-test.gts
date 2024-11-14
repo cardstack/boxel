@@ -42,10 +42,11 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setExpiresInSec, createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
-  });
+  let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL],
+    });
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
@@ -912,6 +913,11 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // out of monthly credit
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 0;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: 'billing-notification',
+      });
+
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
       assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
@@ -923,6 +929,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // out of monthly credit and additional credit
       userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: 'billing-notification',
+      });
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
       assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
@@ -934,6 +944,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // out of additional credit
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 1000;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: 'billing-notification',
+      });
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
       assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');

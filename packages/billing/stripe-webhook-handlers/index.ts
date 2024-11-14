@@ -4,6 +4,7 @@ import { handleCheckoutSessionCompleted } from './checkout-session-completed';
 
 import Stripe from 'stripe';
 import { handleSubscriptionDeleted } from './subscription-deleted';
+import { getUserByStripeId } from '../billing-queries';
 
 export type StripeEvent = {
   id: string;
@@ -94,6 +95,7 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,
   request: Request,
+  sendBillingNotification: (stripeUserId: string) => Promise<void>,
 ): Promise<Response> {
   let signature = request.headers.get('stripe-signature');
 
@@ -144,5 +146,6 @@ export default async function stripeWebhookHandler(
       break;
   }
 
+  sendBillingNotification(event.data.object.customer);
   return new Response('ok');
 }
