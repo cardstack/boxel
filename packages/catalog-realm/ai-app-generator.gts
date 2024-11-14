@@ -354,7 +354,6 @@ class DashboardTab extends GlimmerComponent<{
   @tracked isGenerating = false;
 
   @action setPrompt(key: string, value: string) {
-    console.log('setPrompt', key, value);
     this.prompt = { ...this.prompt, [key]: value };
   }
 

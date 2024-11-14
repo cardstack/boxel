@@ -52,7 +52,6 @@ export default class CommandService extends Service {
     command: Command<any, any, any>,
     autoExecute: boolean,
   ) {
-    console.log('registerCommand', command.name);
     let name = `${command.name}_${this.commandNonce++}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
     this.commands.set(name, { command, autoExecute });
     return name;
@@ -135,18 +134,14 @@ export default class CommandService extends Service {
       // lookup command
       let { command: commandToRun } = this.commands.get(command.name) ?? {};
 
-      console.log('run', command.name, commandToRun);
-
       if (commandToRun) {
         // Get the input type and validate/construct the payload
         let InputType = await commandToRun.getInputType();
         // Construct a new instance of the input type with the payload
-        console.log('payload', payload);
         let typedInput = new InputType({
           ...payload.attributes,
           ...payload.relationships,
         });
-        console.log('typedInput', typedInput);
         res = await commandToRun.execute(typedInput);
       } else if (command.name === 'patchCard') {
         if (!hasPatchData(payload)) {
