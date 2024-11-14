@@ -16,8 +16,6 @@ import TriangleRightIcon from '../../icons/triangle-right.gts';
 import IconButton from '../icon-button/index.gts';
 import { setupDateLibrary } from './setup.gts';
 
-setupDateLibrary();
-
 interface Signature {
   Args: {
     end?: Date | null;
@@ -34,6 +32,9 @@ export default class DateRangePicker extends Component<Signature> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
+
+    setupDateLibrary();
+
     // If both start and end are provided, use them
     if (this.args.start && this.args.end) {
       this.leftCenter = this.args.start;
