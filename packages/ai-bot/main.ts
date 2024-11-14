@@ -33,7 +33,10 @@ class Assistant {
   id: string;
 
   constructor(client: MatrixClient, id: string) {
-    this.openai = new OpenAI();
+    this.openai = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1', // We use openrouter so that we can track usage cost in $
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
     this.id = id;
     this.client = client;
   }
