@@ -392,17 +392,20 @@ export function getPatchTool(
         type: 'object',
         properties: {
           attributes: {
-            cardId: {
-              type: 'string',
-              const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
+            type: 'object',
+            properties: {
+              cardId: {
+                type: 'string',
+                const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
+              },
+              description: {
+                type: 'string',
+              },
+              ...patchSpec,
             },
-            description: {
-              type: 'string',
-            },
-            ...patchSpec,
           },
         },
-        required: ['attributes', 'description'],
+        required: ['attributes'],
       },
     },
   };
