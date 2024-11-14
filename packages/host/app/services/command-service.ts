@@ -7,6 +7,8 @@ import flatMap from 'lodash/flatMap';
 
 import { IEvent } from 'matrix-js-sdk';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   Command,
   type LooseSingleCardDocument,
@@ -32,6 +34,8 @@ import type {
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import { shortenUuid } from '../utils/uuid';
+
 import CardService from './card-service';
 import RealmServerService from './realm-server';
 
@@ -42,7 +46,6 @@ export default class CommandService extends Service {
   @service private declare realm: Realm;
   @service private declare realmServer: RealmServerService;
 
-  private commandNonce = 0;
   private commands: Map<
     string,
     { command: Command<any, any, any>; autoExecute: boolean }
@@ -52,7 +55,7 @@ export default class CommandService extends Service {
     command: Command<any, any, any>,
     autoExecute: boolean,
   ) {
-    let name = `${command.name}_${this.commandNonce++}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
+    let name = `${command.name}_${shortenUuid(uuidv4())}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
     this.commands.set(name, { command, autoExecute });
     return name;
   }
