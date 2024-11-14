@@ -46,12 +46,12 @@ class Assistant {
     let messages = getModifyPrompt(history, this.id, tools);
     if (tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
-        model: 'gpt-4o',
+        model: 'openai/gpt-4o',
         messages: messages,
       });
     } else {
       return this.openai.beta.chat.completions.stream({
-        model: 'gpt-4o',
+        model: 'openai/gpt-4o',
         messages: messages,
         tools: tools,
         tool_choice: 'auto',
