@@ -33,12 +33,14 @@ class Edit extends Component<typeof DateRangeField> {
 
   get formatted() {
     if (!this.range.start && !this.range.end) {
-      return '[no date range]';
+      return '[Select a date range]';
     }
     let start = this.range.start
       ? Format.format(this.range.start)
-      : '[no start]';
-    let end = this.range.end ? Format.format(this.range.end) : '[no end]';
+      : '[Select start date]';
+    let end = this.range.end
+      ? Format.format(this.range.end)
+      : '[Select end date]';
     return `${start} - ${end}`;
   }
 
