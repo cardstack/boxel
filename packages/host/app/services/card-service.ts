@@ -200,8 +200,7 @@ export default class CardService extends Service {
   async saveModel<T extends object>(
     owner: T,
     card: CardDef,
-    defaultRealmHref: string | undefined = this.realm.defaultWritableRealm
-      ?.path,
+    defaultRealmHref: string | undefined,
   ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
@@ -222,6 +221,8 @@ export default class CardService extends Service {
       // in the case where we get no realm URL from the card, we are dealing with
       // a new card instance that does not have a realm URL yet.
       if (!realmURL) {
+        defaultRealmHref =
+          defaultRealmHref ?? this.realm.defaultWritableRealm?.path;
         if (!defaultRealmHref) {
           throw new Error('Could not find a writable realm');
         }
