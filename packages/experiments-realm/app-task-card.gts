@@ -522,7 +522,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       }
       /** Need to specify height because fitted field component has a default height**/
       .card {
-        height: 180px !important;
+        height: 170px !important;
       }
 
       .status-select {

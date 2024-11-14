@@ -229,6 +229,63 @@ export class TeamMember extends User {
   static displayName = 'Team Member';
   static icon = UserIcon;
   @field team = linksTo(Team);
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <div class='assignee-container'>
+        <div class='assignee-display'>
+          <Avatar
+            class='avatar'
+            @userId={{@model.id}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
+          <span class='assignee-name'>
+            {{@model.name}}
+          </span>
+        </div>
+      </div>
+
+      {{! template-lint-disable require-scoped-style }}
+      <style>
+        .assignee-container {
+          container-type: inline-size;
+          width: 80px;
+          flex: none;
+        }
+        .assignee-display {
+          display: flex;
+          align-items: center;
+          background-color: var(--boxel-200);
+          border-radius: 100px;
+          overflow: hidden;
+        }
+        .avatar {
+          --profile-avatar-icon-size: 26px;
+          --profile-avatar-icon-border: 0px;
+          flex-shrink: 0;
+        }
+        .assignee-name {
+          font-size: 12px;
+          font-weight: 500;
+          padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        /* Hide the assignee name when container width is too narrow to display it properly */
+        @container (width < 80px) {
+          .assignee-display {
+            width: max-content;
+            background-color: transparent;
+          }
+          .assignee-name {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
 }
 
 export class Project extends CardDef {
@@ -278,68 +335,86 @@ function shortenId(id: string): string {
 class Fitted extends Component<typeof Task> {
   get visibleTags() {
     if (!this.args.model.tags) return [];
-    return this.args.model.tags.slice(0, 2);
+    return this.args.model.tags.slice(0, 3);
   }
 
   get hasMoreTags() {
     if (!this.args.model.tags) return false;
-    return this.args.model.tags.length > 2;
+    return this.args.model.tags.length > 3;
   }
 
   get remainingTagsCount() {
     if (!this.args.model.tags) return '';
-    return this.args.model.tags.length - 2;
+    return this.args.model.tags.length - 3;
   }
 
   <template>
     <div class='task-card'>
-      <div class='main-info'>
+      <div class='card-header'>
         <span class='short-id'>{{@model.shortId}}</span>
         <h3 class='task-title'>{{@model.taskName}}</h3>
       </div>
 
-      <div class='sub-info'>
+      <div class='card-info'>
         {{#if @model.assignee}}
-          <div class='task-assignee'>
-            <Avatar
-              class='avatar'
-              @userId={{@model.assignee.id}}
-              @displayName={{@model.assignee.name}}
-              @isReady={{true}}
-            />
-            <span class='assignee-name'>
-              {{@model.assignee.name}}
-            </span>
-          </div>
+          <@fields.assignee @format='atom' />
         {{/if}}
 
         {{#if @model.tags.length}}
-          <div class='task-tags'>
+          <div class='card-tags'>
             {{#each this.visibleTags as |tag|}}
               <Pill class='tag-pill' @pillBackgroundColor={{tag.color}}>
                 <:default>
-                  {{tag.name}}
+                  <span>{{tag.name}}</span>
                 </:default>
               </Pill>
             {{/each}}
             {{#if this.hasMoreTags}}
-              +{{this.remainingTagsCount}}
+              <span class='remaining-tags'>+{{this.remainingTagsCount}}</span>
             {{/if}}
           </div>
         {{/if}}
       </div>
 
-      <div class='spacer'></div>
-
-      <span class='task-date-range'>
+      <div class='card-footer'>
         <Calendar width='14px' height='14px' class='calendar-icon' />
+
         {{#if @model.dueDate}}
-          <span class='date-info'><@fields.dueDate /></span>
+          <time class='date-info' datetime='{{@model.dueDate}}'>
+            <@fields.dueDate />
+          </time>
         {{else}}
           <span class='no-date-info'>No Due Date Assigned</span>
         {{/if}}
-      </span>
+      </div>
     </div>
+
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .card-info {
+        position: relative;
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: var(--boxel-sp-xxs);
+        overflow-x: hidden;
+      }
+      .card-info .boundaries {
+        box-shadow: none;
+      }
+      .card-info .field-component-card.atom-format.display-container-true {
+        padding: 0;
+        background-color: transparent;
+        width: auto;
+        height: auto;
+        overflow: unset;
+      }
+      .card-assignee {
+        display: inline-flex;
+        align-items: center;
+        overflow: hidden;
+      }
+    </style>
     <style scoped>
       .task-card {
         width: 100%;
@@ -348,7 +423,7 @@ class Fitted extends Component<typeof Task> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
-        overflow-y: auto;
+        overflow: hidden;
       }
       .short-id {
         font-size: var(--boxel-font-size-xs);
@@ -361,78 +436,120 @@ class Fitted extends Component<typeof Task> {
         font-weight: 600;
         line-height: 1.2;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .sub-info {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
-      .task-assignee {
-        display: inline-flex;
-        align-items: center;
-        background-color: var(--boxel-200);
-        border-radius: 100px;
-        overflow: hidden;
-      }
-      .avatar {
-        --profile-avatar-icon-size: 20px;
-        --profile-avatar-icon-border: 0px;
-        flex-shrink: 0;
-      }
-      .assignee-name {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
-        color: var(--boxel-600);
-        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .spacer {
-        flex-grow: 1;
-      }
-      .task-date-range {
+      .card-footer {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         color: var(--boxel-dark);
+        margin-top: auto;
       }
       .calendar-icon {
         flex-shrink: 0;
       }
       .date-info {
-        font-size: var(--boxel-font-size-xs);
+        font-size: 10px;
         font-weight: 500;
         color: var(--boxel-600);
         line-height: 10px;
+        white-space: nowrap;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .no-date-info {
-        font-size: var(--boxel-font-size-xs);
+        font-size: 10px;
         font-weight: 500;
         color: var(--boxel-400);
         line-height: 10px;
-      }
-      .task-tags {
-        display: inline-flex;
-        align-items: center;
-        font-size: var(--boxel-font-size-xs);
-        gap: var(--boxel-sp-xxxs);
-        overflow: hidden;
-        flex-wrap: nowrap;
-      }
-      .tag-pill {
-        font-size: var(--boxel-font-size-xs);
-        padding: var(--boxel-sp-6xs) var(--boxel-sp-4xs);
-        border: transparent;
-        border-radius: 5px;
         white-space: nowrap;
+        -webkit-line-clamp: 1;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      .card-tags {
+        display: flex;
+        align-items: stretch;
+        gap: var(--boxel-sp-xxs);
+        flex: 1;
+      }
+      .tag-pill {
+        font-size: 12px;
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
+        border: transparent;
+        border-radius: 5px;
+        overflow: hidden;
+        max-width: 120px;
+      }
+      .tag-pill > span {
+        white-space: nowrap;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .remaining-tags {
+        display: inline-flex;
+        align-items: center;
+        justify-content: end;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--boxel-500);
+        position: absolute;
+        right: 0;
+        width: 50px;
+        height: 100%;
+        background: linear-gradient(to right, transparent 1%, white, white);
+      }
+
+      @container (height <= 29px) {
+        .task-title,
+        .card-info,
+        .card-tags,
+        .card-footer {
+          display: none;
+        }
+      }
+
+      @container fitted-card (1.0 > aspect-ratio) {
+        .card-tags,
+        .card-footer {
+          display: none;
+        }
+        .task-card {
+          display: flex;
+          flex-direction: column;
+        }
+      }
+
+      @container fitted-card (aspect-ratio < 0.9) and (width <= 100px) and (height <= 120px) {
+        .task-card {
+          padding: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-xxs);
+        }
+        .card-info,
+        .card-footer {
+          display: none;
+        }
+        .task-title {
+          -webkit-line-clamp: 1;
+        }
+      }
+
+      @container fitted-card (aspect-ratio < 0.95) and (width <= 165px) and (height <= 225px) {
+        .task-card {
+          padding: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-xxs);
+        }
+        .card-footer {
+          display: inline-flex;
+        }
+        .card-tags {
+          display: none;
+        }
       }
 
       @container fitted-card (2.0 < aspect-ratio) {
@@ -442,89 +559,52 @@ class Fitted extends Component<typeof Task> {
         .task-title {
           -webkit-line-clamp: 1;
         }
-        .spacer {
-          display: none;
-        }
       }
+
       @container fitted-card (2.0 < aspect-ratio) and (height <= 115px) {
         .task-card {
           gap: var(--boxel-sp-xxs);
         }
-        .task-date-range {
-          display: none;
-        }
-        .spacer {
+        .card-footer {
           display: none;
         }
       }
+
       @container fitted-card (2.0 < aspect-ratio) and (aspect-ratio > 3.9) and (height <= 58px) {
         .task-card,
-        .main-info {
+        .card-header {
           display: flex;
           flex-direction: row;
           align-items: center;
           justify-content: space-between;
           gap: var(--boxel-sp-xs);
         }
-        .sub-info {
+        .card-info {
           margin-top: 0;
         }
-        .task-date-range {
+        .card-footer {
           display: none;
         }
         .task-title {
           margin: 0;
           -webkit-line-clamp: 1;
         }
-        .task-date-range,
-        .task-tags {
-          display: none;
-        }
-        .spacer {
+        .card-due-date-display,
+        .card-tags {
           display: none;
         }
       }
+
       @container fitted-card (2.0 < aspect-ratio) and (width <= 150px) {
         .task-card,
-        .main-info {
+        .card-header {
           align-items: center;
           justify-content: center;
         }
-        .sub-info,
+        .card-info,
         .task-title,
-        .task-date-range,
-        .task-tags {
-          display: none;
-        }
-        .spacer {
-          display: none;
-        }
-      }
-      @container fitted-card (1.0 > aspect-ratio) {
-        .task-tags,
-        .task-date-range {
-          display: none;
-        }
-        .task-card {
-          display: flex;
-          flex-direction: column;
-        }
-        .sub-info {
-          order: 1;
-          margin-top: auto;
-        }
-        .spacer {
-          display: none;
-        }
-      }
-      @container (height <= 29px) {
-        .task-title,
-        .sub-info,
-        .task-tags,
-        .task-date-range {
-          display: none;
-        }
-        .spacer {
+        .card-due-date-display,
+        .card-tags {
           display: none;
         }
       }
@@ -679,19 +759,6 @@ class TaskIsolated extends Component<typeof Task> {
         background-color: var(--boxel-200);
         border-radius: 100px;
         overflow: hidden;
-      }
-      .avatar {
-        --profile-avatar-icon-size: 20px;
-        --profile-avatar-icon-border: 0px;
-        flex-shrink: 0;
-      }
-      .assignee-name {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
-        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
       .row-1 {
         display: flex;
