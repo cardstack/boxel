@@ -91,47 +91,68 @@ export async function startServer() {
     );
   }
 
-  return new IsolatedRealmServer({
-    realmServerProcess: realmServer,
-    realmPath: testRealmDir,
-    dbName: process.env.PGDATABASE,
-    dbPort: parseInt(process.env.PGPORT),
-  });
+  return new IsolatedRealmServer(realmServer, testRealmDir);
 }
 
 export class IsolatedRealmServer {
-  private realmServerProcess: ReturnType<typeof spawn>;
-  readonly realmPath: string;
-  readonly dbName: string;
-  readonly dbPort: number;
+  private stopped: (() => void) | undefined;
+  private sqlResults: ((results: string) => void) | undefined;
+  private sqlError: ((error: string) => void) | undefined;
 
-  constructor({
-    realmServerProcess,
-    realmPath, // useful for debugging
-    dbName,
-    dbPort,
-  }: {
-    realmServerProcess: ReturnType<typeof spawn>;
-    realmPath: string; // useful for debugging
-    dbName: string;
-    dbPort: number;
-  }) {
-    this.realmServerProcess = realmServerProcess;
-    this.realmPath = realmPath;
-    this.dbName = dbName;
-    this.dbPort = dbPort;
+  constructor(
+    private realmServerProcess: ReturnType<typeof spawn>,
+    readonly realmPath: string, // useful for debugging
+  ) {
+    realmServerProcess.on('message', (message) => {
+      if (message === 'stopped') {
+        if (!this.stopped) {
+          console.error(`received unprompted server stop`);
+          return;
+        }
+        this.stopped();
+      } else if (
+        typeof message === 'string' &&
+        message.startsWith('sql-results:')
+      ) {
+        let results = message.substring('sql-results:'.length);
+        if (!this.sqlResults) {
+          console.error(`received unprompted SQL: ${results}`);
+          return;
+        }
+        this.sqlResults(results);
+      } else if (
+        typeof message === 'string' &&
+        message.startsWith('sql-error:')
+      ) {
+        let error = message.substring('sql-error:'.length);
+        if (!this.sqlError) {
+          console.error(`received unprompted SQL error: ${error}`);
+          return;
+        }
+        this.sqlError(error);
+      }
+    });
+  }
+
+  async executeSQL(sql: string): Promise<Record<string, any>[]> {
+    let execute = new Promise<string>(
+      (resolve, reject: (reason: string) => void) => {
+        this.sqlResults = resolve;
+        this.sqlError = reject;
+      },
+    );
+    this.realmServerProcess.send(`execute-sql:${sql}`);
+    let resultsStr = await execute;
+    this.sqlResults = undefined;
+    this.sqlError = undefined;
+    return JSON.parse(resultsStr);
   }
 
   async stop() {
-    let stopped: () => void;
-    let stop = new Promise<void>((r) => (stopped = r));
-    this.realmServerProcess.on('message', (message) => {
-      if (message === 'stopped') {
-        stopped();
-      }
-    });
+    let stop = new Promise<void>((r) => (this.stopped = r));
     this.realmServerProcess.send('stop');
     await stop;
+    this.stopped = undefined;
     this.realmServerProcess.send('kill');
   }
 }

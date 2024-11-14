@@ -19,12 +19,9 @@ import {
   registerRealmUsers,
 } from '../helpers';
 
-import { PgAdapter } from '@cardstack/postgres';
-
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
-  let dbAdapter: PgAdapter;
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
@@ -36,7 +33,6 @@ test.describe('User Registration w/o Token', () => {
     await smtpStart();
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
-    dbAdapter = new PgAdapter({ autoMigrate: true });
   });
 
   test.afterEach(async () => {
@@ -67,7 +63,11 @@ test.describe('User Registration w/o Token', () => {
 
     await page.bringToFront();
 
-    let users = await dbAdapter.execute('SELECT * FROM users');
+    let users = await realmServer.executeSQL('SELECT * FROM users');
+    // TODO remove this--this is just here to prove that the sql actually works
+    let realmVersions = await realmServer.executeSQL(
+      'SELECT * FROM realm_versions',
+    );
     console.log(users);
 
     await expect(page.locator('[data-test-email-validated]')).toContainText(

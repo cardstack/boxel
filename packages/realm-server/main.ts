@@ -276,6 +276,25 @@ let autoMigrate = migrateDB || undefined;
       registrationSecretDeferred.fulfill(
         message.substring('registration-secret:'.length),
       );
+    } else if (
+      typeof message === 'string' &&
+      message.startsWith('execute-sql:') &&
+      registrationSecretDeferred
+    ) {
+      let sql = message.substring('execute-sql:'.length);
+      dbAdapter
+        .execute(sql)
+        .then((results) => {
+          if (process.send) {
+            let serializedResults = JSON.stringify(results);
+            process.send(`sql-results:${serializedResults}`);
+          }
+        })
+        .catch((e) => {
+          if (process.send) {
+            process.send(`sql-error:${e.message}`);
+          }
+        });
     }
   });
 
