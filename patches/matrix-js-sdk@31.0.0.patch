@@ -37,20 +37,104 @@ index 9115598fd769bad15ed23293a68d617d5dbf21a5..95c28e59d8414dbc0837f5c85c98dd96
  }
  function anySignal(signals) {
 diff --git a/lib/sync.js b/lib/sync.js
-index f59265e1089ce832c0be8a23aa19813c2d4738cc..e9b70f2b75a89bb561fc420f03b5106a55f34e09 100644
+index f59265e1089ce832c0be8a23aa19813c2d4738cc..630f58767cbb887620883d075e1b947b9f83b944 100644
 --- a/lib/sync.js
 +++ b/lib/sync.js
-@@ -747,6 +747,13 @@ class SyncApi {
+@@ -719,7 +719,7 @@ class SyncApi {
+    * Invoke me to do /sync calls
+    */
+   async doSync(syncOptions) {
+-    while (this.running) {
++    async function _sync() {
+       const syncToken = this.client.store.getSyncToken();
+       let data;
+       try {
+@@ -729,8 +729,8 @@ class SyncApi {
+         data = await this.currentSyncRequest;
+       } catch (e) {
+         const abort = await this.onSyncError(e);
+-        if (abort) return;
+-        continue;
++        if (abort) return true;
++        return;
+       } finally {
+         this.currentSyncRequest = undefined;
+       }
+@@ -747,6 +747,7 @@ class SyncApi {
          nextSyncToken: data.next_batch,
          catchingUp: this.catchingUp
        };
 +
-+      if (syncToken === data.next_batch) {
-+        // there are no updates and we are just idle--wait before 
-+        // continuing so that idle syncs don't DDoS the server
-+        await new Promise(r => setTimeout(r, 1000));
-+      }
-+
        if (this.syncOpts.crypto) {
          // tell the crypto module we're about to process a sync
          // response
+@@ -798,6 +799,14 @@ class SyncApi {
+         await this.client.store.save();
+       }
+     }
++
++    const throttledSync = throttle(_sync.bind(this), 1000);
++
++    while (this.running) {
++      let abort = await throttledSync();
++      if (abort) { return; }
++    }
++
+     if (!this.running) {
+       debuglog("Sync no longer running: exiting.");
+       if (this.connectionReturnedDefer) {
+@@ -1624,6 +1633,54 @@ class SyncApi {
+   }
+ }
+ 
++// https://chatgpt.com/share/6734ecfd-cab0-8009-bbb9-b0126ed13d6a
++function throttle(func, wait) {
++  let lastCall = 0;
++  let timeoutId = null;
++  let lastArgs = null;
++  let lastContext = null;
++  let pendingPromise = null;
++
++  const invokeFunc = async (time) => {
++    lastCall = time;
++    const result = func.apply(lastContext, lastArgs);
++    lastArgs = lastContext = null;
++    pendingPromise = result instanceof Promise ? result : Promise.resolve(result);
++    await pendingPromise;
++  };
++
++  const throttled = function(...args) {
++    const now = Date.now();
++    lastArgs = args;
++    lastContext = this;
++
++    const isLeadingCall = lastCall === 0;
++
++    if (isLeadingCall) {
++      invokeFunc(now);
++    }
++
++    const remainingTime = wait - (now - lastCall);
++
++    if (remainingTime <= 0 || remainingTime > wait) {
++      if (timeoutId) {
++        clearTimeout(timeoutId);
++        timeoutId = null;
++      }
++      invokeFunc(now);
++    } else if (!timeoutId) {
++      timeoutId = setTimeout(() => {
++        timeoutId = null;
++        invokeFunc(Date.now());
++      }, remainingTime);
++    }
++
++    return pendingPromise;
++  };
++
++  return throttled;
++}
++
+ // /!\ This function is not intended for public use! It's only exported from
+ // here in order to share some common logic with sliding-sync-sdk.ts.
+ exports.SyncApi = SyncApi;
