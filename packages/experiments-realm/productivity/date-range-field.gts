@@ -10,7 +10,6 @@ import {
   BoxelDropdown,
   Pill,
 } from '@cardstack/boxel-ui/components';
-import { on } from '@ember/modifier';
 import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -21,14 +20,25 @@ const Format = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 
+interface DateRange {
+  start?: Date | null;
+  end?: Date | null;
+}
+
 class Edit extends Component<typeof DateRangeField> {
-  @tracked range: any | undefined;
+  @tracked range: DateRange = {
+    start: this.args.model.start,
+    end: this.args.model.end,
+  };
+
   get formatted() {
-    if (!this.args.model.start || !this.args.model.end) {
+    if (!this.range.start && !this.range.end) {
       return '[no date range]';
     }
-    let start = Format.format(this.args.model.start);
-    let end = Format.format(this.args.model.end);
+    let start = this.range.start
+      ? Format.format(this.range.start)
+      : '[no start]';
+    let end = this.range.end ? Format.format(this.range.end) : '[no end]';
     return `${start} - ${end}`;
   }
 
@@ -36,16 +46,41 @@ class Edit extends Component<typeof DateRangeField> {
     this.range = selected.date;
   }
 
-  get selected() {
-    if (this.args.model.start && this.args.model.end) {
-      return this.args.model;
+  isSameAsModel(range: DateRange) {
+    if (
+      !this.args.model.start &&
+      !this.args.model.end &&
+      !this.range.start &&
+      !this.range.end
+    ) {
+      return true;
     }
-    return this.range;
+
+    if (
+      this.args.model.start &&
+      this.args.model.end &&
+      range.start &&
+      range.end
+    ) {
+      return (
+        this.args.model.start.getTime() === range.start.getTime() &&
+        this.args.model.end.getTime() === range.end.getTime()
+      );
+    } else {
+      return false;
+    }
+  }
+
+  save() {
+    this.args.model.start = this.range.start;
+    this.args.model.end = this.range.end;
   }
 
   @action onClose() {
-    this.args.model.start = this.range.start;
-    this.args.model.end = this.range.end;
+    if (this.isSameAsModel(this.range)) {
+      return;
+    }
+    this.save();
   }
 
   <template>
@@ -57,10 +92,10 @@ class Edit extends Component<typeof DateRangeField> {
       </:trigger>
       <:content>
         <DateRangePicker
-          @start={{this.selected.start}}
-          @end={{this.selected.end}}
+          @start={{this.range.start}}
+          @end={{this.range.end}}
           @onSelect={{this.onSelect}}
-          @selected={{this.selected}}
+          @selected={{this.range}}
         />
       </:content>
     </BoxelDropdown>
