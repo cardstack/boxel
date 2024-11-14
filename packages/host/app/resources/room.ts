@@ -11,7 +11,6 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
-  CardMessageContent,
   CommandEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
