@@ -9,7 +9,6 @@ import 'ember-power-select/styles';
 import './deprecation-workflow';
 import 'ember-power-calendar/styles';
 
-
 export default class App extends Application {
   modulePrefix = config.modulePrefix;
   podModulePrefix = config.podModulePrefix;
