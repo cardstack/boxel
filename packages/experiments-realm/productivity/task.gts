@@ -232,17 +232,19 @@ export class TeamMember extends User {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <div class='assignee-display'>
-        <Avatar
-          class='avatar'
-          @userId={{@model.id}}
-          @displayName={{@model.name}}
-          @isReady={{true}}
-        />
-        <span class='assignee-name'>
-          {{@model.name}}
-        </span>
-      </div>
+      {{#if @model}}
+        <div class='assignee-display'>
+          <Avatar
+            class='avatar'
+            @userId={{@model.id}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
+          <span class='assignee-name'>
+            {{@model.name}}
+          </span>
+        </div>
+      {{/if}}
       <style scoped>
         .assignee-display {
           display: flex;
@@ -339,13 +341,11 @@ class Fitted extends Component<typeof Task> {
       </div>
 
       <div class='card-info'>
-        {{#if @model.assignee}}
-          <@fields.assignee
-            class='card-assignee'
-            @format='atom'
-            @displayContainer={{false}}
-          />
-        {{/if}}
+        <@fields.assignee
+          class='card-assignee'
+          @format='atom'
+          @displayContainer={{false}}
+        />
 
         {{#if @model.tags.length}}
           <div class='card-tags'>
@@ -630,13 +630,11 @@ class TaskIsolated extends Component<typeof Task> {
       </div>
       <div class='task-meta'>
         <div class='row-1'>
-          {{#if @model.assignee}}
-            <@fields.assignee
-              class='task-assignee'
-              @format='atom'
-              @displayContainer={{false}}
-            />
-          {{/if}}
+          <@fields.assignee
+            class='task-assignee'
+            @format='atom'
+            @displayContainer={{false}}
+          />
           {{#if this.hasDateRange}}
             <div class='task-dates'>
               <Calendar width='14px' height='14px' class='calendar-icon' />
@@ -925,13 +923,11 @@ export class Task extends CardDef {
   static atom = class Atom extends Component<typeof this> {
     <template>
       <div class='task-atom'>
-        {{#if @model.assignee}}
-          <@fields.assignee
-            @format='atom'
-            @displayContainer={{false}}
-            class='task-assignee'
-          />
-        {{/if}}
+        <@fields.assignee
+          @format='atom'
+          @displayContainer={{false}}
+          class='task-assignee'
+        />
         <div class='task-title'>{{@model.taskName}}</div>
       </div>
       <style scoped>
