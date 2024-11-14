@@ -53,7 +53,7 @@ export interface LedgerEntry {
     | 'plan_allowance_used'
     | 'extra_credit_used'
     | 'plan_allowance_expired';
-  subscriptionCycleId: string;
+  subscriptionCycleId: string | null;
 }
 
 export async function insertStripeEvent(

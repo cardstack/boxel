@@ -93,6 +93,9 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       .boxel-multi-select__dropdown {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
+        z-index: var(
+          --boxel-layer-modal-urgent
+        ); /* TODO: Investigate why this is needed */
       }
       .boxel-multi-select__dropdown ul {
         list-style: none;
