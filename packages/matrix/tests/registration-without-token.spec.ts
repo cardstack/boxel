@@ -18,11 +18,13 @@ import {
   assertPaymentSetup,
   registerRealmUsers,
 } from '../helpers';
-import { registerUser } from '../docker/synapse';
+
+import { PgAdapter } from '@cardstack/postgres';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
+  let dbAdapter: PgAdapter;
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
@@ -34,6 +36,7 @@ test.describe('User Registration w/o Token', () => {
     await smtpStart();
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
   });
 
   test.afterEach(async () => {
@@ -64,9 +67,14 @@ test.describe('User Registration w/o Token', () => {
 
     await page.bringToFront();
 
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    let users = await dbAdapter.execute('SELECT * FROM users');
+    console.log(users);
 
-    await assertPaymentSetup(page, admin.accessToken, 'user1');
+    await expect(page.locator('[data-test-email-validated]')).toContainText(
+      'Success! Your email has been validated',
+    );
+
+    await assertPaymentSetup(page, 'user1');
     await assertLoggedIn(page);
   });
 });

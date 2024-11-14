@@ -91,14 +91,36 @@ export async function startServer() {
     );
   }
 
-  return new IsolatedRealmServer(realmServer, testRealmDir);
+  return new IsolatedRealmServer({
+    realmServerProcess: realmServer,
+    realmPath: testRealmDir,
+    dbName: process.env.PGDATABASE,
+    dbPort: parseInt(process.env.PGPORT),
+  });
 }
 
 export class IsolatedRealmServer {
-  constructor(
-    private realmServerProcess: ReturnType<typeof spawn>,
-    readonly realmPath: string, // useful for debugging
-  ) {}
+  private realmServerProcess: ReturnType<typeof spawn>;
+  readonly realmPath: string;
+  readonly dbName: string;
+  readonly dbPort: number;
+
+  constructor({
+    realmServerProcess,
+    realmPath, // useful for debugging
+    dbName,
+    dbPort,
+  }: {
+    realmServerProcess: ReturnType<typeof spawn>;
+    realmPath: string; // useful for debugging
+    dbName: string;
+    dbPort: number;
+  }) {
+    this.realmServerProcess = realmServerProcess;
+    this.realmPath = realmPath;
+    this.dbName = dbName;
+    this.dbPort = dbPort;
+  }
 
   async stop() {
     let stopped: () => void;
