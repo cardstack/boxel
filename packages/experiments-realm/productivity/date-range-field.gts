@@ -9,10 +9,13 @@ import {
   DateRangePicker,
   BoxelDropdown,
   Pill,
+  BoxelButton,
 } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -30,6 +33,7 @@ class Edit extends Component<typeof DateRangeField> {
     start: this.args.model.start,
     end: this.args.model.end,
   };
+  @tracked closeWithoutSaving: boolean = false;
 
   get formatted() {
     if (!this.range.start && !this.range.end) {
@@ -83,10 +87,19 @@ class Edit extends Component<typeof DateRangeField> {
   }
 
   @action onClose() {
+    if (this.closeWithoutSaving) {
+      this.closeWithoutSaving = false;
+      return;
+    }
     if (this.isSameAsModel(this.range)) {
       return;
     }
     this.save();
+  }
+
+  @action cancel(close: () => void) {
+    this.closeWithoutSaving = true;
+    close();
   }
 
   <template>
@@ -96,13 +109,17 @@ class Edit extends Component<typeof DateRangeField> {
           {{this.formatted}}
         </Pill>
       </:trigger>
-      <:content>
+      <:content as |dd|>
         <DateRangePicker
           @start={{this.range.start}}
           @end={{this.range.end}}
           @onSelect={{this.onSelect}}
           @selected={{this.range}}
         />
+        <BoxelButton
+          @kind='primary'
+          {{on 'click' (fn this.cancel dd.close)}}
+        >Cancel</BoxelButton>
       </:content>
     </BoxelDropdown>
   </template>
