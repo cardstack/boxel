@@ -3867,7 +3867,7 @@ module('Realm Server', function (hooks) {
 
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
       await insertUser(dbAdapter, userId!, 'cus_123');
-      await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_123');
+      await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
       }
@@ -3888,7 +3888,8 @@ module('Realm Server', function (hooks) {
             lines: {
               data: [
                 {
-                  price: { product: 'prod_123' },
+                  amount: 0,
+                  price: { product: 'prod_free' },
                 },
               ],
             },
