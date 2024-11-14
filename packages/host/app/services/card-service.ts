@@ -200,7 +200,7 @@ export default class CardService extends Service {
   async saveModel<T extends object>(
     owner: T,
     card: CardDef,
-    defaultRealmHref: string | undefined,
+    defaultRealmHref?: string,
   ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {

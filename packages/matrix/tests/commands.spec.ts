@@ -48,20 +48,22 @@ test.describe('Commands', () => {
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
 
-    expect(boxelMessageData.context.tools).toMatchObject([
-      {
-        type: 'function',
-        function: {
-          name: 'patchCard',
-          description:
-            'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              attributes: {
+    expect(boxelMessageData.context.tools.length).toEqual(3);
+    let patchCardTool = boxelMessageData.context.tools.find(
+      (t: any) => t.function.name === 'patchCard',
+    );
+    expect(patchCardTool).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'patchCard',
+        description:
+          'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
+        parameters: {
+          type: 'object',
+          properties: {
+            attributes: {
+              type: 'object',
+              properties: {
                 cardId: {
                   type: 'string',
                   const: `${testHost}/mango`,
@@ -93,23 +95,29 @@ test.describe('Commands', () => {
                 },
               },
             },
-            required: ['attributes', 'description'],
           },
+          required: ['attributes', 'description'],
         },
       },
-      {
-        type: 'function',
-        function: {
-          name: 'searchCard',
-          description:
-            'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              attributes: {
+    });
+    let searchCardTool = boxelMessageData.context.tools.find(
+      (t: any) => t.function.name === 'searchCard',
+    );
+    expect(searchCardTool).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'searchCard',
+        description:
+          'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            attributes: {
+              type: 'object',
+              properties: {
                 filter: {
                   type: 'object',
                   properties: {
@@ -137,42 +145,45 @@ test.describe('Commands', () => {
                 },
               },
             },
-            required: ['attributes', 'description'],
           },
+          required: ['attributes', 'description'],
         },
       },
-      {
-        type: 'function',
-        function: {
-          name: 'generateAppModule',
-          description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
-          parameters: {
-            type: 'object',
-            properties: {
-              attached_card_id: {
-                type: 'string',
-                const: `${testHost}/mango`,
-              },
-              description: {
-                type: 'string',
-              },
-              appTitle: {
-                type: 'string',
-              },
-              moduleCode: {
-                type: 'string',
-              },
+    });
+    let generateAppModuleTool = boxelMessageData.context.tools.find(
+      (t: any) => t.function.name === 'generateAppModule',
+    );
+    expect(generateAppModuleTool).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'generateAppModule',
+        description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
+        parameters: {
+          type: 'object',
+          properties: {
+            attached_card_id: {
+              type: 'string',
+              const: `${testHost}/mango`,
             },
-            required: [
-              'attached_card_id',
-              'description',
-              'appTitle',
-              'moduleCode',
-            ],
+            description: {
+              type: 'string',
+            },
+            appTitle: {
+              type: 'string',
+            },
+            moduleCode: {
+              type: 'string',
+            },
           },
+          required: [
+            'attached_card_id',
+            'description',
+            'appTitle',
+            'moduleCode',
+          ],
         },
       },
-    ]);
+    });
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
@@ -247,6 +258,7 @@ test.describe('Commands', () => {
           arguments: {
             attributes: {
               cardId,
+              description: 'Patching card',
               patch: {
                 attributes: {
                   firstName: 'Dave',
