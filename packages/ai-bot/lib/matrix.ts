@@ -126,7 +126,13 @@ export const toMatrixMessageCommandContent = (
   eventToUpdate: string | undefined,
 ): IContent | undefined => {
   let { arguments: payload } = functionCall;
-  const body = payload['description'] || 'Issuing command';
+  // Take the description if it exists (old format)
+  // Otherwise take the description from the attributes (new format, responses are cards)
+  // If neither exists, use a default
+  const body =
+    payload['description'] ||
+    payload['attributes']?.description ||
+    'Issuing command';
   let messageObject: IContent = {
     body: body,
     msgtype: 'org.boxel.command',
