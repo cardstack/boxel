@@ -232,33 +232,28 @@ export class TeamMember extends User {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <div class='assignee-container'>
-        <div class='assignee-display'>
-          <Avatar
-            class='avatar'
-            @userId={{@model.id}}
-            @displayName={{@model.name}}
-            @isReady={{true}}
-          />
-          <span class='assignee-name'>
-            {{@model.name}}
-          </span>
-        </div>
+      <div class='assignee-display'>
+        <Avatar
+          class='avatar'
+          @userId={{@model.id}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
+        <span class='assignee-name'>
+          {{@model.name}}
+        </span>
       </div>
 
       {{! template-lint-disable require-scoped-style }}
       <style>
-        .assignee-container {
-          container-type: inline-size;
-          width: 80px;
-          flex: none;
-        }
         .assignee-display {
           display: flex;
           align-items: center;
+          flex: none;
           background-color: var(--boxel-200);
           border-radius: 100px;
           overflow: hidden;
+          max-width: 100px;
         }
         .avatar {
           --profile-avatar-icon-size: 26px;
@@ -272,16 +267,6 @@ export class TeamMember extends User {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-        }
-        /* Hide the assignee name when container width is too narrow to display it properly */
-        @container (width < 80px) {
-          .assignee-display {
-            width: max-content;
-            background-color: transparent;
-          }
-          .assignee-name {
-            display: none;
-          }
         }
       </style>
     </template>
