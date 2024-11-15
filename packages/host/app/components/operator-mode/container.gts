@@ -131,7 +131,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private get matrixUserId() {
-    return this.matrixService.userId;
+    return this.matrixService.userId || '';
   }
 
   <template>
