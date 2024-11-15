@@ -301,11 +301,7 @@ class Fitted extends Component<typeof Task> {
 
           <span class='task-date-range'>
             <Calendar width='14px' height='14px' class='calendar-icon' />
-            {{#if @model.dueDate}}
-              <span class='date-info'><@fields.dueDate /></span>
-            {{else}}
-              <span class='date-info'>No Due Date Assigned</span>
-            {{/if}}
+            <@fields.dateRange @format='atom' />
           </span>
         </div>
       </div>
@@ -733,10 +729,6 @@ class TaskIsolated extends Component<typeof Task> {
 
   get tagNames() {
     return this.args.model.tags?.map((tag) => tag.name) ?? [];
-  }
-
-  get hasDateRange() {
-    return this.args.model.dateStarted && this.args.model.dueDate;
   }
 
   get progress() {
