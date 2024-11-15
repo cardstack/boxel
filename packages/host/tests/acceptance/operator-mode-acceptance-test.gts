@@ -7,8 +7,8 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import window from 'ember-window-mock';
 import { getPageTitle } from 'ember-page-title/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
