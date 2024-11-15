@@ -36,6 +36,7 @@ import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
+import DataTableUsage from './components/data-table/usage.gts';
 
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
@@ -73,4 +74,5 @@ export const ALL_USAGE_COMPONENTS = [
   ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
   ['ViewSelector', ViewSelectorUsage],
+  ['DataTable', DataTableUsage],
 ];

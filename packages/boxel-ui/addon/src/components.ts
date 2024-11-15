@@ -51,6 +51,7 @@ import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 import ViewSelector from './components/view-selector/index.gts';
+import DataTable from './components/data-table/index.gts';
 
 export {
   Accordion,
@@ -102,4 +103,5 @@ export {
   TabbedHeader,
   Tooltip,
   ViewSelector,
+  DataTable
 };
