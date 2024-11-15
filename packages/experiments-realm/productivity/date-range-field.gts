@@ -96,7 +96,7 @@ class Edit extends Component<typeof DateRangeField> {
           <div class='dropdown-actions'>
             <BoxelButton
               @kind='secondary'
-              {{on 'click' (fn this.reset)}}
+              {{on 'click' this.reset}}
             >Reset</BoxelButton>
             <BoxelButton
               @kind='primary'
