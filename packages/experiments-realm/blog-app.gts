@@ -36,6 +36,8 @@ import CategoriesIcon from '@cardstack/boxel-icons/hierarchy-3';
 import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
+type ViewOption = 'card' | 'strip' | 'grid';
+
 interface SortOption {
   displayName: string;
   sort: Query['sort'];
@@ -196,12 +198,13 @@ interface BlogCardsGridSignature {
   Args: {
     query: Query;
     realms: URL[];
+    selectedView: ViewOption;
     context?: CardContext;
   };
 }
 class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
   <template>
-    <ul class='cards' data-test-cards-grid-cards>
+    <ul class='blog-cards {{@selectedView}}-view' data-test-cards-grid-cards>
       {{#let
         (component @context.prerenderedCardSearchComponent)
         as |PrerenderedCardSearch|
@@ -235,13 +238,35 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
       {{/let}}
     </ul>
     <style scoped>
-      .cards {
+      .blog-cards {
         display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
+        );
+        grid-auto-rows: var(--grid-card-height);
         gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
         padding: var(--boxel-sp-6xs);
         overflow: auto;
+      }
+      .card-view {
+        --grid-card-height: 21.875rem; /* 350px */
+      }
+      .strip-view {
+        --grid-card-min-width: 21.875rem;
+        --grid-card-max-width: calc(50% - var(--boxel-sp));
+        --grid-card-height: 6.125rem;
+      }
+      .grid-view {
+        --grid-card-min-width: 11.125rem;
+        --grid-card-max-width: 1fr;
+        --grid-card-height: 15.125rem;
+      }
+      .card {
+        container-name: fitted-card;
+        container-type: size;
       }
     </style>
   </template>
@@ -251,7 +276,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   <template>
     <section class='blog-app'>
       <aside class='blog-app-column sidebar'>
-        <header class='sidebar-header'>
+        <header class='sidebar-header' aria-label='blog-header'>
           <img
             class='sidebar-header-thumbnail'
             src={{@model.thumbnailURL}}
@@ -302,6 +327,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           />
         </header>
         <BlogCardsGrid
+          @selectedView={{this.selectedView}}
           @context={{@context}}
           @query={{this.query}}
           @realms={{this.realms}}
@@ -411,7 +437,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   filters: SidebarFilter[] = new TrackedArray(FILTERS);
   sortOptions = SORT_OPTIONS;
 
-  @tracked private selectedView: string | undefined;
+  @tracked private selectedView: ViewOption = 'card';
   @tracked private selectedSort: SortOption = this.sortOptions[0];
   @tracked private activeFilter: SidebarFilter = this.filters[0];
 
@@ -470,7 +496,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     }
   });
 
-  @action private onChangeView(id: string) {
+  @action private onChangeView(id: ViewOption) {
     this.selectedView = id;
   }
 
