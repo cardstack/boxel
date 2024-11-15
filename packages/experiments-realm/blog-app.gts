@@ -1,5 +1,5 @@
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
+import { action, get } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
@@ -120,7 +120,7 @@ class SortMenu extends GlimmerComponent<SortMenuSignature> {
           <BoxelButton class='sort-trigger' {{bindings}}>
             <span class='sort-trigger-content'>
               {{@selected.displayName}}
-              {{#if (eq @selected.sort.0.direction 'desc')}}
+              {{#if (eq (get @selected.sort '0.direction') 'desc')}}
                 <ArrowDown width='16' height='16' />
               {{else}}
                 <ArrowUp width='16' height='16' />
@@ -257,7 +257,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             src={{@model.thumbnailURL}}
             width='60'
             height='60'
-            role='presentation'
+            alt={{@model.title}}
           />
           <h1 class='sidebar-header-title'><@fields.title /></h1>
           <p class='sidebar-header-description'><@fields.description /></p>
@@ -286,7 +286,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         />
       </aside>
       <section class='blog-app-column content'>
-        <header class='content-header'>
+        <header
+          class='content-header'
+          aria-label={{this.activeFilter.displayName}}
+        >
           <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
           <ViewSelector
             @selectedId={{this.selectedView}}
