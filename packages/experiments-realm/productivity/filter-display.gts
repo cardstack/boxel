@@ -16,7 +16,6 @@ export interface FilterDisplaySignature {
   };
 }
 
-// Per class
 export class FilterDisplay extends GlimmerComponent<FilterDisplaySignature> {
   <template>
     <div class='filter-display'>
@@ -28,10 +27,7 @@ export class FilterDisplay extends GlimmerComponent<FilterDisplaySignature> {
             {{yield item}}
           </:default>
           <:iconRight>
-            <IconButton
-              @icon={{IconX}}
-              {{on 'click' (fn @removeItem @key item)}}
-            />
+            <IconButton @icon={{IconX}} {{on 'click' (fn @removeItem item)}} />
           </:iconRight>
         </Pill>
       {{/each}}

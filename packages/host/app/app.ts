@@ -1,3 +1,4 @@
+import 'decorator-transforms/globals';
 import './lib/public-path'; // this should be first
 import './lib/setup-globals'; // This should be second
 import './deprecation-workflow';
