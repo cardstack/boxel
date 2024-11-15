@@ -21,6 +21,7 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
 import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
+// @ts-expect-error path resolution issue
 import { AppCard } from '/catalog/app-card';
 import { TaskStatusField } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
@@ -309,9 +310,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   }
 
   @action onSelectFilter(item: FilterType) {
-    if (this.selectedFilter) {
-      this.selectedFilter = item;
-    }
+    this.selectedFilter = item;
   }
 
   @action onChange(selected: SelectedItem[]) {
