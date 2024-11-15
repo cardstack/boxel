@@ -182,7 +182,7 @@ export default class DateRangeField extends FieldDef {
           color: var(--boxel-600);
         }
         .text.no-date-info {
-          color: var(--boxel-400);
+          color: var(--boxel-600);
         }
       </style>
     </template>
