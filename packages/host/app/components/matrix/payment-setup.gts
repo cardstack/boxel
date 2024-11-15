@@ -55,7 +55,7 @@ export default class PaymentSetup extends Component<Signature> {
               Success! Your email has been validated
             </div>
           {{else}}
-            <div class='success-banner' data-test-setup-payment>
+            <div class='success-banner' data-test-setup-payment-message>
               <InfoCircleIcon class='info-icon' />
               Setup your payment method now to enjoy Boxel
             </div>

@@ -8,6 +8,7 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
+import { IsolatedRealmServer } from './isolated-realm-server';
 
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -581,10 +582,90 @@ export async function assertPaymentSetup(page: Page, username: string) {
     'href',
     stripeLink,
   );
+}
 
-  // TODO: update user with stripeCustomerId with query
+export async function setupPayment(
+  page: Page,
+  username: string,
+  realmServer: IsolatedRealmServer,
+) {
+  // decode the username from base64
+  const decodedUsername = Buffer.from(username, 'base64').toString('utf8');
 
-  const returnUrl = page.url();
+  // mock trigger stripe webhook 'checkout.session.completed'
+  let freePlan = await realmServer.executeSQL(
+    `SELECT * FROM plans WHERE name = 'Free'`,
+  );
+  let subscriptionId = `sub_1234567890`;
+  await realmServer.executeSQL(
+    `UPDATE users SET stripe_customer_id = 'cus_1234567890' WHERE matrix_user_id = '${decodedUsername}'`,
+  );
+
+  let findUser = await realmServer.executeSQL(
+    `SELECT * FROM users WHERE matrix_user_id = '${decodedUsername}'`,
+  );
+
+  const userId = findUser[0].id;
+
+  const now = Math.floor(Date.now() / 1000); // Current time in seconds
+  const oneYearFromNow = now + 31536000; // One year in seconds
+  const oneMonthFromNow = now + 2592000; // One month in seconds
+
+  // mock trigger stripe webhook 'invoice.payment_succeeded'
+  await realmServer.executeSQL(
+    `INSERT INTO subscriptions (
+      user_id, 
+      plan_id, 
+      started_at, 
+      ended_at,
+      status, 
+      stripe_subscription_id
+    ) VALUES (
+      '${userId}',
+      '${freePlan[0].id}',
+      ${now},
+      ${oneYearFromNow},
+      'active',
+      '${subscriptionId}'
+    )`,
+  );
+
+  const getSubscription = await realmServer.executeSQL(
+    `SELECT id FROM subscriptions WHERE stripe_subscription_id = '${subscriptionId}'`,
+  );
+  const subscriptionUUID = getSubscription[0].id;
+
+  await realmServer.executeSQL(
+    `INSERT INTO subscription_cycles (
+      subscription_id, 
+      period_start, 
+      period_end
+    ) VALUES (
+      '${subscriptionUUID}',
+      ${now},
+      ${oneMonthFromNow}
+    )`,
+  );
+
+  let subscriptionCycle = await realmServer.executeSQL(
+    `SELECT id FROM subscription_cycles WHERE subscription_id = '${subscriptionUUID}'`,
+  );
+  const subscriptionCycleUUID = subscriptionCycle[0].id;
+
+  await realmServer.executeSQL(
+    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${freePlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
+  );
+
+  // Return url example: https://realms-staging.stack.cards/?from-free-plan-payment-link=true
+
+  // extract return url from page.url()
+  // assert return url contains ?from-free-plan-payment-link=true
+  const currentUrl = new URL(page.url());
+  const currentParams = currentUrl.searchParams;
+  currentParams.append('from-free-plan-payment-link', 'true');
+  const returnUrl = `${currentUrl.origin}${
+    currentUrl.pathname
+  }?${currentParams.toString()}`;
 
   await page.goto(returnUrl);
 }
