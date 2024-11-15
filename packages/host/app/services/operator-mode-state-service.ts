@@ -350,7 +350,7 @@ export default class OperatorModeStateService extends Service {
       return `Code Mode: ${this.state.codePath ?? 'Boxel'}`;
     } else {
       let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
-      return itemForTitle?.card.title ?? 'Boxel';
+      return itemForTitle?.title ?? 'Boxel';
     }
   }
 

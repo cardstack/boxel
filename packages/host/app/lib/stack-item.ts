@@ -83,6 +83,14 @@ export class StackItem {
     throw new Error(`This StackItem has no card set`);
   }
 
+  get title() {
+    if (this.newCard) {
+      return this.newCard.title;
+    } else if (this.cardResource?.card) {
+      return this.cardResource.card.title;
+    }
+  }
+
   get cardError() {
     return this.cardResource?.cardError?.error;
   }
