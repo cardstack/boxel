@@ -5,10 +5,6 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { TrackedArray } from 'tracked-built-ins';
 
-// TODO: BlogApp should extend AppCard
-// // @ts-expect-error: Module '/catalog/app-card' may not be available during compilation
-// import { AppCard } from '/catalog/app-card';
-
 import {
   CardDef,
   Component,
@@ -16,14 +12,18 @@ import {
   type CardContext,
 } from 'https://cardstack.com/base/card-api';
 
-import { baseRealm, type Query } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  SupportedMimeType,
+  type Query,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import {
   BoxelButton,
   BoxelDropdown,
   Menu as BoxelMenu,
   CardContainer,
-  type Filter,
   FilterList,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
@@ -31,6 +31,7 @@ import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
+import IconComponent from '@cardstack/boxel-icons/captions';
 import CategoriesIcon from '@cardstack/boxel-icons/hierarchy-3';
 import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
@@ -73,42 +74,33 @@ const SORT_OPTIONS: SortOption[] = [
   },
 ];
 
-const FILTERS: Filter[] = [
+interface SidebarFilter {
+  displayName: string;
+  icon: typeof IconComponent;
+  cardTypeName: string;
+  createNewButtonText?: string;
+  isCreateNewDisabled?: boolean;
+  cardRef?: ResolvedCodeRef;
+}
+const FILTERS: SidebarFilter[] = [
   {
     displayName: 'Blog Posts',
-    createNew: 'Post',
     icon: BlogPostIcon,
-    query: {
-      filter: {
-        eq: {
-          _cardType: 'Post',
-        },
-      },
-    },
+    cardTypeName: 'Blog Post',
+    createNewButtonText: 'Post',
   },
   {
     displayName: 'Author Bios',
-    createNew: 'Author',
     icon: AuthorIcon,
-    query: {
-      filter: {
-        eq: {
-          _cardType: 'Author Bio',
-        },
-      },
-    },
+    cardTypeName: 'Author Bio',
+    createNewButtonText: 'Author',
   },
   {
     displayName: 'Categories',
-    createNew: 'Category',
     icon: CategoriesIcon,
-    query: {
-      filter: {
-        eq: {
-          _cardType: 'Category', // TODO: does not exist
-        },
-      },
-    },
+    cardTypeName: 'Category',
+    createNewButtonText: 'Category',
+    isCreateNewDisabled: true, // TODO: Category cards
   },
 ];
 
@@ -200,14 +192,14 @@ class SortMenu extends GlimmerComponent<SortMenuSignature> {
   }
 }
 
-interface CardsGridSignature {
+interface BlogCardsGridSignature {
   Args: {
     query: Query;
     realms: URL[];
     context?: CardContext;
   };
 }
-class CardsGrid extends GlimmerComponent<CardsGridSignature> {
+class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
   <template>
     <ul class='cards' data-test-cards-grid-cards>
       {{#let
@@ -242,11 +234,14 @@ class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         </PrerenderedCardSearch>
       {{/let}}
     </ul>
-    <style>
+    <style scoped>
       .cards {
+        display: grid;
+        gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
-        padding: 0;
+        padding: var(--boxel-sp-6xs);
+        overflow: auto;
       }
     </style>
   </template>
@@ -272,11 +267,15 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             class='sidebar-create-button'
             @kind='primary'
             @size='large'
+            @disabled={{this.activeFilter.isCreateNewDisabled}}
+            @loading={{this.createCard.isRunning}}
             {{on 'click' this.createNew}}
           >
-            <IconPlus class='create-button-icon' width='12' height='12' />
+            {{#unless this.createCard.isRunning}}
+              <IconPlus class='create-button-icon' width='15' height='15' />
+            {{/unless}}
             New
-            {{this.activeFilter.createNew}}
+            {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
         <FilterList
@@ -299,7 +298,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @onSort={{this.onSort}}
           />
         </header>
-        <CardsGrid
+        <BlogCardsGrid
           @context={{@context}}
           @query={{this.query}}
           @realms={{this.realms}}
@@ -358,11 +357,16 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .sidebar-create-button {
+        --icon-color: currentColor;
+        --boxel-loading-indicator-size: 15px;
         gap: var(--boxel-sp-xs);
         font-weight: 600;
       }
       .sidebar-create-button-icon {
         flex-shrink: 0;
+      }
+      .sidebar-create-button :deep(.loading-indicator) {
+        margin: 0;
       }
 
       /* TODO: fix filter component styles in boxel-ui */
@@ -385,7 +389,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       }
 
       .content-header {
-        height: 60px;
+        min-height: 60px;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -401,20 +405,67 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     </style>
   </template>
 
-  filters: Filter[] = new TrackedArray(FILTERS);
+  filters: SidebarFilter[] = new TrackedArray(FILTERS);
   sortOptions = SORT_OPTIONS;
 
   @tracked private selectedView: string | undefined;
   @tracked private selectedSort: SortOption = this.sortOptions[0];
-  @tracked private activeFilter = this.filters[0];
+  @tracked private activeFilter: SidebarFilter = this.filters[0];
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadCardTypes.perform();
+  }
 
   private get realms() {
     return [this.args.model[realmURL]!];
   }
 
   private get query() {
-    return { ...this.activeFilter.query, sort: this.selectedSort.sort };
+    let query = {
+      filter: { eq: { _cardType: this.activeFilter.cardTypeName } },
+    };
+    return { ...query, sort: this.selectedSort.sort };
   }
+
+  private loadCardTypes = restartableTask(async () => {
+    let response = await fetch(`${this.realms[0]}_types`, {
+      headers: {
+        Accept: SupportedMimeType.CardTypeSummary,
+      },
+    });
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} -
+          ${response.statusText}. ${responseText}`,
+      ) as any;
+
+      err.status = response.status;
+      err.responseText = responseText;
+
+      throw err;
+    }
+    let cardTypeSummaries = (await response.json()).data as {
+      id: string;
+      attributes: { displayName: string; total: number };
+    }[];
+
+    for (let filter of this.filters) {
+      let summary = cardTypeSummaries.find(
+        (s) => s.attributes.displayName === filter.cardTypeName,
+      );
+      if (!summary) {
+        console.error(`Card type summary not found for ${filter.displayName}`);
+        return;
+      }
+      const lastIndex = summary.id.lastIndexOf('/');
+      filter.cardRef = {
+        module: summary.id.substring(0, lastIndex),
+        name: summary.id.substring(lastIndex + 1),
+      };
+    }
+  });
 
   @action private onChangeView(id: string) {
     this.selectedView = id;
@@ -425,7 +476,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     this.activeFilter = this.activeFilter;
   }
 
-  @action private onFilterChange(filter: Filter) {
+  @action private onFilterChange(filter: SidebarFilter) {
     this.activeFilter = filter;
   }
 
@@ -434,16 +485,23 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private createCard = restartableTask(async () => {
-    let cardType = this.activeFilter.query.filter.type!;
+    let ref = this.activeFilter.cardRef;
+    if (!ref) {
+      console.error(
+        `Can not create new ${this.activeFilter.cardTypeName}. CardRef is not found.`,
+      );
+      return;
+    }
     let currentRealm = this.realms[0];
-    await this.args.context?.actions?.createCard?.(cardType, currentRealm, {
+    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
     });
   });
 }
 
-//  Using type CardDef instead of AppCard from catalog because of
-//  the many type issues resulting from the lack types from catalog realm
+// TODO: BlogApp should extend AppCard
+// Using type CardDef instead of AppCard from catalog because of
+// the many type issues resulting from the lack types from catalog realm
 export class BlogApp extends CardDef {
   static displayName = 'Blog App';
   static prefersWideFormat = true;
