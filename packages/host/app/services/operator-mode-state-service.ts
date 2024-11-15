@@ -402,6 +402,9 @@ export default class OperatorModeStateService extends Service {
 
   private persist() {
     this.operatorModeController.operatorModeState = this.serialize();
+    // This sets the title of the document for it's appearance in the browser
+    // history (which needs to happen after the history pushState)--the
+    // afterRender is the perfect place for this
     document.title = this.title;
   }
 
