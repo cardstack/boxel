@@ -4,7 +4,7 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
@@ -344,6 +344,16 @@ export default class OperatorModeStateService extends Service {
     });
   }
 
+  @cached
+  get title() {
+    if (this.state.submode === Submodes.Code) {
+      return `Code Mode: ${this.state.codePath}`;
+    } else {
+      let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
+      return itemForTitle?.card.title ?? 'Boxel';
+    }
+  }
+
   private updateOpenDirsForNestedPath() {
     let localPath = this.codePathRelativeToRealm;
 
@@ -392,6 +402,7 @@ export default class OperatorModeStateService extends Service {
 
   private persist() {
     this.operatorModeController.operatorModeState = this.serialize();
+    document.title = this.title;
   }
 
   // Serialized POJO version of state, with only cards that have been saved.

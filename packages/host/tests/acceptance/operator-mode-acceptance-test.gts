@@ -407,6 +407,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    assert.strictEqual(
+      document.querySelector('title')?.textContent,
+      'Test Workspace B',
+    );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
@@ -460,6 +464,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
       submode: Submodes.Interact,
     });
+    assert.strictEqual(document.querySelector('title')?.textContent, 'Mango');
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
@@ -500,6 +505,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+    assert.strictEqual(
+      document.querySelector('title')?.textContent,
+      `Code Mode: ${testRealmURL}address-with-no-embedded-template`,
+    );
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
