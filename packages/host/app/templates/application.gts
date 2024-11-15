@@ -5,15 +5,12 @@ import RouteTemplate from 'ember-route-template';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 
-import HeadLayout from '../components/head-layout';
-
 interface ApplicationRouteSignature {
   Args: {};
 }
 
 const ApplicationRouteComponent: TemplateOnlyComponent<ApplicationRouteSignature> =
   <template>
-    <HeadLayout />
     {{outlet}}
     <CardPrerender />
 
