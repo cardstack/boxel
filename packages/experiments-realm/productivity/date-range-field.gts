@@ -149,6 +149,8 @@ export default class DateRangeField extends FieldDef {
 
   static edit = Edit;
   static atom = class Atom extends Component<typeof this> {
+    // Note: The designs are slightly inconsistent with the data structure of the card
+    // this function is used to determine if the end date is missing, so we can display (although there is more data behind the scenes)
     get hasNoDueDateInfo() {
       return !this.args.model.end;
     }
