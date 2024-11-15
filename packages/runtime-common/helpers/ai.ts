@@ -391,6 +391,9 @@ export function getPatchTool(
       parameters: {
         type: 'object',
         properties: {
+          description: {
+            type: 'string',
+          },
           attributes: {
             type: 'object',
             properties: {
@@ -398,14 +401,16 @@ export function getPatchTool(
                 type: 'string',
                 const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
               },
-              description: {
-                type: 'string',
+              patch: {
+                type: 'object',
+                properties: {
+                  ...patchSpec,
+                },
               },
-              ...patchSpec,
             },
           },
         },
-        required: ['attributes'],
+        required: ['attributes', 'description'],
       },
     },
   };
@@ -445,15 +450,20 @@ export function getSearchTool() {
           description: {
             type: 'string',
           },
-          filter: {
+          attributes: {
             type: 'object',
             properties: {
-              contains: containsFilterProperty,
-              eq: eqCardTypeFilterProperty,
+              filter: {
+                type: 'object',
+                properties: {
+                  contains: containsFilterProperty,
+                  eq: eqCardTypeFilterProperty,
+                },
+              },
             },
           },
         },
-        required: ['filter', 'description'],
+        required: ['attributes', 'description'],
       },
     },
   };

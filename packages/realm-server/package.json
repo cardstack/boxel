@@ -32,6 +32,7 @@
     "@types/yargs": "^17.0.10",
     "concurrently": "^8.0.1",
     "date-fns": "^2.28.0",
+    "decorator-transforms": "^2.3.0",
     "eslint-plugin-qunit": "^7.3.4",
     "ethers": "^6.6.2",
     "eventsource": "^2.0.2",

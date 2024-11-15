@@ -18,6 +18,7 @@ import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
+import 'decorator-transforms/globals';
 
 let log = logger('main');
 

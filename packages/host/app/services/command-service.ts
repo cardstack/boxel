@@ -7,6 +7,8 @@ import flatMap from 'lodash/flatMap';
 
 import { IEvent } from 'matrix-js-sdk';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   Command,
   type LooseSingleCardDocument,
@@ -32,6 +34,8 @@ import type {
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import { shortenUuid } from '../utils/uuid';
+
 import CardService from './card-service';
 import RealmServerService from './realm-server';
 
@@ -42,7 +46,6 @@ export default class CommandService extends Service {
   @service private declare realm: Realm;
   @service private declare realmServer: RealmServerService;
 
-  private commandNonce = 0;
   private commands: Map<
     string,
     { command: Command<any, any, any>; autoExecute: boolean }
@@ -52,8 +55,7 @@ export default class CommandService extends Service {
     command: Command<any, any, any>,
     autoExecute: boolean,
   ) {
-    console.log('registerCommand', command.name);
-    let name = `${command.name}_${this.commandNonce++}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
+    let name = `${command.name}_${shortenUuid(uuidv4())}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
     this.commands.set(name, { command, autoExecute });
     return name;
   }
@@ -135,18 +137,14 @@ export default class CommandService extends Service {
       // lookup command
       let { command: commandToRun } = this.commands.get(command.name) ?? {};
 
-      console.log('run', command.name, commandToRun);
-
       if (commandToRun) {
         // Get the input type and validate/construct the payload
         let InputType = await commandToRun.getInputType();
         // Construct a new instance of the input type with the payload
-        console.log('payload', payload);
         let typedInput = new InputType({
           ...payload.attributes,
           ...payload.relationships,
         });
-        console.log('typedInput', typedInput);
         res = await commandToRun.execute(typedInput);
       } else if (command.name === 'patchCard') {
         if (!hasPatchData(payload)) {

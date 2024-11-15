@@ -12,7 +12,7 @@ import { modifier } from 'ember-modifier';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Avatar, Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance, markdownToHtml } from '@cardstack/runtime-common';
@@ -33,7 +33,6 @@ import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
-import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -114,8 +113,10 @@ export default class RoomMessage extends Component<Signature> {
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component
-          ProfileAvatarIcon
+          Avatar
+          isReady=true
           userId=@message.author.userId
+          displayName=@message.author.displayName
         }}
         @resources={{this.resources}}
         @errorMessage={{this.errorMessage}}

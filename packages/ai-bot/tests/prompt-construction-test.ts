@@ -15,7 +15,7 @@ import type {
   Tool,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { EventStatus } from 'matrix-js-sdk';
+import { EventStatus, IRoomEvent } from 'matrix-js-sdk';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -930,8 +930,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  patch: {
-                    attributes: {
+                  attributes: {
+                    type: 'object',
+                    properties: {
                       firstName: { type: 'string' },
                     },
                   },
@@ -963,6 +964,9 @@ module('getModifyPrompt', () => {
         parameters: {
           type: 'object',
           properties: {
+            description: {
+              type: 'string',
+            },
             attributes: {
               type: 'object',
               properties: {
@@ -970,20 +974,23 @@ module('getModifyPrompt', () => {
                   type: 'string',
                   const: 'http://localhost:4201/experiments/Friend/1',
                 },
-                description: {
-                  type: 'string',
-                },
                 patch: {
-                  attributes: {
-                    firstName: {
-                      type: 'string',
+                  type: 'object',
+                  properties: {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        firstName: {
+                          type: 'string',
+                        },
+                      },
                     },
                   },
                 },
               },
             },
           },
-          required: ['attributes'],
+          required: ['attributes', 'description'],
         },
       },
     });
@@ -1036,7 +1043,10 @@ module('getModifyPrompt', () => {
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Meeting/2', {
                   attributes: {
-                    location: { type: 'string' },
+                    type: 'object',
+                    properties: {
+                      location: { type: 'string' },
+                    },
                   },
                 }),
               ],
@@ -1067,6 +1077,9 @@ module('getModifyPrompt', () => {
           parameters: {
             type: 'object',
             properties: {
+              description: {
+                type: 'string',
+              },
               attributes: {
                 type: 'object',
                 properties: {
@@ -1074,18 +1087,23 @@ module('getModifyPrompt', () => {
                     type: 'string',
                     const: 'http://localhost:4201/experiments/Meeting/2',
                   },
-                  description: {
-                    type: 'string',
-                  },
-                  attributes: {
-                    location: {
-                      type: 'string',
+                  patch: {
+                    type: 'object',
+                    properties: {
+                      attributes: {
+                        type: 'object',
+                        properties: {
+                          location: {
+                            type: 'string',
+                          },
+                        },
+                      },
                     },
                   },
                 },
               },
             },
-            required: ['attributes'],
+            required: ['attributes', 'description'],
           },
         },
       });

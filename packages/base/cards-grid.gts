@@ -1,5 +1,4 @@
 import { action } from '@ember/object';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -15,12 +14,12 @@ import {
   AddButton,
   CardContainer,
   FilterList,
-  IconButton,
   Tooltip,
   type Filter,
   BoxelDropdown,
   Menu as BoxelMenu,
   BoxelButton,
+  ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
@@ -101,34 +100,15 @@ class Isolated extends Component<typeof CardsGrid> {
           <div class='title'>
             {{this.activeFilter.displayName}}
           </div>
-          <div class='view-as'>
-            <span>View as</span>
-            <IconButton
-              @icon={{IconList}}
-              @width='20px'
-              @height='20px'
-              class={{cn
-                'view-as__button'
-                is-selected-view=(eq this.viewSize 'strip')
-              }}
-              {{on 'click' (fn (mut this.viewSize) 'strip')}}
-            />
-            <IconButton
-              @icon={{IconGrid}}
-              @width='20px'
-              @height='20px'
-              class={{cn
-                'view-as__button'
-                is-selected-view=(eq this.viewSize 'grid')
-              }}
-              {{on 'click' (fn (mut this.viewSize) 'grid')}}
-            />
-          </div>
+          <ViewSelector
+            @items={{this.viewOptions}}
+            @onChange={{this.onViewChange}}
+            @selectedId={{this.viewSize}}
+          />
           <div class='sorting'>
             <span>
               Sort by
             </span>
-
             <BoxelDropdown>
               <:trigger as |bindings|>
                 <BoxelButton class='sort-button' {{bindings}}>
@@ -274,23 +254,6 @@ class Isolated extends Component<typeof CardsGrid> {
         overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
       }
-      .view-as {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-      }
-      .view-as > span {
-        text-wrap: nowrap;
-        margin-right: var(--boxel-sp-xxs);
-      }
-      .view-as__button {
-        --boxel-icon-button-width: 20px;
-        --boxel-icon-button-height: 20px;
-        --icon-color: var(--boxel-450);
-      }
-      .is-selected-view {
-        --icon-color: var(--boxel-dark);
-      }
       .cards {
         list-style-type: none;
         margin: 0;
@@ -341,6 +304,10 @@ class Isolated extends Component<typeof CardsGrid> {
       },
     ]);
 
+  private viewOptions = [
+    { id: 'strip', icon: IconList },
+    { id: 'grid', icon: IconGrid },
+  ];
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
   @tracked viewSize: 'grid' | 'strip' = 'grid';
@@ -360,6 +327,10 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @action onFilterChanged(filter: Filter) {
     this.activeFilter = filter;
+  }
+
+  @action onViewChange(viewId: 'grid' | 'strip') {
+    this.viewSize = viewId;
   }
 
   @action
