@@ -21,6 +21,7 @@ import {
   assertLoggedOut,
   logout,
   login,
+  setupPayment,
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
@@ -106,7 +107,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
 
-    await assertPaymentSetup(page, 'user1');
+    // base 64 encode the matrix user id
+    const matrixUserId = Buffer.from('@user1:localhost').toString('base64');
+
+    await assertPaymentSetup(page, matrixUserId);
+    await setupPayment(page, matrixUserId, realmServer);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',

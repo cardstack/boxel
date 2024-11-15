@@ -16,6 +16,7 @@ import {
   gotoRegistration,
   assertLoggedIn,
   assertPaymentSetup,
+  setupPayment,
   registerRealmUsers,
 } from '../helpers';
 
@@ -63,18 +64,15 @@ test.describe('User Registration w/o Token', () => {
 
     await page.bringToFront();
 
-    let users = await realmServer.executeSQL('SELECT * FROM users');
-    // TODO remove this--this is just here to prove that the sql actually works
-    let realmVersions = await realmServer.executeSQL(
-      'SELECT * FROM realm_versions',
-    );
-    console.log(users);
-
     await expect(page.locator('[data-test-email-validated]')).toContainText(
       'Success! Your email has been validated',
     );
 
-    await assertPaymentSetup(page, 'user1');
+    // base 64 encode the matrix user id
+    const matrixUserId = Buffer.from('@user1:localhost').toString('base64');
+
+    await assertPaymentSetup(page, matrixUserId);
+    await setupPayment(page, matrixUserId, realmServer);
     await assertLoggedIn(page);
   });
 });

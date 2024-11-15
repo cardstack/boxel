@@ -229,10 +229,13 @@ export default class RealmServerService extends Service {
       return;
     }
     const json = await this.authenticatedUserRequest();
+    let plan =
+      json.included?.find((i: { type: string }) => i.type === 'plan')
+        ?.attributes?.name ?? null;
     this._user = {
       matrixUserId: json.data.attributes.matrixUserId,
       stripeCustomerId: json.data.attributes.stripeCustomerId,
-      plan: json.data.attributes.plan,
+      plan: plan,
     };
   }
 

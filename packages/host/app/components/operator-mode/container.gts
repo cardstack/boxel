@@ -131,10 +131,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private get matrixUserId() {
-    if (!this.realmServer.user) {
-      return '';
-    }
-    return this.realmServer.user.matrixUserId;
+    return this.matrixService.userId;
   }
 
   <template>
