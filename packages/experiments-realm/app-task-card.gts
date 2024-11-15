@@ -256,7 +256,6 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
               index: null,
               label: null,
             },
-            dueDate: null,
             description: null,
             thumbnailURL: null,
           },

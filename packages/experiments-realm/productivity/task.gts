@@ -19,7 +19,6 @@ import {
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
-import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
@@ -517,17 +516,7 @@ class TaskIsolated extends Component<typeof Task> {
               </span>
             </div>
           {{/if}}
-          {{#if this.hasDateRange}}
-            <div class='task-dates'>
-              <Calendar width='14px' height='14px' class='calendar-icon' />
-              <span class='date-info'>
-                <@fields.dateStarted />
-                -
-                <@fields.dueDate />
-              </span>
-            </div>
-          {{/if}}
-
+          <@fields.dateRange @format='atom' />
         </div>
         <div class='row-2'>
           {{#each this.tagNames as |tagLabel|}}
@@ -805,8 +794,6 @@ export class Task extends CardDef {
   @field assignee = linksTo(TeamMember);
   @field project = linksTo(Project);
   @field team = linksTo(Team);
-  @field dateStarted = contains(DateField);
-  @field dueDate = contains(DateField);
   @field children = linksToMany(() => Task);
   @field tags = linksToMany(() => Tag);
   @field dateRange = contains(DateRangeField);

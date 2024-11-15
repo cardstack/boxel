@@ -16,6 +16,8 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -36,16 +38,7 @@ class Edit extends Component<typeof DateRangeField> {
   @tracked closeWithoutSaving: boolean = false;
 
   get formatted() {
-    if (!this.range.start && !this.range.end) {
-      return '[Select a date range]';
-    }
-    let start = this.range.start
-      ? Format.format(this.range.start)
-      : '[Select start date]';
-    let end = this.range.end
-      ? Format.format(this.range.end)
-      : '[Select end date]';
-    return `${start} - ${end}`;
+    return getFormattedDate(this.range);
   }
 
   @action onSelect(selected: any) {
@@ -145,6 +138,7 @@ class Edit extends Component<typeof DateRangeField> {
 
 export default class DateRangeField extends FieldDef {
   static displayName = 'Date Range';
+  static icon = CalendarIcon;
   @field start = contains(DateField);
   @field end = contains(DateField);
   @field title = contains(StringField, {
@@ -154,4 +148,81 @@ export default class DateRangeField extends FieldDef {
   });
 
   static edit = Edit;
+  static atom = class Atom extends Component<typeof this> {
+    get hasNoDueDateInfo() {
+      return !this.args.model.end;
+    }
+
+    get formatted() {
+      return getFormattedDate(this.args.model as DateRange, {
+        dueDateOnly: true,
+        noDateMsg: '[No date assigned]',
+      });
+    }
+
+    get dateIcon() {
+      return this.args.model.constructor?.icon;
+    }
+
+    <template>
+      <time class='date-info'>
+        {{#if this.dateIcon}}
+          <this.dateIcon class='icon' />
+        {{/if}}
+        <div class={{cn 'text' no-date-info=this.hasNoDueDateInfo}}>
+          {{this.formatted}}
+        </div>
+      </time>
+      <style scoped>
+        .date-info {
+          --date-icon-size: 14px;
+          display: inline-flex;
+          align-items: center;
+          font-size: calc(var(--date-icon-size) * 0.9);
+          gap: var(--boxel-sp-xxs);
+          white-space: nowrap;
+          -webkit-line-clamp: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-weight: 500;
+        }
+        .icon {
+          width: var(--date-icon-size);
+          height: var(--date-icon-size);
+        }
+        .text {
+          color: var(--boxel-600);
+        }
+        .text.no-date-info {
+          color: var(--boxel-400);
+        }
+      </style>
+    </template>
+  };
+}
+
+interface DateRangeConfig {
+  dueDateOnly: boolean;
+  noDateMsg: string;
+}
+
+function getFormattedDate(
+  range: DateRange,
+  config: Partial<DateRangeConfig> = {},
+): string {
+  const defaults = {
+    dueDateOnly: false,
+    noDateMsg: '[Select a date]',
+  };
+  const finalConfig = { ...defaults, ...config };
+
+  if (!range.start && !range.end) {
+    return finalConfig.noDateMsg;
+  }
+  let start = range.start ? Format.format(range.start) : '[Select start date]';
+  let end = range.end ? Format.format(range.end) : '[Select end date]';
+  if (finalConfig.dueDateOnly === true) {
+    return end;
+  }
+  return `${start} - ${end}`;
 }
