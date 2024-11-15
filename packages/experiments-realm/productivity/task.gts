@@ -232,22 +232,20 @@ export class TeamMember extends User {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <div class='assignee-display'>
-        <Avatar
-          class='avatar'
-          @userId={{@model.id}}
-          @displayName={{@model.name}}
-          @isReady={{true}}
-        />
-        <span class='assignee-name'>
-          {{@model.name}}
-        </span>
-      </div>
-
-      {{! can be changed to scoped if needed }}
-      {{! template-lint-disable require-scoped-style }}
-
-      <style>
+      {{#if @model}}
+        <div class='assignee-display'>
+          <Avatar
+            class='avatar'
+            @userId={{@model.id}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
+          <span class='assignee-name'>
+            {{@model.name}}
+          </span>
+        </div>
+      {{/if}}
+      <style scoped>
         .assignee-display {
           display: flex;
           align-items: center;
@@ -258,14 +256,14 @@ export class TeamMember extends User {
           width: fit-content;
         }
         .avatar {
-          --profile-avatar-icon-size: 26px;
+          --profile-avatar-icon-size: 20px;
           --profile-avatar-icon-border: 0px;
           flex-shrink: 0;
         }
         .assignee-name {
-          font-size: 12px;
-          font-weight: 500;
           padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
+          font: 600 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -343,9 +341,11 @@ class Fitted extends Component<typeof Task> {
       </div>
 
       <div class='card-info'>
-        {{#if @model.assignee}}
-          <@fields.assignee @format='atom' />
-        {{/if}}
+        <@fields.assignee
+          class='card-assignee'
+          @format='atom'
+          @displayContainer={{false}}
+        />
 
         {{#if @model.tags.length}}
           <div class='card-tags'>
@@ -376,8 +376,7 @@ class Fitted extends Component<typeof Task> {
       </div>
     </div>
 
-    {{! template-lint-disable require-scoped-style }}
-    <style>
+    <style scoped>
       .card-info {
         position: relative;
         display: flex;
@@ -386,23 +385,11 @@ class Fitted extends Component<typeof Task> {
         gap: var(--boxel-sp-xxs);
         overflow-x: hidden;
       }
-      .card-info .boundaries {
-        box-shadow: none;
-      }
-      .card-info .field-component-card.atom-format.display-container-true {
-        padding: 0;
-        background-color: transparent;
+      .card-assignee {
         width: auto;
         height: auto;
         overflow: unset;
       }
-      .card-assignee {
-        display: inline-flex;
-        align-items: center;
-        overflow: hidden;
-      }
-    </style>
-    <style scoped>
       .task-card {
         width: 100%;
         height: 100%;
@@ -643,19 +630,11 @@ class TaskIsolated extends Component<typeof Task> {
       </div>
       <div class='task-meta'>
         <div class='row-1'>
-          {{#if @model.assignee}}
-            <div class='task-assignee'>
-              <Avatar
-                class='avatar'
-                @userId={{@model.assignee.id}}
-                @displayName={{@model.assignee.name}}
-                @isReady={{true}}
-              />
-              <span class='assignee-name'>
-                {{@model.assignee.name}}
-              </span>
-            </div>
-          {{/if}}
+          <@fields.assignee
+            class='task-assignee'
+            @format='atom'
+            @displayContainer={{false}}
+          />
           {{#if this.hasDateRange}}
             <div class='task-dates'>
               <Calendar width='14px' height='14px' class='calendar-icon' />
@@ -741,11 +720,9 @@ class TaskIsolated extends Component<typeof Task> {
         gap: var(--boxel-sp-xs);
       }
       .task-assignee {
-        display: inline-flex;
-        align-items: center;
-        background-color: var(--boxel-200);
-        border-radius: 100px;
-        overflow: hidden;
+        width: auto;
+        height: auto;
+        overflow: unset;
       }
       .row-1 {
         display: flex;
@@ -946,16 +923,11 @@ export class Task extends CardDef {
   static atom = class Atom extends Component<typeof this> {
     <template>
       <div class='task-atom'>
-        {{#if @model.assignee}}
-          <div class='avatar-wrapper'>
-            <Avatar
-              @userId={{@model.assignee.id}}
-              @displayName={{@model.assignee.name}}
-              @isReady={{true}}
-              class='avatar'
-            />
-          </div>
-        {{/if}}
+        <@fields.assignee
+          @format='atom'
+          @displayContainer={{false}}
+          class='task-assignee'
+        />
         <div class='task-title'>{{@model.taskName}}</div>
       </div>
       <style scoped>
@@ -964,11 +936,10 @@ export class Task extends CardDef {
           align-items: center;
           gap: var(--boxel-sp-xxxs);
         }
-        .avatar-wrapper {
-          display: inline-block;
-        }
-        .avatar {
-          --profile-avatar-icon-size: 20px;
+        .task-assignee {
+          width: auto;
+          height: auto;
+          overflow: unset;
         }
         .task-title {
           white-space: nowrap;
