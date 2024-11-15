@@ -13,6 +13,7 @@ import {
   CardDef,
   Component,
   realmURL,
+  type CardContext,
 } from 'https://cardstack.com/base/card-api';
 
 import { baseRealm, type Query } from '@cardstack/runtime-common';
@@ -199,16 +200,69 @@ class SortMenu extends GlimmerComponent<SortMenuSignature> {
   }
 }
 
+interface CardsGridSignature {
+  Args: {
+    query: Query;
+    realms: URL[];
+    context?: CardContext;
+  };
+}
+class CardsGrid extends GlimmerComponent<CardsGridSignature> {
+  <template>
+    <ul class='cards' data-test-cards-grid-cards>
+      {{#let
+        (component @context.prerenderedCardSearchComponent)
+        as |PrerenderedCardSearch|
+      }}
+        <PrerenderedCardSearch
+          @query={{@query}}
+          @format='fitted'
+          @realms={{@realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <li
+                class='card'
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardContainer @displayBoundaries='true'>
+                  {{card.component}}
+                </CardContainer>
+              </li>
+            {{/each}}
+          </:response>
+        </PrerenderedCardSearch>
+      {{/let}}
+    </ul>
+    <style>
+      .cards {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </template>
+}
+
 class BlogAppTemplate extends Component<typeof BlogApp> {
   <template>
     <section class='blog-app'>
-      <div class='blog-app-column sidebar'>
+      <aside class='blog-app-column sidebar'>
         <header class='sidebar-header'>
           <img
             class='sidebar-header-thumbnail'
             src={{@model.thumbnailURL}}
             width='60'
             height='60'
+            role='presentation'
           />
           <h1 class='sidebar-header-title'><@fields.title /></h1>
           <p class='sidebar-header-description'><@fields.description /></p>
@@ -231,8 +285,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           @activeFilter={{this.activeFilter}}
           @onChanged={{this.onFilterChange}}
         />
-      </div>
-      <div class='blog-app-column content'>
+      </aside>
+      <section class='blog-app-column content'>
         <header class='content-header'>
           <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
           <ViewSelector
@@ -245,41 +299,12 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @onSort={{this.onSort}}
           />
         </header>
-
-        <ul class='cards' data-test-cards-grid-cards>
-          {{#let
-            (component @context.prerenderedCardSearchComponent)
-            as |PrerenderedCardSearch|
-          }}
-            <PrerenderedCardSearch
-              @query={{this.query}}
-              @format='fitted'
-              @realms={{this.realms}}
-            >
-              <:loading>
-                Loading...
-              </:loading>
-              <:response as |cards|>
-                {{#each cards as |card|}}
-                  <li
-                    class='card'
-                    {{@context.cardComponentModifier
-                      cardId=card.url
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <CardContainer @displayBoundaries='true'>
-                      {{card.component}}
-                    </CardContainer>
-                  </li>
-                {{/each}}
-              </:response>
-            </PrerenderedCardSearch>
-          {{/let}}
-        </ul>
-      </div>
+        <CardsGrid
+          @context={{@context}}
+          @query={{this.query}}
+          @realms={{this.realms}}
+        />
+      </section>
     </section>
     <style scoped>
       .blog-app {
@@ -372,11 +397,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         margin: 0;
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
-      }
-      .cards {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
       }
     </style>
   </template>
