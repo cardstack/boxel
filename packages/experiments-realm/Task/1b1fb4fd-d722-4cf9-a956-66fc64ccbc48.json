@@ -12,7 +12,8 @@
         "index": null,
         "label": null
       },
-      "dueDate": null,
+      "dateStarted": null,
+      "dueDate": "2024-11-16",
       "description": null,
       "thumbnailURL": null
     },
@@ -30,6 +31,16 @@
       "team": {
         "links": {
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },

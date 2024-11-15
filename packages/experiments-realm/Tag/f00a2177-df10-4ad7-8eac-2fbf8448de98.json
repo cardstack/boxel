@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Card",
-      "color": "#00ac3d",
+      "color": "",
       "description": null,
       "thumbnailURL": null
     },

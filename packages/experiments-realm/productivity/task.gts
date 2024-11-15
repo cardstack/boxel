@@ -29,6 +29,8 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
+import { isToday, isThisWeek, addWeeks } from 'date-fns';
+import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -262,7 +264,7 @@ export class TeamMember extends User {
         }
         .assignee-name {
           padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
-          font: 600 var(--boxel-font-xs);
+          font: 500 var(--boxel-font-xs);
           letter-spacing: var(--boxel-lsp-sm);
           white-space: nowrap;
           overflow: hidden;
@@ -319,77 +321,109 @@ function shortenId(id: string): string {
 
 class Fitted extends Component<typeof Task> {
   get visibleTags() {
-    if (!this.args.model.tags) return [];
-    return this.args.model.tags.slice(0, 3);
+    return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
   }
 
-  get hasMoreTags() {
-    if (!this.args.model.tags) return false;
-    return this.args.model.tags.length > 3;
-  }
+  get dueDateStatus() {
+    if (!this.args.model.dueDate) return null;
 
-  get remainingTagsCount() {
-    if (!this.args.model.tags) return '';
-    return this.args.model.tags.length - 3;
+    const dueDate = new Date(this.args.model.dueDate);
+    const nextWeek = addWeeks(new Date(), 1);
+
+    if (isToday(dueDate)) {
+      return {
+        label: 'Due Today',
+        color: '#01de67',
+        urgent: true,
+      };
+    } else if (isThisWeek(dueDate)) {
+      return {
+        label: 'This Week',
+        color: '#ffbc00',
+        urgent: false,
+      };
+    } else if (dueDate <= nextWeek) {
+      return {
+        label: 'Next Week',
+        color: '#4fc8fd',
+        urgent: false,
+      };
+    }
+    return null;
   }
 
   <template>
     <div class='task-card'>
-      <div class='card-header'>
-        <span class='short-id'>{{@model.shortId}}</span>
-        <h3 class='task-title'>{{@model.taskName}}</h3>
-      </div>
+      <header>
+        {{#if this.visibleTags.length}}
+          <div class='card-tags'>
+            {{#each this.visibleTags as |tag|}}
+              <tag
+                @format='atom'
+                class='card-tag'
+                @displayContainer={{false}}
+              />
+            {{/each}}
+          </div>
+        {{/if}}
+        <div class='short-id-container'>
+          <ChevronsUp width='14px' height='14px' />
+          <span class='short-id'>{{@model.shortId}}</span>
+        </div>
+      </header>
 
       <div class='card-info'>
+        {{#if @model.taskName}}
+          <h3 class='task-title'>{{@model.taskName}}</h3>
+        {{/if}}
+
+        <div class='date-info-container'>
+          {{#if @model.dueDate}}
+            {{#if this.dueDateStatus}}
+              <div class='date-status-pill-container'>
+                <Pill
+                  class='date-status-pill'
+                  @pillBackgroundColor={{this.dueDateStatus.color}}
+                >
+                  <:default>{{this.dueDateStatus.label}}</:default>
+                </Pill>
+
+                <div class='calendar-icon-container'>
+                  <Calendar width='14px' height='14px' class='calendar-icon' />
+                  <time class='date-info' datetime='{{@model.dueDate}}'>
+                    <@fields.dueDate />
+                  </time>
+                </div>
+              </div>
+            {{else}}
+              <div class='calendar-icon-container'>
+                <Calendar width='14px' height='14px' class='calendar-icon' />
+                <time class='date-info' datetime='{{@model.dueDate}}'>
+                  <@fields.dueDate />
+                </time>
+              </div>
+            {{/if}}
+          {{else}}
+            <div class='calendar-icon-container'>
+              <Calendar width='14px' height='14px' class='calendar-icon' />
+
+              <span class='no-date-info'>No Due Date Assigned</span>
+            </div>
+
+          {{/if}}
+        </div>
+      </div>
+
+      <footer>
         <@fields.assignee
           class='card-assignee'
           @format='atom'
           @displayContainer={{false}}
         />
-
-        {{#if @model.tags.length}}
-          <div class='card-tags'>
-            {{#each this.visibleTags as |tag|}}
-              <Pill class='tag-pill' @pillBackgroundColor={{tag.color}}>
-                <:default>
-                  <span>{{tag.name}}</span>
-                </:default>
-              </Pill>
-            {{/each}}
-            {{#if this.hasMoreTags}}
-              <span class='remaining-tags'>+{{this.remainingTagsCount}}</span>
-            {{/if}}
-          </div>
-        {{/if}}
-      </div>
-
-      <div class='card-footer'>
-        <Calendar width='14px' height='14px' class='calendar-icon' />
-
-        {{#if @model.dueDate}}
-          <time class='date-info' datetime='{{@model.dueDate}}'>
-            <@fields.dueDate />
-          </time>
-        {{else}}
-          <span class='no-date-info'>No Due Date Assigned</span>
-        {{/if}}
-      </div>
+      </footer>
     </div>
 
     <style scoped>
-      .card-info {
-        position: relative;
-        display: flex;
-        flex-wrap: nowrap;
-        align-items: stretch;
-        gap: var(--boxel-sp-xxs);
-        overflow-x: hidden;
-      }
-      .card-assignee {
-        width: auto;
-        height: auto;
-        overflow: unset;
-      }
       .task-card {
         width: 100%;
         height: 100%;
@@ -399,12 +433,48 @@ class Fitted extends Component<typeof Task> {
         gap: var(--boxel-sp-sm);
         overflow: hidden;
       }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        justify-content: space-between;
+      }
+      .card-tags {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
+      }
+      .card-tag {
+        width: auto;
+        height: auto;
+        overflow: unset;
+      }
+      .card-tags > :last-child {
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .short-id-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-3xs);
+        margin-left: auto;
+      }
       .short-id {
-        font-size: var(--boxel-font-size-xs);
-        color: var(--boxel-red);
+        font-size: calc(var(--boxel-font-size-xs) * 0.85);
+        font-weight: 600;
+        color: var(--boxel-600);
+        line-height: normal;
+        background-color: var(--boxel-200);
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
+        border-radius: 5px;
+        white-space: nowrap;
       }
       .task-title {
-        margin: var(--boxel-sp-xxxs) 0 0 0;
+        margin: var(--boxel-sp-xxxs) 0;
         padding: 0;
         font-size: var(--boxel-font-size);
         font-weight: 600;
@@ -415,171 +485,172 @@ class Fitted extends Component<typeof Task> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .card-footer {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-        color: var(--boxel-dark);
-        margin-top: auto;
-      }
       .calendar-icon {
         flex-shrink: 0;
       }
+      .date-info-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        margin-top: var(--boxel-sp-xxxs);
+      }
       .date-info {
-        font-size: 10px;
+        font-size: calc(var(--boxel-font-size-xs) * 0.9);
         font-weight: 500;
         color: var(--boxel-600);
-        line-height: 10px;
         white-space: nowrap;
         -webkit-line-clamp: 1;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       .no-date-info {
-        font-size: 10px;
+        font-size: calc(var(--boxel-font-size-xs) * 0.9);
         font-weight: 500;
         color: var(--boxel-400);
-        line-height: 10px;
         white-space: nowrap;
         -webkit-line-clamp: 1;
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .card-tags {
+      .date-status-pill-container {
         display: flex;
-        align-items: stretch;
-        gap: var(--boxel-sp-xxs);
-        flex: 1;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
       }
-      .tag-pill {
-        font-size: 12px;
-        padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
-        border: transparent;
-        border-radius: 5px;
-        overflow: hidden;
-        max-width: 120px;
+      .date-status-pill {
+        border: none;
+        border-radius: 5px 0 0 5px;
+        font-size: calc(var(--boxel-font-size-xs) * 0.9);
+        font-weight: 500;
+        position: relative;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
+          var(--boxel-sp-xxs);
+        clip-path: polygon(
+          0 0,
+          calc(100% - 8px) 0,
+          100% 50%,
+          calc(100% - 8px) 100%,
+          0 100%
+        );
       }
-      .tag-pill > span {
-        white-space: nowrap;
-        -webkit-line-clamp: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .remaining-tags {
+      .calendar-icon-container {
         display: inline-flex;
         align-items: center;
-        justify-content: end;
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--boxel-500);
-        position: absolute;
-        right: 0;
-        width: 50px;
-        height: 100%;
-        background: linear-gradient(to right, transparent 1%, white, white);
+        gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
+      }
+      footer {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        color: var(--boxel-dark);
+        margin-top: auto;
+      }
+      .card-assignee {
+        width: auto;
+        height: auto;
+        overflow: unset;
+        margin-left: auto;
       }
 
-      @container (height <= 29px) {
-        .task-title,
-        .card-info,
-        .card-tags,
-        .card-footer {
-          display: none;
-        }
-      }
-
-      @container fitted-card (1.0 > aspect-ratio) {
-        .card-tags,
-        .card-footer {
-          display: none;
-        }
+      /* Square/Portrait Container (aspect-ratio <= 1.0) */
+      @container (aspect-ratio <= 1.0) {
         .task-card {
-          display: flex;
-          flex-direction: column;
+          padding: var(--boxel-sp-xs);
+        }
+
+        .date-status-pill {
+          display: none;
+        }
+
+        footer {
+          margin-top: auto;
         }
       }
 
-      @container fitted-card (aspect-ratio < 0.9) and (width <= 100px) and (height <= 120px) {
+      /* Compact Portrait (height <= 230px) */
+      @container (aspect-ratio <= 1.0) and (height <=230px) {
         .task-card {
-          padding: var(--boxel-sp-xxs);
-          gap: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-5xs);
         }
-        .card-info,
-        .card-footer {
-          display: none;
-        }
+
         .task-title {
-          -webkit-line-clamp: 1;
+          font-size: var(--boxel-font-xs);
         }
-      }
 
-      @container fitted-card (aspect-ratio < 0.95) and (width <= 165px) and (height <= 225px) {
-        .task-card {
-          padding: var(--boxel-sp-xxs);
-          gap: var(--boxel-sp-xxs);
-        }
-        .card-footer {
-          display: inline-flex;
-        }
         .card-tags {
           display: none;
         }
       }
 
-      @container fitted-card (2.0 < aspect-ratio) {
-        .task-card {
-          padding: var(--boxel-sp-xxs);
-        }
+      /* Landscape Container (1.0 < aspect-ratio <= 2.0) */
+      @container (1.0 < aspect-ratio <= 2.0) {
         .task-title {
           -webkit-line-clamp: 1;
         }
+
+        .task-card {
+          padding: var(--boxel-sp-sm);
+        }
       }
 
-      @container fitted-card (2.0 < aspect-ratio) and (height <= 115px) {
-        .task-card {
-          gap: var(--boxel-sp-xxs);
-        }
-        .card-footer {
+      /* Extra styles for very narrow height but medium*/
+      @container (aspect-ratio < 2.0) and (height <= 78px) {
+        .card-tags,
+        .date-info-container {
           display: none;
         }
       }
 
-      @container fitted-card (2.0 < aspect-ratio) and (aspect-ratio > 3.9) and (height <= 58px) {
-        .task-card,
-        .card-header {
-          display: flex;
+      @container (aspect-ratio > 2.0) and (height <= 78px) {
+        .task-card {
+          padding: var(--boxel-sp-xxxs);
+        }
+
+        .card-tags,
+        .date-info-container {
+          display: none;
+        }
+
+        .task-title {
+          font-size: var(--boxel-font-xs);
+          -webkit-line-clamp: 1;
+        }
+      }
+
+      /* Extra styles for super narrow height */
+      @container (aspect-ratio > 6.0) and (height <= 78px) {
+        .task-card {
+          padding: var(--boxel-sp-xs);
           flex-direction: row;
           align-items: center;
-          justify-content: space-between;
-          gap: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-sm);
         }
-        .card-info {
-          margin-top: 0;
-        }
-        .card-footer {
+
+        .card-tags,
+        .date-info-container {
           display: none;
         }
+
         .task-title {
-          margin: 0;
-          -webkit-line-clamp: 1;
+          font-size: var(--boxel-font-xs);
         }
-        .card-due-date-display,
-        .card-tags {
-          display: none;
+
+        footer {
+          margin-top: 0;
+          margin-left: auto;
         }
       }
 
-      @container fitted-card (2.0 < aspect-ratio) and (width <= 150px) {
-        .task-card,
-        .card-header {
-          align-items: center;
-          justify-content: center;
+      /* Wide Container (aspect-ratio > 2.0) */
+      @container (aspect-ratio > 2.0) {
+        .task-card {
+          gap: var(--boxel-sp-xxxs);
         }
-        .card-info,
-        .task-title,
-        .card-due-date-display,
-        .card-tags {
-          display: none;
+
+        .task-title {
+          -webkit-line-clamp: 1;
         }
       }
     </style>
@@ -599,11 +670,20 @@ export class Tag extends CardDef {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <Pill>
+      <Pill class='tag-pill' @pillBackgroundColor={{@model.color}}>
         <:default>
-          {{@model.name}}
+          <span># {{@model.name}}</span>
         </:default>
       </Pill>
+      <style scoped>
+        .tag-pill {
+          font-size: calc(var(--boxel-font-size-xs) * 0.9);
+          font-weight: 500;
+          padding: 0;
+          --pill-font-color: var(--boxel-500);
+          border: none;
+        }
+      </style>
     </template>
   };
 }
@@ -754,7 +834,7 @@ class TaskIsolated extends Component<typeof Task> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         color: var(--boxel-600);
-        line-height: 10px;
+        line-height: calc(var(--boxel-font-size-xs) * 0.9);
       }
       .children-header {
         font-size: var(--boxel-font-size-sm);
