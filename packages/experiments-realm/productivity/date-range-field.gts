@@ -17,7 +17,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
