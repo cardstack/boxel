@@ -35,7 +35,6 @@ class Edit extends Component<typeof DateRangeField> {
     start: this.args.model.start,
     end: this.args.model.end,
   };
-  @tracked closeWithoutSaving: boolean = false;
 
   get formatted() {
     return getFormattedDate(this.range);
@@ -45,32 +44,7 @@ class Edit extends Component<typeof DateRangeField> {
     this.range = selected.date;
   }
 
-  isSameAsModel(range: DateRange) {
-    if (
-      !this.args.model.start &&
-      !this.args.model.end &&
-      !this.range.start &&
-      !this.range.end
-    ) {
-      return true;
-    }
-
-    if (
-      this.args.model.start &&
-      this.args.model.end &&
-      range.start &&
-      range.end
-    ) {
-      return (
-        this.args.model.start.getTime() === range.start.getTime() &&
-        this.args.model.end.getTime() === range.end.getTime()
-      );
-    } else {
-      return false;
-    }
-  }
-
-  save() {
+  write() {
     if (this.range.start) {
       this.args.model.start = this.range.start;
     }
@@ -79,20 +53,27 @@ class Edit extends Component<typeof DateRangeField> {
     }
   }
 
-  @action onClose() {
-    if (this.closeWithoutSaving) {
-      this.closeWithoutSaving = false;
-      return;
-    }
-    if (this.isSameAsModel(this.range)) {
-      return;
-    }
-    this.save();
+  @action save(close: () => void) {
+    this.write();
+    close();
   }
 
-  @action cancel(close: () => void) {
-    this.closeWithoutSaving = true;
-    close();
+  @action onClose() {
+    this.range = {
+      start: this.args.model.start,
+      end: this.args.model.end,
+    };
+  }
+  // reset allows the user to
+  //1. decide if he even wants a field to be present (ie he might want an empty date range)
+  //2. allows the user to also go back to the original state of TODAY while editing
+  @action reset() {
+    this.range = {
+      start: null,
+      end: null,
+    };
+    this.args.model.start = undefined;
+    this.args.model.end = undefined;
   }
 
   <template>
@@ -114,9 +95,13 @@ class Edit extends Component<typeof DateRangeField> {
           </div>
           <div class='dropdown-actions'>
             <BoxelButton
+              @kind='secondary'
+              {{on 'click' (fn this.reset)}}
+            >Reset</BoxelButton>
+            <BoxelButton
               @kind='primary'
-              {{on 'click' (fn this.cancel dd.close)}}
-            >Cancel</BoxelButton>
+              {{on 'click' (fn this.save dd.close)}}
+            >Save</BoxelButton>
           </div>
         </div>
       </:content>
@@ -131,6 +116,7 @@ class Edit extends Component<typeof DateRangeField> {
       .dropdown-actions {
         display: flex;
         justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
       }
     </style>
   </template>
