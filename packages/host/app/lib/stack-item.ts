@@ -89,6 +89,7 @@ export class StackItem {
     } else if (this.cardResource?.card) {
       return this.cardResource.card.title;
     }
+    return undefined;
   }
 
   get cardError() {
