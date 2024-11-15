@@ -4,7 +4,6 @@ import { ComponentLike } from '@glint/template';
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 
-import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
 
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
@@ -48,8 +47,6 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   }
 
   <template>
-    {{pageTitle 'Host Components'}}
-
     <h1 class='boxel-sr-only'>Boxel Host Components Documentation</h1>
 
     <FreestyleGuide
