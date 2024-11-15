@@ -576,7 +576,7 @@ class Fitted extends Component<typeof Task> {
         }
 
         .task-title {
-          font-size: var(--boxel-font-xs);
+          -webkit-line-clamp: 1;
         }
 
         .card-tags {
@@ -586,10 +586,6 @@ class Fitted extends Component<typeof Task> {
 
       /* Landscape Container (1.0 < aspect-ratio <= 2.0) */
       @container (1.0 < aspect-ratio <= 2.0) {
-        .task-title {
-          -webkit-line-clamp: 1;
-        }
-
         .task-card {
           padding: var(--boxel-sp-sm);
         }
@@ -597,6 +593,10 @@ class Fitted extends Component<typeof Task> {
 
       /* Extra styles for very narrow height but medium*/
       @container (aspect-ratio < 2.0) and (height <= 78px) {
+        .task-title {
+          -webkit-line-clamp: 1;
+        }
+
         .card-tags,
         .date-info-container {
           display: none;
@@ -614,8 +614,15 @@ class Fitted extends Component<typeof Task> {
         }
 
         .task-title {
-          font-size: var(--boxel-font-xs);
+          font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 1;
+        }
+      }
+
+      /* Extra styles for small size */
+      @container (aspect-ratio > 2.0) and (width <= 250px) and (height <= 58px) {
+        footer {
+          display: none;
         }
       }
 
@@ -634,7 +641,7 @@ class Fitted extends Component<typeof Task> {
         }
 
         .task-title {
-          font-size: var(--boxel-font-xs);
+          font-size: var(--boxel-font-size-sm);
         }
 
         footer {
