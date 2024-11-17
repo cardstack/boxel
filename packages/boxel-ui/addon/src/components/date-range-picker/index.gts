@@ -160,9 +160,11 @@ export default class DateRangePicker extends Component<Signature> {
     <style>
       .ember-power-calendar {
         --ember-power-calendar-cell-size: 30px;
+        --ember-power-calendar-row-spacing: var(--boxel-sp-sm);
+        width: 100%;
       }
       .ember-power-calendar-week {
-        padding-bottom: var(--boxel-sp-sm);
+        padding-bottom: var(--ember-power-calendar-row-spacing);
       }
     </style>
   </template>
