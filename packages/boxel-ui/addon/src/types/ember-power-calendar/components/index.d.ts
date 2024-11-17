@@ -7,7 +7,3 @@ declare module 'ember-power-calendar/components/power-calendar-range' {
     Nav: typeof NavComponent;
   }
 }
-
-declare module 'ember-power-calendar' {
-  export function registerDateLibrary(dateLibrary: any): void;
-}
