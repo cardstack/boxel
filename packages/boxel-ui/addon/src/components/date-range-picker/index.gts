@@ -82,85 +82,72 @@ export default class DateRangePicker extends Component<Signature> {
   }
 
   <template>
-    <div class='date-range-picker'>
-      <PowerCalendarRange
-        @selected={{@selected}}
-        @onSelect={{@onSelect}}
-        @locale='en-US'
-        ...attributes
-        as |calendar|
-      >
-        <div class='months-container'>
-          <div>
-            <calendar.Nav>
-              <div class='nav-container'>
-                <IconButton
-                  @icon={{TriangleLeftIcon}}
-                  aria-label='Previous month'
-                  {{on 'click' (fn this.onNavigate 'left' 'previous')}}
-                />
-                <div class='month-name'>
-                  {{powerCalendarFormatDate
-                    this.leftCenter
-                    'MMMM yyyy'
-                    locale=calendar.locale
-                  }}
-                </div>
-                <IconButton
-                  @icon={{TriangleRightIcon}}
-                  aria-label='Next month'
-                  {{on 'click' (fn this.onNavigate 'left' 'next')}}
-                />
+    <PowerCalendarRange
+      @selected={{@selected}}
+      @onSelect={{@onSelect}}
+      @locale='en-US'
+      ...attributes
+      as |calendar|
+    >
+      <div class='months-container'>
+        <div class='month-calendar'>
+          <calendar.Nav>
+            <div class='nav-container'>
+              <IconButton
+                @icon={{TriangleLeftIcon}}
+                aria-label='Previous month'
+                {{on 'click' (fn this.onNavigate 'left' 'previous')}}
+              />
+              <div class='month-name'>
+                {{powerCalendarFormatDate
+                  this.leftCenter
+                  'MMMM yyyy'
+                  locale=calendar.locale
+                }}
               </div>
-            </calendar.Nav>
-            <calendar.Days @center={{this.leftCenter}} />
-          </div>
-
-          <div>
-            <calendar.Nav>
-              <div class='nav-container'>
-                <IconButton
-                  @icon={{TriangleLeftIcon}}
-                  aria-label='Previous month'
-                  {{on 'click' (fn this.onNavigate 'right' 'previous')}}
-                />
-                <div class='month-name'>
-                  {{powerCalendarFormatDate
-                    this.rightCenter
-                    'MMMM yyyy'
-                    locale=calendar.locale
-                  }}
-                </div>
-                <IconButton
-                  @icon={{TriangleRightIcon}}
-                  aria-label='Next month'
-                  {{on 'click' (fn this.onNavigate 'right' 'next')}}
-                />
-              </div>
-            </calendar.Nav>
-            <calendar.Days @center={{this.rightCenter}} />
-          </div>
+              <IconButton
+                @icon={{TriangleRightIcon}}
+                aria-label='Next month'
+                {{on 'click' (fn this.onNavigate 'left' 'next')}}
+              />
+            </div>
+          </calendar.Nav>
+          <calendar.Days @center={{this.leftCenter}} />
         </div>
-      </PowerCalendarRange>
-    </div>
+
+        <div class='month-calendar'>
+          <calendar.Nav>
+            <div class='nav-container'>
+              <IconButton
+                @icon={{TriangleLeftIcon}}
+                aria-label='Previous month'
+                {{on 'click' (fn this.onNavigate 'right' 'previous')}}
+              />
+              <div class='month-name'>
+                {{powerCalendarFormatDate
+                  this.rightCenter
+                  'MMMM yyyy'
+                  locale=calendar.locale
+                }}
+              </div>
+              <IconButton
+                @icon={{TriangleRightIcon}}
+                aria-label='Next month'
+                {{on 'click' (fn this.onNavigate 'right' 'next')}}
+              />
+            </div>
+          </calendar.Nav>
+          <calendar.Days @center={{this.rightCenter}} />
+        </div>
+      </div>
+    </PowerCalendarRange>
     <style scoped>
-      .date-range-picker {
+      .month-calendar {
         width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
       }
-
-      .month-name {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
       .months-container {
         display: flex;
         flex-direction: row;
-        align-items: flex-start;
         gap: var(--boxel-sp-lg);
       }
       .nav-container {
@@ -171,11 +158,11 @@ export default class DateRangePicker extends Component<Signature> {
     </style>
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .ember-power-calendar-day {
-        width: 2.5em;
+      .ember-power-calendar {
+        --ember-power-calendar-cell-size: 30px;
       }
       .ember-power-calendar-week {
-        padding: var(--boxel-sp-xxs) 0;
+        padding-bottom: var(--boxel-sp-sm);
       }
     </style>
   </template>
