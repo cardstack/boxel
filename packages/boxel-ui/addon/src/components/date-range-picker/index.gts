@@ -172,11 +172,10 @@ export default class DateRangePicker extends Component<Signature> {
     {{! template-lint-disable require-scoped-style }}
     <style>
       .ember-power-calendar-day {
-        width: 2.5em; /*add fixed width to ensure cols of numbers align*/
-        padding: var(--boxel-sp-xxs);
+        width: 2.5em;
       }
       .ember-power-calendar-week {
-        gap: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xxs) 0;
       }
     </style>
   </template>
