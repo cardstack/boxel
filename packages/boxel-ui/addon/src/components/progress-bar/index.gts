@@ -1,6 +1,8 @@
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { eq } from '@cardstack/boxel-ui/helpers';
+
+import { cssVar } from '../../helpers.ts';
 
 export type BoxelProgressBarPosition = 'start' | 'center' | 'end';
 
@@ -9,8 +11,8 @@ interface Signature {
     label?: string;
     max: number;
     position?: BoxelProgressBarPosition;
-    value: number;
     progressVariant?: 'horizontal' | 'circle';
+    value: number;
   };
   Element: HTMLDivElement;
 }
@@ -28,7 +30,7 @@ export default class ProgressBar extends Component<Signature> {
     const percentage =
       Math.round(Math.min(Math.max((value / max) * 100, 0), 100)) + '%';
 
-    return htmlSafe(`width: ${percentage}`);
+    return htmlSafe(`width: ${percentage};`);
   }
 
   get progressBarPosition() {
@@ -43,7 +45,8 @@ export default class ProgressBar extends Component<Signature> {
     {{#if (eq @progressVariant 'circle')}}
       <div
         class='progress-circle'
-        style='--progressPercentage: {{this.progressPercentage}}'
+        {{! template-lint-disable no-inline-styles }}
+        style={{cssVar progressPercentage=this.progressPercentage}}
       >
         <div class='progress-circle-inner'>
           <span class='progress-percentage'>{{this.progressPercentage}}</span>
