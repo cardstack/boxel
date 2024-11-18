@@ -80,7 +80,7 @@ export async function handleSubscriptionDeleted(
   });
 }
 
-async function subcribeUserToFreePlan(
+async function subscribeUserToFreePlan(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
 ) {
