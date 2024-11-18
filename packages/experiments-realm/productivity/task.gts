@@ -249,7 +249,7 @@ export class TeamMember extends User {
       {{/if}}
       <style scoped>
         .assignee-display {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           background-color: var(--boxel-200);
           border-radius: 100px;
@@ -620,7 +620,7 @@ class Fitted extends Component<typeof Task> {
       }
 
       /* Extra styles for small size */
-      @container (aspect-ratio > 2.0) and (width <= 250px) and (height <= 58px) {
+      @container (width <= 400px) and (height <= 58px) {
         footer {
           display: none;
         }
@@ -677,11 +677,14 @@ export class Tag extends CardDef {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <Pill class='tag-pill' @pillBackgroundColor={{@model.color}}>
-        <:default>
-          <span># {{@model.name}}</span>
-        </:default>
-      </Pill>
+      {{#if @model.name}}
+        <Pill class='tag-pill' @pillBackgroundColor={{@model.color}}>
+          <:default>
+            <span># {{@model.name}}</span>
+          </:default>
+        </Pill>
+      {{/if}}
+
       <style scoped>
         .tag-pill {
           font-size: calc(var(--boxel-font-size-xs) * 0.9);
@@ -697,221 +700,189 @@ export class Tag extends CardDef {
 
 class TaskIsolated extends Component<typeof Task> {
   <template>
-    <div class='task-card'>
-      <div class='task-header'>
-        <h2 class='task-title'>{{@model.taskName}}</h2>
-        <Pill
-          class='small-pill'
-          style={{cssVar
-            pill-font-color=@model.status.color
-            pill-border-color=@model.status.color
-          }}
-        >
-          <:default>
-            {{@model.status.label}}
-          </:default>
-        </Pill>
-      </div>
-      <div class='task-detail'>
-        {{@model.taskDetail}}
-      </div>
-      <div class='task-meta'>
-        <div class='row-1'>
-          <@fields.assignee
-            class='task-assignee'
-            @format='atom'
-            @displayContainer={{false}}
-          />
-          {{#if this.hasDateRange}}
-            <div class='task-dates'>
-              <Calendar width='14px' height='14px' class='calendar-icon' />
-              <span class='date-info'>
-                <@fields.dateStarted />
-                -
-                <@fields.dueDate />
-              </span>
-            </div>
-          {{/if}}
+    <div class='task-container'>
+      <header>
+        <div class='left-column'>
+          <h2 class='task-title'>{{@model.taskName}}</h2>
 
+          <div class='status-label'>
+            <span class='text-gray'>in</span>
+            {{@model.status.label}}
+          </div>
         </div>
-        <div class='row-2'>
-          {{#each this.tagNames as |tagLabel|}}
-            <Pill class='tag-pill'>
-              <:default>
-                <span class='tag-dot'></span>
-                {{tagLabel}}
-              </:default>
-            </Pill>
-          {{/each}}
+
+        <div class='right-column'>
+          <div class='progress-circle'>
+            <div class='progress-circle-inner'>
+              <span class='progress-percentage'>{{this.progress}}%</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <hr class='task-divider border-gray' />
+
+      <div class='task-info'>
+        <div class='left-column'>
+          <h4>Description</h4>
+          {{#if @model.taskDetail}}
+            <p>{{@model.taskDetail}}</p>
+          {{else}}
+            No Task Description Provided
+          {{/if}}
+        </div>
+
+        <div class='right-column'>
+          <div class='assignees'>
+            <h4>Assignees</h4>
+
+            <@fields.assignee
+              @format='atom'
+              @displayContainer={{false}}
+              class='task-assignee'
+            />
+          </div>
+
+          <div class='due-date'>
+            <h4>Due Date</h4>
+
+          </div>
+
+          <div class='tags'>
+            <h4>Tags</h4>
+            {{#if @fields.tags.length}}
+              <div class='task-tags'>
+                {{#each @fields.tags as |Tag|}}
+                  <Tag
+                    @format='atom'
+                    class='task-tag'
+                    @displayContainer={{false}}
+                  />
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
         </div>
       </div>
-      {{#if this.hasChildren}}
-        <div class='subtasks-section'>
-          <div class='subtasks-header-container'>
-            <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
-              child tasks)</h4>
-            <div class='progress-bar-container'>
-              <ProgressBar
-                @label={{this.progressLabel}}
-                @value={{this.progress}}
-                @max={{100}}
-              />
-            </div>
-          </div>
-          <div class='subtasks-container'>
-            <div class='status-column'>
-              {{#each this.shippedArr as |isShipped|}}
-                <div class='status-indicator'>
-                  {{#if isShipped}}
-                    <div class='circle completed'>
-                      <CheckMark width='15px' height='15px' />
-                    </div>
-                  {{else}}
-                    <div class='circle incomplete'></div>
-                  {{/if}}
-                </div>
-              {{/each}}
-            </div>
-            <div class='children-column'>
-              {{#each @fields.children as |ChildTask|}}
-                <div class='subtask-item'>
-                  <ChildTask />
-                </div>
-              {{/each}}
-            </div>
-          </div>
-        </div>
-      {{/if}}
+
+      <hr class='task-divider border-white' />
+
+      <div class='task-subtasks'>
+        <h4>Subtasks ({{@model.children.length}})</h4>
+
+        {{#if @model.children.length}}
+          <@fields.children @format='fitted' @displayContainer={{false}} />
+        {{else}}
+          No Subtasks
+        {{/if}}
+      </div>
     </div>
+
     <style scoped>
-      .task-card {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        padding: 0 var(--boxel-sp);
+      h2,
+      h4,
+      p {
+        margin-block-start: 0;
       }
-      .task-header {
+      p {
+        font-size: var(--boxel-font-size-sm);
+      }
+      .task-container {
+        padding: var(--boxel-sp-lg);
+        container-type: inline-size;
+      }
+      .task-container > * {
+        margin-top: var(--boxel-sp-lg);
+      }
+      header {
         display: flex;
-        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
       }
-      .task-detail {
-        min-height: var(--boxel-form-control-height);
-        margin-bottom: var(--boxel-sp-sm);
+      .task-title {
+        font-size: var(--boxel-font-size-med);
+        font-weight: 600;
       }
-      .task-meta {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
+      .status-label {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        margin-top: var(--boxel-sp-xs);
+      }
+      .text-gray {
+        color: var(--boxel-400);
+      }
+      .progress-circle {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        position: relative;
+        background: conic-gradient(
+          var(--boxel-success) {{this.progress}}%,
+          var(--boxel-200) {{this.progress}}% 100%
+        );
+      }
+
+      .progress-circle-inner {
+        position: absolute;
+        inset: 5px;
+        background: var(--boxel-light);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+      }
+
+      .progress-percentage {
+        font-size: var(--boxel-font-sm);
+        font-weight: 600;
+        color: var(--boxel-dark);
+      }
+      .task-divider.border-gray {
+        border: 1px solid var(--boxel-300);
+      }
+      .task-divider.border-white {
+        border: 1px solid var(--boxel-light);
+      }
+      .task-info {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-lg);
+      }
+      .task-info .right-column {
+        display: grid;
+        gap: var(--boxel-sp-lg);
       }
       .task-assignee {
+        display: inline-flex;
         width: auto;
         height: auto;
         overflow: unset;
       }
-      .row-1 {
+      .task-tags {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
+        overflow: hidden;
       }
-      .row-2 {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
+      .task-tag {
+        width: auto;
+        height: auto;
+        overflow: unset;
       }
-      .progress-bar-container {
-        --boxel-progress-bar-fill-color: var(--boxel-highlight);
-        width: 35%;
-        max-width: 400px;
+      .atom-format:is(:hover, :focus) {
+        transform: unset;
+        box-shadow: unset;
+        outline: none;
       }
 
-      .task-dates {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        color: var(--boxel-600);
-      }
-      .calendar-icon {
-        flex-shrink: 0;
-      }
-      .date-info {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
-        color: var(--boxel-600);
-        line-height: calc(var(--boxel-font-size-xs) * 0.9);
-      }
-      .children-header {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-purple);
-        margin-bottom: var(--boxel-sp-xxs);
-      }
-      .subtasks-section {
-        border-radius: var(--boxel-border-radius);
-        min-width: 150px;
-        max-width: 600px;
-      }
-      .subtasks-header-container {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .subtasks-header {
-        padding: 0 var(--boxel-sp-xxs);
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-purple);
-      }
-      .subtasks-container {
-        display: flex;
-        gap: var(--boxel-sp-sm);
-      }
-      .status-column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxs);
-      }
-      .children-column {
-        flex-grow: 1;
-      }
-      .status-indicator {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 65px; /* Increased height to match subtask-item */
-      }
-      .subtask-item {
-        height: 65px; /* Set a fixed height for subtask items */
-        width: 100%;
-        display: flex;
-        align-items: center;
-      }
-      .circle {
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 2px solid var(--boxel-dark);
-      }
-      .circle.completed {
-        background-color: var(--boxel-highlight);
-      }
-      .circle.incomplete {
-        background-color: white;
-      }
-      .tag-pill {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
-      .tag-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background-color: var(--boxel-purple);
+      @container (max-width: 600px) {
+        .task-info {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+        .task-info .right-column {
+          gap: var(--boxel-sp);
+        }
       }
     </style>
   </template>
@@ -1015,7 +986,6 @@ export class Task extends CardDef {
           @displayContainer={{false}}
           class='task-assignee'
         />
-        <div class='task-title'>{{@model.taskName}}</div>
       </div>
       <style scoped>
         .task-atom {
