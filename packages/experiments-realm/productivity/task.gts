@@ -664,9 +664,9 @@ class Fitted extends Component<typeof Task> {
         }
       }
 
-      /* Extra styles for width <= 150px */
-      @container (width <= 150px) {
-        header,
+      /* Extra styles for width <= 150px and height <= 100px */
+      @container (width <= 150px) and (height <= 100px) {
+        .card-tags,
         .card-info,
         footer {
           display: none;
