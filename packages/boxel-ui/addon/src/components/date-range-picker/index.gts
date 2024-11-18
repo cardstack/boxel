@@ -27,6 +27,7 @@ interface Signature {
 }
 
 const dateFormat = 'MMM yyyy';
+const weekdayFormat = 'min';
 
 export default class DateRangePicker extends Component<Signature> {
   @tracked leftCenter: Date;
@@ -114,7 +115,10 @@ export default class DateRangePicker extends Component<Signature> {
               />
             </div>
           </calendar.Nav>
-          <calendar.Days @weekdayFormat='min' @center={{this.leftCenter}} />
+          <calendar.Days
+            @weekdayFormat={{weekdayFormat}}
+            @center={{this.leftCenter}}
+          />
         </div>
 
         <div class='month-calendar'>
@@ -139,7 +143,10 @@ export default class DateRangePicker extends Component<Signature> {
               />
             </div>
           </calendar.Nav>
-          <calendar.Days @center={{this.rightCenter}} />
+          <calendar.Days
+            @weekdayFormat={{weekdayFormat}}
+            @center={{this.rightCenter}}
+          />
         </div>
       </div>
     </PowerCalendarRange>
