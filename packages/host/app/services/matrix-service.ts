@@ -894,6 +894,13 @@ export default class MatrixService extends Service {
     if (event.content?.data) {
       if (typeof event.content.data === 'string') {
         event.content.data = JSON.parse(event.content.data);
+      } else {
+        console.warn(
+          `Skipping event ${
+            eventId ?? stateKey
+          }, event.content.data is not serialized properly`,
+        );
+        return;
       }
     }
     eventId = eventId ?? stateKey; // room state may not necessary have an event ID
