@@ -8,7 +8,7 @@ import { restartableTask, rawTimeout, task, dropTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { MatrixEvent } from 'matrix-js-sdk';
+import { type IEvent } from 'matrix-js-sdk';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
@@ -19,8 +19,6 @@ import {
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
-
-import { ExtendedMatrixSDK } from './matrix-sdk-loader';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -60,14 +58,12 @@ export default class RealmServerService extends Service {
   @service private declare reset: ResetService;
   @tracked private _creditInfo: CreditInfo | null = null;
   private auth: AuthStatus = { type: 'anonymous' };
-  private sdk: ExtendedMatrixSDK | undefined;
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
   private ready = new Deferred<void>();
   private sessionRoomId: string | null = null;
-  private isCreditInfoRefresherRegistered = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -79,9 +75,8 @@ export default class RealmServerService extends Service {
     this.logout();
   }
 
-  setClientAndSDK(client: ExtendedClient, sdk: ExtendedMatrixSDK) {
+  setClient(client: ExtendedClient) {
     this.client = client;
-    this.sdk = sdk;
     this.token =
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
@@ -182,8 +177,25 @@ export default class RealmServerService extends Service {
   }
 
   async fetchCreditInfo() {
+    if (this.creditInfo) {
+      return;
+    }
     await this.fetchCreditInfoTask.perform();
-    await this.registerCreditInfoRefresher.perform();
+  }
+
+  async handleRealmServerEvent(maybeRealmServerEvent: Partial<IEvent>) {
+    let sessionRoomId = await this.getSessionRoomId();
+    if (
+      maybeRealmServerEvent.room_id !== sessionRoomId ||
+      maybeRealmServerEvent.type !== 'm.room.message' ||
+      maybeRealmServerEvent.content?.msgtype !==
+        'org.boxel.realm-server-event' ||
+      maybeRealmServerEvent.content?.body !== 'billing-notification'
+    ) {
+      return;
+    }
+
+    await this.fetchCreditInfoTask.perform();
   }
 
   get creditInfo() {
@@ -226,39 +238,6 @@ export default class RealmServerService extends Service {
 
     return new URL(url);
   }
-
-  private registerCreditInfoRefresher = dropTask(async () => {
-    if (this.isCreditInfoRefresherRegistered) {
-      return;
-    }
-
-    if (!this.client || !this.sdk) {
-      throw new Error(
-        `Cannot register credit info refresher without matrix client or sdk`,
-      );
-    }
-
-    let sessionRoomId = await this.getSessionRoomId();
-    this.client.on(this.sdk.RoomEvent.Timeline, async (event: MatrixEvent) => {
-      await this.client?.decryptEventIfNeeded(event);
-      let content = event.getContent<{
-        msgtype: string;
-        body: string;
-      }>();
-      if (
-        event.getRoomId() !== sessionRoomId ||
-        event.getType() !== 'm.room.message' ||
-        content?.msgtype !== 'org.boxel.realm-server-event' ||
-        content?.body !== 'billing-notification'
-      ) {
-        return;
-      }
-
-      await this.fetchCreditInfoTask.perform();
-    });
-
-    this.isCreditInfoRefresherRegistered = true;
-  });
 
   private fetchCreditInfoTask = dropTask(async () => {
     if (!this.client) {

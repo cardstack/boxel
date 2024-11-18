@@ -368,7 +368,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.client.isLoggedIn()) {
-      this.realmServer.setClientAndSDK(this.client, this.matrixSDK);
+      this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
 
@@ -1087,7 +1087,10 @@ export default class MatrixService extends Service {
           } while (currentFragmentId);
         }
       }
+    } else {
+      await this.realmServer.handleRealmServerEvent(event);
     }
+
     if (oldEventId) {
       await this.updateRoomEvent(event, oldEventId);
     } else {
