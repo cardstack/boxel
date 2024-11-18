@@ -2,31 +2,55 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import DataTable, {
-  type Columns,
-  type Rows,
+  type DataTableHeader,
+  type DataTableCell,
 } from './index.gts';
 
 export default class DataTableUsage extends Component {
-  @tracked columns:Columns[] = [];
-  @tracked rows:Rows[] = [];
+  @tracked dataTableHeader:DataTableHeader[] = [];
+  @tracked dataTableCell:DataTableCell[] = [];
 
   private datas = {
-    "columns": [
-      { "name": "First Name", "value": "firstName" },
-      { "name": "Last Name", "value": "lastName" },
-      { "name": "Email", "value": "email" }
+    "dataTableHeader": [
+      {
+        "name": "First Name",
+        "value": "firstName"
+      },
+      {
+        "name": "Last Name",
+        "value": "lastName"
+      },
+      {
+        "name": "Email",
+        "value": "email"
+      }
     ],
-    "rows": [
-      { "firstName": "John", "lastName": "Doe", "email": "john.doe@example.com" },
-      { "firstName": "Jane", "lastName": "Smith", "email": "jane.smith@example.com" },
-      { "firstName": "Emily", "lastName": "Davis", "email": "emily.davis@example.com" }
+
+    "dataTableCell": [
+      {
+        "firstName": "John",
+        "lastName": "Doe",
+        "email": "john.doe@example.com"
+      },
+
+      {
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "email": "jane.smith@example.com"
+      },
+
+      {
+        "firstName": "Emily",
+        "lastName": "Davis",
+        "email": "emily.davis@example.com"
+      }
     ]
   }
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.columns = this.datas.columns;
-    this.rows = this.datas.rows;
+    this.dataTableHeader = this.datas.dataTableHeader;
+    this.dataTableCell = this.datas.dataTableCell;
   }
 
   <template>
@@ -36,9 +60,16 @@ export default class DataTableUsage extends Component {
       </:description>
       <:example>
         <DataTable
-          @columns={{this.columns}}
-          @rows={{this.rows}}/>
+          @dataTableHeader={{this.dataTableHeader}}
+          @dataTableCell={{this.dataTableCell}}/>
       </:example>
+      <:api as |Args|>
+        <Args.Object
+          @name='Data Table'
+          @description='An object of array of data for the header and the cell'
+          @value={{this.datas}}
+        />
+      </:api>
     </FreestyleUsage>
   </template>
 }
