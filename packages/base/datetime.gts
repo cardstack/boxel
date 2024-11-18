@@ -79,6 +79,9 @@ export default class DatetimeField extends FieldDef {
     </template>
 
     parseInput(set: Function, date: string) {
+      if (!date?.length) {
+        return set(null);
+      }
       return set(parseISO(date));
     }
 
