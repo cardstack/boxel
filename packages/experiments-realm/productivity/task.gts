@@ -936,6 +936,9 @@ class TaskIsolated extends Component<typeof Task> {
   get tagNames() {
     return this.args.model.tags?.map((tag) => tag.name) ?? [];
   }
+  get hasDateRange() {
+    return this.args.model.dateStarted && this.args.model.dueDate;
+  }
 
   get progress() {
     if (!this.hasChildren) return 0;
