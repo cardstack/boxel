@@ -11,8 +11,8 @@ interface Signature {
     label?: string;
     max: number;
     position?: BoxelProgressBarPosition;
-    progressVariant?: 'horizontal' | 'circle';
     value: number;
+    variant?: 'horizontal' | 'circular';
   };
   Element: HTMLDivElement;
 }
@@ -25,12 +25,7 @@ export default class ProgressBar extends Component<Signature> {
   }
 
   get progressWidth(): ReturnType<typeof htmlSafe> {
-    const max = this.args.max ?? 100;
-    const value = this.args.value ?? 0;
-    const percentage =
-      Math.round(Math.min(Math.max((value / max) * 100, 0), 100)) + '%';
-
-    return htmlSafe(`width: ${percentage};`);
+    return htmlSafe(`width: ${this.progressPercentage};`);
   }
 
   get progressBarPosition() {
@@ -42,37 +37,37 @@ export default class ProgressBar extends Component<Signature> {
   }
 
   <template>
-    {{#if (eq @progressVariant 'circle')}}
-      <div
-        class='progress-circle'
-        {{! template-lint-disable no-inline-styles }}
-        style={{cssVar progressPercentage=this.progressPercentage}}
-      >
-        <div class='progress-circle-inner'>
-          <span class='progress-percentage'>{{this.progressPercentage}}</span>
+    <div
+      class='boxel-progress-bar'
+      data-test-boxel-progress-bar
+      aria-label={{@label}}
+      ...attributes
+    >
+      {{#if (eq @variant 'circular')}}
+        <div
+          class='progress-bar-circular'
+          style={{cssVar progressPercentage=this.progressPercentage}}
+        >
+          <div class='progress-bar-circular-inner'>
+            <span class='progress-percentage'>{{this.progressPercentage}}</span>
+          </div>
         </div>
-      </div>
-
-    {{else}}
-      <div
-        class='boxel-progress-bar'
-        data-test-boxel-progress-bar
-        aria-label={{@label}}
-        ...attributes
-      >
-        <div class='progress-bar'>
-          <div class='progress-bar-value' style={{this.progressWidth}}>
-            <div class='progress-bar-info {{this.progressBarPosition}}'>
-              <div class='progress-bar-label'>
-                {{#if @label}}
-                  {{@label}}
-                {{/if}}
+      {{else}}
+        <div class='progress-bar-horizontal'>
+          <div class='progress-bar-container'>
+            <div class='progress-bar-value' style={{this.progressWidth}}>
+              <div class='progress-bar-info {{this.progressBarPosition}}'>
+                <div class='progress-bar-label'>
+                  {{#if @label}}
+                    {{@label}}
+                  {{/if}}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    {{/if}}
+      {{/if}}
+    </div>
 
     <style scoped>
       @layer {
@@ -93,6 +88,9 @@ export default class ProgressBar extends Component<Signature> {
             --boxel-progress-bar-font-color,
             var(--boxel-light)
           );
+          --progress-bar-size: 80px;
+        }
+        .progress-bar-horizontal {
           height: 1.5em;
           width: 100%;
           background-color: var(--progress-bar-background-color);
@@ -101,7 +99,7 @@ export default class ProgressBar extends Component<Signature> {
           overflow: hidden;
           border: 1px solid var(--boxel-200);
         }
-        .progress-bar {
+        .progress-bar-container {
           height: 100%;
           width: 100%;
           position: absolute;
@@ -141,20 +139,7 @@ export default class ProgressBar extends Component<Signature> {
           text-overflow: ellipsis;
           color: var(--progress-bar-font-color);
         }
-        .progress-circle {
-          --progress-bar-background-color: var(
-            --boxel-progress-bar-background-color,
-            var(--boxel-light-200)
-          );
-          --progress-bar-fill-color: var(
-            --boxel-progress-bar-fill-color,
-            var(--boxel-highlight)
-          );
-          --progress-bar-font-color: var(
-            --boxel-progress-bar-font-color,
-            var(--boxel-light)
-          );
-          --progress-bar-size: 80px;
+        .progress-bar-circular {
           width: var(--progress-bar-size);
           height: var(--progress-bar-size);
           border-radius: 50%;
@@ -165,7 +150,7 @@ export default class ProgressBar extends Component<Signature> {
               80.15%
           );
         }
-        .progress-circle-inner {
+        .progress-bar-circular-inner {
           position: absolute;
           inset: 10px;
           background: var(--boxel-light);

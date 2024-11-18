@@ -15,7 +15,7 @@ export default class ProgressBarUsage extends Component {
   @tracked value = 20;
   @tracked label = '';
   @tracked position: BoxelProgressBarPosition = 'end';
-  @tracked progressVariant: 'horizontal' | 'circle' = 'horizontal';
+  @tracked variant: 'horizontal' | 'circular' = 'horizontal';
 
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
   declare boxelProgressBarBackgroundColor: CSSVariableInfo;
@@ -52,7 +52,7 @@ export default class ProgressBarUsage extends Component {
             @max={{this.max}}
             @position={{this.position}}
             @label={{this.label}}
-            @progressVariant={{this.progressVariant}}
+            @variant={{this.variant}}
           />
         </:example>
         <:api as |Args|>
@@ -82,11 +82,11 @@ export default class ProgressBarUsage extends Component {
             @onInput={{fn (mut this.position)}}
           />
           <Args.String
-            @name='progressVariant'
-            @value={{this.progressVariant}}
-            @options={{array 'horizontal' 'circle'}}
+            @name='variant'
+            @value={{this.variant}}
+            @options={{array 'horizontal' 'circular'}}
             @description='Variant of the progress bar'
-            @onInput={{fn (mut this.progressVariant)}}
+            @onInput={{fn (mut this.variant)}}
           />
         </:api>
         <:cssVars as |Css|>
@@ -132,7 +132,7 @@ export default class ProgressBarUsage extends Component {
             @max={{this.max}}
             @position={{this.position}}
             @label={{this.progressValue}}
-            @progressVariant={{'horizontal'}}
+            @variant={{'horizontal'}}
           />
         </:example>
       </FreestyleUsage>
@@ -142,8 +142,7 @@ export default class ProgressBarUsage extends Component {
           <BoxelProgressBar
             @value={{this.value}}
             @max={{this.max}}
-            @position={{this.position}}
-            @progressVariant={{'circle'}}
+            @variant={{'circular'}}
           />
         </:example>
       </FreestyleUsage>
