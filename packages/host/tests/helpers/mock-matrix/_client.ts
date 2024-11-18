@@ -13,6 +13,7 @@ import { MockSDK } from './_sdk';
 import { ServerState } from './_server-state';
 
 import type { Config } from '../mock-matrix';
+import { guidFor } from '@ember/object/internals';
 
 type IEvent = MatrixSDK.IEvent;
 
@@ -309,11 +310,33 @@ export class MockClient implements ExtendedClient {
     };
     let localEvent = new MatrixEvent(localEventData);
     let eventDataClone = { ...localEventData, content: { ...content } };
+    console.log('localEvent', localEvent);
+    console.log(
+      'localEventData',
+      localEventData.content,
+      guidFor(localEventData.content),
+    );
+    console.log(
+      'eventDataClone',
+      eventDataClone.content,
+      guidFor(eventDataClone.content),
+    );
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
+
+    if (content.body?.match(/SENDING_DELAY_THEN_FAILURE/)) {
+      console.log(
+        'SENDING_DELAY_THEN_FAILURE, setting status to NOT_SENT',
+        localEvent,
+      );
+      localEvent.setStatus(MatrixSDK.EventStatus.NOT_SENT);
+      this.emitLocalEchoUpdated(localEvent);
+      throw new Error('Failed to send event, deliberately');
+    }
+    console.log('Not SENDING_DELAY_THEN_FAILURE, sending event');
     let eventId = this.serverState.addRoomEvent(
       this.loggedInAs || 'unknown_user',
       roomEvent,
@@ -322,20 +345,7 @@ export class MockClient implements ExtendedClient {
       ...eventDataClone,
       event_id: eventId,
     });
-    console.log(
-      'matrixEvent, checking for SENDING_DELAY_THEN_FAILURE',
-      matrixEvent,
-      content.body,
-    );
-    if (content.body?.match(/SENDING_DELAY_THEN_FAILURE/)) {
-      console.log(
-        'SENDING_DELAY_THEN_FAILURE, setting status to NOT_SENT',
-        matrixEvent,
-      );
-      matrixEvent.setStatus(MatrixSDK.EventStatus.NOT_SENT);
-    } else {
-      console.log('SENDING_DELAY_THEN_FAILURE, no match');
-    }
+
     this.emitLocalEchoUpdated(matrixEvent, localEventId);
     return { event_id: eventId };
   }

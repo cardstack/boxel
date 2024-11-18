@@ -113,15 +113,18 @@ export class ServerState {
     >,
     overrides?: { state_key?: string; origin_server_ts?: number },
   ) {
-    let room = event.room_id && this.#rooms.get(event.room_id);
+    let eventClone = { ...event, content: { ...event.content } };
+
+    // duplicate the event fully
+    let room = eventClone.room_id && this.#rooms.get(eventClone.room_id);
     if (!room) {
       throw new Error(`room ${event.room_id} does not exist`);
     }
     let eventId = this.eventId();
     let matrixEvent: IEvent = {
-      ...event,
+      ...eventClone,
       // Don’t want to list out all the types from MatrixEvent union type
-      type: event.type as any,
+      type: eventClone.type as any,
       event_id: eventId,
       origin_server_ts: overrides?.origin_server_ts ?? this.#now(),
       unsigned: { age: 0 },
@@ -137,8 +140,9 @@ export class ServerState {
       relatesTo.event_id = relatesTo.event_id.replace(/__EVENT_ID__/g, eventId);
     }
     room.events.push(matrixEvent);
-    this.#listeners.forEach((listener) => listener(matrixEvent));
-
+    setTimeout(() => {
+      this.#listeners.forEach((listener) => listener(matrixEvent));
+    }, 0);
     return matrixEvent.event_id;
   }
 
