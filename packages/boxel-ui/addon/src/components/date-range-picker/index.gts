@@ -160,6 +160,7 @@ export default class DateRangePicker extends Component<Signature> {
     Note: I don't think there is any reason why we can't implement scoped styles here unlike ember-power-select which uses wormholes
     but we do so for now to avoid the complexity of maintaining fidelity with the way the ember-power-calendar styles are implemented.
     We do so intentionally to
+    - possibly needing the styles for dropdown
     - maintain fidelity with the library
     - avoid the complexity of implementing :deep() pseudo-class to styles to be applied
      }}
