@@ -884,7 +884,7 @@ export default class MatrixService extends Service {
     return card;
   }
 
-  private addRoomEvent(event: TempEvent) {
+  private addRoomEvent(event: TempEvent, oldEventId?: string) {
     let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
     // If we are receiving an event which contains
     // a data field, we may need to parse it
@@ -894,13 +894,6 @@ export default class MatrixService extends Service {
     if (event.content?.data) {
       if (typeof event.content.data === 'string') {
         event.content.data = JSON.parse(event.content.data);
-      } else {
-        console.warn(
-          `Skipping event ${
-            eventId ?? stateKey
-          }, event.content.data is not serialized properly`,
-        );
-        return;
       }
     }
     eventId = eventId ?? stateKey; // room state may not necessary have an event ID
@@ -925,12 +918,25 @@ export default class MatrixService extends Service {
     }
 
     // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-    if (!room.events.find((e) => e.event_id === eventId)) {
+    let matchingEvents = room.events.filter(
+      (e) => e.event_id === eventId || e.event_id === oldEventId,
+    );
+    if (matchingEvents.length > 1) {
+      throw new Error(
+        `bug: ${matchingEvents.length} events with the same event_id(s): ${eventId}, ${oldEventId}, expected a maximum of 1`,
+      );
+    }
+    if (matchingEvents.length === 0) {
       room.events = [
         ...(room.events ?? []),
         event as unknown as DiscreteMatrixEvent,
       ];
+      return;
     }
+    let eventToReplace = matchingEvents[0];
+    let eventIndex = room.events.indexOf(eventToReplace);
+    room.events[eventIndex] = event as unknown as DiscreteMatrixEvent;
+    room.events = [...room.events];
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
@@ -1037,9 +1043,6 @@ export default class MatrixService extends Service {
     _room: unknown,
     maybeOldEventId?: string,
   ) => {
-    if (typeof maybeOldEventId !== 'string') {
-      return;
-    }
     this.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });
     debounce(this, this.drainTimeline, 100);
   };
@@ -1160,11 +1163,8 @@ export default class MatrixService extends Service {
         }
       }
     }
-    if (oldEventId) {
-      await this.updateRoomEvent(event, oldEventId);
-    } else {
-      await this.addRoomEvent(event);
-    }
+    await this.addRoomEvent(event, oldEventId);
+
     if (
       event.type === 'm.room.message' &&
       event.content?.msgtype === 'org.boxel.command'
@@ -1175,40 +1175,6 @@ export default class MatrixService extends Service {
     if (room.oldState.paginationToken != null) {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
-    }
-  }
-
-  private async updateRoomEvent(event: Partial<IEvent>, oldEventId: string) {
-    if (event.content?.data && typeof event.content.data === 'string') {
-      event.content.data = JSON.parse(event.content.data);
-    }
-    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
-    if (!eventId) {
-      throw new Error(
-        `bug: event ID is undefined for event ${JSON.stringify(
-          event,
-          null,
-          2,
-        )}`,
-      );
-    }
-    if (!roomId) {
-      throw new Error(
-        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
-      );
-    }
-
-    let room = this.getRoom(roomId);
-    if (!room) {
-      throw new Error(
-        `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
-      );
-    }
-    let oldEventIndex = room.events.findIndex((e) => e.event_id === oldEventId);
-    if (oldEventIndex >= 0) {
-      room.events[oldEventIndex] = event as unknown as DiscreteMatrixEvent;
-      room.events = [...room.events];
     }
   }
 }

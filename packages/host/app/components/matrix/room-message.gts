@@ -315,11 +315,9 @@ export default class RoomMessage extends Component<Signature> {
     if (this.args.message.errorMessage) {
       return this.args.message.errorMessage;
     }
-
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-
     if (!this.resources?.errors) {
       return undefined;
     }
