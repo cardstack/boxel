@@ -107,6 +107,7 @@ async function subcribeUserToFreePlan(
           price: prices.data[0].id,
         },
       ],
+      payment_behavior: 'error_if_incomplete',
     });
   } catch (err) {
     console.error(`Failed to subscribe user back to free plan, error:`, err);
