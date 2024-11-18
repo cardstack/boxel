@@ -357,8 +357,8 @@ class Fitted extends Component<typeof Task> {
       <header>
         {{#if this.visibleTags.length}}
           <div class='card-tags'>
-            {{#each this.visibleTags as |tag|}}
-              <tag
+            {{#each this.visibleTags as |Tag|}}
+              <Tag
                 @format='atom'
                 class='card-tag'
                 @displayContainer={{false}}
