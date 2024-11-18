@@ -24,14 +24,8 @@ import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
-import fs from 'fs';
 
 let log = logger('ai-bot');
-
-// Ensure logs directory exists
-if (!fs.existsSync('ai-bot-logs')) {
-  fs.mkdirSync('ai-bot-logs');
-}
 
 class Assistant {
   private openai: OpenAI;
@@ -48,28 +42,16 @@ class Assistant {
     let tools = getTools(history, this.id);
     let messages = getModifyPrompt(history, this.id, tools);
 
-    // Write out tools and messages to a log file
-    const logData = {
-      timestamp: new Date().toISOString(),
-      tools,
-      messages,
-    };
-
-    fs.writeFileSync(
-      `ai-bot-logs/${Date.now()}-prompt.json`,
-      JSON.stringify(logData, null, 2),
-    );
-
     if (tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
         model: 'gpt-4o',
-        messages: messages,
+        messages,
       });
     } else {
       return this.openai.beta.chat.completions.stream({
         model: 'gpt-4o',
-        messages: messages,
-        tools: tools,
+        messages,
+        tools,
         tool_choice: 'auto',
       });
     }
