@@ -311,17 +311,6 @@ export class MockClient implements ExtendedClient {
     };
     let localEvent = new MatrixEvent(localEventData);
     let eventDataClone = { ...localEventData, content: { ...content } };
-    console.log('localEvent', localEvent);
-    console.log(
-      'localEventData',
-      localEventData.content,
-      guidFor(localEventData.content),
-    );
-    console.log(
-      'eventDataClone',
-      eventDataClone.content,
-      guidFor(eventDataClone.content),
-    );
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
@@ -337,7 +326,6 @@ export class MockClient implements ExtendedClient {
       this.emitLocalEchoUpdated(localEvent);
       throw new Error('Failed to send event, deliberately');
     }
-    console.log('Not SENDING_DELAY_THEN_FAILURE, sending event');
     let eventId = this.serverState.addRoomEvent(
       this.loggedInAs || 'unknown_user',
       roomEvent,

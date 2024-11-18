@@ -1163,7 +1163,6 @@ export default class MatrixService extends Service {
         }
       }
     }
-    console.log('addRoomEvent', event, oldEventId);
     await this.addRoomEvent(event, oldEventId);
 
     if (
