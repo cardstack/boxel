@@ -86,7 +86,6 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { guidFor } from '@ember/object/internals';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name

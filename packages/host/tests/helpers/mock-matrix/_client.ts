@@ -1,3 +1,5 @@
+import { guidFor } from '@ember/object/internals';
+
 import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
@@ -13,7 +15,6 @@ import { MockSDK } from './_sdk';
 import { ServerState } from './_server-state';
 
 import type { Config } from '../mock-matrix';
-import { guidFor } from '@ember/object/internals';
 
 type IEvent = MatrixSDK.IEvent;
 
