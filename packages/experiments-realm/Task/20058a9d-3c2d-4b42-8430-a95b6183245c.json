@@ -5,8 +5,8 @@
       "taskName": "Build Multi-Select Component",
       "taskDetail": "Multi-Select component to be used when filtering ",
       "status": {
-        "index": 6,
-        "label": "Shipped"
+        "index": 2,
+        "label": "Current Sprint"
       },
       "priority": {
         "index": 1,
@@ -36,9 +36,19 @@
           "self": null
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
+        }
+      },
+      "tags.2": {
+        "links": {
+          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
         }
       }
     },

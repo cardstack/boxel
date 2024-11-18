@@ -16,30 +16,22 @@ export default class PillUsage extends Component {
   pillKinds = ['button', 'default'];
   pillKindDefault: BoxelPillKind = 'default';
   @tracked kind: BoxelPillKind = this.pillKindDefault;
+  @tracked pillBackgroundColor = '#ffffff';
 
-  @cssVariable({ cssClassName: 'header-freestyle-container' })
-  declare pillFontColor: CSSVariableInfo;
-  @cssVariable({ cssClassName: 'header-freestyle-container' })
-  declare pillBackgroundColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillPadding: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillGap: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillIconSize: CSSVariableInfo;
-  @cssVariable({ cssClassName: 'header-freestyle-container' })
-  declare pillBorderColor: CSSVariableInfo;
 
   <template>
     <div
       class='header-freestyle-container'
       style={{cssVar
-        pill-font-color=this.pillFontColor.value
-        pill-background-color=this.pillBackgroundColor.value
         pill-padding=this.pillPadding.value
         pill-gap=this.pillGap.value
         pill-icon-size=this.pillIconSize.value
-        pill-border-color=this.pillBorderColor.value
       }}
     >
       <FreestyleUsage @name='Pill'>
@@ -48,7 +40,11 @@ export default class PillUsage extends Component {
           appealing manner. Similar to a tag, badge or label.
         </:description>
         <:example>
-          <Pill @kind={{this.kind}} data-test-pill-freestyle-usage>
+          <Pill
+            @kind={{this.kind}}
+            @pillBackgroundColor={{this.pillBackgroundColor}}
+            data-test-pill-freestyle-usage
+          >
             <:iconLeft>
               <IconPlus />
             </:iconLeft>
@@ -67,24 +63,15 @@ export default class PillUsage extends Component {
             @onInput={{fn (mut this.kind)}}
             @value={{this.kind}}
           />
+          <Args.String
+            @name='pillBackgroundColor'
+            @description='3-or-6 digit hex color code for background color'
+            @value={{this.pillBackgroundColor}}
+            @onInput={{fn (mut this.pillBackgroundColor)}}
+            @defaultValue='#ffffff'
+          />
         </:api>
         <:cssVars as |Css|>
-          <Css.Basic
-            @name='pill-font-color'
-            @type='color'
-            @description='Color of the pill'
-            @defaultValue='#000'
-            @value={{this.pillFontColor.value}}
-            @onInput={{this.pillFontColor.update}}
-          />
-          <Css.Basic
-            @name='pill-background-color'
-            @type='color'
-            @description='Background color of the pill'
-            @defaultValue='#000'
-            @value={{this.pillBackgroundColor.value}}
-            @onInput={{this.pillBackgroundColor.update}}
-          />
           <Css.Basic
             @name='pill-padding'
             @type='dimension'
@@ -105,14 +92,6 @@ export default class PillUsage extends Component {
             @description='Size of the icon'
             @value={{this.pillIconSize.value}}
             @onInput={{this.pillIconSize.update}}
-          />
-          <Css.Basic
-            @name='pill-border-color'
-            @type='color'
-            @description='Border color of the pill'
-            @defaultValue='var(--boxel-400)'
-            @value={{this.pillBorderColor.value}}
-            @onInput={{this.pillBorderColor.update}}
           />
         </:cssVars>
       </FreestyleUsage>

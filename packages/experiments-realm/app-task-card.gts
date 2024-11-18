@@ -458,7 +458,6 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         height: 100%;
       }
       .filter-section {
-        padding: var(--boxel-sp-xs) 0;
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp);
@@ -485,8 +484,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       }
       /** Need to specify height because fitted field component has a default height**/
       .card {
-        height: 150px !important;
-        box-shadow: none;
+        height: 170px !important;
       }
 
       .status-select {
