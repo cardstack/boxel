@@ -1,5 +1,3 @@
-import { guidFor } from '@ember/object/internals';
-
 import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
@@ -310,7 +308,6 @@ export class MockClient implements ExtendedClient {
       state_key: this.loggedInAs!,
     };
     let localEvent = new MatrixEvent(localEventData);
-    let eventDataClone = { ...localEventData, content: { ...content } };
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
@@ -331,7 +328,7 @@ export class MockClient implements ExtendedClient {
       roomEvent,
     );
     let matrixEvent = new MatrixEvent({
-      ...eventDataClone,
+      ...localEventData,
       event_id: eventId,
     });
 
