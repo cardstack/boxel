@@ -25,10 +25,10 @@ export default class ProgressBar extends Component<Signature> {
   get progressWidth(): ReturnType<typeof htmlSafe> {
     const max = this.args.max ?? 100;
     const value = this.args.value ?? 0;
-    const percentage = Math.round(
-      Math.min(Math.max((value / max) * 100, 0), 100),
-    );
-    return htmlSafe(`width: ${percentage}%`);
+    const percentage =
+      Math.round(Math.min(Math.max((value / max) * 100, 0), 100)) + '%';
+
+    return htmlSafe(`width: ${percentage}`);
   }
 
   get progressBarPosition() {
@@ -175,11 +175,6 @@ export default class ProgressBar extends Component<Signature> {
           font-size: var(--boxel-font-sm);
           font-weight: 600;
           color: var(--boxel-dark);
-        }
-
-        .usage-label {
-          font-size: var(--boxel-font-sm);
-          color: var(--boxel-dark-400);
         }
       }
     </style>

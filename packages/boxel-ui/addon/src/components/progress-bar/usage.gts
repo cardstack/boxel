@@ -27,7 +27,9 @@ export default class ProgressBarUsage extends Component {
   declare boxelProgressBarFontColor: CSSVariableInfo;
 
   get progressValue() {
-    return `${this.value} / ${this.max}`;
+    const max = Math.round(Math.min(this.max));
+    const value = Math.round(Math.min(this.value));
+    return `${value} / ${max}`;
   }
 
   <template>
@@ -123,7 +125,7 @@ export default class ProgressBarUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name='Horizontal progress bar with label'>
+      <FreestyleUsage @name='Horizontal progress bar with value'>
         <:example>
           <BoxelProgressBar
             @value={{this.value}}
