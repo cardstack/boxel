@@ -1,5 +1,6 @@
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export type BoxelProgressBarPosition = 'start' | 'center' | 'end';
 
@@ -9,15 +10,24 @@ interface Signature {
     max: number;
     position?: BoxelProgressBarPosition;
     value: number;
+    progressVariant?: 'horizontal' | 'circle';
   };
   Element: HTMLDivElement;
 }
 
 export default class ProgressBar extends Component<Signature> {
+  get progressPercentage(): string {
+    const max = this.args.max ?? 100;
+    const value = this.args.value ?? 0;
+    return Math.round(Math.min(Math.max((value / max) * 100, 0), 100)) + '%';
+  }
+
   get progressWidth(): ReturnType<typeof htmlSafe> {
     const max = this.args.max ?? 100;
     const value = this.args.value ?? 0;
-    const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
+    const percentage = Math.round(
+      Math.min(Math.max((value / max) * 100, 0), 100),
+    );
     return htmlSafe(`width: ${percentage}%`);
   }
 
@@ -30,26 +40,36 @@ export default class ProgressBar extends Component<Signature> {
   }
 
   <template>
-    <div
-      class='boxel-progress-bar'
-      data-test-boxel-progress-bar
-      aria-label={{@label}}
-      ...attributes
-    >
-      <div class='progress-bar'>
-        <div class='progress-bar-value' style={{this.progressWidth}}>
-          <div class='progress-bar-info {{this.progressBarPosition}}'>
-            <div class='progress-bar-label'>
-              {{#if @label}}
-                {{@label}}
-              {{/if}}
-            </div>
-          </div>
-
+    {{#if (eq @progressVariant 'circle')}}
+      <div
+        class='progress-circle'
+        style='--progressPercentage: {{this.progressPercentage}}'
+      >
+        <div class='progress-circle-inner'>
+          <span class='progress-percentage'>{{this.progressPercentage}}</span>
         </div>
       </div>
 
-    </div>
+    {{else}}
+      <div
+        class='boxel-progress-bar'
+        data-test-boxel-progress-bar
+        aria-label={{@label}}
+        ...attributes
+      >
+        <div class='progress-bar'>
+          <div class='progress-bar-value' style={{this.progressWidth}}>
+            <div class='progress-bar-info {{this.progressBarPosition}}'>
+              <div class='progress-bar-label'>
+                {{#if @label}}
+                  {{@label}}
+                {{/if}}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {{/if}}
 
     <style scoped>
       @layer {
@@ -117,6 +137,49 @@ export default class ProgressBar extends Component<Signature> {
           overflow: hidden;
           text-overflow: ellipsis;
           color: var(--progress-bar-font-color);
+        }
+        .progress-circle {
+          --progress-bar-background-color: var(
+            --boxel-progress-bar-background-color,
+            var(--boxel-light-200)
+          );
+          --progress-bar-fill-color: var(
+            --boxel-progress-bar-fill-color,
+            var(--boxel-highlight)
+          );
+          --progress-bar-font-color: var(
+            --boxel-progress-bar-font-color,
+            var(--boxel-light)
+          );
+          --progress-bar-size: 80px;
+          width: var(--progress-bar-size);
+          height: var(--progress-bar-size);
+          border-radius: 50%;
+          position: relative;
+          background: conic-gradient(
+            var(--progress-bar-fill-color) 0 var(--progressPercentage),
+            var(--progress-bar-background-color) var(--progressPercentage)
+              80.15%
+          );
+        }
+        .progress-circle-inner {
+          position: absolute;
+          inset: 10px;
+          background: var(--boxel-light);
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+        }
+
+        .progress-percentage {
+          font-size: var(--boxel-font-sm);
+          font-weight: 600;
+          color: var(--boxel-dark);
+        }
+
+        .usage-label {
+          font-size: var(--boxel-font-sm);
+          color: var(--boxel-dark-400);
         }
       }
     </style>

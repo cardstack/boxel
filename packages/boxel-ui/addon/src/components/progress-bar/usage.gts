@@ -15,6 +15,7 @@ export default class ProgressBarUsage extends Component {
   @tracked value = 20;
   @tracked label = '';
   @tracked position: BoxelProgressBarPosition = 'end';
+  @tracked progressVariant: 'horizontal' | 'circle' = 'horizontal';
 
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
   declare boxelProgressBarBackgroundColor: CSSVariableInfo;
@@ -49,6 +50,7 @@ export default class ProgressBarUsage extends Component {
             @max={{this.max}}
             @position={{this.position}}
             @label={{this.label}}
+            @progressVariant={{this.progressVariant}}
           />
         </:example>
         <:api as |Args|>
@@ -76,6 +78,13 @@ export default class ProgressBarUsage extends Component {
             @options={{array 'start' 'center' 'end'}}
             @description='Position of the progress bar info'
             @onInput={{fn (mut this.position)}}
+          />
+          <Args.String
+            @name='progressVariant'
+            @value={{this.progressVariant}}
+            @options={{array 'horizontal' 'circle'}}
+            @description='Variant of the progress bar'
+            @onInput={{fn (mut this.progressVariant)}}
           />
         </:api>
         <:cssVars as |Css|>
@@ -114,13 +123,25 @@ export default class ProgressBarUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name='Progress with value'>
+      <FreestyleUsage @name='Horizontal progress bar with label'>
         <:example>
           <BoxelProgressBar
             @value={{this.value}}
             @max={{this.max}}
             @position={{this.position}}
             @label={{this.progressValue}}
+            @progressVariant={{'horizontal'}}
+          />
+        </:example>
+      </FreestyleUsage>
+
+      <FreestyleUsage @name='Circular progress bar'>
+        <:example>
+          <BoxelProgressBar
+            @value={{this.value}}
+            @max={{this.max}}
+            @position={{this.position}}
+            @progressVariant={{'circle'}}
           />
         </:example>
       </FreestyleUsage>
