@@ -184,9 +184,9 @@ module('Responding', (hooks) => {
 
   test('Sends tool call event and replaces thinking message when tool call happens with no content', async () => {
     const patchArgs = {
+      description: 'A new thing',
       attributes: {
         cardId: 'card/1',
-        description: 'A new thing',
         patch: {
           attributes: {
             some: 'thing',
