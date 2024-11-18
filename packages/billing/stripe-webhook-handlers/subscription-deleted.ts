@@ -98,6 +98,9 @@ async function subscribeUserToFreePlan(
   }
 
   try {
+    // After this endpoint is called, Stripe will trigger the `invoice.payment_succeeded` event.
+    // Our webhook handler will process this event to activate the subscription
+    // and grant the user any associated allowances.
     await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [
