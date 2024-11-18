@@ -7,7 +7,7 @@ import {
   type MatrixEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { logger, aiBotUsername } from '@cardstack/runtime-common';
+import { logger, aiBotUsername, retry } from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
@@ -24,21 +24,94 @@ import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
+import { PgAdapter, TransactionManager } from '@cardstack/postgres';
+import {
+  getUserByMatrixUserId,
+  spendCredits,
+} from '@cardstack/billing/billing-queries';
 
 let log = logger('ai-bot');
+
+let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
+  private pgAdapter: PgAdapter;
   id: string;
 
   constructor(client: MatrixClient, id: string) {
     this.openai = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1', // We use openrouter so that we can track usage cost in $
+      baseURL: 'https://openrouter.ai/api/v1',
       apiKey: process.env.OPENROUTER_API_KEY,
     });
     this.id = id;
     this.client = client;
+    this.pgAdapter = new PgAdapter();
+  }
+
+  async fetchGenerationCost(generationId: string) {
+    let response = await (
+      await fetch(
+        `https://openrouter.ai/api/v1/generation?id=${generationId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          },
+        },
+      )
+    ).json();
+
+    if (response.error && response.error.includes('not found')) {
+      return null;
+    }
+
+    return response.data.total_cost;
+  }
+
+  async trackAiUsageCost(matrixUserId: string, generationId: string) {
+    try {
+      let costInUsd = await retry(
+        () => this.fetchGenerationCost(generationId),
+        {
+          retries: 10,
+          delayMs: 500,
+        },
+      );
+
+      let creditsConsumed = Math.round(costInUsd / 0.001);
+
+      let user = await getUserByMatrixUserId(this.pgAdapter, matrixUserId);
+      if (!user) {
+        throw new Error('should not happen: user with matrix id not found');
+      }
+
+      let txManager = new TransactionManager(this.pgAdapter);
+      await txManager.withTransaction(async () => {
+        await spendCredits(this.pgAdapter, user!.id, creditsConsumed);
+      });
+
+      log.info('Successfully tracked AI usage:', {
+        matrixUserId,
+        generationId,
+        creditsConsumed,
+      });
+    } catch (err) {
+      log.error('Failed to track AI usage:', err);
+      throw err;
+    }
+  }
+
+  async enqueueTrackAiUsageCost(matrixUserId: string, generationId: string) {
+    if (trackAiUsageCostPromises.has(matrixUserId)) {
+      return;
+    }
+    trackAiUsageCostPromises.set(
+      matrixUserId,
+      this.trackAiUsageCost(matrixUserId, generationId).finally(() => {
+        trackAiUsageCostPromises.delete(matrixUserId);
+      }),
+    );
   }
 
   getResponse(history: DiscreteMatrixEvent[]) {
@@ -177,6 +250,21 @@ Common issues are:
         }
 
         const responder = new Responder(client, room.roomId);
+
+        // Do not generate new responses if previous ones' cost is still being reported
+        let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
+          event.getSender()!,
+        );
+        if (pendingCreditsConsumptionPromise) {
+          try {
+            await pendingCreditsConsumptionPromise;
+          } catch (e) {
+            log.error(e);
+            return responder.onError(
+              'There was an error reporting Boxel Credits usage. Try again or contact support if the problem persists.',
+            );
+          }
+        }
         await responder.initialize();
 
         if (historyError) {
@@ -186,9 +274,11 @@ Common issues are:
           return;
         }
 
+        let generationId: string | undefined;
         const runner = assistant
           .getResponse(history)
           .on('chunk', async (chunk, _snapshot) => {
+            generationId = chunk.id;
             await responder.onChunk(chunk);
           })
           .on('content', async (_delta, snapshot) => {
@@ -200,9 +290,24 @@ Common issues are:
           .on('error', async (error) => {
             await responder.onError(error);
           });
+
         // We also need to catch the error when getting the final content
-        let finalContent = await runner.finalContent().catch(responder.onError);
-        await responder.finalize(finalContent);
+        let finalContent;
+        try {
+          finalContent = await runner.finalContent();
+          await responder.finalize(finalContent);
+        } catch (error) {
+          await responder.onError(error);
+        } finally {
+          if (generationId) {
+            let userMatrixId = event.getSender()!;
+
+            assistant.enqueueTrackAiUsageCost(
+              userMatrixId,
+              generationId as string,
+            );
+          }
+        }
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
           return await assistant.setTitle(room.roomId, history, event);

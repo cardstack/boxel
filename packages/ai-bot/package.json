@@ -1,7 +1,9 @@
 {
   "name": "@cardstack/ai-bot",
   "dependencies": {
-    "@cardstack/runtime-common": "workspace:^",
+    "@cardstack/runtime-common": "workspace:*",
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/billing": "workspace:*",
     "@sentry/node": "^8.31.0",
     "@types/node": "^18.18.5",
     "@types/stream-chain": "^2.0.1",
