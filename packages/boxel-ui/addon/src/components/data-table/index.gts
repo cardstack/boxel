@@ -110,7 +110,7 @@ export default class DataTable extends Component<Signature> {
         this.dataTableCell = [...this.dataTableCell];
         this.editedCell = null;
         this.editedValue = '';
-        this.updateData()
+        this.updateData(this.dataTableCell)
       }
     })
   }
