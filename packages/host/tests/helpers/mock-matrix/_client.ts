@@ -308,6 +308,7 @@ export class MockClient implements ExtendedClient {
       state_key: this.loggedInAs!,
     };
     let localEvent = new MatrixEvent(localEventData);
+    let eventDataClone = { ...localEventData, content: { ...content } };
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
@@ -318,11 +319,22 @@ export class MockClient implements ExtendedClient {
       roomEvent,
     );
     let matrixEvent = new MatrixEvent({
-      ...localEventData,
+      ...eventDataClone,
       event_id: eventId,
     });
+    console.log(
+      'matrixEvent, checking for SENDING_DELAY_THEN_FAILURE',
+      matrixEvent,
+      content.body,
+    );
     if (content.body?.match(/SENDING_DELAY_THEN_FAILURE/)) {
+      console.log(
+        'SENDING_DELAY_THEN_FAILURE, setting status to NOT_SENT',
+        matrixEvent,
+      );
       matrixEvent.setStatus(MatrixSDK.EventStatus.NOT_SENT);
+    } else {
+      console.log('SENDING_DELAY_THEN_FAILURE, no match');
     }
     this.emitLocalEchoUpdated(matrixEvent, localEventId);
     return { event_id: eventId };

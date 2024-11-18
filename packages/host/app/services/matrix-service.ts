@@ -86,6 +86,7 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { guidFor } from '@ember/object/internals';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -1161,8 +1162,25 @@ export default class MatrixService extends Service {
       }
     }
     if (oldEventId) {
+      console.log(
+        'updateRoomEvent, we have oldEventId',
+        event,
+        'content.data type',
+        typeof event.content?.data,
+        guidFor(event),
+        guidFor(event.content),
+      );
       await this.updateRoomEvent(event, oldEventId);
     } else {
+      console.log('guidFor event');
+      console.log(
+        'addRoomEvent, we do not have oldEventId',
+        event,
+        'content.data type',
+        typeof event.content?.data,
+        guidFor(event),
+        guidFor(event.content),
+      );
       await this.addRoomEvent(event);
     }
     if (

@@ -309,25 +309,35 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get errorMessage() {
+    console.log('errorMessage', this.args.message);
     if (this.failedCommandState) {
       return `Failed to apply changes. ${this.failedCommandState.message}`;
     }
+    console.log(
+      'errorMessage, not failedCommandState',
+      this.args.message.errorMessage,
+    );
     if (this.args.message.errorMessage) {
       return this.args.message.errorMessage;
     }
+    console.log('errorMessage, no failedCommandState or errorMessage');
 
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
+    console.log('errorMessage, no streamingTimeout');
 
     if (!this.resources?.errors) {
+      console.log('errorMessage, no resources.errors');
       return undefined;
     }
 
     let hasResourceErrors = this.resources.errors.length > 0;
+    console.log('errorMessage, hasResourceErrors', hasResourceErrors);
     if (hasResourceErrors) {
       return 'Error rendering attached cards.';
     }
+    console.log('errorMessage, no hasResourceErrors', this.resources.errors);
 
     return this.resources.errors
       .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
