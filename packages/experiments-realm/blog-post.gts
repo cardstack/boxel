@@ -174,4 +174,34 @@ export class BlogPost extends CardDef {
     </template>
   };
   static fitted = FittedTemplate;
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article>
+        <header>
+          <h1><@fields.title /></h1>
+          <p class='description'><@fields.description /></p>
+          <@fields.authorBio class='byline' />
+        </header>
+        <@fields.body />
+      </article>
+      <style scoped>
+        article {
+          padding: var(--boxel-sp) var(--boxel-sp-xl);
+        }
+        h1 {
+          margin-top: 0;
+          font: 600 var(--boxel-font-xl);
+        }
+        img {
+          max-width: 100%;
+        }
+        .description {
+          font: var(--boxel-font);
+        }
+        .byline {
+          max-width: 300px;
+        }
+      </style>
+    </template>
+  };
 }

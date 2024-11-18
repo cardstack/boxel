@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "The Future of Urban Living: Skyscrapers or Sustainable Communities?",
+      "slug": "urban-living-future-sustainable",
+      "body": null,
+      "description": "As our cities grow ever upward, should we continue to build, or focus on creating? This article explores the pros and cons of both approaches.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1548182880-8b7b2af2caa2?q=80&w=2970&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+    },
+    "relationships": {
+      "authorBio": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-post",
+        "name": "BlogPost"
+      }
+    }
+  }
+}

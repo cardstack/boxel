@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {
   Component,
   realmURL,
@@ -12,64 +11,46 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
+import { DndItem, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import {
-  CardContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
-import {
-  BoxelButton,
-  CircleSpinner,
   DndKanbanBoard,
   DndColumn,
   BoxelSelect,
-  IconButton,
-  BoxelMultiSelectBasic,
 } from '@cardstack/boxel-ui/components';
-import {
-  DropdownArrowFilled,
-  IconPlus,
-  IconFunnel,
-} from '@cardstack/boxel-ui/icons';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
-import { fn, array } from '@ember/helper';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
-import {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-  Query,
-  getCards,
-} from '@cardstack/runtime-common';
+import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
+// @ts-expect-error path resolution issue
 import { AppCard } from '/catalog/app-card';
-import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
+import { TaskStatusField } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
 import getTaskCardsResource from './productivity/task-cards-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
 
-import { isEqual } from 'lodash';
 import type Owner from '@ember/owner';
-import { Resource } from 'ember-resources';
+import {
+  AnyFilter,
+  CardTypeFilter,
+  Query,
+} from '@cardstack/runtime-common/query';
 
 type FilterType = 'status' | 'assignee' | 'project';
 
-interface FilterObject {
+export interface SelectedItem {
+  name?: string;
   label?: string;
-  codeRef: ResolvedCodeRef;
-  filter: any;
+  index?: number;
 }
 
-interface SelectedItem {
-  name: string;
-}
-
-class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
+class AppTaskCardIsolated extends Component<typeof AppCard> {
   @tracked loadingColumnKey: string | undefined;
-  @tracked selectedFilter: FilterType;
+  @tracked selectedFilter: FilterType | undefined;
   private declare assigneeQuery: {
     instances: CardDef[];
     isLoading: boolean;
@@ -84,7 +65,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     status: {
       label: 'Status',
       codeRef: {
-        module: `${this.realmURL?.href}productivity/task`,
+        module: `${this.realmHref}productivity/task`,
         name: 'Status',
       },
       options: () => TaskStatusField.values,
@@ -92,7 +73,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     assignee: {
       label: 'Assignee',
       codeRef: {
-        module: `${this.realmURL?.href}productivity/task`,
+        module: `${this.realmHref}productivity/task`,
         name: 'TeamMember',
       },
       options: () => this.assigneeCards,
@@ -100,7 +81,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     project: {
       label: 'Project',
       codeRef: {
-        module: `${this.realmURL?.href}productivity/task`,
+        module: `${this.realmHref}productivity/task`,
         name: 'Project',
       },
       options: () => this.projectCards,
@@ -113,13 +94,13 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   get filterTypes() {
-    return Object.keys(this.filters);
+    return Object.keys(this.filters) as FilterType[];
   }
 
   taskCollection = getTaskCardsResource(
     this,
     () => this.getTaskQuery,
-    () => this.realmURL,
+    () => this.realmHref,
   );
 
   initializeDropdownData = restartableTask(async () => {
@@ -129,7 +110,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           type: this.filters.assignee.codeRef,
         },
       },
-      [this.realmURL],
+      this.realmHrefs,
     );
 
     this.projectQuery = getCards(
@@ -138,7 +119,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           type: this.filters.project.codeRef,
         },
       },
-      [this.realmURL],
+      this.realmHrefs,
     );
     await this.assigneeQuery.loaded;
     await this.projectQuery.loaded;
@@ -153,7 +134,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   filterObject(filterType: FilterType) {
-    let filterObject = this.filters[filterType];
     let selectedItems = this.selectedItems.get(filterType) ?? [];
     return selectedItems.map((item) => {
       if (filterType === 'status') {
@@ -187,44 +167,50 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     return this.selectedItems.get(this.selectedFilter) ?? [];
   }
 
-  get realmURL() {
-    return this.args.model[realmURL];
+  get realmURL(): URL {
+    return this.args.model[realmURL]!;
   }
 
-  get realmURLs() {
-    return [this.realmURL];
+  get realmHref() {
+    return this.realmURL.href;
+  }
+
+  get realmHrefs() {
+    return [this.realmURL?.href];
   }
 
   get assignedTaskCodeRef() {
     return {
-      module: `${this.args.model[realmURL]?.href}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
+      module: `${this.realmHref}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
       name: 'Task',
     };
   }
 
-  get getTaskQuery() {
-    let everyArr = [];
+  get getTaskQuery(): Query {
+    let everyArr: (AnyFilter | CardTypeFilter)[] = [];
     this.filterTypes.forEach((filterType) => {
       let anyFilter = this.filterObject(filterType);
       if (anyFilter.length > 0) {
         everyArr.push({
           any: anyFilter,
-        });
+        } as AnyFilter);
       }
     });
 
-    return everyArr.length > 0
-      ? {
-          filter: {
-            on: this.assignedTaskCodeRef,
-            every: everyArr,
-          },
-        }
-      : {
-          filter: {
-            type: this.assignedTaskCodeRef,
-          },
-        };
+    return (
+      everyArr.length > 0
+        ? {
+            filter: {
+              on: this.assignedTaskCodeRef,
+              every: everyArr,
+            },
+          }
+        : {
+            filter: {
+              type: this.assignedTaskCodeRef,
+            },
+          }
+    ) as Query;
   }
 
   @action isSelectedItem(item: SelectedItem) {
@@ -323,33 +309,14 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
     await this.args.context?.actions?.saveCard?.(updatedCard);
   }
 
-  @action changeQuery() {
-    this.newQuery = {
-      filter: {
-        on: this.assignedTaskCodeRef,
-        // this is the column status
-        any: [
-          {
-            eq: {
-              'status.label': 'Backlog',
-            },
-          },
-          {
-            eq: {
-              'status.label': 'Current Sprint',
-            },
-          },
-        ],
-      },
-    };
-  }
-
   @action onSelectFilter(item: FilterType) {
     this.selectedFilter = item;
   }
 
-  @action onChange(value: SelectedItem) {
-    this.selectedItems.set(this.selectedFilter, value);
+  @action onChange(selected: SelectedItem[]) {
+    if (this.selectedFilter) {
+      this.selectedItems.set(this.selectedFilter, selected);
+    }
   }
 
   @action onClose() {
@@ -358,16 +325,17 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   get options() {
-    return (
-      this.selectedFilterConfig.getCards() ?? this.selectedFilterConfig?.options
-    );
+    return this.selectedFilterConfig?.options();
   }
 
   @action removeFilter(key: FilterType, item: SelectedItem) {
     let items = this.selectedItems.get(key);
+    if (!items) {
+      return;
+    }
     let itemIndex: number;
     if (key === 'status') {
-      itemIndex = items.findIndex((o) => item.index === o.index);
+      itemIndex = items.findIndex((o) => item?.index === o?.index);
     } else {
       itemIndex = items.findIndex((o) => item === o);
     }
@@ -379,7 +347,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   @action selectedFilterItems(filterType: FilterType) {
-    return this.selectedItems.get(filterType);
+    return this.selectedItems.get(filterType) ?? [];
   }
 
   <template>
@@ -393,7 +361,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
             {{#let (this.selectedFilterConfig.options) as |options|}}
               <FilterDropdown
                 @options={{options}}
-                @realmURLs={{this.realmURLs}}
+                @realmURLs={{this.realmHrefs}}
                 @selected={{this.selectedItemsForFilter}}
                 @onChange={{this.onChange}}
                 @onClose={{this.onClose}}
@@ -434,7 +402,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
                 <FilterDisplay
                   @key={{filterType}}
                   @items={{items}}
-                  @removeItem={{this.removeFilter}}
+                  @removeItem={{(fn this.removeFilter filterType)}}
                   as |item|
                 >
                   {{#if (eq filterType 'status')}}
@@ -449,40 +417,35 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         {{/if}}
       </div>
       <div class='columns-container'>
-        {{#if this.loadTasks.isRunning}}
-          Loading..
-        {{else}}
-          <DndKanbanBoard
-            @columns={{this.taskCollection.columns}}
-            @onMove={{this.onMoveCardMutation}}
-          >
-            <:header as |column|>
-              <ColumnHeader
-                @statusLabel={{column.title}}
-                @createNewTask={{this.createNewTask}}
-                @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
-              />
-            </:header>
-            <:card as |card|>
-              {{#let (getComponent card) as |CardComponent|}}
-                <div
-                  {{@context.cardComponentModifier
-                    cardId=card.id
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  data-test-cards-grid-item={{removeFileExtension card.id}}
-                  data-cards-grid-item={{removeFileExtension card.id}}
-                >
-                  <CardComponent class='card' />
-                </div>
-              {{/let}}
+        <DndKanbanBoard
+          @columns={{this.taskCollection.columns}}
+          @onMove={{this.onMoveCardMutation}}
+        >
+          <:header as |column|>
+            <ColumnHeader
+              @statusLabel={{column.title}}
+              @createNewTask={{this.createNewTask}}
+              @isCreateNewTaskLoading={{this.isCreateNewTaskLoading}}
+            />
+          </:header>
+          <:card as |card|>
+            {{#let (getComponent card) as |CardComponent|}}
+              <div
+                {{@context.cardComponentModifier
+                  cardId=card.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+                data-test-cards-grid-item={{removeFileExtension card.id}}
+                data-cards-grid-item={{removeFileExtension card.id}}
+              >
+                <CardComponent class='card' />
+              </div>
+            {{/let}}
 
-            </:card>
-          </DndKanbanBoard>
-
-        {{/if}}
+          </:card>
+        </DndKanbanBoard>
       </div>
     </div>
 
@@ -496,7 +459,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         height: 100%;
       }
       .filter-section {
-        padding: var(--boxel-sp-xs) 0;
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp);
@@ -523,8 +485,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       }
       /** Need to specify height because fitted field component has a default height**/
       .card {
-        height: 150px !important;
-        box-shadow: none;
+        height: 170px !important;
       }
 
       .status-select {
@@ -537,7 +498,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 interface ColumnHeaderSignature {
   statusLabel: string;
   createNewTask: (statusLabel: string) => void;
-  isCreateNewTaskLoading: (statusLabel: string) => void;
+  isCreateNewTaskLoading: (statusLabel: string) => boolean;
 }
 
 class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
