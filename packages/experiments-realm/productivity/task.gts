@@ -21,8 +21,6 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
 import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
@@ -31,7 +29,8 @@ import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { isToday, isThisWeek, addWeeks } from 'date-fns';
 import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
-
+import { CheckMark } from '@cardstack/boxel-ui/icons';
+import GlimmerComponent from '@glimmer/component';
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
@@ -164,6 +163,52 @@ class EditPriority extends Component<typeof TaskPriorityField> {
         </item.component>
       </RadioInput>
     </div>
+  </template>
+}
+
+interface TaskCompletionStatusSignature {
+  Element: HTMLDivElement;
+  Args: {
+    model: Task | Partial<Task>;
+  };
+}
+
+class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusSignature> {
+  get isShipped() {
+    return this.args.model.status?.label === 'Shipped';
+  }
+
+  <template>
+    <div class='completion-status'>
+      <span class='checkmark {{if this.isShipped "shipped"}}'>
+        {{#if this.isShipped}}
+          <CheckMark width='16px' height='16px' />
+        {{/if}}
+      </span>
+    </div>
+
+    <style scoped>
+      .completion-status {
+        display: inline-flex;
+        align-items: center;
+      }
+      .checkmark {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 20px;
+        width: 20px;
+        background-color: white;
+        border: 2px solid var(--boxel-400);
+        border-radius: 4px;
+        transition: all 0.2s ease;
+      }
+      .checkmark.shipped {
+        background-color: var(--boxel-highlight);
+        color: white;
+      }
+    </style>
   </template>
 }
 
@@ -319,41 +364,54 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
+function getDueDateStatus(dueDateString: string | null) {
+  if (!dueDateString) return null;
+
+  const dueDate = new Date(dueDateString);
+  const nextWeek = addWeeks(new Date(), 1);
+
+  if (isToday(dueDate)) {
+    return {
+      label: 'Due Today',
+      color: '#01de67',
+      urgent: true,
+    };
+  } else if (isThisWeek(dueDate)) {
+    return {
+      label: 'This Week',
+      color: '#ffbc00',
+      urgent: false,
+    };
+  } else if (dueDate <= nextWeek) {
+    return {
+      label: 'Next Week',
+      color: '#4fc8fd',
+      urgent: false,
+    };
+  }
+  return null;
+}
+
 class Fitted extends Component<typeof Task> {
   get visibleTags() {
     return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
   }
 
+  get hasDueDateStatus() {
+    return this.dueDateStatus !== null;
+  }
+
   get dueDateStatus() {
     if (!this.args.model.dueDate) return null;
-
-    const dueDate = new Date(this.args.model.dueDate);
-    const nextWeek = addWeeks(new Date(), 1);
-
-    if (isToday(dueDate)) {
-      return {
-        label: 'Due Today',
-        color: '#01de67',
-        urgent: true,
-      };
-    } else if (isThisWeek(dueDate)) {
-      return {
-        label: 'This Week',
-        color: '#ffbc00',
-        urgent: false,
-      };
-    } else if (dueDate <= nextWeek) {
-      return {
-        label: 'Next Week',
-        color: '#4fc8fd',
-        urgent: false,
-      };
-    }
-    return null;
+    return getDueDateStatus(this.args.model.dueDate.toString());
   }
 
   <template>
     <div class='task-card'>
+      <div class='task-completion-status'>
+        <TaskCompletionStatus @model={{@model}} />
+      </div>
+
       <header>
         {{#if this.visibleTags.length}}
           <div class='card-tags'>
@@ -379,7 +437,7 @@ class Fitted extends Component<typeof Task> {
 
         <div class='date-info-container'>
           {{#if @model.dueDate}}
-            {{#if this.dueDateStatus}}
+            {{#if this.hasDueDateStatus}}
               <div class='date-status-pill-container'>
                 <Pill
                   class='date-status-pill'
@@ -407,9 +465,8 @@ class Fitted extends Component<typeof Task> {
             <div class='calendar-icon-container'>
               <Calendar width='14px' height='14px' class='calendar-icon' />
 
-              <span class='no-date-info'>No Due Date Assigned</span>
+              <span class='no-data-found-txt'>No Due Date Assigned</span>
             </div>
-
           {{/if}}
         </div>
       </div>
@@ -424,6 +481,9 @@ class Fitted extends Component<typeof Task> {
     </div>
 
     <style scoped>
+      .task-completion-status {
+        display: none;
+      }
       .task-card {
         width: 100%;
         height: 100%;
@@ -495,7 +555,7 @@ class Fitted extends Component<typeof Task> {
         margin-top: var(--boxel-sp-xxxs);
       }
       .date-info {
-        font-size: calc(var(--boxel-font-size-xs) * 0.9);
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
         font-weight: 500;
         color: var(--boxel-600);
         white-space: nowrap;
@@ -503,14 +563,15 @@ class Fitted extends Component<typeof Task> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .no-date-info {
-        font-size: calc(var(--boxel-font-size-xs) * 0.9);
+      .no-data-found-txt {
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
         font-weight: 500;
         color: var(--boxel-400);
         white-space: nowrap;
         -webkit-line-clamp: 1;
         overflow: hidden;
         text-overflow: ellipsis;
+        margin-top: 1px;
       }
       .date-status-pill-container {
         display: flex;
@@ -521,7 +582,7 @@ class Fitted extends Component<typeof Task> {
       .date-status-pill {
         border: none;
         border-radius: 5px 0 0 5px;
-        font-size: calc(var(--boxel-font-size-xs) * 0.9);
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
         font-weight: 500;
         position: relative;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
@@ -603,16 +664,34 @@ class Fitted extends Component<typeof Task> {
         }
       }
 
+      /* Extra styles for width <= 150px */
+      @container (width <= 150px) {
+        header,
+        .card-info,
+        footer {
+          display: none;
+        }
+      }
+
+      /* Extra styles for width > 280px and height 78px */
+      @container (width > 280px) and (height <= 78px) {
+        .task-completion-status {
+          display: inline-flex;
+        }
+      }
+
       @container (aspect-ratio > 2.0) and (height <= 78px) {
         .task-card {
-          padding: var(--boxel-sp-xxxs);
+          padding: var(--boxel-sp-xs);
+          flex-direction: row;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
         }
 
         .card-tags,
         .date-info-container {
           display: none;
         }
-
         .task-title {
           font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 1;
@@ -630,9 +709,6 @@ class Fitted extends Component<typeof Task> {
       @container (aspect-ratio > 6.0) and (height <= 78px) {
         .task-card {
           padding: var(--boxel-sp-xs);
-          flex-direction: row;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
         }
 
         .card-tags,
@@ -687,10 +763,10 @@ export class Tag extends CardDef {
 
       <style scoped>
         .tag-pill {
-          font-size: calc(var(--boxel-font-size-xs) * 0.9);
+          font-size: calc(var(--boxel-font-size-xs) * 0.95);
           font-weight: 500;
           padding: 0;
-          --pill-font-color: var(--boxel-500);
+          --pill-font-color: var(--boxel-400);
           border: none;
         }
       </style>
@@ -699,6 +775,15 @@ export class Tag extends CardDef {
 }
 
 class TaskIsolated extends Component<typeof Task> {
+  get hasDueDateStatus() {
+    return this.dueDateStatus !== null;
+  }
+
+  get dueDateStatus() {
+    if (!this.args.model.dueDate) return null;
+    return getDueDateStatus(this.args.model.dueDate.toString());
+  }
+
   <template>
     <div class='task-container'>
       <header>
@@ -712,11 +797,21 @@ class TaskIsolated extends Component<typeof Task> {
         </div>
 
         <div class='right-column'>
-          <div class='progress-circle'>
-            <div class='progress-circle-inner'>
-              <span class='progress-percentage'>{{this.progress}}%</span>
-            </div>
-          </div>
+          <ProgressBar
+            @value={{this.progress}}
+            @max={{100}}
+            @variant='circular'
+            class='progress-bar-circular'
+          />
+          {{#if this.hasProgress}}
+            <ProgressBar
+              @value={{this.progress}}
+              @max={{100}}
+              @label={{this.progressLabel}}
+              @variant='horizontal'
+              class='progress-bar-horizontal'
+            />
+          {{/if}}
         </div>
       </header>
 
@@ -728,7 +823,7 @@ class TaskIsolated extends Component<typeof Task> {
           {{#if @model.taskDetail}}
             <p>{{@model.taskDetail}}</p>
           {{else}}
-            No Task Description Provided
+            <span class='no-data-found-txt'>No Task Description Provided</span>
           {{/if}}
         </div>
 
@@ -736,21 +831,60 @@ class TaskIsolated extends Component<typeof Task> {
           <div class='assignees'>
             <h4>Assignees</h4>
 
-            <@fields.assignee
-              @format='atom'
-              @displayContainer={{false}}
-              class='task-assignee'
-            />
+            {{#if @model.assignee}}
+              <@fields.assignee
+                @format='atom'
+                @displayContainer={{false}}
+                class='task-assignee'
+              />
+            {{else}}
+              <span class='no-data-found-txt'>No Assignees Found</span>
+            {{/if}}
           </div>
 
           <div class='due-date'>
             <h4>Due Date</h4>
+            {{#if @model.dueDate}}
+              {{#if this.hasDueDateStatus}}
+                <div class='date-status-pill-container'>
+                  <Pill
+                    class='date-status-pill'
+                    @pillBackgroundColor={{this.dueDateStatus.color}}
+                  >
+                    <:default>{{this.dueDateStatus.label}}</:default>
+                  </Pill>
 
+                  <div class='calendar-icon-container'>
+                    <Calendar
+                      width='14px'
+                      height='14px'
+                      class='calendar-icon'
+                    />
+                    <time class='date-info' datetime='{{@model.dueDate}}'>
+                      <@fields.dueDate />
+                    </time>
+                  </div>
+                </div>
+              {{else}}
+                <div class='calendar-icon-container'>
+                  <Calendar width='14px' height='14px' class='calendar-icon' />
+                  <time class='date-info' datetime='{{@model.dueDate}}'>
+                    <@fields.dueDate />
+                  </time>
+                </div>
+              {{/if}}
+            {{else}}
+              <div class='calendar-icon-container'>
+                <Calendar width='14px' height='14px' class='calendar-icon' />
+
+                <span class='no-data-found-txt'>No Due Date Assigned</span>
+              </div>
+            {{/if}}
           </div>
 
           <div class='tags'>
             <h4>Tags</h4>
-            {{#if @fields.tags.length}}
+            {{#if @model.tags}}
               <div class='task-tags'>
                 {{#each @fields.tags as |Tag|}}
                   <Tag
@@ -760,6 +894,8 @@ class TaskIsolated extends Component<typeof Task> {
                   />
                 {{/each}}
               </div>
+            {{else}}
+              <span class='no-data-found-txt'>No Tags Found</span>
             {{/if}}
           </div>
         </div>
@@ -770,10 +906,18 @@ class TaskIsolated extends Component<typeof Task> {
       <div class='task-subtasks'>
         <h4>Subtasks ({{@model.children.length}})</h4>
 
-        {{#if @model.children.length}}
-          <@fields.children @format='fitted' @displayContainer={{false}} />
+        {{#if @model.children}}
+          <@fields.children @format='fitted' />
+          {{!-- <div class='children-column'>
+              {{#each @fields.children as |ChildTask|}}
+                <div class='subtask-item'>
+                  <ChildTask />
+                </div>
+              {{/each}}
+            </div> --}}
+
         {{else}}
-          No Subtasks
+          <span class='no-data-found-txt'>No Subtasks Found</span>
         {{/if}}
       </div>
     </div>
@@ -783,6 +927,8 @@ class TaskIsolated extends Component<typeof Task> {
       h4,
       p {
         margin-block-start: 0;
+        margin-block-end: 1em;
+        word-break: break-word;
       }
       p {
         font-size: var(--boxel-font-size-sm);
@@ -811,33 +957,14 @@ class TaskIsolated extends Component<typeof Task> {
       .text-gray {
         color: var(--boxel-400);
       }
-      .progress-circle {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        position: relative;
-        background: conic-gradient(
-          var(--boxel-success) {{this.progress}}%,
-          var(--boxel-200) {{this.progress}}% 100%
-        );
-      }
-
-      .progress-circle-inner {
-        position: absolute;
-        inset: 5px;
-        background: var(--boxel-light);
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-      }
-
-      .progress-percentage {
-        font-size: var(--boxel-font-sm);
-        font-weight: 600;
-        color: var(--boxel-dark);
+      .progress-bar-horizontal {
+        display: none;
+        --progress-bar-font-color: var(--boxel-dark);
+        border: 0px;
+        margin-top: var(--boxel-sp);
       }
       .task-divider.border-gray {
-        border: 1px solid var(--boxel-300);
+        border: 1px solid var(--boxel-100);
       }
       .task-divider.border-white {
         border: 1px solid var(--boxel-light);
@@ -845,11 +972,11 @@ class TaskIsolated extends Component<typeof Task> {
       .task-info {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xl);
       }
       .task-info .right-column {
         display: grid;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xl);
       }
       .task-assignee {
         display: inline-flex;
@@ -869,39 +996,74 @@ class TaskIsolated extends Component<typeof Task> {
         height: auto;
         overflow: unset;
       }
-      .atom-format:is(:hover, :focus) {
-        transform: unset;
-        box-shadow: unset;
-        outline: none;
+      .date-info {
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
+        font-weight: 500;
+        color: var(--boxel-600);
+        white-space: nowrap;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .no-data-found-txt {
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
+        font-weight: 500;
+        color: var(--boxel-400);
+        white-space: nowrap;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 1px;
+      }
+      .date-status-pill-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .date-status-pill {
+        border: none;
+        border-radius: 5px 0 0 5px;
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
+        font-weight: 500;
+        position: relative;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
+          var(--boxel-sp-xxs);
+        clip-path: polygon(
+          0 0,
+          calc(100% - 8px) 0,
+          100% 50%,
+          calc(100% - 8px) 100%,
+          0 100%
+        );
+      }
+      .calendar-icon-container {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
       }
 
       @container (max-width: 600px) {
+        header {
+          display: block;
+        }
+        .progress-bar-circular {
+          display: none;
+        }
+        .progress-bar-horizontal {
+          display: block;
+        }
         .task-info {
           grid-template-columns: 1fr;
-          gap: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-lg);
         }
         .task-info .right-column {
-          gap: var(--boxel-sp);
+          gap: var(--boxel-sp-lg);
         }
       }
     </style>
   </template>
-
-  get shippedArr() {
-    return (
-      this.args.model.children?.map(
-        (child) => child.status.label === 'Shipped',
-      ) ?? []
-    );
-  }
-
-  @action
-  isShipped(status: unknown): boolean {
-    if (typeof status === 'string') {
-      return status.includes('Shipped'); // checking for html content
-    }
-    return false;
-  }
 
   get tagNames() {
     return this.args.model.tags?.map((tag) => tag.name) ?? [];
@@ -916,7 +1078,12 @@ class TaskIsolated extends Component<typeof Task> {
     const shippedCount = this.args.model.children!.filter(
       (child) => child.status.label === 'Shipped',
     ).length;
+
     return Math.round((shippedCount / this.childrenCount) * 100);
+  }
+
+  get hasProgress() {
+    return this.progress > 0;
   }
 
   get progressLabel() {
