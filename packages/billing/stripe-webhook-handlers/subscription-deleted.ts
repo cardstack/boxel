@@ -73,7 +73,7 @@ export async function handleSubscriptionDeleted(
 
     // This happens when the payment method fails for a couple of times and then Stripe subscription gets expired.
     if (newStatus === 'expired') {
-      await subcribeUserToFreePlan(dbAdapter, event.data.object.customer);
+      await subscribeUserToFreePlan(dbAdapter, event.data.object.customer);
     }
 
     await markStripeEventAsProcessed(dbAdapter, event.id);
@@ -84,22 +84,20 @@ async function subscribeUserToFreePlan(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
 ) {
-  try {
-    let stripe = getStripe();
-    let freePlan = await getPlanByMonthlyPrice(dbAdapter, 0);
-    if (!freePlan) {
-      console.error('Free plan is not found');
-      return;
-    }
-    let prices = await stripe.prices.list({
-      product: freePlan.stripePlanId,
-      active: true,
-    });
-    if (!prices.data[0]) {
-      console.error('No price found for free plan');
-      return;
-    }
+  let stripe = getStripe();
+  let freePlan = await getPlanByMonthlyPrice(dbAdapter, 0);
+  if (!freePlan) {
+    throw new Error('Free plan is not found');
+  }
+  let prices = await stripe.prices.list({
+    product: freePlan.stripePlanId,
+    active: true,
+  });
+  if (!prices.data[0]) {
+    throw new Error('No price found for free plan');
+  }
 
+  try {
     await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [

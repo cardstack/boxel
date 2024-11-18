@@ -3830,6 +3830,7 @@ module('Realm Server', function (hooks) {
     let fetchPriceListStub: sinon.SinonStub;
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
+      process.env.STRIPE_API_KEY = 'stripe-api-key';
       process.env.STRIPE_WEBHOOK_SECRET = 'stripe-webhook-secret';
       let stripe = getStripe();
       createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
