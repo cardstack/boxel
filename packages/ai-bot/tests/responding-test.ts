@@ -231,9 +231,9 @@ module('Responding', (hooks) => {
           id: 'some-tool-call-id',
           name: 'patchCard',
           arguments: {
+            description: 'A new thing',
             attributes: {
               cardId: 'card/1',
-              description: 'A new thing',
               patch: {
                 attributes: {
                   some: 'thing',
@@ -247,7 +247,7 @@ module('Responding', (hooks) => {
     );
     assert.deepEqual(
       sentEvents[1].content.body,
-      patchArgs.attributes.description,
+      patchArgs.description,
       'Body text should be the description',
     );
     assert.deepEqual(
@@ -262,9 +262,9 @@ module('Responding', (hooks) => {
 
   test('Sends tool call event separately when content is sent before tool call', async () => {
     const patchArgs = {
+      description: 'A new thing',
       attributes: {
         cardId: 'card/1',
-        description: 'A new thing',
         patch: {
           attributes: {
             some: 'thing',
@@ -309,9 +309,9 @@ module('Responding', (hooks) => {
           id: 'some-tool-call-id',
           name: 'patchCard',
           arguments: {
+            description: 'A new thing',
             attributes: {
               cardId: 'card/1',
-              description: 'A new thing',
               patch: {
                 attributes: {
                   some: 'thing',
