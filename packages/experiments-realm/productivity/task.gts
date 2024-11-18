@@ -300,7 +300,6 @@ class Fitted extends Component<typeof Task> {
           {{/if}}
 
           <span class='task-date-range'>
-            <Calendar width='14px' height='14px' class='calendar-icon' />
             <@fields.dateRange @format='atom' />
           </span>
         </div>
