@@ -26,6 +26,8 @@ interface Signature {
   Element: HTMLElement;
 }
 
+const dateFormat = 'MMM yyyy';
+
 export default class DateRangePicker extends Component<Signature> {
   @tracked leftCenter: Date;
   @tracked rightCenter: Date;
@@ -101,7 +103,7 @@ export default class DateRangePicker extends Component<Signature> {
               <div class='month-name'>
                 {{powerCalendarFormatDate
                   this.leftCenter
-                  'MMMM yyyy'
+                  dateFormat
                   locale=calendar.locale
                 }}
               </div>
@@ -126,7 +128,7 @@ export default class DateRangePicker extends Component<Signature> {
               <div class='month-name'>
                 {{powerCalendarFormatDate
                   this.rightCenter
-                  'MMMM yyyy'
+                  dateFormat
                   locale=calendar.locale
                 }}
               </div>
@@ -155,19 +157,21 @@ export default class DateRangePicker extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
+      .days-container {
+        margin-top: auto;
+      }
     </style>
     {{! 
     Note: I don't think there is any reason why we can't implement scoped styles here unlike ember-power-select which uses wormholes
     but we do so for now to avoid the complexity of maintaining fidelity with the way the ember-power-calendar styles are implemented.
     We do so intentionally to
-    - possibly needing the styles for dropdown
     - maintain fidelity with the library
     - avoid the complexity of implementing :deep() pseudo-class to styles to be applied
      }}
     {{! template-lint-disable require-scoped-style }}
     <style>
       .ember-power-calendar {
-        --ember-power-calendar-cell-size: 30px;
+        --ember-power-calendar-cell-size: 35px;
         --ember-power-calendar-row-spacing: var(--boxel-sp-sm);
         width: 100%;
       }
