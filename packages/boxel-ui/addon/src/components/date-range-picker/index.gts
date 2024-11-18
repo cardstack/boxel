@@ -114,7 +114,7 @@ export default class DateRangePicker extends Component<Signature> {
               />
             </div>
           </calendar.Nav>
-          <calendar.Days @center={{this.leftCenter}} />
+          <calendar.Days @weekdayFormat='min' @center={{this.leftCenter}} />
         </div>
 
         <div class='month-calendar'>
@@ -177,6 +177,9 @@ export default class DateRangePicker extends Component<Signature> {
       }
       .ember-power-calendar-week {
         padding-bottom: var(--ember-power-calendar-row-spacing);
+      }
+      .ember-power-calendar-weekday {
+        padding: var(--boxel-sp-4xs);
       }
     </style>
   </template>
