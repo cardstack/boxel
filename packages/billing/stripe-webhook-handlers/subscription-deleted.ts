@@ -8,26 +8,11 @@ import {
   sumUpCreditsLedger,
   addToCreditsLedger,
   getMostRecentSubscriptionCycle,
+  getPlanByMonthlyPrice,
 } from '../billing-queries';
 
 import { PgAdapter, TransactionManager } from '@cardstack/postgres';
-import Stripe from 'stripe';
-
-
-
-let stripe: Stripe;
-
-export function getStripe() {
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    throw new Error('STRIPE_WEBHOOK_SECRET is not set');
-  }
-
-  if (!stripe) {
-    stripe = new Stripe(process.env.STRIPE_WEBHOOK_SECRET);
-  }
-
-  return stripe;
-}
+import { getStripe } from './stripe';
 
 export async function handleSubscriptionDeleted(
   dbAdapter: DBAdapter,
@@ -88,24 +73,42 @@ export async function handleSubscriptionDeleted(
 
     // This happens when the payment method fails for a couple of times and then Stripe subscription gets expired.
     if (newStatus === 'expired') {
-      await subcribeUserToFreePlan(event.data.object.customer);
+      await subcribeUserToFreePlan(dbAdapter, event.data.object.customer);
     }
 
     await markStripeEventAsProcessed(dbAdapter, event.id);
   });
 }
 
-async function subcribeUserToFreePlan(stripeCustomerId: string) {
+async function subcribeUserToFreePlan(
+  dbAdapter: DBAdapter,
+  stripeCustomerId: string,
+) {
   try {
-    await getStripe().subscriptions.create({
+    let stripe = getStripe();
+    let freePlan = await getPlanByMonthlyPrice(dbAdapter, 0);
+    if (!freePlan) {
+      console.error('Free plan is not found');
+      return;
+    }
+    let prices = await stripe.prices.list({
+      product: freePlan.stripePlanId,
+      active: true,
+    });
+    if (!prices.data[0]) {
+      console.error('No price found for free plan');
+      return;
+    }
+
+    await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [
         {
-          price: '0'
-        }
+          price: prices.data[0].id,
+        },
       ],
     });
-  } catch(err) {
+  } catch (err) {
     console.error(`Failed to subscribe user back to free plan, error:`, err);
   }
 }

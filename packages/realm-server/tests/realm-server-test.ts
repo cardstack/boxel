@@ -74,7 +74,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import Stripe from 'stripe';
 import sinon from 'sinon';
-import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
+import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -3827,15 +3827,18 @@ module('Realm Server', function (hooks) {
 
   module('stripe webhook handler', function (hooks) {
     let createSubscriptionStub: sinon.SinonStub;
+    let fetchPriceListStub: sinon.SinonStub;
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
       process.env.STRIPE_WEBHOOK_SECRET = 'stripe-webhook-secret';
       let stripe = getStripe();
       createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
+      fetchPriceListStub = sinon.stub(stripe.prices, 'list');
     });
 
     hooks.afterEach(async function () {
       createSubscriptionStub.restore();
+      fetchPriceListStub.restore();
     });
 
     setupPermissionedRealm(hooks, {
@@ -3988,6 +3991,43 @@ module('Realm Server', function (hooks) {
         return createSubscriptionResponse;
       });
 
+      let fetchPriceListResponse = {
+        object: 'list',
+        data: [
+          {
+            id: 'price_1QMRCxH9rBd1yAHRD4BXhAHW',
+            object: 'price',
+            active: true,
+            billing_scheme: 'per_unit',
+            created: 1731921923,
+            currency: 'usd',
+            custom_unit_amount: null,
+            livemode: false,
+            lookup_key: null,
+            metadata: {},
+            nickname: null,
+            product: 'prod_REv3E69DbAPv4K',
+            recurring: {
+              aggregate_usage: null,
+              interval: 'month',
+              interval_count: 1,
+              meter: null,
+              trial_period_days: null,
+              usage_type: 'licensed',
+            },
+            tax_behavior: 'unspecified',
+            tiers_mode: null,
+            transform_quantity: null,
+            type: 'recurring',
+            unit_amount: 0,
+            unit_amount_decimal: '0',
+          },
+        ],
+        has_more: false,
+        url: '/v1/prices',
+      };
+      fetchPriceListStub.resolves(fetchPriceListResponse);
+
       let stripeSubscriptionDeletedEvent = {
         id: 'evt_sub_deleted_1',
         object: 'event',
@@ -4099,6 +4139,42 @@ module('Realm Server', function (hooks) {
       createSubscriptionStub.throws({
         message: 'Failed subscribing to free plan',
       });
+      let fetchPriceListResponse = {
+        object: 'list',
+        data: [
+          {
+            id: 'price_1QMRCxH9rBd1yAHRD4BXhAHW',
+            object: 'price',
+            active: true,
+            billing_scheme: 'per_unit',
+            created: 1731921923,
+            currency: 'usd',
+            custom_unit_amount: null,
+            livemode: false,
+            lookup_key: null,
+            metadata: {},
+            nickname: null,
+            product: 'prod_REv3E69DbAPv4K',
+            recurring: {
+              aggregate_usage: null,
+              interval: 'month',
+              interval_count: 1,
+              meter: null,
+              trial_period_days: null,
+              usage_type: 'licensed',
+            },
+            tax_behavior: 'unspecified',
+            tiers_mode: null,
+            transform_quantity: null,
+            type: 'recurring',
+            unit_amount: 0,
+            unit_amount_decimal: '0',
+          },
+        ],
+        has_more: false,
+        url: '/v1/prices',
+      };
+      fetchPriceListStub.resolves(fetchPriceListResponse);
 
       let stripeSubscriptionDeletedEvent = {
         id: 'evt_sub_deleted_1',
@@ -4134,6 +4210,42 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(subscriptions.length, 1);
       assert.strictEqual(subscriptions[0].status, 'expired');
       assert.strictEqual(subscriptions[0].planId, creatorPlan.id);
+
+      // ensures the subscription info is null,
+      // so the host can use that to redirect user to checkout free plan page
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, '@test_realm:localhost', [
+            'read',
+            'write',
+          ])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'user',
+            id: user.id,
+            attributes: {
+              matrixUserId: user.matrixUserId,
+              stripeCustomerId: user.stripeCustomerId,
+              creditsAvailableInPlanAllowance: null,
+              creditsIncludedInPlanAllowance: null,
+              extraCreditsAvailableInBalance: null,
+            },
+            relationships: {
+              subscription: null,
+            },
+          },
+          included: null,
+        },
+        '/_user response is correct',
+      );
     });
   });
 });
