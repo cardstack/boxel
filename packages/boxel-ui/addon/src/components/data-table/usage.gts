@@ -1,16 +1,10 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import DataTable, {
-  type DataTableHeader,
-  type DataTableCell,
-} from './index.gts';
+import DataTable, { DataTableType } from './index.gts';
 
 export default class DataTableUsage extends Component {
-  @tracked dataTableHeader:DataTableHeader[] = [];
-  @tracked dataTableCell:DataTableCell[] = [];
-
-  private datas = {
+  @tracked tableDatas:DataTableType = {
     "dataTableHeader": [
       {
         "name": "First Name",
@@ -41,7 +35,6 @@ export default class DataTableUsage extends Component {
 
       {
         "firstName": "Emily",
-        "lastName": "Davis",
         "email": "emily.davis@example.com"
       }
     ]
@@ -49,8 +42,6 @@ export default class DataTableUsage extends Component {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.dataTableHeader = this.datas.dataTableHeader;
-    this.dataTableCell = this.datas.dataTableCell;
   }
 
   <template>
@@ -60,14 +51,13 @@ export default class DataTableUsage extends Component {
       </:description>
       <:example>
         <DataTable
-          @dataTableHeader={{this.dataTableHeader}}
-          @dataTableCell={{this.dataTableCell}}/>
+          @data={{this.tableDatas}}/>
       </:example>
       <:api as |Args|>
         <Args.Object
           @name='Data Table'
           @description='An object of array of data for the header and the cell'
-          @value={{this.datas}}
+          @value={{this.tableDatas}}
         />
       </:api>
     </FreestyleUsage>

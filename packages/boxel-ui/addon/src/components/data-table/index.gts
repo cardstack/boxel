@@ -7,17 +7,22 @@ import { action } from '@ember/object';
 import { next } from '@ember/runloop';
 import { and, eq } from '@cardstack/boxel-ui/helpers';
 
-export type DataTableHeader = {
+export interface DataTableHeader {
   name: string
   value: string
 };
-export type DataTableCell = {
+export interface DataTableCell {
   [key: string]: string
 };
+
+export interface DataTableType {
+  dataTableHeader: DataTableHeader[],
+  dataTableCell: DataTableCell[]
+}
+
 interface Signature {
   Args: {
-    dataTableHeader: DataTableHeader[]
-    dataTableCell: DataTableCell[]
+    data: DataTableType
   };
   Element: HTMLElement
 }
@@ -30,10 +35,47 @@ type cellData = {
 }
 export default class DataTable extends Component<Signature> {
   // track the props so i can make it mutable
-  @tracked dataTableHeader = [...this.args.dataTableHeader];
-  @tracked dataTableCell = [...this.args.dataTableCell];
+  @tracked dataTableHeader = [...this.args.data.dataTableHeader];
+  @tracked dataTableCell = [...this.args.data.dataTableCell];
   @tracked editedCell: { cellIndex: number; headerIndex: number } | null = null;
   @tracked editedValue: string = '';
+  @tracked errorMessage: string | null = null;
+
+  @action
+  validateData(): boolean {
+    if (!Array.isArray(this.dataTableCell)) {
+      this.errorMessage = 'Data should be an array.';
+      return false;
+    }
+
+    // make sure that the header and cell is matching and show any missing value
+    const expectedKeys = this.dataTableHeader.map(header => header.value);
+    for (const row of this.dataTableCell) {
+      const rowKeys = Object.keys(row);
+      if (!expectedKeys.every(key => rowKeys.includes(key))) {
+        this.errorMessage = `Table Header is missing some expected Table Cell. Expected Table Cell: ${expectedKeys.join(', ')}.`;
+        return false;
+      }
+    }
+    this.errorMessage = null;
+    return true;
+  }
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    if (!this.validateData()) {
+      console.error(this.errorMessage);
+    }
+  }
+
+  // validate again after any data has been updated
+  @action
+  updateData(newData: DataTableCell[]): void {
+    this.dataTableCell = newData;
+    if (!this.validateData()) {
+      console.error(this.errorMessage);
+    }
+  }
 
   @action
   onCellClick(cellData: cellData): void {
@@ -63,11 +105,12 @@ export default class DataTable extends Component<Signature> {
           set(cell, header.value, this.editedValue)
         }
 
-        // even if there's no save, just update the new value accordingly
+        // even if there's no new set value, just update the new value accordingly
         this.dataTableHeader = [...this.dataTableHeader];
         this.dataTableCell = [...this.dataTableCell];
         this.editedCell = null;
         this.editedValue = '';
+        this.updateData()
       }
     })
   }
@@ -87,6 +130,11 @@ export default class DataTable extends Component<Signature> {
   }
   <template>
     <div class="data-table" ...attributes>
+      {{#if this.errorMessage}}
+        <div class="error-message">
+          <p>{{this.errorMessage}}</p>
+        </div>
+      {{/if}}
       <table>
         <thead>
           <tr>
@@ -130,6 +178,11 @@ export default class DataTable extends Component<Signature> {
       </table>
     </div>
     <style scoped>
+      .error-message {
+        color: var(--boxel-error-100);
+        font-weight: bold;
+        margin-bottom: var(--boxel-sp-sm);
+      }
       .data-table {
         width: 100%;
         border-collapse: collapse;
@@ -141,7 +194,7 @@ export default class DataTable extends Component<Signature> {
       }
       td {
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: var(--boxel-transition);
       }
       td:hover {
         box-shadow: var(--boxel-box-shadow-hover);
@@ -150,8 +203,7 @@ export default class DataTable extends Component<Signature> {
       }
       input {
         width: 100%;
-        padding: 5px;
-        border: 1px solid #ccc;
+        padding: var(--boxel-sp-sm);
       }
     </style>
   </template>
