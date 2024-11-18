@@ -223,25 +223,16 @@ export default class RealmServerService extends Service {
     };
   }
 
-  async fetchUser() {
-    if (this.auth.type !== 'logged-in') {
-      this._user = undefined;
-      return;
-    }
+  async fetchUser(): Promise<User> {
     const json = await this.authenticatedUserRequest();
     let plan =
       json.included?.find((i: { type: string }) => i.type === 'plan')
         ?.attributes?.name ?? null;
-    this._user = {
+    return {
       matrixUserId: json.data.attributes.matrixUserId,
       stripeCustomerId: json.data.attributes.stripeCustomerId,
       plan: plan,
     };
-  }
-
-  @cached
-  get user() {
-    return this._user;
   }
 
   async fetchCatalogRealms() {

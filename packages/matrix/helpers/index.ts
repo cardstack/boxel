@@ -584,6 +584,19 @@ export async function assertPaymentSetup(page: Page, username: string) {
   );
 }
 
+export async function setupUser(
+  username: string,
+  realmServer: IsolatedRealmServer,
+) {
+  let findUser = await realmServer.executeSQL(`SELECT * FROM users`);
+
+  await realmServer.executeSQL(
+    `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
+  );
+
+  findUser = await realmServer.executeSQL(`SELECT * FROM users`);
+}
+
 export async function setupPayment(
   page: Page,
   username: string,
@@ -596,9 +609,14 @@ export async function setupPayment(
   let freePlan = await realmServer.executeSQL(
     `SELECT * FROM plans WHERE name = 'Free'`,
   );
-  let subscriptionId = `sub_1234567890`;
+
+  const randomNumber = Math.random().toString(36).substring(2, 12);
+
+  let subscriptionId = `sub_${randomNumber}`;
+  let stripeCustomerId = `cus_${randomNumber}`;
+
   await realmServer.executeSQL(
-    `UPDATE users SET stripe_customer_id = 'cus_1234567890' WHERE matrix_user_id = '${decodedUsername}'`,
+    `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${decodedUsername}'`,
   );
 
   let findUser = await realmServer.executeSQL(
@@ -662,7 +680,7 @@ export async function setupPayment(
   // assert return url contains ?from-free-plan-payment-link=true
   const currentUrl = new URL(page.url());
   const currentParams = currentUrl.searchParams;
-  currentParams.append('from-free-plan-payment-link', 'true');
+  await currentParams.append('from-free-plan-payment-link', 'true');
   const returnUrl = `${currentUrl.origin}${
     currentUrl.pathname
   }?${currentParams.toString()}`;

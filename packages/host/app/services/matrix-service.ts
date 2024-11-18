@@ -112,6 +112,7 @@ export default class MatrixService extends Service {
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
+  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -261,6 +262,10 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
+  get isNewUser() {
+    return this._isNewUser;
+  }
+
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
@@ -275,6 +280,8 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
+    this._isNewUser = true;
+    this._isInitializingNewUser = false;
   }
 
   public async createPersonalRealmForUser({

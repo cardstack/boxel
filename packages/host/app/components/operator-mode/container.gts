@@ -2,6 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { trackedFunction } from 'ember-resources/util/function';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -11,7 +12,7 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal } from '@cardstack/boxel-ui/components';
 
-import { not } from '@cardstack/boxel-ui/helpers';
+import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
 
@@ -121,12 +122,24 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  private fetchUserInfo = trackedFunction(this, async () => {
+    if (!this.matrixService.isLoggedIn) {
+      return;
+    }
+    return await this.realmServer.fetchUser();
+  });
+
+  private get isUserInfoLoadings() {
+    return this.fetchUserInfo.isLoading;
+  }
+
   private get isUserSubscribed() {
-    if (!this.realmServer.user) {
+    if (this.isUserInfoLoading) {
       return false;
     }
     return (
-      !!this.realmServer.user.stripeCustomerId && !!this.realmServer.user.plan
+      !!this.fetchUserInfo.value?.stripeCustomerId &&
+      !!this.fetchUserInfo.value?.plan
     );
   }
 
@@ -144,16 +157,18 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if (not this.matrixService.isLoggedIn)}}
+      {{#if
+        (or
+          (not this.matrixService.isLoggedIn)
+          this.matrixService.isInitializingNewUser
+          this.isUserInfoLoading
+        )
+      }}
         <Auth />
       {{else if (not this.isUserSubscribed)}}
         <PaymentSetup
           @matrixUserId={{this.matrixUserId}}
-          @flow={{if
-            this.matrixService.isInitializingNewUser
-            'register'
-            'logged-in'
-          }}
+          @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
         />
       {{else if this.isCodeMode}}
         <CodeSubmode

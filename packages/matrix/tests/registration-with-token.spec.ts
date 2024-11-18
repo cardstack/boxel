@@ -25,6 +25,7 @@ import {
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
+  setupUser,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -188,11 +189,24 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
 
+    await setupUser('@user2:localhost', realmServer);
+
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
+
+    await expect(
+      page.locator('[data-test-setup-payment-message]'),
+    ).toContainText('Setup your payment method now to enjoy Boxel');
+
+    const user2MatrixUserId =
+      Buffer.from('@user2:localhost').toString('base64');
+
+    await assertPaymentSetup(page, user2MatrixUserId);
+    await setupPayment(page, user2MatrixUserId, realmServer);
+
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
       displayName: 'user2',

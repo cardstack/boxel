@@ -54,7 +54,6 @@ export default class Index extends Route<void> {
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
       await this.matrixService.start();
-      await this.realmServer.fetchUser();
       this.didMatrixServiceStart = true;
     }
 
