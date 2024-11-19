@@ -1,7 +1,7 @@
 import { type DBAdapter } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
-  getMostRecentSubscription,
+  getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
   getUserByStripeId,
   insertStripeEvent,
@@ -52,7 +52,7 @@ export async function handleCheckoutSessionCompleted(
         );
       }
 
-      let subscription = await getMostRecentSubscription(dbAdapter, user.id);
+      let subscription = await getCurrentActiveSubscription(dbAdapter, user.id);
       if (!subscription) {
         throw new Error(
           `User ${user.id} has no subscription, cannot add extra credits`,

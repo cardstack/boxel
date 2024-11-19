@@ -478,9 +478,9 @@ export async function spendCredits(
   userId: string,
   creditsToSpend: number,
 ) {
-  let subscription = await getMostRecentSubscription(dbAdapter, userId);
+  let subscription = await getCurrentActiveSubscription(dbAdapter, userId);
   if (!subscription) {
-    throw new Error('subscription not found');
+    throw new Error('active subscription not found');
   }
   let subscriptionCycle = await getMostRecentSubscriptionCycle(
     dbAdapter,
