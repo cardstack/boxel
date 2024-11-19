@@ -344,6 +344,48 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xs);
       }
+
+      .card-view-container :deep(.fitted-template) {
+        padding: 0;
+      }
+      .card-view-container :deep(.card-thumbnail) {
+        border-radius: 0;
+      }
+
+      @container fitted-card (700px <= width) {
+        :deep(.fitted-template) {
+          display: grid;
+          grid-template-columns: 30% 1fr;
+          grid-template-rows: max-content max-content 1fr;
+          gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        }
+        :deep(.thumbnail-section) {
+          grid-column: 1;
+          grid-row: 1 / 4;
+        }
+        :deep(.info-section) {
+          grid-column: 2;
+          padding-right: var(--boxel-sp-lg);
+        }
+        :deep(.card-display-name) {
+          display: none;
+        }
+        :deep(.card-description) {
+          grid-column: 2;
+          display: -webkit-box;
+          -webkit-line-clamp: 4;
+          margin: 0;
+          padding-right: var(--boxel-sp-lg);
+          font: var(--boxel-font);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        :deep(.card-title) {
+          -webkit-line-clamp: 3;
+          margin-top: var(--boxel-sp-lg);
+          font: 700 var(--boxel-font-lg);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+      }
     </style>
   </template>
 }
