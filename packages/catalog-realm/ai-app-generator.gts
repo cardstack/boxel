@@ -25,10 +25,9 @@ import {
 } from '@cardstack/runtime-common';
 import { AppCard, AppCardTemplate, CardsGrid } from './app-card';
 import CPU from '@cardstack/boxel-icons/cpu';
-import {
-  CreateBoxelApp,
+import CreateBoxelApp, {
   CreateProductRequirementsInput,
-} from './AiAppGenerator/commands';
+} from './AiAppGenerator/create-boxel-app-command';
 
 const getCardTypeQuery = (cardRef: CodeRef, excludedId?: string): Query => {
   let filter: Query['filter'];
@@ -376,60 +375,7 @@ class DashboardTab extends GlimmerComponent<{
     } finally {
       this.isGenerating = false;
     }
-    // let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
-    // let requirements = this.prompt.customRequirements
-    //   ? `that has these features: ${this.prompt.customRequirements}`
-    //   : '';
-    // let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
-    // this.generateRequirements.perform(this.prdCardRef, {
-    //   data: {
-    //     attributes: { appTitle, prompt },
-    //     meta: {
-    //       adoptsFrom: this.prdCardRef,
-    //       realmURL: this.args.currentRealm?.href,
-    //     },
-    //   },
-    // });
   };
-  //   private generateRequirements = restartableTask(
-  //     async (ref: CodeRef, doc: LooseSingleCardDocument) => {
-  //       try {
-  //         this.errorMessage = '';
-  //         let { createCard, viewCard, runCommand } =
-  //           this.args.context?.actions ?? {};
-  //         if (!createCard || !viewCard || !runCommand) {
-  //           throw new Error('Missing required card actions');
-  //         }
-
-  //         let card = await createCard(ref, this.args.currentRealm, {
-  //           doc,
-  //           cardModeAfterCreation: 'isolated',
-  //         });
-  //         if (!card) {
-  //           throw new Error('Error: Failed to create card');
-  //         }
-
-  //         // Construct the relative URL for the SkillCard
-  //         let skillCardUrl = new URL(
-  //           './SkillCard/generate-product-requirements',
-  //           import.meta.url,
-  //         ).href;
-
-  //         // Update the runCommand call to use the constructed URL
-  //         await runCommand(
-  //           card,
-  //           skillCardUrl,
-  //           'Generate product requirements document',
-  //         );
-  //         this.prompt = this.promptReset;
-  //         this.args.setActiveTab?.('requirements');
-  //       } catch (e) {
-  //         this.errorMessage =
-  //           e instanceof Error ? `${e.name}: ${e.message}` : 'An error occurred.';
-  //         throw e;
-  //       }
-  //   },
-  // );
 }
 
 class RequirementsTab extends GlimmerComponent<{
