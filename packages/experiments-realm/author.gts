@@ -1,5 +1,6 @@
 import StringCard from 'https://cardstack.com/base/string';
-import TextAreaCard from 'https://cardstack.com/base/text-area';
+import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
   Component,
   CardDef,
@@ -24,13 +25,13 @@ export class Author extends CardDef {
       return this.body;
     },
   });
-  @field photo = contains(StringCard); // TODO: image card
-  @field body = contains(TextAreaCard); // TODO: markdown card
+  @field photo = contains(Base64ImageField);
+  @field body = contains(MarkdownField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContentContainer>
-        <h3>Yo, my name is: <@fields.title /></h3>
+        <h3><@fields.title /></h3>
         <p><@fields.body /></p>
       </CardContentContainer>
     </template>

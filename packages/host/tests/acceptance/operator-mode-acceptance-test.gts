@@ -7,6 +7,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -407,6 +408,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    assert.strictEqual(getPageTitle(), 'Test Workspace B');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
@@ -460,6 +462,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
       submode: Submodes.Interact,
     });
+    assert.strictEqual(getPageTitle(), 'Mango');
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
@@ -500,6 +503,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+    assert.strictEqual(
+      getPageTitle(),
+      `address-with-no-embedded-template.gts in Test Workspace B`,
+    );
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {

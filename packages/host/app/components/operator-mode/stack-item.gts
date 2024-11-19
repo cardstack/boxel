@@ -45,6 +45,7 @@ import {
   RealmURLContextName,
   Deferred,
   cardTypeIcon,
+  CommandContext,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -52,6 +53,7 @@ import config from '@cardstack/host/config/environment';
 import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import type {
+  CardContext,
   CardDef,
   Format,
   FieldType,
@@ -82,6 +84,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
+    commandContext: CommandContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
     onSelectedCards: (
@@ -232,10 +235,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried;
   }
 
-  private get cardContext() {
+  private get cardContext(): Omit<
+    CardContext,
+    'prerenderedCardSearchComponent'
+  > {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
+      commandContext: this.args.commandContext,
     };
   }
 

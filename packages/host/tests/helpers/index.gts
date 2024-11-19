@@ -465,6 +465,11 @@ export function lookupLoaderService(): LoaderService {
   return owner.lookup('service:loader-service') as LoaderService;
 }
 
+export function lookupService<T extends Service>(name: string): T {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup(`service:${name}`) as T;
+}
+
 export function lookupNetworkService(): NetworkService {
   let owner = (getContext() as TestContext).owner;
   return owner.lookup('service:network') as NetworkService;

@@ -10,7 +10,37 @@
       "command": "pnpm",
       "args": ["watch"],
       "isBackground": true,
-      "problemMatcher": ["$tsc-watch"]
+      "problemMatcher": [
+        // Adapted from https://github.com/connor4312/esbuild-problem-matchers/blob/51e17a9f4464dd008bfc07871482b94dc87901ce/package.json#L68
+        {
+          "severity": "error",
+          "applyTo": "closedDocuments",
+          "source": "esbuild",
+          "fileLocation": "relative",
+          "pattern": [
+            {
+              "regexp": "^[✘▲] \\[([A-Z]+)\\] (.+)",
+              "severity": 1,
+              "message": 2
+            },
+            {
+              "regexp": "^(?:\\t| {4})(?!\\s)([^:]+)(?::([0-9]+))?(?::([0-9]+))?:$",
+              "file": 1,
+              "line": 2,
+              "column": 3
+            }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": {
+              "regexp": "\\[watch\\] build started"
+            },
+            "endsPattern": {
+              "regexp": "\\[watch\\] build finished"
+            }
+          }
+        }
+      ]
     }
   ]
 }

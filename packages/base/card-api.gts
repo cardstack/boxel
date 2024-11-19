@@ -44,6 +44,7 @@ import {
   type Actions,
   type RealmInfo,
   CodeRef,
+  CommandContext,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -130,6 +131,7 @@ interface NotLoadedValue {
 
 export interface CardContext {
   actions?: Actions;
+  commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {

@@ -44,16 +44,17 @@ class Assistant {
   getResponse(history: DiscreteMatrixEvent[]) {
     let tools = getTools(history, this.id);
     let messages = getModifyPrompt(history, this.id, tools);
+
     if (tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
         model: 'openai/gpt-4o',
-        messages: messages,
+        messages,
       });
     } else {
       return this.openai.beta.chat.completions.stream({
         model: 'openai/gpt-4o',
-        messages: messages,
-        tools: tools,
+        messages,
+        tools,
         tool_choice: 'auto',
       });
     }

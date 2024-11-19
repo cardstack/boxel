@@ -40,7 +40,11 @@ import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgr
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -51,6 +55,7 @@ import SubmodeLayout from './submode-layout';
 import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 
@@ -140,6 +145,7 @@ interface Signature {
 
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: Realm;
@@ -657,9 +663,14 @@ export default class InteractSubmode extends Component<Signature> {
 
   @provide(CardContextName)
   // @ts-ignore "cardContext is declared but not used"
-  private get cardContext() {
+  private get cardContext(): Omit<
+    CardContext,
+    'prerenderedCardSearchComponent'
+  > {
     return {
       actions: this.publicAPI(this, 0),
+      // TODO: should we include this here??
+      commandContext: this.commandService.commandContext,
     };
   }
 
@@ -719,6 +730,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
+                @commandContext={{this.commandService.commandContext}}
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
