@@ -4,7 +4,7 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
@@ -344,6 +344,18 @@ export default class OperatorModeStateService extends Service {
     });
   }
 
+  @cached
+  get title() {
+    if (this.state.submode === Submodes.Code) {
+      return `${this.codePathRelativeToRealm} in ${
+        this.realm.info(this.realmURL.href).name
+      }`;
+    } else {
+      let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
+      return itemForTitle?.title ?? 'Boxel';
+    }
+  }
+
   private updateOpenDirsForNestedPath() {
     let localPath = this.codePathRelativeToRealm;
 
@@ -392,6 +404,10 @@ export default class OperatorModeStateService extends Service {
 
   private persist() {
     this.operatorModeController.operatorModeState = this.serialize();
+    // This sets the title of the document for it's appearance in the browser
+    // history (which needs to happen after the history pushState)--the
+    // afterRender is the perfect place for this
+    document.title = this.title;
   }
 
   // Serialized POJO version of state, with only cards that have been saved.
