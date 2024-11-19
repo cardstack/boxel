@@ -38,6 +38,7 @@ import {
   visitOperatorMode,
   lookupLoaderService,
   lookupNetworkService,
+  setupRealmServerEndpoints,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -56,6 +57,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
   });
+  setupRealmServerEndpoints(hooks);
 
   hooks.beforeEach(async function () {
     let loader = lookupLoaderService().loader;

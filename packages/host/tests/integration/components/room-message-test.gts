@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
+import { setupRealmServerEndpoints } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -16,6 +17,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     activeRealms: [],
     autostart: true,
   });
+  setupRealmServerEndpoints(hooks);
 
   async function setupTestScenario(
     isStreaming: boolean,

@@ -400,6 +400,7 @@ export async function runTestRealmServer({
     testRealm,
     testRealmServer,
     testRealmHttpServer,
+    matrixClient,
   };
 }
 
