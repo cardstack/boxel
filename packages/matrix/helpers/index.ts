@@ -607,13 +607,15 @@ export async function getRoomEvents(
     );
     // there will generally be 2 rooms, one is the DM room we do for
     // authentication, the other is the actual chat (with org.boxel.message events)
-    return roomsWithEvents.find((messages) => {
-      return messages.find(
-        (message) =>
-          message.type === 'm.room.message' &&
-          message.content?.msgtype === 'org.boxel.message',
-      );
-    })!;
+    return (
+      roomsWithEvents.find((messages) => {
+        return messages.find(
+          (message) =>
+            message.type === 'm.room.message' &&
+            message.content?.msgtype === 'org.boxel.message',
+        );
+      }) ?? []
+    );
   }
   return await getAllRoomEvents(roomId, accessToken);
 }
@@ -622,4 +624,20 @@ export async function getRoomsFromSync(username = 'user1', password = 'pass') {
   let { accessToken } = await loginUser(username, password);
   let response = (await sync(accessToken)) as any;
   return response.rooms;
+}
+
+export async function waitUntil<T>(
+  condition: () => Promise<T>,
+  timeout = 10000,
+  interval = 250,
+): Promise<T> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const result = await condition();
+    if (result) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  throw new Error('Timeout waiting for condition');
 }

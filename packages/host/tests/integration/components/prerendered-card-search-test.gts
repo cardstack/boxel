@@ -402,7 +402,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       callback: async () => {
         let owner = (getContext() as TestContext).owner;
         let cardService = owner.lookup('service:card-service') as CardService;
-        console.log('triggering card deletion');
         await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
       },
     });

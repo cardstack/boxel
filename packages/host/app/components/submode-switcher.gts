@@ -36,7 +36,7 @@ interface Signature {
 
 export default class SubmodeSwitcher extends Component<Signature> {
   <template>
-    <div data-test-submode-switcher ...attributes>
+    <div data-test-submode-switcher={{@submode}} ...attributes>
       <BoxelDropdown @contentClass='submode-switcher-dropdown'>
         <:trigger as |bindings|>
           <Button
