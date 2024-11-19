@@ -2,13 +2,14 @@ import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { trackedFunction } from 'ember-resources/util/function';
+
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { trackedFunction } from 'ember-resources/util/function';
 
 import { Modal } from '@cardstack/boxel-ui/components';
 
