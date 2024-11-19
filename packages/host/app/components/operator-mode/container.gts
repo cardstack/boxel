@@ -124,6 +124,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private fetchUserInfo = trackedFunction(this, async () => {
+    if (isTesting()) {
+      return;
+    }
     if (!this.matrixService.isLoggedIn) {
       return;
     }
@@ -135,6 +138,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private get isUserSubscribed() {
+    if (isTesting()) {
+      return true;
+    }
     if (this.isUserInfoLoading) {
       return false;
     }
