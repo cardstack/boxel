@@ -135,17 +135,12 @@ export default class DateRangeField extends FieldDef {
 
   static edit = Edit;
   static atom = class Atom extends Component<typeof this> {
-    // Note: The designs are slightly inconsistent with the data structure of the card
-    // this function is used to determine if the end date is missing, so we can display (although there is more data behind the scenes)
-    get hasNoDueDateInfo() {
-      return !this.args.model.end;
+    get hasNoDateInfo() {
+      return !this.args.model.start && !this.args.model.end;
     }
 
     get formatted() {
-      return getFormattedDate(this.args.model as DateRange, {
-        dueDateOnly: true,
-        noDateMsg: '[No date assigned]',
-      });
+      return getFormattedDate(this.args.model as DateRange);
     }
 
     get dateIcon() {
@@ -157,7 +152,7 @@ export default class DateRangeField extends FieldDef {
         {{#if this.dateIcon}}
           <this.dateIcon class='icon' />
         {{/if}}
-        <div class={{cn 'text' no-date-info=this.hasNoDueDateInfo}}>
+        <div class={{cn 'text' no-date-info=this.hasNoDateInfo}}>
           {{this.formatted}}
         </div>
       </time>
@@ -190,7 +185,6 @@ export default class DateRangeField extends FieldDef {
 }
 
 interface DateRangeConfig {
-  dueDateOnly: boolean;
   noDateMsg: string;
 }
 
@@ -199,7 +193,6 @@ function getFormattedDate(
   config: Partial<DateRangeConfig> = {},
 ): string {
   const defaults = {
-    dueDateOnly: false,
     noDateMsg: '[Select a date]',
   };
   const finalConfig = { ...defaults, ...config };
@@ -209,8 +202,5 @@ function getFormattedDate(
   }
   let start = range.start ? Format.format(range.start) : '[Select start date]';
   let end = range.end ? Format.format(range.end) : '[Select end date]';
-  if (finalConfig.dueDateOnly === true) {
-    return end;
-  }
   return `${start} - ${end}`;
 }
