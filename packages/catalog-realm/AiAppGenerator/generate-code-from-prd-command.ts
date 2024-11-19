@@ -9,7 +9,7 @@ import { ProductRequirementDocument } from '../product-requirement-document';
 import CodeRefField from '../../base/code-ref';
 import { Command } from '@cardstack/runtime-common';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
-import CreateModuleCommand from '../../host/app/commands/create-module';
+import CreateModuleCommand from '@cardstack/boxel-host/commands/create-module';
 
 export class GenerateCodeFromPRDInput extends CardDef {
   @field productRequirements = linksTo(ProductRequirementDocument);

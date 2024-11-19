@@ -1,35 +1,35 @@
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
-import CreateModuleCommand from './create-module';
-import PatchCardCommand from './patch-card';
-import ReloadCardCommand from './reload-card';
-import SaveCardCommand from './save-card';
-import ShowCardCommand from './show-card';
-import SwitchSubmodeCommand from './switch-submode';
+import * as CreateModuleCommandModule from './create-module';
+import * as PatchCardCommandModule from './patch-card';
+import * as ReloadCardCommandModule from './reload-card';
+import * as SaveCardCommandModule from './save-card';
+import * as ShowCardCommandModule from './show-card';
+import * as SwitchSubmodeCommandModule from './switch-submode';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-module',
-    CreateModuleCommand,
+    CreateModuleCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/potch-card',
-    PatchCardCommand,
+    '@cardstack/boxel-host/commands/patch-card',
+    PatchCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/reload-card',
-    ReloadCardCommand,
+    ReloadCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',
-    SaveCardCommand,
+    SaveCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/show-card',
-    ShowCardCommand,
+    ShowCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/switch-submode',
-    SwitchSubmodeCommand,
+    SwitchSubmodeCommandModule,
   );
 }
