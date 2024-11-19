@@ -46,7 +46,7 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
-interface CreditInfo {
+interface SubscriptionData {
   plan: string | null;
   creditsAvailableInPlanAllowance: number | null;
   creditsIncludedInPlanAllowance: number | null;
@@ -56,7 +56,7 @@ interface CreditInfo {
 export default class RealmServerService extends Service {
   @service private declare network: NetworkService;
   @service private declare reset: ResetService;
-  @tracked private _creditInfo: CreditInfo | null = null;
+  @tracked private _subscriptionData: SubscriptionData | null = null;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
@@ -176,11 +176,11 @@ export default class RealmServerService extends Service {
       });
   }
 
-  async fetchCreditInfo() {
-    if (this.creditInfo) {
+  async fetchSubscriptionData() {
+    if (this.subscriptionData) {
       return;
     }
-    await this.fetchCreditInfoTask.perform();
+    await this.fetchSubscriptionDataTask.perform();
   }
 
   async handleRealmServerEvent(maybeRealmServerEvent: Partial<IEvent>) {
@@ -195,15 +195,15 @@ export default class RealmServerService extends Service {
       return;
     }
 
-    await this.fetchCreditInfoTask.perform();
+    await this.fetchSubscriptionDataTask.perform();
   }
 
-  get creditInfo() {
-    return this._creditInfo;
+  get subscriptionData() {
+    return this._subscriptionData;
   }
 
-  get fetchingCreditInfo() {
-    return this.fetchCreditInfoTask.isRunning;
+  get fetchingSubscriptionData() {
+    return this.fetchSubscriptionDataTask.isRunning;
   }
 
   async fetchCatalogRealms() {
@@ -239,9 +239,9 @@ export default class RealmServerService extends Service {
     return new URL(url);
   }
 
-  private fetchCreditInfoTask = dropTask(async () => {
+  private fetchSubscriptionDataTask = dropTask(async () => {
     if (!this.client) {
-      throw new Error(`Cannot fetch credit info without matrix client`);
+      throw new Error(`Cannot fetch subscription data without matrix client`);
     }
     await this.login();
     if (this.auth.type !== 'logged-in') {
@@ -270,7 +270,7 @@ export default class RealmServerService extends Service {
       json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
     let extraCreditsAvailableInBalance =
       json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-    this._creditInfo = {
+    this._subscriptionData = {
       plan,
       creditsAvailableInPlanAllowance,
       creditsIncludedInPlanAllowance,

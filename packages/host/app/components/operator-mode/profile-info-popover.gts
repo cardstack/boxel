@@ -209,7 +209,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   @service declare matrixService: MatrixService;
 
   private fetchCreditInfo = task(async () => {
-    await this.realmServer.fetchCreditInfo();
+    await this.realmServer.fetchSubscriptionData();
   });
 
   @action private logout() {
@@ -217,23 +217,23 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   }
 
   private get isLoading() {
-    return this.realmServer.fetchingCreditInfo;
+    return this.realmServer.fetchingSubscriptionData;
   }
 
   private get plan() {
-    return this.realmServer.creditInfo?.plan;
+    return this.realmServer.subscriptionData?.plan;
   }
 
   private get creditsIncludedInPlanAllowance() {
-    return this.realmServer.creditInfo?.creditsIncludedInPlanAllowance;
+    return this.realmServer.subscriptionData?.creditsIncludedInPlanAllowance;
   }
 
   private get creditsAvailableInPlanAllowance() {
-    return this.realmServer.creditInfo?.creditsAvailableInPlanAllowance;
+    return this.realmServer.subscriptionData?.creditsAvailableInPlanAllowance;
   }
 
   private get extraCreditsAvailableInBalance() {
-    return this.realmServer.creditInfo?.extraCreditsAvailableInBalance;
+    return this.realmServer.subscriptionData?.extraCreditsAvailableInBalance;
   }
 
   private get monthlyCreditText() {
