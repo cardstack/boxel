@@ -10,18 +10,13 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
+import PatchCardCommand from '@cardstack/host/commands/patch-card';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
+import ShowCardCommand from '@cardstack/host/commands/show-card';
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import type {
-  SwitchSubmodeInput,
-  SaveCardInput,
-  ShowCardInput,
-  PatchCardInput,
-} from 'https://cardstack.com/base/command';
-
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import {
   setupLocalIndexing,
@@ -47,10 +42,6 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
-import SaveCardCommand from '@cardstack/host/commands/save-card';
-import ShowCardCommand from '@cardstack/host/commands/show-card';
-import PatchCardCommand from '@cardstack/host/commands/patch-card';
 
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
