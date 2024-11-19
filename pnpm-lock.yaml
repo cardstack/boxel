@@ -117,8 +117,14 @@ importers:
 
   packages/ai-bot:
     dependencies:
+      '@cardstack/billing':
+        specifier: workspace:*
+        version: link:../billing
+      '@cardstack/postgres':
+        specifier: workspace:*
+        version: link:../postgres
       '@cardstack/runtime-common':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../runtime-common
       '@sentry/node':
         specifier: ^8.31.0
