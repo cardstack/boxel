@@ -7,6 +7,7 @@ import ArrowLeft from './icons/arrow-left.gts';
 import ArrowRight from './icons/arrow-right.gts';
 import ArrowTopLeft from './icons/arrow-top-left.gts';
 import BoxelIcon from './icons/boxel-icon.gts';
+import Card from './icons/card.gts';
 import CardbotLg from './icons/cardbot-lg.gts';
 import CaretDown from './icons/caret-down.gts';
 import CheckMark from './icons/check-mark.gts';
@@ -21,6 +22,7 @@ import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
 import FourLines from './icons/four-lines.gts';
+import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
@@ -47,6 +49,7 @@ import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
+import Rows4 from './icons/rows-4.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
@@ -61,6 +64,7 @@ export const ALL_ICON_COMPONENTS = [
   ArrowRight,
   ArrowTopLeft,
   BoxelIcon,
+  Card,
   CardbotLg,
   CaretDown,
   CheckMark,
@@ -75,6 +79,7 @@ export const ALL_ICON_COMPONENTS = [
   FailureBordered,
   File,
   FourLines,
+  Grid3x3,
   Group,
   IconCircle,
   IconCircleSelected,
@@ -101,6 +106,7 @@ export const ALL_ICON_COMPONENTS = [
   LoadingIndicator,
   Lock,
   Profile,
+  Rows4,
   Send,
   Sparkle,
   SuccessBordered,
@@ -116,6 +122,7 @@ export {
   ArrowRight,
   ArrowTopLeft,
   BoxelIcon,
+  Card,
   CardbotLg,
   CaretDown,
   CheckMark,
@@ -130,6 +137,7 @@ export {
   FailureBordered,
   File,
   FourLines,
+  Grid3x3,
   Group,
   IconCircle,
   IconCircleSelected,
@@ -156,6 +164,7 @@ export {
   LoadingIndicator,
   Lock,
   Profile,
+  Rows4,
   Send,
   Sparkle,
   SuccessBordered,

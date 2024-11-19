@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Ramped",
+      "description": "Urban insights",
+      "thumbnailURL": "https://cdn.discordapp.com/attachments/584061276544827432/1306724109149012019/ramped.png?ex=67385de9&is=67370c69&hm=d1a4893bcc51a6c40765f2e700afb911577c79ac951283ae386af468b571b77e&"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-app",
+        "name": "BlogApp"
+      }
+    }
+  }
+}

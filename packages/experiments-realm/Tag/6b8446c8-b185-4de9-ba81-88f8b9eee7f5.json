@@ -3,6 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Boxel UI",
+      "color": "",
       "description": null,
       "thumbnailURL": null
     },

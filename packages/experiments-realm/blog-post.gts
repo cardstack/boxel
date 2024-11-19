@@ -1,5 +1,6 @@
-import StringCard from 'https://cardstack.com/base/string';
-import MarkdownCard from 'https://cardstack.com/base/markdown';
+import DatetimeField from 'https://cardstack.com/base/datetime';
+import StringField from 'https://cardstack.com/base/string';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
   CardDef,
   field,
@@ -10,6 +11,7 @@ import {
 import { Author } from './author';
 import { markdownToHtml } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
+import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import FileStack from '@cardstack/boxel-icons/file-stack';
 
 class FittedTemplate extends Component<typeof BlogPost> {
@@ -161,17 +163,64 @@ class FittedTemplate extends Component<typeof BlogPost> {
   </template>
 }
 
+class Status extends StringField {
+  static displayName = 'Status';
+  static icon = CalendarCog;
+}
+
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   static icon = FileStack;
-  @field title = contains(StringCard);
-  @field slug = contains(StringCard);
-  @field body = contains(MarkdownCard);
+  @field title = contains(StringField);
+  @field slug = contains(StringField);
+  @field body = contains(MarkdownField);
   @field authorBio = linksTo(Author);
+  @field publishDate = contains(DatetimeField);
+  @field status = contains(Status, {
+    computeVia: function (this: BlogPost) {
+      if (!this.publishDate) {
+        return 'Draft';
+      }
+      if (Date.now() >= Date.parse(String(this.publishDate))) {
+        return 'Published';
+      }
+      return 'Scheduled';
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.title /> by <@fields.authorBio />
     </template>
   };
   static fitted = FittedTemplate;
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article>
+        <header>
+          <h1><@fields.title /></h1>
+          <p class='description'><@fields.description /></p>
+          <@fields.authorBio class='byline' />
+        </header>
+        <@fields.body />
+      </article>
+      <style scoped>
+        article {
+          padding: var(--boxel-sp) var(--boxel-sp-xl);
+        }
+        h1 {
+          margin-top: 0;
+          font: 600 var(--boxel-font-xl);
+        }
+        img {
+          max-width: 100%;
+        }
+        .description {
+          font: var(--boxel-font);
+        }
+        .byline {
+          max-width: 300px;
+        }
+      </style>
+    </template>
+  };
 }

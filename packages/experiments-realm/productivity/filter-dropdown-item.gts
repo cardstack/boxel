@@ -1,55 +1,6 @@
-// @ts-nocheck
-import {
-  Component,
-  realmURL,
-  StringField,
-  contains,
-  field,
-  BaseDef,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
-import { getCard, getCards } from '@cardstack/runtime-common';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
-import {
-  CardContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
-import {
-  BoxelButton,
-  CircleSpinner,
-  DndKanbanBoard,
-  DndColumn,
-  BoxelSelect,
-  IconButton,
-  BoxelMultiSelectBasic,
-} from '@cardstack/boxel-ui/components';
-import {
-  DropdownArrowFilled,
-  IconPlus,
-  IconFunnel,
-} from '@cardstack/boxel-ui/icons';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
-import { fn, array } from '@ember/helper';
-import { action } from '@ember/object';
-import {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-  type Query,
-} from '@cardstack/runtime-common';
-import { restartableTask } from 'ember-concurrency';
-import { AppCard } from '/catalog/app-card';
-import { TaskStatusField, type LooseyGooseyData } from './productivity/task';
-import { FilterTrigger } from './productivity/filter-trigger';
-import Checklist from '@cardstack/boxel-icons/checklist';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
-
-import { isEqual } from 'lodash';
-import type Owner from '@ember/owner';
-import { Resource } from 'ember-resources';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 interface CheckBoxArgs {
   Args: {
