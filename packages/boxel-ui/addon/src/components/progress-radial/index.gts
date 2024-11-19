@@ -5,7 +5,6 @@ import { cssVar } from '../../helpers.ts';
 
 interface Signature {
   Args: {
-    label?: string;
     max: number;
     value: number;
   };
@@ -27,7 +26,7 @@ export default class ProgressRadial extends Component<Signature> {
     <div
       class='boxel-progress-radial'
       data-test-boxel-progress-radial
-      aria-label={{@label}}
+      aria-label='progress-radial'
       ...attributes
     >
       <div
