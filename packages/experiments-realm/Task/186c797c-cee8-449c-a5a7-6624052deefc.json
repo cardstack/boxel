@@ -20,11 +20,6 @@
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/b32c3da1-61c1-4d87-acff-a7eecccd8377"
-        }
-      },
       "project": {
         "links": {
           "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"

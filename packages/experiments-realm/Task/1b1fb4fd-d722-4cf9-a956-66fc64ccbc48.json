@@ -12,8 +12,10 @@
         "index": null,
         "label": null
       },
-      "dateStarted": null,
-      "dueDate": "2024-11-16",
+      "dateRange": {
+        "start": "2024-11-18",
+        "end": "2024-11-19"
+      },
       "description": null,
       "thumbnailURL": null
     },

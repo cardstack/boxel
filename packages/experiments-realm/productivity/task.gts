@@ -19,7 +19,6 @@ import {
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
-import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
 import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
 import TagIcon from '@cardstack/boxel-icons/tag';
@@ -370,27 +369,26 @@ function getDueDateStatus(dueDateString: string | null) {
   if (!dueDateString) return null;
 
   const dueDate = new Date(dueDateString);
-  const nextWeek = addWeeks(new Date(), 1);
+  const today = new Date();
+  const nextWeek = addWeeks(dueDate, 1);
 
   if (isToday(dueDate)) {
     return {
       label: 'Due Today',
       color: '#01de67',
-      urgent: true,
     };
   } else if (isThisWeek(dueDate)) {
     return {
       label: 'This Week',
       color: '#ffbc00',
-      urgent: false,
     };
-  } else if (dueDate <= nextWeek) {
+  } else if (dueDate > today && dueDate < nextWeek) {
     return {
       label: 'Next Week',
       color: '#4fc8fd',
-      urgent: false,
     };
   }
+
   return null;
 }
 
@@ -399,13 +397,20 @@ class Fitted extends Component<typeof Task> {
     return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
   }
 
-  get hasDueDateStatus() {
-    return this.dueDateStatus !== null;
+  get dueDate() {
+    return this.args.model.dateRange?.end;
   }
 
   get dueDateStatus() {
-    if (!this.args.model.dueDate) return null;
-    return getDueDateStatus(this.args.model.dueDate.toString());
+    return this.dueDate ? getDueDateStatus(this.dueDate.toString()) : undefined;
+  }
+
+  get hasDueDate() {
+    return Boolean(this.dueDate);
+  }
+
+  get hasDueDateStatus() {
+    return Boolean(this.dueDateStatus);
   }
 
   <template>
@@ -438,37 +443,24 @@ class Fitted extends Component<typeof Task> {
         {{/if}}
 
         <div class='date-info-container'>
-          {{#if @model.dueDate}}
-            {{#if this.hasDueDateStatus}}
-              <div class='date-status-pill-container'>
+          {{#if this.hasDueDate}}
+            <div class='date-status-pill-container'>
+              {{#if this.dueDateStatus}}
                 <Pill
                   class='date-status-pill'
                   @pillBackgroundColor={{this.dueDateStatus.color}}
                 >
                   <:default>{{this.dueDateStatus.label}}</:default>
                 </Pill>
+              {{/if}}
 
-                <div class='calendar-icon-container'>
-                  <Calendar width='14px' height='14px' class='calendar-icon' />
-                  <time class='date-info' datetime='{{@model.dueDate}}'>
-                    <@fields.dueDate />
-                  </time>
-                </div>
-              </div>
-            {{else}}
               <div class='calendar-icon-container'>
                 <Calendar width='14px' height='14px' class='calendar-icon' />
-                <time class='date-info' datetime='{{@model.dueDate}}'>
-                  <@fields.dueDate />
-                </time>
+                <@fields.dateRange.end @format='atom' />
               </div>
-            {{/if}}
-          {{else}}
-            <div class='calendar-icon-container'>
-              <Calendar width='14px' height='14px' class='calendar-icon' />
-
-              <span class='no-data-found-txt'>No Due Date Assigned</span>
             </div>
+          {{else}}
+            <span class='no-data-found-txt'>No Due Date Assigned</span>
           {{/if}}
         </div>
       </div>
@@ -487,6 +479,9 @@ class Fitted extends Component<typeof Task> {
         display: none;
       }
       .task-card {
+        --font-weight-500: 500;
+        --font-weight-600: 600;
+        --font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
         width: 100%;
         height: 100%;
         padding: var(--boxel-sp-sm);
@@ -526,8 +521,8 @@ class Fitted extends Component<typeof Task> {
         margin-left: auto;
       }
       .short-id {
-        font-size: calc(var(--boxel-font-size-xs) * 0.85);
-        font-weight: 600;
+        font-size: var(--font-size-extra-small);
+        font-weight: var(--font-weight-600);
         color: var(--boxel-600);
         line-height: normal;
         background-color: var(--boxel-200);
@@ -539,7 +534,7 @@ class Fitted extends Component<typeof Task> {
         margin: var(--boxel-sp-xxxs) 0;
         padding: 0;
         font-size: var(--boxel-font-size);
-        font-weight: 600;
+        font-weight: var(--font-weight-600);
         line-height: 1.2;
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -547,27 +542,15 @@ class Fitted extends Component<typeof Task> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .calendar-icon {
-        flex-shrink: 0;
-      }
       .date-info-container {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         margin-top: var(--boxel-sp-xxxs);
       }
-      .date-info {
-        font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: 500;
-        color: var(--boxel-600);
-        white-space: nowrap;
-        -webkit-line-clamp: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
       .no-data-found-txt {
-        font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: 500;
+        font-size: var(--font-size-extra-small);
+        font-weight: var(--font-weight-500);
         color: var(--boxel-400);
         white-space: nowrap;
         -webkit-line-clamp: 1;
@@ -582,10 +565,11 @@ class Fitted extends Component<typeof Task> {
         gap: var(--boxel-sp-xxxs);
       }
       .date-status-pill {
+        height: 24px;
         border: none;
         border-radius: 5px 0 0 5px;
-        font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: 500;
+        font-size: var(--font-size-extra-small);
+        font-weight: var(--font-weight-500);
         position: relative;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
           var(--boxel-sp-xxs);
@@ -598,10 +582,14 @@ class Fitted extends Component<typeof Task> {
         );
       }
       .calendar-icon-container {
+        font-size: var(--font-size-extra-small);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         overflow: hidden;
+      }
+      .calendar-icon {
+        flex-shrink: 0;
       }
       footer {
         display: inline-flex;
@@ -777,13 +765,20 @@ export class Tag extends CardDef {
 }
 
 class TaskIsolated extends Component<typeof Task> {
-  get hasDueDateStatus() {
-    return this.dueDateStatus !== null;
+  get dueDate() {
+    return this.args.model.dateRange?.end;
   }
 
   get dueDateStatus() {
-    if (!this.args.model.dueDate) return null;
-    return getDueDateStatus(this.args.model.dueDate.toString());
+    return this.dueDate ? getDueDateStatus(this.dueDate.toString()) : undefined;
+  }
+
+  get hasDueDate() {
+    return Boolean(this.dueDate);
+  }
+
+  get hasDueDateStatus() {
+    return Boolean(this.dueDateStatus);
   }
 
   <template>
@@ -791,7 +786,6 @@ class TaskIsolated extends Component<typeof Task> {
       <header>
         <div class='left-column'>
           <h2 class='task-title'>{{@model.taskName}}</h2>
-
           <div class='status-label'>
             <span class='text-gray'>in</span>
             {{@model.status.label}}
@@ -846,15 +840,17 @@ class TaskIsolated extends Component<typeof Task> {
 
           <div class='due-date'>
             <h4>Due Date</h4>
-            {{#if @model.dueDate}}
-              {{#if this.hasDueDateStatus}}
+            <div class='date-info-container'>
+              {{#if this.hasDueDate}}
                 <div class='date-status-pill-container'>
-                  <Pill
-                    class='date-status-pill'
-                    @pillBackgroundColor={{this.dueDateStatus.color}}
-                  >
-                    <:default>{{this.dueDateStatus.label}}</:default>
-                  </Pill>
+                  {{#if this.dueDateStatus}}
+                    <Pill
+                      class='date-status-pill'
+                      @pillBackgroundColor={{this.dueDateStatus.color}}
+                    >
+                      <:default>{{this.dueDateStatus.label}}</:default>
+                    </Pill>
+                  {{/if}}
 
                   <div class='calendar-icon-container'>
                     <Calendar
@@ -862,26 +858,13 @@ class TaskIsolated extends Component<typeof Task> {
                       height='14px'
                       class='calendar-icon'
                     />
-                    <time class='date-info' datetime='{{@model.dueDate}}'>
-                      <@fields.dueDate />
-                    </time>
+                    <@fields.dateRange.end @format='atom' />
                   </div>
                 </div>
               {{else}}
-                <div class='calendar-icon-container'>
-                  <Calendar width='14px' height='14px' class='calendar-icon' />
-                  <time class='date-info' datetime='{{@model.dueDate}}'>
-                    <@fields.dueDate />
-                  </time>
-                </div>
-              {{/if}}
-            {{else}}
-              <div class='calendar-icon-container'>
-                <Calendar width='14px' height='14px' class='calendar-icon' />
-
                 <span class='no-data-found-txt'>No Due Date Assigned</span>
-              </div>
-            {{/if}}
+              {{/if}}
+            </div>
           </div>
 
           <div class='tags'>
@@ -910,14 +893,6 @@ class TaskIsolated extends Component<typeof Task> {
 
         {{#if @model.children}}
           <@fields.children @format='fitted' />
-          {{!-- <div class='children-column'>
-              {{#each @fields.children as |ChildTask|}}
-                <div class='subtask-item'>
-                  <ChildTask />
-                </div>
-              {{/each}}
-            </div> --}}
-
         {{else}}
           <span class='no-data-found-txt'>No Subtasks Found</span>
         {{/if}}
@@ -936,6 +911,9 @@ class TaskIsolated extends Component<typeof Task> {
         font-size: var(--boxel-font-size-sm);
       }
       .task-container {
+        --font-weight-500: 500;
+        --font-weight-600: 600;
+        --font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
         padding: var(--boxel-sp-lg);
         container-type: inline-size;
       }
@@ -949,11 +927,11 @@ class TaskIsolated extends Component<typeof Task> {
       }
       .task-title {
         font-size: var(--boxel-font-size-med);
-        font-weight: 600;
+        font-weight: var(--font-weight-600);
       }
       .status-label {
         font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
+        font-weight: var(--font-weight-600);
         margin-top: var(--boxel-sp-xs);
       }
       .text-gray {
@@ -998,18 +976,9 @@ class TaskIsolated extends Component<typeof Task> {
         height: auto;
         overflow: unset;
       }
-      .date-info {
-        font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: 500;
-        color: var(--boxel-600);
-        white-space: nowrap;
-        -webkit-line-clamp: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
       .no-data-found-txt {
         font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: 500;
+        font-weight: var(--font-weight-500);
         color: var(--boxel-400);
         white-space: nowrap;
         -webkit-line-clamp: 1;
@@ -1024,10 +993,11 @@ class TaskIsolated extends Component<typeof Task> {
         gap: var(--boxel-sp-xxs);
       }
       .date-status-pill {
+        height: 24px;
         border: none;
         border-radius: 5px 0 0 5px;
-        font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: 500;
+        font-size: var(--font-size-extra-small);
+        font-weight: var(--font-weight-500);
         position: relative;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
           var(--boxel-sp-xxs);
@@ -1040,10 +1010,14 @@ class TaskIsolated extends Component<typeof Task> {
         );
       }
       .calendar-icon-container {
+        font-size: var(--font-size-extra-small);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         overflow: hidden;
+      }
+      .calendar-icon {
+        flex-shrink: 0;
       }
 
       @container (max-width: 600px) {
@@ -1071,7 +1045,7 @@ class TaskIsolated extends Component<typeof Task> {
     return this.args.model.tags?.map((tag) => tag.name) ?? [];
   }
   get hasDateRange() {
-    return this.args.model.dateStarted && this.args.model.dueDate;
+    return this.args.model.dateRange;
   }
 
   get progress() {
@@ -1134,8 +1108,6 @@ export class Task extends CardDef {
   @field assignee = linksTo(TeamMember);
   @field project = linksTo(Project);
   @field team = linksTo(Team);
-  @field dateStarted = contains(DateField);
-  @field dueDate = contains(DateField);
   @field children = linksToMany(() => Task);
   @field tags = linksToMany(() => Tag);
   @field dateRange = contains(DateRangeField);
@@ -1158,7 +1130,7 @@ export class Task extends CardDef {
       </div>
       <style scoped>
         .task-atom {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-xxxs);
         }
