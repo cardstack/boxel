@@ -33,7 +33,10 @@ class Assistant {
   id: string;
 
   constructor(client: MatrixClient, id: string) {
-    this.openai = new OpenAI();
+    this.openai = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1', // We use openrouter so that we can track usage cost in $
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
     this.id = id;
     this.client = client;
   }
@@ -43,12 +46,12 @@ class Assistant {
     let messages = getModifyPrompt(history, this.id, tools);
     if (tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
-        model: 'gpt-4o',
+        model: 'openai/gpt-4o',
         messages: messages,
       });
     } else {
       return this.openai.beta.chat.completions.stream({
-        model: 'gpt-4o',
+        model: 'openai/gpt-4o',
         messages: messages,
         tools: tools,
         tool_choice: 'auto',

@@ -83,7 +83,7 @@ class File extends Component<FileArgs> {
           role='button'
           {{on 'click' this.openFile}}
         >
-          <RealmIcon @realmInfo={{realm.info}} class='icon' />
+          <RealmIcon @realmInfo={{realm.info}} />
           {{@recentFile.filePath}}
         </li>
       </WithLoadedRealm>
@@ -97,18 +97,9 @@ class File extends Component<FileArgs> {
         border-radius: var(--code-mode-container-border-radius);
         display: flex;
         align-items: center;
+        gap: var(--boxel-sp-xxxs);
         overflow-wrap: anywhere;
         overflow: hidden;
-      }
-
-      .icon {
-        --boxel-realm-icon-border: none;
-        --boxel-realm-icon-border-radius: var(
-          --code-mode-realm-icon-border-radius
-        );
-        min-width: var(--boxel-icon-sm);
-        min-height: var(--boxel-icon-sm);
-        margin-right: var(--boxel-sp-xxxs);
       }
     </style>
   </template>

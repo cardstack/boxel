@@ -39,9 +39,10 @@ import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
+  type Permissions,
   cardTypeDisplayName,
   PermissionsContextName,
-  type Permissions,
+  RealmURLContextName,
   Deferred,
   cardTypeIcon,
 } from '@cardstack/runtime-common';
@@ -66,6 +67,15 @@ import type EnvironmentService from '../../services/environment-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 
+export interface StackItemComponentAPI {
+  clearSelections: () => void;
+  doWithStableScroll: (
+    changeSizeCallback: () => Promise<void>,
+  ) => Promise<void>;
+  scrollIntoView: (selector: string) => Promise<void>;
+  startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
+}
+
 interface Signature {
   Args: {
     item: StackItem;
@@ -79,11 +89,8 @@ interface Signature {
       stackItem: StackItem,
     ) => void;
     setupStackItem: (
-      stackItem: StackItem,
-      clearSelections: () => void,
-      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-      doScrollIntoView: (selector: string) => void,
-      doCloseAnimation: () => void,
+      model: StackItem,
+      componentAPI: StackItemComponentAPI,
     ) => void;
     saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
@@ -110,7 +117,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isSaving = false;
-  @tracked private isClosing = false;
+  @tracked private animationType:
+    | 'opening'
+    | 'closing'
+    | 'movingForward'
+    | undefined = 'opening';
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
@@ -124,6 +135,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get permissions(): Permissions {
     return this.realm.permissions(this.card.id);
   }
+
+  @provide(RealmURLContextName)
+  get realmURL() {
+    let api = this.args.item.api;
+    return this.card[api.realmURL];
+  }
+
   cardTracker = new ElementTracker<{
     cardId?: string;
     card?: CardDef;
@@ -136,13 +154,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.loadCard.perform();
     this.subscribeToCard.perform();
-    this.args.setupStackItem(
-      this.args.item,
-      this.clearSelections,
-      this.doWithStableScroll.perform,
-      this.scrollIntoView.perform,
-      this.doCloseAnimation.perform,
-    );
+    this.args.setupStackItem(this.args.item, {
+      clearSelections: this.clearSelections,
+      doWithStableScroll: this.doWithStableScroll.perform,
+      scrollIntoView: this.scrollIntoView.perform,
+      startAnimation: this.startAnimation.perform,
+    });
   }
 
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -201,7 +218,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
-      transition: margin-top var(--boxel-transition);
+      transition: margin-top var(--boxel-transition), width var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     return htmlSafe(styles);
@@ -223,7 +240,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private closeItem = dropTask(async () => {
-    await this.doCloseAnimation.perform();
+    await this.startAnimation.perform('closing');
     this.args.close(this.args.item);
   });
 
@@ -417,23 +434,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
-  private doCloseAnimation = dropTask(async () => {
-    this.isClosing = true;
-    if (this.itemEl) {
+  private startAnimation = dropTask(
+    async (animationType: 'closing' | 'movingForward') => {
+      this.animationType = animationType;
+      if (!this.itemEl) return;
       await new Promise<void>((resolve) => {
-        scheduleOnce('afterRender', this, this.handleCloseAnimation, resolve);
+        scheduleOnce(
+          'afterRender',
+          this,
+          this.handleAnimationCompletion,
+          resolve,
+        );
       });
-    }
-  });
+    },
+  );
 
-  private handleCloseAnimation(resolve: () => void) {
+  private handleAnimationCompletion(resolve: () => void) {
     if (!this.itemEl) {
       return;
     }
     const animations = this.itemEl.getAnimations() || [];
-    Promise.all(animations.map((animation) => animation.finished)).then(() =>
-      resolve(),
-    );
+    Promise.all(animations.map((animation) => animation.finished)).then(() => {
+      this.animationType = undefined;
+      resolve();
+    });
   }
 
   private setupContentEl = (el: HTMLElement) => {
@@ -459,11 +483,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private get doOpeningAnimation() {
-    return this.isTopCard;
+    return this.isTopCard && this.animationType === 'opening';
   }
 
   private get doClosingAnimation() {
-    return this.isClosing;
+    return this.animationType === 'closing';
+  }
+
+  private get doMovingForwardAnimation() {
+    return this.animationType === 'movingForward';
   }
 
   private get isTesting() {
@@ -476,6 +504,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{if this.isBuried "buried"}}
         {{if this.doOpeningAnimation "opening-animation"}}
         {{if this.doClosingAnimation "closing-animation"}}
+        {{if this.doMovingForwardAnimation "move-forward-animation"}}
         {{if this.isTesting "testing"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
@@ -577,6 +606,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }
       }
 
+      @keyframes moveForward {
+        from {
+          transform: translateY(0);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateY(25px);
+          opacity: 1;
+        }
+      }
+
       .item {
         --stack-item-header-height: 3rem;
         justify-self: center;
@@ -588,14 +628,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
       .item.opening-animation {
         animation: scaleIn 0.2s forwards;
+        transition: margin-top var(--boxel-transition);
       }
       .item.closing-animation {
         animation: fadeOut 0.2s forwards;
+      }
+      .item.move-forward-animation {
+        animation: moveForward 0.2s none;
       }
       .item.opening-animation.testing {
         animation-duration: 0s;
       }
       .item.closing-animation.testing {
+        animation-duration: 0s;
+      }
+      .item.move-forward-animation.testing {
         animation-duration: 0s;
       }
 

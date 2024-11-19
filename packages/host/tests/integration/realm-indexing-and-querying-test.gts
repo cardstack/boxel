@@ -2833,6 +2833,107 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
   });
 
+  test('can index a card that has a linksTo relationship to itself', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Friend/hassan.json': {
+          data: {
+            id: `${testRealmURL}Friend/hassan`,
+            attributes: {
+              firstName: 'Hassan',
+              description: 'Dog owner',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/hassan`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/friend',
+                name: 'Friend',
+              },
+            },
+          },
+        },
+      },
+    });
+    let indexer = realm.realmIndexQueryEngine;
+    let hassan = await indexer.cardDocument(
+      new URL(`${testRealmURL}Friend/hassan`),
+      {
+        loadLinks: true,
+      },
+    );
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(hassan.doc, {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          type: 'card',
+          links: { self: `${testRealmURL}Friend/hassan` },
+          attributes: {
+            firstName: 'Hassan',
+            title: 'Hassan',
+            description: 'Dog owner',
+            thumbnailURL: null,
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `./hassan`,
+              },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}Friend/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/friend',
+              name: 'Friend',
+            },
+            lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}Friend/hassan.json`,
+            ),
+            realmInfo: testRealmInfo,
+            realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Friend/hassan.json`,
+            ),
+          },
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
+    }
+
+    let hassanEntry = await getInstance(
+      realm,
+      new URL(`${testRealmURL}Friend/hassan`),
+    );
+    if (hassanEntry) {
+      assert.deepEqual(hassanEntry.searchDoc, {
+        _cardType: 'Friend',
+        id: `${testRealmURL}Friend/hassan`,
+        firstName: 'Hassan',
+        description: 'Dog owner',
+        friend: {
+          id: `${testRealmURL}Friend/hassan`,
+        },
+        title: 'Hassan',
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/hassan in the index`,
+      );
+    }
+  });
+
   test('can index a field with a cycle in the linksToMany field', async function (assert) {
     let hassanID = `${testRealmURL}Friends/hassan`;
     let mangoID = `${testRealmURL}Friends/mango`;

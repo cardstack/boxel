@@ -6,11 +6,14 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  Avatar,
+  BoxelButton,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
@@ -83,6 +86,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         gap: var(--boxel-sp-4xs);
 
         --icon-color: var(--boxel-teal);
+        --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
       .info-group .value.out-of-credit {
         --icon-color: #ff0000;
@@ -139,14 +143,18 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
             <span class='label'>Membership Tier</span>
-            <span
-              class='value'
-              data-test-membership-tier
-            >{{this.plan.name}}</span>
+            <span class='value' data-test-membership-tier>
+              {{#if this.isLoading}}
+                <LoadingIndicator />
+              {{else}}
+                {{this.plan}}
+              {{/if}}
+            </span>
           </div>
           <BoxelButton
             @kind='secondary-light'
             @size='small'
+            @disabled={{this.isLoading}}
             data-test-upgrade-plan-button
             {{on 'click' @toggleProfileSettings}}
           >Upgrade Plan</BoxelButton>
@@ -155,16 +163,26 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
             <span
               class={{cn 'value' out-of-credit=this.isOutOfPlanCreditAllowance}}
               data-test-monthly-credit
-            ><IconHexagon width='16px' height='16px' />
-              {{this.monthlyCreditText}}</span>
+            >
+              {{#if this.isLoading}}
+                <LoadingIndicator />
+              {{else}}
+                <IconHexagon width='16px' height='16px' />
+                {{this.monthlyCreditText}}
+              {{/if}}
+            </span>
           </div>
           <div class='info-group additional-credit'>
             <span class='label'>Additional Credit</span>
             <span
               class={{cn 'value' out-of-credit=this.isOutOfCredit}}
               data-test-additional-credit
-            ><IconHexagon width='16px' height='16px' />
-              {{this.extraCreditsAvailableInBalance}}</span>
+            >{{#if this.isLoading}}
+                <LoadingIndicator />
+              {{else}}
+                <IconHexagon width='16px' height='16px' />
+                {{this.extraCreditsAvailableInBalance}}
+              {{/if}}</span>
           </div>
           <div
             class={{cn 'buy-more-credits' out-of-credit=this.isOutOfCredit}}
@@ -173,6 +191,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
             <BoxelButton
               @kind={{if this.isOutOfCredit 'primary' 'secondary-light'}}
               @size={{if this.isOutOfCredit 'base' 'small'}}
+              @disabled={{this.isLoading}}
               {{on 'click' @toggleProfileSettings}}
             >Buy more credits</BoxelButton>
           </div>
@@ -192,6 +211,10 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     return await this.realmServer.fetchCreditInfo();
   });
 
+  private get isLoading() {
+    return this.fetchCreditInfo.isLoading;
+  }
+
   private get plan() {
     return this.fetchCreditInfo.value?.plan;
   }
@@ -200,8 +223,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     return this.fetchCreditInfo.value?.creditsIncludedInPlanAllowance;
   }
 
-  private get creditsUsedInPlanAllowance() {
-    return this.fetchCreditInfo.value?.creditsUsedInPlanAllowance;
+  private get creditsAvailableInPlanAllowance() {
+    return this.fetchCreditInfo.value?.creditsAvailableInPlanAllowance;
   }
 
   private get extraCreditsAvailableInBalance() {
@@ -209,26 +232,25 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   }
 
   private get monthlyCreditText() {
-    return this.creditsUsedInPlanAllowance != undefined &&
-      this.creditsIncludedInPlanAllowance != undefined
-      ? `${
-          this.creditsIncludedInPlanAllowance - this.creditsUsedInPlanAllowance
-        } of ${this.creditsIncludedInPlanAllowance} left`
-      : '';
+    return this.creditsAvailableInPlanAllowance != null &&
+      this.creditsIncludedInPlanAllowance != null
+      ? `${this.creditsAvailableInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`
+      : null;
   }
 
   private get isOutOfCredit() {
     return (
       this.isOutOfPlanCreditAllowance &&
-      this.extraCreditsAvailableInBalance == 0
+      (this.extraCreditsAvailableInBalance == null ||
+        this.extraCreditsAvailableInBalance == 0)
     );
   }
 
   private get isOutOfPlanCreditAllowance() {
     return (
-      this.creditsUsedInPlanAllowance &&
-      this.creditsIncludedInPlanAllowance &&
-      this.creditsUsedInPlanAllowance >= this.creditsIncludedInPlanAllowance
+      this.creditsAvailableInPlanAllowance == null ||
+      this.creditsIncludedInPlanAllowance == null ||
+      this.creditsAvailableInPlanAllowance <= 0
     );
   }
 }
@@ -238,7 +260,11 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
 
   <template>
     <div class='profile-popover-body' data-test-profile-icon-container>
-      <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
+      <Avatar
+        @isReady={{this.matrixService.profile.loaded}}
+        @userId={{this.matrixService.userId}}
+        @displayName={{this.matrixService.profile.displayName}}
+      />
 
       <div class='display-name' data-test-profile-display-name>
         {{this.matrixService.profile.displayName}}

@@ -855,8 +855,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
-      .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Test Workspace B');
+      .dom(
+        `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('aria-label', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -914,8 +916,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
-      .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Test Workspace A');
+      .dom(
+        `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('aria-label', 'Test Workspace A');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });

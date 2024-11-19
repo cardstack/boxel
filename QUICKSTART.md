@@ -100,7 +100,7 @@ To build the entire repository and run the application, follow these steps:
 
     ```zsh
     cd ./packages/ai-bot
-    OPENAI_API_KEY=*** pnpm start
+    OPENROUTER_API_KEY=*** pnpm start
     ```
 
 ## Cleanup command

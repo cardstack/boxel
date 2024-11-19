@@ -10,7 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import { runSharedTest, p } from '@cardstack/runtime-common/helpers';
 import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
-import PgAdapter from '../pg-adapter';
+import { PgAdapter } from '@cardstack/postgres';
 import { shimExternals } from '../lib/externals';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import indexQueryEngineTests from '@cardstack/runtime-common/tests/index-query-engine-test';
@@ -119,7 +119,7 @@ module('query', function (hooks) {
     ]);
     loader = new Loader(fetch, virtualNetwork.resolveImport);
 
-    dbAdapter = new PgAdapter();
+    dbAdapter = new PgAdapter({ autoMigrate: true });
     indexQueryEngine = new IndexQueryEngine(dbAdapter);
   });
 

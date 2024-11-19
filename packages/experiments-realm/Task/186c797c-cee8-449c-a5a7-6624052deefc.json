@@ -12,15 +12,17 @@
         "index": null,
         "label": null
       },
-      "dateStarted": "2024-10-09",
-      "dueDate": "2024-10-11",
+      "dateRange": {
+        "start": "2024-10-09",
+        "end": "2024-10-11"
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
         "links": {
-          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
+          "self": "../TeamMember/b32c3da1-61c1-4d87-acff-a7eecccd8377"
         }
       },
       "project": {

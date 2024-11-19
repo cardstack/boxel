@@ -13,7 +13,6 @@ import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/c
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
-import ProfileAvatarIconVisualUsage from '@cardstack/host/components/operator-mode/profile-avatar-icon/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
@@ -39,7 +38,6 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       ['AiAssistant::Message', AiAssistantMessageUsage],
       ['AiAssistant::PillMenu', PillMenuUsage],
       ['AiAssistant::SkillMenu', AiAssistantSkillMenuUsage],
-      ['ProfileAvatarIconVisualUsage', ProfileAvatarIconVisualUsage],
       ['SearchSheet', SearchSheetUsage],
     ].map(([name, c]) => {
       return {

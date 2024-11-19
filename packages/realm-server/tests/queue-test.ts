@@ -1,8 +1,11 @@
 import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 
-import { PgQueueRunner, PgQueuePublisher } from '../pg-queue';
-import PgAdapter from '../pg-adapter';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
 
 import {
   type QueuePublisher,
@@ -18,7 +21,7 @@ module('queue', function (hooks) {
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    adapter = new PgAdapter();
+    adapter = new PgAdapter({ autoMigrate: true });
     publisher = new PgQueuePublisher(adapter);
     runner = new PgQueueRunner(adapter, 'q1');
     await runner.start();
@@ -47,7 +50,7 @@ module('queue', function (hooks) {
     let runner2: QueueRunner;
     let adapter2: PgAdapter;
     nestedHooks.beforeEach(async function () {
-      adapter2 = new PgAdapter();
+      adapter2 = new PgAdapter({ autoMigrate: true });
       runner2 = new PgQueueRunner(adapter2, 'q2');
       await runner2.start();
 

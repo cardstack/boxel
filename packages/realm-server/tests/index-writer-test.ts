@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 import { IndexWriter, IndexQueryEngine } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-import PgAdapter from '../pg-adapter';
+import { PgAdapter } from '@cardstack/postgres';
 import indexWriterTests from '@cardstack/runtime-common/tests/index-writer-test';
 
 module('index-writer', function (hooks) {
@@ -12,7 +12,7 @@ module('index-writer', function (hooks) {
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    adapter = new PgAdapter();
+    adapter = new PgAdapter({ autoMigrate: true });
     indexWriter = new IndexWriter(adapter);
     indexQueryEngine = new IndexQueryEngine(adapter);
   });

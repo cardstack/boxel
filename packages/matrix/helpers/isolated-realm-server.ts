@@ -40,6 +40,7 @@ export async function startServer() {
       `--matrixURL='http://localhost:8008'`,
       `--realmsRootPath='${dir.name}'`,
       `--seedPath='${seedPath}'`,
+      `--migrateDB`,
       `--useRegistrationSecretFunction`,
 
       `--path='${testRealmDir}'`,

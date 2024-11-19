@@ -3,8 +3,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
   BaseDef,
-  CardContext,
-  realmURL,
+  type CardContext,
   type Box,
   type BoxComponent,
   type CardDef,
@@ -29,6 +28,7 @@ import {
   identifyCard,
   getPlural,
   CardContextName,
+  RealmURLContextName,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -57,6 +57,7 @@ interface Signature {
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
     <div class='links-to-many-editor' data-test-links-to-many={{@field.name}}>
@@ -101,10 +102,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         offerToCreate: {
           ref: type,
           relativeTo: undefined,
-          realmURL: this.args.model.value[realmURL],
+          realmURL: this.realmURL,
         },
         multiSelect: true,
         createNewCard: this.cardContext?.actions?.createCard,
+        consumingRealm: this.realmURL,
       },
     );
     if (chosenCard) {
