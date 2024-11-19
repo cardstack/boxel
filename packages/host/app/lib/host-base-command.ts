@@ -20,9 +20,7 @@ export default abstract class HostBaseCommand<
     protected readonly configuration?: CommandConfiguration | undefined, // we'd like this to be required *if* CommandConfiguration is defined, and allow the user to skip it when CommandConfiguration is undefined
   ) {
     super(commandContext, configuration);
-    let ownerOfCommandContext = getOwner(commandContext);
-    console.log({ ownerOfCommandContext });
-    setOwner(this, ownerOfCommandContext!);
+    setOwner(this, getOwner(commandContext)!);
   }
 
   @service protected declare loaderService: LoaderService;
