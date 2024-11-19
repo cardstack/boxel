@@ -32,6 +32,7 @@ import {
   lookupNetworkService,
   createJWT,
   testRealmSecretSeed,
+  setupRealmServerEndpoints,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -760,56 +761,46 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     };
 
-    hooks.beforeEach(function () {
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          if (req.url.includes('_server-session')) {
-            let data = await req.json();
-            if (!data.challenge) {
-              return new Response(
-                JSON.stringify({
-                  challenge: 'test',
-                  room: matrixRoomId,
-                }),
-                {
-                  status: 401,
-                },
-              );
-            } else {
-              return new Response('Ok', {
-                status: 200,
-                headers: {
-                  Authorization: createJWT(
-                    {
-                      user: '@testuser:staging',
-                    },
-                    '1d',
-                    testRealmSecretSeed,
-                  ),
-                },
-              });
-            }
-          }
-          return null;
+    setupRealmServerEndpoints(hooks, [
+      {
+        route: '_user',
+        getResponse: async (_req: Request) => {
+          return new Response(JSON.stringify(userResponseBody));
         },
-        { prepend: true },
-      );
-    });
+      },
+      {
+        route: '_server-session',
+        getResponse: async (req: Request) => {
+          let data = await req.json();
+          if (!data.challenge) {
+            return new Response(
+              JSON.stringify({
+                challenge: 'test',
+                room: matrixRoomId,
+              }),
+              {
+                status: 401,
+              },
+            );
+          } else {
+            return new Response('Ok', {
+              status: 200,
+              headers: {
+                Authorization: createJWT(
+                  {
+                    user: '@testuser:staging',
+                  },
+                  '1d',
+                  testRealmSecretSeed,
+                ),
+              },
+            });
+          }
+        },
+      },
+    ]);
 
     test('can access and save settings via profile info popover', async function (assert) {
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          return null;
-        },
-        { prepend: true },
-      );
-
       await visitOperatorMode({
         stacks: [
           [

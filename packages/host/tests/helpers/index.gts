@@ -632,3 +632,93 @@ export async function elementIsVisible(element: Element) {
     intersectionObserver.observe(element);
   });
 }
+
+type RealmServerEndpoint = {
+  route: string;
+  getResponse: (req: Request) => Promise<Response>;
+};
+export function setupRealmServerEndpoints(
+  hooks: NestedHooks,
+  endpoints?: RealmServerEndpoint[],
+) {
+  let defaultEndpoints: RealmServerEndpoint[] = [
+    {
+      route: '_server-session',
+      getResponse: async function (req: Request) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: 'boxel-session-room-id',
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:staging',
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      },
+    },
+    {
+      route: '_user',
+      getResponse: async function (_req: Request) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'user',
+              id: 1,
+              attributes: {
+                matrixUserId: '@testuser:staging',
+                stripeCustomerId: 'stripe-id-1',
+                creditsAvailableInPlanAllowance: null,
+                creditsIncludedInPlanAllowance: null,
+                extraCreditsAvailableInBalance: null,
+              },
+              relationships: {
+                subscription: null,
+              },
+            },
+            included: null,
+          }),
+        );
+      },
+    },
+  ];
+
+  let handleRealmServerRequest = async (req: Request) => {
+    let endpoint = endpoints?.find((e) => req.url.includes(e.route));
+    if (endpoint) {
+      return await endpoint.getResponse(req);
+    }
+
+    let defaultEndpoint = defaultEndpoints.find((e) =>
+      req.url.includes(e.route),
+    );
+    if (defaultEndpoint) {
+      return await defaultEndpoint.getResponse(req);
+    }
+
+    return null;
+  };
+
+  hooks.beforeEach(function () {
+    lookupNetworkService().mount(handleRealmServerRequest, { prepend: true });
+  });
+
+  hooks.afterEach(function () {
+    lookupNetworkService().virtualNetwork.unmount(handleRealmServerRequest);
+  });
+}

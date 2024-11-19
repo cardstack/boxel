@@ -13,6 +13,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupRealmServerEndpoints,
 } from '../helpers';
 
 import {
@@ -104,6 +105,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
   });
   setupBaseRealm(hooks);
+  setupRealmServerEndpoints(hooks);
 
   hooks.beforeEach(async function () {
     class Pet extends CardDef {
