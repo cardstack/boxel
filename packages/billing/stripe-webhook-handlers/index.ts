@@ -124,9 +124,6 @@ export default async function stripeWebhookHandler(
 
   let type = event.type;
 
-  // For adding extra credits, we should listen for charge.succeeded, and for
-  // subsciptions, we should listen for invoice.payment_succeeded (I discovered this when I was
-  // testing which webhooks arrive for both types of payments)
   switch (type) {
     // These handlers should eventually become jobs which workers will process asynchronously
     case 'invoice.payment_succeeded':
