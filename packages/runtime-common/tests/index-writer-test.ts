@@ -15,6 +15,7 @@ import { testRealmURL } from '../helpers/const';
 import stripScopedCSSGlimmerAttributes from '../helpers/strip-scoped-css-glimmer-attributes';
 import '../helpers/code-equality-assertion';
 import { IndexQueryEngine } from '../index-query-engine';
+import { coerceTypes } from '../index-structure';
 
 const testRealmURL2 = `http://test-realm/test2/`;
 
@@ -571,7 +572,7 @@ const tests = Object.freeze({
 
     let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
       'SELECT * FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
-      { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     assert.deepEqual(
       errorEntry,
@@ -635,7 +636,7 @@ const tests = Object.freeze({
 
       let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
         'SELECT * FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
-        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+        { coerceTypes },
       )) as unknown as BoxelIndexTable[];
       assert.deepEqual(
         errorEntry,
