@@ -7,9 +7,9 @@ import {
 } from '../middleware';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import {
-  getMostRecentSubscription,
+  getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
-  getPlan,
+  getPlanById,
   getUserByMatrixUserId,
   Plan,
   SubscriptionCycle,
@@ -86,16 +86,16 @@ export default function handleFetchUserRequest({
       return;
     }
 
-    let mostRecentSubscription = await getMostRecentSubscription(
+    let mostRecentSubscription = await getCurrentActiveSubscription(
       dbAdapter,
       user.id,
     );
     let currentSubscriptionCycle: SubscriptionCycle | null = null;
-    let plan: Plan | undefined = undefined;
+    let plan: Plan | null = null;
     if (mostRecentSubscription) {
       [currentSubscriptionCycle, plan] = await Promise.all([
         getMostRecentSubscriptionCycle(dbAdapter, mostRecentSubscription.id),
-        getPlan(dbAdapter, mostRecentSubscription.planId),
+        getPlanById(dbAdapter, mostRecentSubscription.planId),
       ]);
     }
 

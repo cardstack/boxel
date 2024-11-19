@@ -1,60 +1,17 @@
-// @ts-nocheck
-import {
-  Component,
-  realmURL,
-  StringField,
-  contains,
-  field,
-  BaseDef,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
 import { getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
-import { TrackedMap } from 'tracked-built-ins';
-import GlimmerComponent from '@glimmer/component';
-import {
-  CardContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
-import {
-  BoxelButton,
-  CircleSpinner,
-  DndKanbanBoard,
-  DndColumn,
-  BoxelSelect,
-  IconButton,
-  BoxelMultiSelectBasic,
-} from '@cardstack/boxel-ui/components';
-import {
-  DropdownArrowFilled,
-  IconPlus,
-  IconFunnel,
-} from '@cardstack/boxel-ui/icons';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
-import { fn, array } from '@ember/helper';
-import { action } from '@ember/object';
-import {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-  type Query,
-} from '@cardstack/runtime-common';
+import { DndColumn, DndItem } from '@cardstack/boxel-ui/components';
+import { type Query } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
-import { AppCard } from '/catalog/app-card';
-import { TaskStatusField, type LooseyGooseyData } from './task';
-import { FilterDropdown } from './filter-dropdown';
-import { StatusPill } from './filter-dropdown-item';
-import { FilterTrigger } from './filter-trigger';
-import Checklist from '@cardstack/boxel-icons/checklist';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { TaskStatusField, type LooseyGooseyData, Task } from './task';
 
 import { isEqual } from 'lodash';
-import type Owner from '@ember/owner';
 import { Resource } from 'ember-resources';
 
 interface Args {
   named: {
-    query: Query | undefined;
+    query: Query;
+    realm: string;
   };
 }
 
@@ -67,7 +24,7 @@ interface Args {
 class TaskCollection extends Resource<Args> {
   @tracked private data: Map<string, DndColumn> = new Map();
   @tracked private order: Map<string, string[]> = new Map();
-  @tracked private query: Query = undefined;
+  @tracked private query: Query | undefined = undefined;
 
   private run = restartableTask(async (query: Query, realm: string) => {
     let staticQuery = getCards(query, [realm]);
@@ -82,13 +39,13 @@ class TaskCollection extends Resource<Args> {
     return !isEqual(this.query, query);
   }
 
-  commit(cards: CardDef) {
+  commit(cards: Task[]) {
     TaskStatusField.values?.map((status: LooseyGooseyData) => {
       let statusLabel = status.label;
       let cardIdsFromOrder = this.order.get(statusLabel);
-      let newCards: CardDef[] = [];
+      let newCards: Task[] = [];
       if (cardIdsFromOrder) {
-        newCards = cardIdsFromOrder.reduce((acc, id) => {
+        newCards = cardIdsFromOrder.reduce((acc: Task[], id: string) => {
           let card = cards.find((c) => c.id === id);
           if (card) {
             acc.push(card);
@@ -106,7 +63,7 @@ class TaskCollection extends Resource<Args> {
   // sourceColumnAfterDrag & targetColumnAfterDrag is the column state after the drag and drop
   update(
     draggedCard: DndItem,
-    targetCard: DndItem | undefined,
+    _targetCard: DndItem | undefined,
     sourceColumnAfterDrag: DndColumn,
     targetColumnAfterDrag: DndColumn,
   ) {
@@ -114,18 +71,20 @@ class TaskCollection extends Resource<Args> {
       (value) => value.label === targetColumnAfterDrag.title,
     );
     let cardInNewCol = targetColumnAfterDrag.cards.find(
-      (c) => c.id === draggedCard.id,
+      (c: Task) => c.id === draggedCard.id,
     );
-    cardInNewCol.status.label = status.label;
-    cardInNewCol.status.index = status.index;
+    if (cardInNewCol) {
+      cardInNewCol.status.label = status?.label;
+      cardInNewCol.status.index = status?.index;
+    }
     //update the order of the cards in the column
     this.order.set(
       sourceColumnAfterDrag.title,
-      sourceColumnAfterDrag.cards.map((c) => c.id),
+      sourceColumnAfterDrag.cards.map((c: Task) => c.id),
     );
     this.order.set(
       targetColumnAfterDrag.title,
-      targetColumnAfterDrag.cards.map((c) => c.id),
+      targetColumnAfterDrag.cards.map((c: Task) => c.id),
     );
     return cardInNewCol;
   }
@@ -143,8 +102,8 @@ class TaskCollection extends Resource<Args> {
 
 export default function getTaskCardsResource(
   parent: object,
-  query: () => Query | undefined,
-  realm: () => string | undefined,
+  query: () => Query,
+  realm: () => string,
 ) {
   return TaskCollection.from(parent, () => ({
     named: {

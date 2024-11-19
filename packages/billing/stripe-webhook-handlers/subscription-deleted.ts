@@ -1,4 +1,4 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import { DBAdapter, reportError } from '@cardstack/runtime-common';
 import { StripeSubscriptionDeletedWebhookEvent } from '.';
 import {
   insertStripeEvent,
@@ -8,9 +8,11 @@ import {
   sumUpCreditsLedger,
   addToCreditsLedger,
   getMostRecentSubscriptionCycle,
+  getPlanByMonthlyPrice,
 } from '../billing-queries';
 
 import { PgAdapter, TransactionManager } from '@cardstack/postgres';
+import { getStripe } from './stripe';
 
 export async function handleSubscriptionDeleted(
   dbAdapter: DBAdapter,
@@ -71,9 +73,45 @@ export async function handleSubscriptionDeleted(
 
     // This happens when the payment method fails for a couple of times and then Stripe subscription gets expired.
     if (newStatus === 'expired') {
-      // TODO: Put the user back on the free plan (by calling Stripe API). Will be handled in CS-7466
+      await subscribeUserToFreePlan(dbAdapter, event.data.object.customer);
     }
 
     await markStripeEventAsProcessed(dbAdapter, event.id);
   });
+}
+
+async function subscribeUserToFreePlan(
+  dbAdapter: DBAdapter,
+  stripeCustomerId: string,
+) {
+  let stripe = getStripe();
+  let freePlan = await getPlanByMonthlyPrice(dbAdapter, 0);
+  if (!freePlan) {
+    throw new Error('Free plan is not found');
+  }
+  let prices = await stripe.prices.list({
+    product: freePlan.stripePlanId,
+    active: true,
+  });
+  if (!prices.data[0]) {
+    throw new Error('No price found for free plan');
+  }
+
+  try {
+    // After this endpoint is called, Stripe will trigger the `invoice.payment_succeeded` event.
+    // Our webhook handler will process this event to activate the subscription
+    // and grant the user any associated allowances.
+    await stripe.subscriptions.create({
+      customer: stripeCustomerId,
+      items: [
+        {
+          price: prices.data[0].id,
+        },
+      ],
+      payment_behavior: 'error_if_incomplete',
+    });
+  } catch (e: any) {
+    reportError(e);
+    console.error(`Failed to subscribe user back to free plan, error:`, e);
+  }
 }

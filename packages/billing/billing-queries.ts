@@ -106,24 +106,6 @@ export async function getPlanByStripeId(
   } as Plan;
 }
 
-export async function getPlan(dbAdapter: DBAdapter, id: string): Promise<Plan> {
-  let results = await query(dbAdapter, [
-    `SELECT * FROM plans WHERE id = `,
-    param(id),
-  ]);
-
-  if (results.length !== 1) {
-    throw new Error(`No plan found with id: ${id}`);
-  }
-
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-  } as Plan;
-}
-
 export async function updateUserStripeCustomerId(
   dbAdapter: DBAdapter,
   userId: string,
@@ -356,29 +338,6 @@ export async function getCurrentActiveSubscription(
   } as Subscription;
 }
 
-export async function getMostRecentSubscription(
-  dbAdapter: DBAdapter,
-  userId: string,
-) {
-  let results = await query(dbAdapter, [
-    `SELECT * FROM subscriptions WHERE user_id = `,
-    param(userId),
-    `ORDER BY started_at DESC`,
-  ]);
-  if (results.length === 0) {
-    return null;
-  }
-
-  return {
-    id: results[0].id,
-    userId: results[0].user_id,
-    planId: results[0].plan_id,
-    startedAt: results[0].started_at,
-    status: results[0].status,
-    stripeSubscriptionId: results[0].stripe_subscription_id,
-  } as Subscription;
-}
-
 export async function getMostRecentSubscriptionCycle(
   dbAdapter: DBAdapter,
   subscriptionId: string,
@@ -470,6 +429,29 @@ export async function getPlanById(
     name: results[0].name,
     monthlyPrice: results[0].monthly_price,
     creditsIncluded: results[0].credits_included,
+    stripePlanId: results[0].stripe_plan_id,
+  } as Plan;
+}
+
+export async function getPlanByMonthlyPrice(
+  dbAdapter: DBAdapter,
+  monthlyPrice: number,
+): Promise<Plan | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM plans WHERE monthly_price = `,
+    param(monthlyPrice),
+  ]);
+
+  if (results.length <= 0) {
+    return null;
+  }
+
+  return {
+    id: results[0].id,
+    name: results[0].name,
+    monthlyPrice: results[0].monthly_price,
+    creditsIncluded: results[0].credits_included,
+    stripePlanId: results[0].stripe_plan_id,
   } as Plan;
 }
 

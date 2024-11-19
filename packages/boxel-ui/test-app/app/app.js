@@ -7,11 +7,7 @@ import '@cardstack/boxel-ui/styles/fonts.css';
 import '@cardstack/boxel-ui/styles/variables.css';
 import 'ember-power-select/styles';
 import './deprecation-workflow';
-import { registerDateLibrary } from 'ember-power-calendar';
-import DateUtils from 'ember-power-calendar-moment';
 import 'ember-power-calendar/styles';
-
-registerDateLibrary(DateUtils);
 
 export default class App extends Application {
   modulePrefix = config.modulePrefix;
