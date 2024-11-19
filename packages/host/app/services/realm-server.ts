@@ -67,7 +67,6 @@ export default class RealmServerService extends Service {
     { type: 'base', url: baseRealm.url },
   ]);
   private ready = new Deferred<void>();
-  private _user: User | undefined;
 
   constructor(owner: Owner) {
     super(owner);

@@ -6,6 +6,7 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
@@ -37,8 +38,8 @@ test.describe('Login using email', () => {
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    await clearLocalStorage(page, appURL);
+    await gotoRegistration(page, appURL);
     await registerUser(synapse, 'user1', 'mypassword1!');
     await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@example.com'],
@@ -54,7 +55,7 @@ test.describe('Login using email', () => {
   });
 
   test('Login using email', async ({ page }) => {
-    await openRoot(page);
+    await openRoot(page, appURL);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1@example.com');

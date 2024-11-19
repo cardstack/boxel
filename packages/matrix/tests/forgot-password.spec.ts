@@ -6,6 +6,7 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
@@ -31,7 +32,7 @@ const password = 'mypassword1!';
 test.describe('Forgot password', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
-  test.beforeEach(async ({ page }, testInfo) => {
+  test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
     test.setTimeout(120_000);
@@ -45,13 +46,14 @@ test.describe('Forgot password', () => {
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    await clearLocalStorage(page, appURL);
+    await gotoRegistration(page, appURL);
     await registerUser(synapse, username, password);
     await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: [email],
       displayname: name,
     });
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
 
   test.afterEach(async () => {
@@ -61,9 +63,7 @@ test.describe('Forgot password', () => {
   });
 
   test('It can reset password', async ({ page }) => {
-    await setupUserSubscribed('@user1:localhost', realmServer);
-
-    await gotoForgotPassword(page);
+    await gotoForgotPassword(page, appURL);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -117,7 +117,9 @@ test.describe('Forgot password', () => {
     ).toContainText('Your password is now reset');
     await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
-    await login(resetPasswordPage, 'user1', 'mypassword2!');
+    await login(resetPasswordPage, 'user1', 'mypassword2!', {
+      url: appURL,
+    });
 
     await assertLoggedIn(resetPasswordPage);
   });

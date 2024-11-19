@@ -10,6 +10,7 @@ import {
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
 import {
+  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
@@ -49,7 +50,7 @@ test.describe('Realm URLs in Matrix account data', () => {
   });
 
   test('active realms are determined by account data', async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
 
     await page.locator('[data-test-workspace-chooser-toggle]').click();
 

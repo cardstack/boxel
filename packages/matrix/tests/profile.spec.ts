@@ -16,6 +16,7 @@ import {
   setupUserSubscribed,
 } from '../helpers';
 import {
+  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
@@ -51,7 +52,7 @@ test.describe('Profile', () => {
   });
 
   async function gotoProfileSettings(page: Page) {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator('[data-test-profile-icon-button]').click();
     await page.locator('[data-test-settings-button]').click();
   }
