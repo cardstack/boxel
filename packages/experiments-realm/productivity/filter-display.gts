@@ -9,6 +9,7 @@ export interface FilterDisplaySignature {
     key: string;
     items: any[];
     removeItem: (item: any) => void;
+    icon: any;
   };
   Element: HTMLDivElement;
   Blocks: {
@@ -18,40 +19,42 @@ export interface FilterDisplaySignature {
 
 export class FilterDisplay extends GlimmerComponent<FilterDisplaySignature> {
   <template>
-    <div class='filter-display'>
-      {{#each @items as |item|}}
-        <Pill>
-          <:default>
-            {{@key}}
-            =
-            {{yield item}}
-          </:default>
-          <:iconRight>
-            <IconButton @icon={{IconX}} {{on 'click' (fn @removeItem item)}} />
-          </:iconRight>
-        </Pill>
-      {{/each}}
-    </div>
+    {{#each @items as |item|}}
+      <Pill class='filter-display-pill'>
+        <:default>
+          {{#if @icon}}
+            <@icon class='filter-display-icon' />
+          {{/if}}
+          {{@key}}
+          =
+          {{yield item}}
+        </:default>
+        <:iconRight>
+          <IconButton
+            @icon={{IconX}}
+            {{on 'click' (fn @removeItem item)}}
+            class='filter-display-remove-button'
+          />
+        </:iconRight>
+      </Pill>
+    {{/each}}
     <style scoped>
-      .filter-display {
-        display: flex;
-        gap: var(--boxel-sp-xs);
+      .filter-display-pill {
+        flex-shrink: 0;
+        font: 500 var(--boxel-font-sm);
+        --pill-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
+        --pill-background-color: var(--boxel-100);
       }
-      .filter-display__remove-button {
-        all: unset;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        border-radius: 50%;
-        transition: background-color 0.2s ease;
+      .filter-display-remove-button {
+        --boxel-icon-button-height: 10px;
+        --boxel-icon-button-width: 10px;
+        --inner-boxel-icon-button-width: 8px;
+        --inner-boxel-icon-button-height: 8px;
       }
-      .filter-display-icon--remove {
-        width: 10px;
-        height: 10px;
-        --icon-color: var(--boxel-multi-select-pill-color);
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        margin-right: var(--boxel-sp-xxxs);
       }
     </style>
   </template>

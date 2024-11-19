@@ -30,6 +30,10 @@ import { FilterTrigger } from './productivity/filter-trigger';
 import getTaskCardsResource from './productivity/task-cards-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
+import Subtask from '@cardstack/boxel-icons/subtask';
+import UserRound from '@cardstack/boxel-icons/user-round';
+import FileCog from '@cardstack/boxel-icons/file-cog';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
@@ -349,6 +353,19 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
     return this.selectedItems.get(filterType) ?? [];
   }
 
+  @action getFilterIcon(filterType: FilterType) {
+    switch (filterType) {
+      case 'status':
+        return FileCog;
+      case 'assignee':
+        return UserRound;
+      case 'project':
+        return Subtask;
+      default:
+        return undefined;
+    }
+  }
+
   <template>
     <div class='task-app'>
       <div class='filter-section'>
@@ -356,52 +373,58 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
           isLoading...
         {{else}}
           <h2 class='project-title'>Project</h2>
-          {{#if this.selectedFilterConfig}}
-            {{#let (this.selectedFilterConfig.options) as |options|}}
-              <FilterDropdown
-                @options={{options}}
-                @realmURLs={{this.realmHrefs}}
-                @selected={{this.selectedItemsForFilter}}
-                @onChange={{this.onChange}}
-                @onClose={{this.onClose}}
+
+          <div class='filter-dropdown-container'>
+            {{#if this.selectedFilterConfig}}
+              {{#let (this.selectedFilterConfig.options) as |options|}}
+                <FilterDropdown
+                  @options={{options}}
+                  @realmURLs={{this.realmHrefs}}
+                  @selected={{this.selectedItemsForFilter}}
+                  @onChange={{this.onChange}}
+                  @onClose={{this.onClose}}
+                  as |item|
+                >
+                  {{#let (this.isSelectedItem item) as |isSelected|}}
+                    {{#if (eq this.selectedFilter 'status')}}
+                      <StatusPill
+                        @isSelected={{isSelected}}
+                        @label={{item.label}}
+                      />
+                    {{else}}
+                      <StatusPill
+                        @isSelected={{isSelected}}
+                        @label={{item.name}}
+                      />
+                    {{/if}}
+                  {{/let}}
+                </FilterDropdown>
+              {{/let}}
+            {{else}}
+              <BoxelSelect
+                class='status-select'
+                @selected={{this.selectedFilter}}
+                @options={{this.filterTypes}}
+                @onChange={{this.onSelectFilter}}
+                @placeholder={{'Choose a Filter'}}
+                @matchTriggerWidth={{false}}
+                @triggerComponent={{FilterTrigger}}
                 as |item|
               >
-                {{#let (this.isSelectedItem item) as |isSelected|}}
-                  {{#if (eq this.selectedFilter 'status')}}
-                    <StatusPill
-                      @isSelected={{isSelected}}
-                      @label={{item.label}}
-                    />
-                  {{else}}
-                    <StatusPill
-                      @isSelected={{isSelected}}
-                      @label={{item.name}}
-                    />
-                  {{/if}}
-                {{/let}}
-              </FilterDropdown>
-            {{/let}}
-          {{else}}
-            <BoxelSelect
-              class='status-select'
-              @selected={{this.selectedFilter}}
-              @options={{this.filterTypes}}
-              @onChange={{this.onSelectFilter}}
-              @placeholder={{'Choose a Filter'}}
-              @matchTriggerWidth={{false}}
-              @triggerComponent={{FilterTrigger}}
-              as |item|
-            >
-              {{item}}
-            </BoxelSelect>
-          {{/if}}
-          <div class='filter-display'>
+                {{item}}
+              </BoxelSelect>
+            {{/if}}
+          </div>
+
+          <div class='filter-display-sec'>
             {{#each this.filterTypes as |filterType|}}
+              {{log filterType}}
               {{#let (this.selectedFilterItems filterType) as |items|}}
                 <FilterDisplay
                   @key={{filterType}}
                   @items={{items}}
                   @removeItem={{(fn this.removeFilter filterType)}}
+                  @icon={{this.getFilterIcon filterType}}
                   as |item|
                 >
                   {{#if (eq filterType 'status')}}
@@ -462,6 +485,20 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         justify-content: space-between;
         gap: var(--boxel-sp);
         align-items: center;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        width: 100%;
+      }
+      .filter-dropdown-container {
+        width: auto;
+      }
+      .filter-display-sec {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: end;
+        gap: var(--boxel-sp-xxs);
+        flex: 1;
+        min-width: 0;
       }
       .project-title {
         font-size: var(-- --boxel-sp-lg);
