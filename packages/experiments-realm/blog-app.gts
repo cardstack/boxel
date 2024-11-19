@@ -89,6 +89,7 @@ interface SidebarFilter {
   createNewButtonText?: string;
   isCreateNewDisabled?: boolean;
   cardRef?: ResolvedCodeRef;
+  query?: Query;
 }
 const FILTERS: SidebarFilter[] = [
   {
@@ -444,12 +445,14 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @onSort={{this.onSort}}
           />
         </header>
-        <BlogCardsGrid
-          @selectedView={{this.selectedView}}
-          @context={{@context}}
-          @query={{this.query}}
-          @realms={{this.realms}}
-        />
+        {{#if this.query}}
+          <BlogCardsGrid
+            @selectedView={{this.selectedView}}
+            @context={{@context}}
+            @query={{this.query}}
+            @realms={{this.realms}}
+          />
+        {{/if}}
       </section>
     </section>
     <style scoped>
@@ -569,10 +572,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private get query() {
-    let query = {
-      filter: { eq: { _cardType: this.activeFilter.cardTypeName } },
-    };
-    return { ...query, sort: this.selectedSort.sort };
+    if (this.loadCardTypes.isIdle && this.activeFilter.query) {
+      return { ...this.activeFilter.query, sort: this.selectedSort.sort };
+    }
+    return undefined;
   }
 
   private loadCardTypes = restartableTask(async () => {
@@ -599,10 +602,12 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         return;
       }
       const lastIndex = summary.id.lastIndexOf('/');
-      filter.cardRef = {
+      let cardRef = {
         module: summary.id.substring(0, lastIndex),
         name: summary.id.substring(lastIndex + 1),
       };
+      filter.cardRef = cardRef;
+      filter.query = { filter: { type: cardRef } };
     }
   });
 
