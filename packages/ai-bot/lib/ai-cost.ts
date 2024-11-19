@@ -1,5 +1,5 @@
 import {
-  getMostRecentSubscription,
+  getCurrentActiveSubscription,
   getUserByMatrixUserId,
   spendCredits,
 } from '@cardstack/billing/billing-queries';
@@ -25,9 +25,9 @@ export async function saveUsageCost(
 
     let user = await getUserByMatrixUserId(pgAdapter, matrixUserId);
 
-    // This check is for transition period where we don't have subscriptions have the subscription flow fully rolled out.
+    // This check is for the transition period where we don't have subscriptions fully rolled out yet.
     // When we have assurance that all users who use the bot have subscriptions, we can remove this subscription check.
-    let subscription = await getMostRecentSubscription(pgAdapter, user!.id);
+    let subscription = await getCurrentActiveSubscription(pgAdapter, user!.id);
     if (!subscription) {
       log.info(
         `user ${matrixUserId} has no subscription, skipping credit usage tracking`,
