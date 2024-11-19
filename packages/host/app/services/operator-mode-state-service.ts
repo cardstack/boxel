@@ -347,7 +347,9 @@ export default class OperatorModeStateService extends Service {
   @cached
   get title() {
     if (this.state.submode === Submodes.Code) {
-      return `Code Mode: ${this.state.codePath ?? 'Boxel'}`;
+      return `${this.codePathRelativeToRealm} in ${
+        this.realm.info(this.realmURL.href).name
+      }`;
     } else {
       let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
       return itemForTitle?.title ?? 'Boxel';

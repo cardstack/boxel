@@ -505,7 +505,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
     assert.strictEqual(
       getPageTitle(),
-      `Code Mode: ${testRealmURL}address-with-no-embedded-template.gts`,
+      `address-with-no-embedded-template.gts in Test Workspace B`,
     );
   });
 
