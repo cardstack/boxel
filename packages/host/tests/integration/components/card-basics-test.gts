@@ -2225,6 +2225,49 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-output]').hasText('Begging for Beginners');
     });
 
+    test('can edit and reset date and datetime fields', async function (assert) {
+      class Person extends CardDef {
+        @field date = contains(DateField);
+        @field appointment = contains(DatetimeField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <@fields.date />
+            <@fields.appointment />
+            <div data-test-date-output>
+              <@fields.date @format='embedded' />
+            </div>
+            <div data-test-datetime-output>
+              <@fields.appointment @format='embedded' />
+            </div>
+          </template>
+        };
+      }
+      const date = '2024-11-18';
+      const appt = `2024-12-01T13:00`;
+      await renderCard(loader, new Person(), 'edit');
+
+      assert.dom('[data-test-date-field-editor]').hasNoValue();
+      assert.dom('[data-test-date-output]').hasText('[no date]');
+      assert.dom('[data-test-datetime-field-editor]').hasNoValue();
+      assert.dom('[data-test-datetime-output]').hasText('[no date-time]');
+
+      await fillIn('[data-test-date-field-editor]', date);
+      assert.dom('[data-test-date-field-editor]').hasValue(date);
+      assert.dom('[data-test-date-output]').hasText('Nov 18, 2024');
+
+      await fillIn('[data-test-datetime-field-editor]', appt);
+      assert.dom('[data-test-datetime-field-editor]').hasValue(appt);
+      assert.dom('[data-test-datetime-output]').hasText('Dec 1, 2024, 1:00 PM');
+
+      await fillIn('[data-test-date-field-editor]', '');
+      assert.dom('[data-test-date-field-editor]').hasNoValue();
+      assert.dom('[data-test-date-output]').hasText('[no date]');
+
+      await fillIn('[data-test-datetime-field-editor]', '');
+      assert.dom('[data-test-datetime-field-editor]').hasNoValue();
+      assert.dom('[data-test-datetime-output]').hasText('[no date-time]');
+    });
+
     test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
       function toDateString(date: Date | null) {
         return date instanceof Date ? format(date, 'yyyy-MM-dd') : null;
