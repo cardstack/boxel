@@ -31,6 +31,8 @@ import { isToday, isThisWeek, addWeeks } from 'date-fns';
 import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import GlimmerComponent from '@glimmer/component';
+import DateRangeField from './date-range-field';
+
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
@@ -1068,7 +1070,6 @@ class TaskIsolated extends Component<typeof Task> {
   get tagNames() {
     return this.args.model.tags?.map((tag) => tag.name) ?? [];
   }
-
   get hasDateRange() {
     return this.args.model.dateStarted && this.args.model.dueDate;
   }
@@ -1137,6 +1138,7 @@ export class Task extends CardDef {
   @field dueDate = contains(DateField);
   @field children = linksToMany(() => Task);
   @field tags = linksToMany(() => Tag);
+  @field dateRange = contains(DateRangeField);
   @field title = contains(StringField, {
     computeVia: function (this: Task) {
       return this.taskName;

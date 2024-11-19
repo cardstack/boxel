@@ -12,8 +12,10 @@
         "index": null,
         "label": null
       },
-      "dateStarted": null,
-      "dueDate": null,
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
       "description": null,
       "thumbnailURL": null
     },

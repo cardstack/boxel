@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Alex",
+      "lastName": "Johnson",
+      "photo": {
+        "altText": "",
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "body": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../author",
+        "name": "Author"
+      }
+    }
+  }
+}
