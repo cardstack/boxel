@@ -32,7 +32,7 @@ import {
   Pill,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
@@ -288,7 +288,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
           <:response as |cards|>
             {{#each cards as |card|}}
               <li
-                class='card {{@selectedView}}-view-container'
+                class='{{@selectedView}}-view-container'
                 {{@context.cardComponentModifier
                   cardId=card.url
                   format='data'
@@ -296,11 +296,13 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
                   fieldName=undefined
                 }}
               >
-                <CardContainer @displayBoundaries='true'>
-                  {{card.component}}
-                </CardContainer>
                 {{#if (eq @selectedView 'card')}}
+                  <div class='card'>
+                    {{card.component}}
+                  </div>
                   <BlogAdminData @cardId={{card.url}} />
+                {{else}}
+                  {{card.component}}
                 {{/if}}
               </li>
             {{/each}}
@@ -323,7 +325,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
         overflow: auto;
       }
       .card-view {
-        --grid-card-height: 21.875rem; /* 350px */
+        --grid-card-height: 370px;
       }
       .strip-view {
         --grid-card-min-width: 21.875rem;
@@ -335,57 +337,21 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
         --grid-card-max-width: 1fr;
         --grid-card-height: 15.125rem;
       }
-      .card {
-        container-name: fitted-card;
-        container-type: size;
-      }
       .card-view-container {
         display: grid;
         grid-template-columns: 1fr 200px;
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xs);
       }
-
-      .card-view-container :deep(.fitted-template) {
-        padding: 0;
+      .strip-view-container,
+      .grid-view-container,
+      .card {
+        container-name: fitted-card;
+        container-type: size;
       }
-      .card-view-container :deep(.card-thumbnail) {
-        border-radius: 0;
-      }
-
-      @container fitted-card (700px <= width) {
-        :deep(.fitted-template) {
-          display: grid;
-          grid-template-columns: 30% 1fr;
-          grid-template-rows: max-content max-content 1fr;
-          gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
-        }
-        :deep(.thumbnail-section) {
-          grid-column: 1;
-          grid-row: 1 / 4;
-        }
-        :deep(.info-section) {
-          grid-column: 2;
-          padding-right: var(--boxel-sp-lg);
-        }
-        :deep(.card-display-name) {
-          display: none;
-        }
-        :deep(.card-description) {
-          grid-column: 2;
-          display: -webkit-box;
-          -webkit-line-clamp: 4;
-          margin: 0;
-          padding-right: var(--boxel-sp-lg);
-          font: var(--boxel-font);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        :deep(.card-title) {
-          -webkit-line-clamp: 3;
-          margin-top: var(--boxel-sp-lg);
-          font: 700 var(--boxel-font-lg);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
+      .strip-view-container > :deep(*),
+      .grid-view-container > :deep(*) {
+        height: 100%;
       }
     </style>
   </template>
