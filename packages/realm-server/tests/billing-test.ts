@@ -771,6 +771,25 @@ module('billing', function (hooks) {
     });
 
     test('add extra credits to user ledger when checkout session completed', async function (assert) {
+      let creatorPlan = await insertPlan(
+        dbAdapter,
+        'Creator',
+        12,
+        2500,
+        'prod_creator',
+      );
+      let subscription = await insertSubscription(dbAdapter, {
+        user_id: user.id,
+        plan_id: creatorPlan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567890',
+      });
+      await insertSubscriptionCycle(dbAdapter, {
+        subscriptionId: subscription.id,
+        periodStart: 1,
+        periodEnd: 2,
+      });
       let stripeCheckoutSessionCompletedEvent = {
         id: 'evt_1234567890',
         object: 'event',

@@ -1,6 +1,8 @@
 import { type DBAdapter } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
+  getMostRecentSubscription,
+  getMostRecentSubscriptionCycle,
   getUserByStripeId,
   insertStripeEvent,
   markStripeEventAsProcessed,
@@ -50,11 +52,27 @@ export async function handleCheckoutSessionCompleted(
         );
       }
 
+      let subscription = await getMostRecentSubscription(dbAdapter, user.id);
+      if (!subscription) {
+        throw new Error(
+          `User ${user.id} has no subscription, cannot add extra credits`,
+        );
+      }
+      let subscriptionCycle = await getMostRecentSubscriptionCycle(
+        dbAdapter,
+        subscription!.id,
+      );
+      if (!subscriptionCycle) {
+        throw new Error(
+          `User ${user.id} has no subscription cycle, cannot add extra credits`,
+        );
+      }
+
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,
         creditAmount: creditReloadAmount,
         creditType: 'extra_credit',
-        subscriptionCycleId: null,
+        subscriptionCycleId: subscriptionCycle.id,
       });
     }
   });
