@@ -5,12 +5,11 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import RealmService from '@cardstack/host/services/realm';
-
-import type { SwitchSubmodeInput } from 'https://cardstack.com/base/command';
 
 import {
   setupIntegrationTestRealm,
@@ -54,11 +53,9 @@ module('Integration | commands | switch-submode', function (hooks) {
     let operatorModeStateService = lookupService<OperatorModeStateService>(
       'operator-mode-state-service',
     );
-    let switchSubmodeCommand = commandService.lookupCommand<
-      SwitchSubmodeInput,
-      undefined,
-      undefined
-    >('switch-submode', undefined);
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
     const InputType = await switchSubmodeCommand.getInputType();
     let input = new InputType({
       submode: 'code',

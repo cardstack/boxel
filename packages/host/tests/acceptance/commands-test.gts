@@ -47,6 +47,10 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
+import ShowCardCommand from '@cardstack/host/commands/show-card';
+import PatchCardCommand from '@cardstack/host/commands/patch-card';
 
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -129,13 +133,8 @@ module('Acceptance | Commands tests', function (hooks) {
           topic: 'unset topic',
           participants: input.participants,
         });
-        let saveCardCommand = this.commandContext.lookupCommand<
-          SaveCardInput,
-          undefined
-        >('save-card');
-        const { SaveCardInput } = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
+        let saveCardCommand = new SaveCardCommand(this.commandContext);
+        const SaveCardInput = await saveCardCommand.getInputType();
         await saveCardCommand.execute(
           new SaveCardInput({
             card: meeting,
@@ -144,11 +143,9 @@ module('Acceptance | Commands tests', function (hooks) {
         );
 
         // Mutate and save again
-        let patchCardCommand = this.commandContext.lookupCommand<
-          PatchCardInput,
-          undefined,
-          { cardType: typeof Meeting }
-        >('patch-card', { cardType: Meeting });
+        let patchCardCommand = new PatchCardCommand(this.commandContext, {
+          cardType: Meeting,
+        });
 
         await this.commandContext.sendAiAssistantMessage({
           prompt: `Change the topic of the meeting to "${input.topic}"`,
@@ -158,13 +155,8 @@ module('Acceptance | Commands tests', function (hooks) {
 
         await patchCardCommand.waitForNextCompletion();
 
-        let showCardCommand = this.commandContext.lookupCommand<
-          ShowCardInput,
-          undefined
-        >('show-card');
-        const { ShowCardInput } = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
+        let showCardCommand = new ShowCardCommand(this.commandContext);
+        const ShowCardInput = await showCardCommand.getInputType();
         await showCardCommand.execute(
           new ShowCardInput({
             cardToShow: meeting,
@@ -203,10 +195,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let switchSubmodeCommand = commandContext.lookupCommand<
-            SwitchSubmodeInput,
-            undefined
-          >('switch-submode');
+          let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
           commandContext.sendAiAssistantMessage({
             prompt: 'Switch to code mode',
             commands: [{ command: switchSubmodeCommand, autoExecute }],

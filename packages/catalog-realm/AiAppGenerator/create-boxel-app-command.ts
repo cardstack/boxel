@@ -1,8 +1,4 @@
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import {
-  CreateInstanceInput,
-  ShowCardInput,
-} from 'https://cardstack.com/base/command';
 import { Command } from '@cardstack/runtime-common';
 import CreateProductRequirementsInstance, {
   CreateProductRequirementsInput,
@@ -10,6 +6,8 @@ import CreateProductRequirementsInstance, {
 import GenerateCodeFromPRDCommand, {
   GenerateCodeFromPRDInput,
 } from './generate-code-from-prd-command';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 export { CreateProductRequirementsInput };
 
@@ -27,11 +25,9 @@ export default class CreateBoxelApp extends Command<
     );
     let { productRequirements: prdCard, roomId } =
       await createPRDCommand.execute(input);
-    let showCardCommand = this.commandContext.lookupCommand<
-      ShowCardInput,
-      undefined
-    >('show-card');
-    let showPRDCardInput = new ShowCardInput();
+    let showCardCommand = new ShowCardCommand(this.commandContext);
+    let ShowPRDCardInput = await showCardCommand.getInputType();
+    let showPRDCardInput = new ShowPRDCardInput();
     showPRDCardInput.cardToShow = prdCard;
     await showCardCommand.execute(showPRDCardInput);
     // Generate App
@@ -47,15 +43,15 @@ export default class CreateBoxelApp extends Command<
       generateAppInput,
     );
     // Create instance
-    let createInstanceCommand = this.commandContext.lookupCommand<
-      CreateInstanceInput,
-      CardDef
-    >('createInstance');
-    let createInstanceInput = new CreateInstanceInput();
-    createInstanceInput.module = moduleCard;
-    createInstanceInput.realm = input.realm;
-    let appCard = await createInstanceCommand.execute(createInstanceInput);
+    let saveCardCommand = new SaveCardCommand(this.commandContext);
+    let SaveCardInput = await saveCardCommand.getInputType();
+    let saveCardInput = new SaveCardInput();
+    let appCard: CardDef; // = new moduleCard(); // TODO create instance from code ref
+    saveCardInput.card = appCard;
+    saveCardInput.realm = input.realm;
+    await saveCardCommand.execute(saveCardInput);
     // open new app card
+    let ShowCardInput = await showCardCommand.getInputType();
     let showCardInput = new ShowCardInput();
     showCardInput.cardToShow = appCard;
     await showCardCommand.execute(showCardInput);

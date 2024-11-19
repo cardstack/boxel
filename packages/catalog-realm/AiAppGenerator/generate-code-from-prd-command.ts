@@ -9,16 +9,13 @@ import { ProductRequirementDocument } from '../product-requirement-document';
 import CodeRefField from '../../base/code-ref';
 import { Command } from '@cardstack/runtime-common';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import CreateModuleCommand from '../../host/app/commands/create-module';
 
 export class GenerateCodeFromPRDInput extends CardDef {
   @field productRequirements = linksTo(ProductRequirementDocument);
   @field realm = contains(StringField);
   @field roomId = contains(StringField);
 }
-import {
-  CreateModuleInput,
-  ModuleCard,
-} from 'https://cardstack.com/base/command';
 
 class GenerateCodeFromPRDResult extends CardDef {
   @field module = contains(CodeRefField);
@@ -52,10 +49,7 @@ export default class GenerateCodeFromPRDCommand extends Command<
     input: GenerateCodeFromPRDInput,
   ): Promise<GenerateCodeFromPRDResult> {
     // Get the create module command
-    let createModuleCommand = this.commandContext.lookupCommand<
-      CreateModuleInput,
-      ModuleCard
-    >('createModule');
+    let createModuleCommand = new CreateModuleCommand(this.commandContext);
 
     // Send message to AI assistant with the PRD card and wait for it to generate code
     let { roomId } = await this.commandContext.sendAiAssistantMessage({

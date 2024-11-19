@@ -1,28 +1,23 @@
 import { service } from '@ember/service';
 
-import { Command, baseRealm } from '@cardstack/runtime-common';
-
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
+import HostBaseCommand from '../lib/host-base-command';
+
 import type CardService from '../services/card-service';
 
-import type LoaderService from '../services/loader-service';
-
-export default class CreateModuleCommand extends Command<
+export default class CreateModuleCommand extends HostBaseCommand<
   BaseCommandModule.CreateModuleInput,
   undefined,
   { cardType: typeof CardDef }
 > {
   @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
 
   description = `Create a new module, errors if there is an existing module with the same name.`;
 
   async getInputType() {
-    let commandModule = await this.loaderService.loader.import<
-      typeof BaseCommandModule
-    >(`${baseRealm.url}command`);
+    let commandModule = await this.loadCommandModule();
     const { CreateModuleInput } = commandModule;
     // Can we define one on the fly?
     return CreateModuleInput;

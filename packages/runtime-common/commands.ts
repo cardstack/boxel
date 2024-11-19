@@ -9,15 +9,6 @@ import {
 } from './helpers/ai';
 
 export interface CommandContext {
-  lookupCommand<
-    CardInputType extends CardDef | undefined,
-    CardResultType extends CardDef | undefined,
-    CommandConfiguration extends any | undefined = undefined,
-  >(
-    name: string,
-    commandConfiguration?: CommandConfiguration,
-  ): Command<CardInputType, CardResultType, CommandConfiguration>;
-
   sendAiAssistantMessage: (params: {
     roomId?: string; // if falsy we create a new room
     show?: boolean; // if truthy, ensure the side panel to the room
@@ -72,7 +63,7 @@ export abstract class Command<
 
   constructor(
     protected readonly commandContext: CommandContext,
-    protected readonly configuration: CommandConfiguration, // we'd like this to be required *if* CommandConfiguration is defined, and allow the user to skip it when CommandConfiguration is undefined
+    protected readonly configuration?: CommandConfiguration | undefined, // we'd like this to be required *if* CommandConfiguration is defined, and allow the user to skip it when CommandConfiguration is undefined
   ) {}
 
   async execute(input: CardInputType): Promise<CardResultType> {

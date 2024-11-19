@@ -1,25 +1,21 @@
 import { service } from '@ember/service';
 
-import { Command, baseRealm } from '@cardstack/runtime-common';
-
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import type LoaderService from '../services/loader-service';
+import HostBaseCommand from '../lib/host-base-command';
+
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class ShowCardCommand extends Command<
+export default class ShowCardCommand extends HostBaseCommand<
   BaseCommandModule.ShowCardInput,
   undefined
 > {
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare loaderService: LoaderService;
 
   description = 'Show a card in the UI';
 
   async getInputType() {
-    let commandModule = await this.loaderService.loader.import<
-      typeof BaseCommandModule
-    >(`${baseRealm.url}command`);
+    let commandModule = await this.loadCommandModule();
     const { ShowCardInput } = commandModule;
     return ShowCardInput;
   }
