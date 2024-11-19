@@ -17,22 +17,32 @@ import {
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
+  setupUserSubscribed,
 } from '../helpers';
 import {
   synapseStart,
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import {
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
   test.beforeEach(async () => {
+    test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
+    realmServer = await startRealmServer();
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
+    await realmServer.stop();
   });
 
   test(`it can send a message in a room`, async ({ page }) => {

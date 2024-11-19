@@ -278,8 +278,7 @@ let autoMigrate = migrateDB || undefined;
       );
     } else if (
       typeof message === 'string' &&
-      message.startsWith('execute-sql:') &&
-      registrationSecretDeferred
+      message.startsWith('execute-sql:')
     ) {
       let sql = message.substring('execute-sql:'.length);
       dbAdapter

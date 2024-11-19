@@ -588,19 +588,15 @@ export async function setupUser(
   username: string,
   realmServer: IsolatedRealmServer,
 ) {
-  let findUser = await realmServer.executeSQL(`SELECT * FROM users`);
-
   await realmServer.executeSQL(
     `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
   );
-
-  findUser = await realmServer.executeSQL(`SELECT * FROM users`);
 }
 
 export async function setupPayment(
-  page: Page,
   username: string,
   realmServer: IsolatedRealmServer,
+  page?: Page,
 ) {
   // decode the username from base64
   const decodedUsername = Buffer.from(username, 'base64').toString('utf8');
@@ -675,17 +671,27 @@ export async function setupPayment(
   );
 
   // Return url example: https://realms-staging.stack.cards/?from-free-plan-payment-link=true
-
   // extract return url from page.url()
   // assert return url contains ?from-free-plan-payment-link=true
-  const currentUrl = new URL(page.url());
-  const currentParams = currentUrl.searchParams;
-  await currentParams.append('from-free-plan-payment-link', 'true');
-  const returnUrl = `${currentUrl.origin}${
-    currentUrl.pathname
-  }?${currentParams.toString()}`;
+  if (page) {
+    const currentUrl = new URL(page.url());
+    const currentParams = currentUrl.searchParams;
+    await currentParams.append('from-free-plan-payment-link', 'true');
+    const returnUrl = `${currentUrl.origin}${
+      currentUrl.pathname
+    }?${currentParams.toString()}`;
 
-  await page.goto(returnUrl);
+    await page.goto(returnUrl);
+  }
+}
+
+export async function setupUserSubscribed(
+  username: string,
+  realmServer: IsolatedRealmServer,
+) {
+  const matrixUserId = Buffer.from(username).toString('base64');
+  await setupUser(username, realmServer);
+  await setupPayment(matrixUserId, realmServer);
 }
 
 export async function assertLoggedOut(page: Page) {

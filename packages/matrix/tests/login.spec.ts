@@ -6,6 +6,10 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
+import {
   clearLocalStorage,
   assertLoggedIn,
   assertLoggedOut,
@@ -14,6 +18,7 @@ import {
   openRoot,
   registerRealmUsers,
   testHost,
+  setupUserSubscribed,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
@@ -21,16 +26,21 @@ const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
+
   test.beforeEach(async ({ page }, testInfo) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
-    testInfo.setTimeout(testInfo.timeout + 30000);
+    test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
+    realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page);
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
   test.afterEach(async () => {
+    await realmServer.stop();
     await synapseStop(synapse.synapseId);
   });
 

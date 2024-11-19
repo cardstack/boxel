@@ -6,6 +6,10 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
+import {
   login,
   logout,
   assertRooms,
@@ -22,23 +26,31 @@ import {
   isInRoom,
   getRoomsFromSync,
   initialRoomName,
+  setupUserSubscribed,
 } from '../helpers';
 
 test.describe('Room creation', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
 
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
+    realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
     await registerUser(synapse, 'xuser', 'pass');
     await clearLocalStorage(page);
+    await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupUserSubscribed('@user2:localhost', realmServer);
+    await setupUserSubscribed('@xuser:localhost', realmServer);
   });
   test.afterEach(async ({ page }) => {
     await page.pause();
     await clearLocalStorage(page);
     await synapseStop(synapse.synapseId);
+    await realmServer.stop();
   });
 
   test('it can create a room', async ({ page }) => {

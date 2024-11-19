@@ -129,7 +129,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     return await this.realmServer.fetchUser();
   });
 
-  private get isUserInfoLoadings() {
+  private get isUserInfoLoading() {
     return this.fetchUserInfo.isLoading;
   }
 

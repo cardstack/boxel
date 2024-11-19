@@ -112,7 +112,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     const matrixUserId = Buffer.from('@user1:localhost').toString('base64');
 
     await assertPaymentSetup(page, matrixUserId);
-    await setupPayment(page, matrixUserId, realmServer);
+    await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',
@@ -205,7 +205,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       Buffer.from('@user2:localhost').toString('base64');
 
     await assertPaymentSetup(page, user2MatrixUserId);
-    await setupPayment(page, user2MatrixUserId, realmServer);
+    await setupPayment(user2MatrixUserId, realmServer, page);
 
     await assertLoggedIn(page, {
       userId: '@user2:localhost',

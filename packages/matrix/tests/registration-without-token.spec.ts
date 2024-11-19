@@ -72,7 +72,7 @@ test.describe('User Registration w/o Token', () => {
     const matrixUserId = Buffer.from('@user1:localhost').toString('base64');
 
     await assertPaymentSetup(page, matrixUserId);
-    await setupPayment(page, matrixUserId, realmServer);
+    await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page);
   });
 });

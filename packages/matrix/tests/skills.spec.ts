@@ -13,20 +13,30 @@ import {
   isInRoom,
   registerRealmUsers,
   getRoomEvents,
+  setupUserSubscribed,
 } from '../helpers';
 import {
   synapseStart,
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import {
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 
 test.describe('Skills', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
   test.beforeEach(async () => {
+    test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
+    realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
+    await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupUserSubscribed('@user2:localhost', realmServer);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);

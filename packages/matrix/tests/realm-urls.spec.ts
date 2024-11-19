@@ -8,16 +8,22 @@ import {
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers } from '../helpers';
+import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
+import {
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 
 test.describe('Realm URLs in Matrix account data', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
   let user: { accessToken: string };
 
   test.beforeEach(async () => {
     synapse = await synapseStart({
       template: 'test',
     });
+    realmServer = await startRealmServer();
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
@@ -33,11 +39,13 @@ test.describe('Realm URLs in Matrix account data', () => {
       'com.cardstack.boxel.realms',
       JSON.stringify({ realms: [] }),
     );
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
 
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
     await smtpStop();
+    await realmServer.stop();
   });
 
   test('active realms are determined by account data', async ({ page }) => {
