@@ -1,4 +1,4 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import { DBAdapter, reportError } from '@cardstack/runtime-common';
 import { StripeSubscriptionDeletedWebhookEvent } from '.';
 import {
   insertStripeEvent,
@@ -110,7 +110,8 @@ async function subscribeUserToFreePlan(
       ],
       payment_behavior: 'error_if_incomplete',
     });
-  } catch (err) {
-    console.error(`Failed to subscribe user back to free plan, error:`, err);
+  } catch (e: any) {
+    reportError(e);
+    console.error(`Failed to subscribe user back to free plan, error:`, e);
   }
 }
