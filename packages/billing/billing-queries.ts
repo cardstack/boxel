@@ -524,7 +524,7 @@ export async function spendCredits(
       subscriptionCycleId: subscriptionCycle.id,
     });
   } else {
-    // If user does not have enough plan allowance credits to cover the spend, use extra credits
+    // If user does not have enough plan allowance credits to cover the spend, try to also use extra credits
     let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
       creditType: ['extra_credit', 'extra_credit_used'],
       userId,
@@ -535,18 +535,22 @@ export async function spendCredits(
       extraCreditsToSpend = availableExtraCredits;
     }
 
-    await addToCreditsLedger(dbAdapter, {
-      userId,
-      creditAmount: -planAllowanceToSpend,
-      creditType: 'plan_allowance_used',
-      subscriptionCycleId: subscriptionCycle.id,
-    });
+    if (planAllowanceToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -planAllowanceToSpend,
+        creditType: 'plan_allowance_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+    }
 
-    await addToCreditsLedger(dbAdapter, {
-      userId,
-      creditAmount: -extraCreditsToSpend,
-      creditType: 'extra_credit_used',
-      subscriptionCycleId: subscriptionCycle.id,
-    });
+    if (extraCreditsToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -extraCreditsToSpend,
+        creditType: 'extra_credit_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+    }
   }
 }

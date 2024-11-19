@@ -7,7 +7,7 @@ import {
   type MatrixEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { logger, aiBotUsername, retry } from '@cardstack/runtime-common';
+import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
@@ -24,11 +24,9 @@ import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, TransactionManager } from '@cardstack/postgres';
-import {
-  getUserByMatrixUserId,
-  spendCredits,
-} from '@cardstack/billing/billing-queries';
+
+import { saveUsageCost } from './lib/ai-cost';
+import { PgAdapter } from '@cardstack/postgres';
 
 let log = logger('ai-bot');
 
@@ -50,65 +48,13 @@ class Assistant {
     this.pgAdapter = new PgAdapter();
   }
 
-  async fetchGenerationCost(generationId: string) {
-    let response = await (
-      await fetch(
-        `https://openrouter.ai/api/v1/generation?id=${generationId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          },
-        },
-      )
-    ).json();
-
-    if (response.error && response.error.includes('not found')) {
-      return null;
-    }
-
-    return response.data.total_cost;
-  }
-
   async trackAiUsageCost(matrixUserId: string, generationId: string) {
-    try {
-      let costInUsd = await retry(
-        () => this.fetchGenerationCost(generationId),
-        {
-          retries: 10,
-          delayMs: 500,
-        },
-      );
-
-      let creditsConsumed = Math.round(costInUsd / 0.001);
-
-      let user = await getUserByMatrixUserId(this.pgAdapter, matrixUserId);
-      if (!user) {
-        throw new Error('should not happen: user with matrix id not found');
-      }
-
-      let txManager = new TransactionManager(this.pgAdapter);
-      await txManager.withTransaction(async () => {
-        await spendCredits(this.pgAdapter, user!.id, creditsConsumed);
-      });
-
-      log.info('Successfully tracked AI usage:', {
-        matrixUserId,
-        generationId,
-        creditsConsumed,
-      });
-    } catch (err) {
-      log.error('Failed to track AI usage:', err);
-      throw err;
-    }
-  }
-
-  async enqueueTrackAiUsageCost(matrixUserId: string, generationId: string) {
     if (trackAiUsageCostPromises.has(matrixUserId)) {
       return;
     }
     trackAiUsageCostPromises.set(
       matrixUserId,
-      this.trackAiUsageCost(matrixUserId, generationId).finally(() => {
+      saveUsageCost(this.pgAdapter, matrixUserId, generationId).finally(() => {
         trackAiUsageCostPromises.delete(matrixUserId);
       }),
     );
@@ -206,6 +152,7 @@ Common issues are:
     async function (event, room, toStartOfTimeline) {
       try {
         let eventBody = event.getContent().body;
+        let senderMatrixUserId = event.getSender()!;
         if (!room) {
           return;
         }
@@ -223,7 +170,7 @@ Common issues are:
           return; // don't respond to card fragments, we just gather these in our history
         }
 
-        if (event.getSender() === aiBotUserId) {
+        if (senderMatrixUserId === aiBotUserId) {
           return;
         }
         log.info(
@@ -231,7 +178,7 @@ Common issues are:
           event.getType(),
           room?.name,
           room?.roomId,
-          event.getSender(),
+          senderMatrixUserId,
           eventBody,
         );
 
@@ -250,10 +197,11 @@ Common issues are:
         }
 
         const responder = new Responder(client, room.roomId);
+        await responder.initialize();
 
         // Do not generate new responses if previous ones' cost is still being reported
         let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
-          event.getSender()!,
+          senderMatrixUserId!,
         );
         if (pendingCreditsConsumptionPromise) {
           try {
@@ -261,11 +209,10 @@ Common issues are:
           } catch (e) {
             log.error(e);
             return responder.onError(
-              'There was an error reporting Boxel Credits usage. Try again or contact support if the problem persists.',
+              'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
             );
           }
         }
-        await responder.initialize();
 
         if (historyError) {
           responder.finalize(
@@ -300,12 +247,7 @@ Common issues are:
           await responder.onError(error);
         } finally {
           if (generationId) {
-            let userMatrixId = event.getSender()!;
-
-            assistant.enqueueTrackAiUsageCost(
-              userMatrixId,
-              generationId as string,
-            );
+            assistant.trackAiUsageCost(senderMatrixUserId, generationId);
           }
         }
 

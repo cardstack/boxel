@@ -28,7 +28,6 @@ import {
   StripeSubscriptionDeletedWebhookEvent,
   StripeCheckoutSessionCompletedWebhookEvent,
 } from '@cardstack/billing/stripe-webhook-handlers';
-import { add } from 'date-fns';
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);
@@ -801,8 +800,7 @@ module('billing', function (hooks) {
     });
   });
 
-  // eslint-disable-next-line qunit/no-only
-  module.only('ai usage tracking', function (hooks) {
+  module('AI usage tracking', function (hooks) {
     let user: User;
     let creatorPlan: Plan;
     let subscription: Subscription;
