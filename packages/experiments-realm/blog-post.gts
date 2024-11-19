@@ -8,9 +8,9 @@ import {
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import { formatDatetime, toISOString } from './blog-app';
 import { Author } from './author';
 import { htmlSafe } from '@ember/template';
-import { CardContainer } from '@cardstack/boxel-ui/components';
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import FileStack from '@cardstack/boxel-icons/file-stack';
 
@@ -25,13 +25,12 @@ class FittedTemplate extends Component<typeof BlogPost> {
   }
 
   private get pubDate() {
-    if (this.args.model.status === 'Published') {
-      const Format = new Intl.DateTimeFormat('en-US', {
+    if (this.args.model.status === 'Published' && this.args.model.publishDate) {
+      return formatDatetime(this.args.model.publishDate, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
       });
-      return Format.format(this.args.model.publishDate);
     }
     return undefined;
   }
@@ -44,17 +43,19 @@ class FittedTemplate extends Component<typeof BlogPost> {
   }
 
   <template>
-    <CardContainer
-      @tag='article'
-      class='fitted-blog-post'
-      @displayBoundaries={{true}}
-    >
+    <article class='fitted-blog-post'>
       <div class='thumbnail' style={{this.backgroundURL @model.thumbnailURL}} />
       <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
       <p class='description'>{{@model.description}}</p>
       <div class='byline'>{{this.authorName}}</div>
-      <div class='date'>{{this.pubDate}}</div>
-    </CardContainer>
+      {{#if this.pubDate}}
+        {{#if @model.publishDate}}
+          <time class='date' timestamp={{toISOString @model.publishDate}}>
+            {{this.pubDate}}
+          </time>
+        {{/if}}
+      {{/if}}
+    </article>
     <style scoped>
       .fitted-blog-post {
         width: 100%;

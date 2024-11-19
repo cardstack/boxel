@@ -201,6 +201,16 @@ class SortMenu extends GlimmerComponent<SortMenuSignature> {
   }
 }
 
+export const toISOString = (datetime: Date) => datetime.toISOString();
+
+export const formatDatetime = (
+  datetime: Date,
+  opts: Intl.DateTimeFormatOptions,
+) => {
+  const Format = new Intl.DateTimeFormat('en-US', opts);
+  return Format.format(datetime);
+};
+
 interface CardAdminViewSignature {
   Args: {
     cardId: string;
@@ -220,7 +230,9 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
             @vertical={{true}}
           >
             {{#if card.publishDate}}
-              {{this.formatDatetime card.publishDate}}
+              <time timestamp={{toISOString card.publishDate}}>
+                {{this.formattedDate card.publishDate}}
+              </time>
             {{else}}
               N/A
             {{/if}}
@@ -249,8 +261,8 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
 
   @tracked resource = getCard<BlogPost>(new URL(this.args.cardId));
 
-  formatDatetime = (datetime: Date) => {
-    const Format = new Intl.DateTimeFormat('en-US', {
+  formattedDate = (datetime: Date) => {
+    return formatDatetime(datetime, {
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
@@ -258,7 +270,6 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
       hour: 'numeric',
       minute: '2-digit',
     });
-    return Format.format(datetime);
   };
 }
 
@@ -296,13 +307,14 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
                   fieldName=undefined
                 }}
               >
+                <CardContainer
+                  class='card'
+                  @displayBoundaries={{not (eq @selectedView 'card')}}
+                >
+                  <card.component />
+                </CardContainer>
                 {{#if (eq @selectedView 'card')}}
-                  <div class='card'>
-                    {{card.component}}
-                  </div>
                   <BlogAdminData @cardId={{card.url}} />
-                {{else}}
-                  {{card.component}}
                 {{/if}}
               </li>
             {{/each}}
@@ -343,15 +355,13 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xs);
       }
-      .strip-view-container,
-      .grid-view-container,
       .card {
         container-name: fitted-card;
         container-type: size;
       }
-      .strip-view-container > :deep(*),
-      .grid-view-container > :deep(*) {
-        height: 100%;
+      .card-view-container :deep(article) {
+        border-radius: var(--boxel-border-radius);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-500);
       }
     </style>
   </template>
