@@ -1,3 +1,4 @@
+import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
@@ -7,6 +8,8 @@ import { Loader } from '@cardstack/runtime-common';
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import RealmService from '@cardstack/host/services/realm';
+
 import type { SwitchSubmodeInput } from 'https://cardstack.com/base/command';
 
 import {
@@ -14,16 +17,28 @@ import {
   setupLocalIndexing,
   lookupLoaderService,
   lookupService,
+  testRealmURL,
+  testRealmInfo,
 } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+}
 
 module('Integration | commands | switch-submode', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
     loader = lookupLoaderService().loader;
   });
 
