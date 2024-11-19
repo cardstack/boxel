@@ -12,8 +12,12 @@
         "index": 1,
         "label": "Medium"
       },
-      "dateStarted": null,
-      "dueDate": "2024-11-15",
+      "dateStarted": "2024-11-15",
+      "dueDate": null,
+      "dateRange": {
+        "start": "2024-11-14",
+        "end": "2024-12-15"
+      },
       "description": null,
       "thumbnailURL": null
     },

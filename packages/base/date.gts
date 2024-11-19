@@ -37,7 +37,7 @@ class View extends Component<typeof DateField> {
 }
 
 export default class DateField extends FieldDef {
-  static icons = CalendarIcon;
+  static icon = CalendarIcon;
   static [primitive]: Date;
   static [serialize](date: Date) {
     return format(date, dateFormat);
