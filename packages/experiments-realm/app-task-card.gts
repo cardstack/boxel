@@ -30,9 +30,9 @@ import { FilterTrigger } from './productivity/filter-trigger';
 import getTaskCardsResource from './productivity/task-cards-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
-import Subtask from '@cardstack/boxel-icons/subtask';
-import UserRound from '@cardstack/boxel-icons/user-round';
-import FileCog from '@cardstack/boxel-icons/file-cog';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
+import User from '@cardstack/boxel-icons/user';
+import FolderGit from '@cardstack/boxel-icons/folder-git';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
@@ -356,11 +356,11 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   @action getFilterIcon(filterType: FilterType) {
     switch (filterType) {
       case 'status':
-        return FileCog;
+        return RectangleEllipsis;
       case 'assignee':
-        return UserRound;
+        return User;
       case 'project':
-        return Subtask;
+        return FolderGit;
       default:
         return undefined;
     }
@@ -418,7 +418,6 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
 
           <div class='filter-display-sec'>
             {{#each this.filterTypes as |filterType|}}
-              {{log filterType}}
               {{#let (this.selectedFilterItems filterType) as |items|}}
                 <FilterDisplay
                   @key={{filterType}}

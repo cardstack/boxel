@@ -27,7 +27,7 @@ export class FilterDisplay extends GlimmerComponent<FilterDisplaySignature> {
           {{/if}}
           {{@key}}
           =
-          {{yield item}}
+          <strong>{{yield item}}</strong>
         </:default>
         <:iconRight>
           <IconButton
@@ -52,9 +52,12 @@ export class FilterDisplay extends GlimmerComponent<FilterDisplaySignature> {
         --inner-boxel-icon-button-height: 8px;
       }
       .filter-display-icon {
-        width: 14px;
-        height: 14px;
+        width: 15px;
+        height: 15px;
         margin-right: var(--boxel-sp-xxxs);
+      }
+      strong {
+        font-weight: 600;
       }
     </style>
   </template>
