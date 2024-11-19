@@ -479,9 +479,9 @@ class Fitted extends Component<typeof Task> {
         display: none;
       }
       .task-card {
-        --font-weight-500: 500;
-        --font-weight-600: 600;
-        --font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
+        --task-font-weight-500: 500;
+        --task-font-weight-600: 600;
+        --tasl-font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
         width: 100%;
         height: 100%;
         padding: var(--boxel-sp-sm);
@@ -521,8 +521,8 @@ class Fitted extends Component<typeof Task> {
         margin-left: auto;
       }
       .short-id {
-        font-size: var(--font-size-extra-small);
-        font-weight: var(--font-weight-600);
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-600);
         color: var(--boxel-600);
         line-height: normal;
         background-color: var(--boxel-200);
@@ -534,7 +534,7 @@ class Fitted extends Component<typeof Task> {
         margin: var(--boxel-sp-xxxs) 0;
         padding: 0;
         font-size: var(--boxel-font-size);
-        font-weight: var(--font-weight-600);
+        font-weight: var(--task-font-weight-600);
         line-height: 1.2;
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -549,8 +549,8 @@ class Fitted extends Component<typeof Task> {
         margin-top: var(--boxel-sp-xxxs);
       }
       .no-data-found-txt {
-        font-size: var(--font-size-extra-small);
-        font-weight: var(--font-weight-500);
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-500);
         color: var(--boxel-400);
         white-space: nowrap;
         -webkit-line-clamp: 1;
@@ -568,8 +568,8 @@ class Fitted extends Component<typeof Task> {
         height: 24px;
         border: none;
         border-radius: 5px 0 0 5px;
-        font-size: var(--font-size-extra-small);
-        font-weight: var(--font-weight-500);
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-500);
         position: relative;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
           var(--boxel-sp-xxs);
@@ -582,7 +582,7 @@ class Fitted extends Component<typeof Task> {
         );
       }
       .calendar-icon-container {
-        font-size: var(--font-size-extra-small);
+        font-size: var(--tasl-font-size-extra-small);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
@@ -911,9 +911,9 @@ class TaskIsolated extends Component<typeof Task> {
         font-size: var(--boxel-font-size-sm);
       }
       .task-container {
-        --font-weight-500: 500;
-        --font-weight-600: 600;
-        --font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
+        --task-font-weight-500: 500;
+        --task-font-weight-600: 600;
+        --tasl-font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
         padding: var(--boxel-sp-lg);
         container-type: inline-size;
       }
@@ -927,11 +927,11 @@ class TaskIsolated extends Component<typeof Task> {
       }
       .task-title {
         font-size: var(--boxel-font-size-med);
-        font-weight: var(--font-weight-600);
+        font-weight: var(--task-font-weight-600);
       }
       .status-label {
         font-size: var(--boxel-font-size-sm);
-        font-weight: var(--font-weight-600);
+        font-weight: var(--task-font-weight-600);
         margin-top: var(--boxel-sp-xs);
       }
       .text-gray {
@@ -959,7 +959,6 @@ class TaskIsolated extends Component<typeof Task> {
         gap: var(--boxel-sp-xl);
       }
       .task-assignee {
-        display: inline-flex;
         width: auto;
         height: auto;
         overflow: unset;
@@ -978,7 +977,7 @@ class TaskIsolated extends Component<typeof Task> {
       }
       .no-data-found-txt {
         font-size: calc(var(--boxel-font-size-xs) * 0.95);
-        font-weight: var(--font-weight-500);
+        font-weight: var(--task-font-weight-500);
         color: var(--boxel-400);
         white-space: nowrap;
         -webkit-line-clamp: 1;
@@ -996,8 +995,8 @@ class TaskIsolated extends Component<typeof Task> {
         height: 24px;
         border: none;
         border-radius: 5px 0 0 5px;
-        font-size: var(--font-size-extra-small);
-        font-weight: var(--font-weight-500);
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-500);
         position: relative;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
           var(--boxel-sp-xxs);
@@ -1010,7 +1009,7 @@ class TaskIsolated extends Component<typeof Task> {
         );
       }
       .calendar-icon-container {
-        font-size: var(--font-size-extra-small);
+        font-size: var(--tasl-font-size-extra-small);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
@@ -1118,35 +1117,6 @@ export class Task extends CardDef {
   });
 
   static isolated = TaskIsolated;
-
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      <div class='task-atom'>
-        <@fields.assignee
-          @format='atom'
-          @displayContainer={{false}}
-          class='task-assignee'
-        />
-      </div>
-      <style scoped>
-        .task-atom {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxxs);
-        }
-        .task-assignee {
-          width: auto;
-          height: auto;
-          overflow: unset;
-        }
-        .task-title {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      </style>
-    </template>
-  };
 
   static fitted = Fitted;
 }
