@@ -503,6 +503,174 @@ const tests = Object.freeze({
     );
   },
 
+  'error entry includes last known good state when available': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
+      internalKeyFor(i, new URL(testRealmURL)),
+    );
+    let modified = Date.now();
+    let resource: CardResource = {
+      id: `${testRealmURL}1`,
+      type: 'card',
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
+    let source = JSON.stringify(resource);
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          pristine_doc: resource,
+          source,
+          search_doc: { name: 'Mango' },
+          display_names: [`Person`],
+          deps: [`${testRealmURL}person`],
+          types,
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+          embedded_html: Object.fromEntries(
+            types.map((type) => [
+              type,
+              `<div class="embedded">Embedded HTML for ${type}</div>`,
+            ]),
+          ),
+          fitted_html: Object.fromEntries(
+            types.map((type) => [
+              type,
+              `<div class="fitted">Fitted HTML for ${type}</div>`,
+            ]),
+          ),
+          isolated_html: `<div class="isolated">Isolated HTML</div>`,
+          atom_html: `<span class="atom">Atom HTML</span>`,
+        },
+      ],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'error',
+      error: {
+        detail: 'test error',
+        status: 500,
+        additionalErrors: [],
+      },
+    });
+    await batch.done();
+
+    let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
+      'SELECT * FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      { coerceTypes: { is_deleted: 'BOOLEAN' } },
+    )) as unknown as BoxelIndexTable[];
+    assert.deepEqual(
+      errorEntry,
+      {
+        url: `${testRealmURL}1.json`,
+        file_alias: `${testRealmURL}1`,
+        realm_version: 2,
+        realm_url: testRealmURL,
+        type: 'error',
+        pristine_doc: resource,
+        source,
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+        transpiled_code: null,
+        search_doc: { name: 'Mango' },
+        display_names: [`Person`],
+        deps: [`${testRealmURL}person`],
+        types,
+        embedded_html: Object.fromEntries(
+          types.map((type) => [
+            type,
+            `<div class="embedded">Embedded HTML for ${type}</div>`,
+          ]),
+        ),
+        fitted_html: Object.fromEntries(
+          types.map((type) => [
+            type,
+            `<div class="fitted">Fitted HTML for ${type}</div>`,
+          ]),
+        ),
+        isolated_html: `<div class="isolated">Isolated HTML</div>`,
+        atom_html: `<span class="atom">Atom HTML</span>`,
+        last_modified: String(modified),
+        resource_created_at: String(modified),
+        is_deleted: null,
+      },
+      'the error entry includes last known good state of instance',
+    );
+  },
+
+  'error entry does not include last known good state when not available':
+    async (assert, { indexWriter, adapter }) => {
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        [],
+      );
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'error',
+        error: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      });
+      await batch.done();
+
+      let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
+        'SELECT * FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      )) as unknown as BoxelIndexTable[];
+      assert.deepEqual(
+        errorEntry,
+        {
+          url: `${testRealmURL}1.json`,
+          file_alias: `${testRealmURL}1`,
+          realm_version: 2,
+          realm_url: testRealmURL,
+          type: 'error',
+          pristine_doc: null,
+          source: null,
+          error_doc: {
+            detail: 'test error',
+            status: 500,
+            additionalErrors: [],
+          },
+          transpiled_code: null,
+          search_doc: null,
+          display_names: null,
+          deps: [],
+          types: null,
+          embedded_html: null,
+          fitted_html: null,
+          isolated_html: null,
+          atom_html: null,
+          last_modified: null,
+          resource_created_at: null,
+          is_deleted: false,
+        },
+        'the error entry does not include last known good state of instance',
+      );
+    },
+
+  // TODO we need to serialize pre-rendered HTML into error doc and ensure we
+  // include scoped css
   'can get an error doc': async (assert, { indexQueryEngine, adapter }) => {
     await setupIndex(adapter, [
       {
