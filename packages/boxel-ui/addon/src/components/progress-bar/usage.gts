@@ -99,7 +99,7 @@ export default class ProgressBarUsage extends Component {
           />
           <Css.Basic
             @name='boxel-progress-bar-border-radius'
-            @type='size'
+            @type='length'
             @description='Border radius of the progress bar'
             @defaultValue={{this.boxelProgressBarBorderRadius.defaults}}
             @value={{this.boxelProgressBarBorderRadius.value}}

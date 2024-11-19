@@ -39,11 +39,7 @@ export default class ProgressRadialUsage extends Component {
           A circular progress indicator to show completion of a task
         </:description>
         <:example>
-          <BoxelProgressRadial
-            @value={{this.value}}
-            @max={{this.max}}
-            @label={{this.label}}
-          />
+          <BoxelProgressRadial @value={{this.value}} @max={{this.max}} />
         </:example>
         <:api as |Args|>
           <Args.Number
@@ -57,12 +53,6 @@ export default class ProgressRadialUsage extends Component {
             @description='Maximum value of the progress'
             @value={{this.max}}
             @onInput={{fn (mut this.max)}}
-          />
-          <Args.String
-            @name='label'
-            @description='Custom label for the progress indicator'
-            @value={{this.label}}
-            @onInput={{fn (mut this.label)}}
           />
         </:api>
         <:cssVars as |Css|>

@@ -42,10 +42,19 @@ export default class ProgressRadial extends Component<Signature> {
     <style scoped>
       @layer {
         .boxel-progress-radial {
-          --progress-radial-size: 80px;
-          --progress-radial-fill-color: var(--boxel-highlight);
-          --progress-radial-background-color: var(--boxel-light-200);
-          --progress-radial-font-weight: 600;
+          --progress-radial-size: var(--boxel-progress-radial-size, 80px);
+          --progress-radial-fill-color: var(
+            --boxel-progress-radial-fill-color,
+            var(--boxel-highlight)
+          );
+          --progress-radial-background-color: var(
+            --boxel-progress-radial-background-color,
+            var(--boxel-light-200)
+          );
+          --progress-radial-font-weight: var(
+            --boxel-progress-radial-font-weight,
+            600
+          );
         }
         .progress-radial-circle-outer {
           width: var(--progress-radial-size);
