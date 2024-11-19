@@ -39,15 +39,13 @@ export default class ProgressBar extends Component<Signature> {
       aria-label={{@label}}
       ...attributes
     >
-      <div class='progress-bar-horizontal'>
-        <div class='progress-bar-container'>
-          <div class='progress-bar-value' style={{this.progressWidth}}>
-            <div class='progress-bar-info {{this.progressBarPosition}}'>
-              <div class='progress-bar-label'>
-                {{#if @label}}
-                  {{@label}}
-                {{/if}}
-              </div>
+      <div class='progress-bar-container'>
+        <div class='progress-bar-value' style={{this.progressWidth}}>
+          <div class='progress-bar-info {{this.progressBarPosition}}'>
+            <div class='progress-bar-label'>
+              {{#if @label}}
+                {{@label}}
+              {{/if}}
             </div>
           </div>
         </div>
@@ -74,7 +72,7 @@ export default class ProgressBar extends Component<Signature> {
             var(--boxel-light)
           );
         }
-        .progress-bar-horizontal {
+        .progress-bar-container {
           height: 1.5em;
           width: 100%;
           background-color: var(--progress-bar-background-color);
@@ -83,15 +81,8 @@ export default class ProgressBar extends Component<Signature> {
           overflow: hidden;
           border: 1px solid var(--boxel-200);
         }
-        .progress-bar-container {
-          height: 100%;
-          width: 100%;
-          position: absolute;
-          top: 0;
-          left: 0;
-        }
         .progress-bar-value {
-          position: relative;
+          position: absolute;
           height: 100%;
           background-color: var(--progress-bar-fill-color);
           border-radius: var(--progress-bar-border-radius) 0 0
