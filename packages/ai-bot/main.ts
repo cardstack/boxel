@@ -25,8 +25,12 @@ import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import { saveUsageCost } from './lib/ai-cost';
+import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
+import {
+  getUserByMatrixUserId,
+  sumUpCreditsLedger,
+} from '@cardstack/billing/billing-queries';
 
 let log = logger('ai-bot');
 
@@ -35,7 +39,7 @@ let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
-  private pgAdapter: PgAdapter;
+  pgAdapter: PgAdapter;
   id: string;
 
   constructor(client: MatrixClient, id: string) {
@@ -197,6 +201,12 @@ Common issues are:
         }
 
         const responder = new Responder(client, room.roomId);
+        if (historyError) {
+          return responder.finalize(
+            'There was an error processing chat history. Please open another session.',
+          );
+        }
+
         await responder.initialize();
 
         // Do not generate new responses if previous ones' cost is still being reported
@@ -214,11 +224,17 @@ Common issues are:
           }
         }
 
-        if (historyError) {
-          responder.finalize(
-            'There was an error processing chat history. Please open another session.',
+        let availableCredits = await getAvailableCredits(
+          assistant.pgAdapter,
+          senderMatrixUserId,
+        );
+
+        let minimumCredits = 10;
+
+        if (availableCredits < minimumCredits) {
+          return responder.onError(
+            `You need a minimum of ${minimumCredits} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
           );
-          return;
         }
 
         let generationId: string | undefined;
@@ -238,7 +254,6 @@ Common issues are:
             await responder.onError(error);
           });
 
-        // We also need to catch the error when getting the final content
         let finalContent;
         try {
           finalContent = await runner.finalContent();
