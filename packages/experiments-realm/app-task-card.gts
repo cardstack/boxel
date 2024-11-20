@@ -42,7 +42,7 @@ import {
   Query,
 } from '@cardstack/runtime-common/query';
 
-export type FilterType = 'status' | 'assignee' | 'project';
+type FilterType = 'status' | 'assignee' | 'project';
 
 export interface SelectedItem {
   name?: string;
