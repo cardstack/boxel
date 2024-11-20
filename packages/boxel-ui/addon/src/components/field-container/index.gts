@@ -56,7 +56,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-field-label-padding-top: 0;
 
       display: grid;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
     .label-container {
       align-items: start;
@@ -86,6 +86,15 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       width: var(--boxel-icon-xs);
       height: var(--boxel-icon-xs);
       flex-shrink: 0;
+    }
+
+    .content {
+      max-width: 100%;
+      overflow: hidden;
+      padding: var(
+        --boxel-field-content-padding,
+        var(--boxel-outline-width)
+      ); /* necessary for our various overlays utilizing box-shadow */
     }
 
     .horizontal {
