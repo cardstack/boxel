@@ -29,6 +29,7 @@ import { ProrationCalculator } from '../proration-calculator';
 export async function handlePaymentSucceeded(
   dbAdapter: DBAdapter,
   event: StripeInvoicePaymentSucceededWebhookEvent,
+  sendBillingNotification: (stripeUserId: string) => Promise<void>,
 ): Promise<void> {
   // We want a transaction so we don't reach an inconsistent DB state if something breaks in the middle of this function
   let txManager = new TransactionManager(dbAdapter as PgAdapter);
@@ -86,6 +87,7 @@ export async function handlePaymentSucceeded(
     }
 
     await markStripeEventAsProcessed(dbAdapter, event.id);
+    await sendBillingNotification(user.stripeCustomerId);
   });
 }
 

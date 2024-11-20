@@ -132,6 +132,12 @@ module('billing', function (hooks) {
         await handlePaymentSucceeded(
           dbAdapter,
           stripeInvoicePaymentSucceededEvent,
+          async function (stripeUserId: string) {
+            assert.strictEqual(
+              stripeUserId,
+              stripeInvoicePaymentSucceededEvent.data.object.customer,
+            );
+          },
         );
 
         // Assert that the stripe event was inserted and processed
@@ -191,7 +197,16 @@ module('billing', function (hooks) {
 
         // Error if stripe event is attempted to be processed again when it's already been processed
         await assert.rejects(
-          handlePaymentSucceeded(dbAdapter, stripeInvoicePaymentSucceededEvent),
+          handlePaymentSucceeded(
+            dbAdapter,
+            stripeInvoicePaymentSucceededEvent,
+            async function (stripeUserId: string) {
+              assert.strictEqual(
+                stripeUserId,
+                stripeInvoicePaymentSucceededEvent.data.object.customer,
+              );
+            },
+          ),
           'error: duplicate key value violates unique constraint "stripe_events_pkey"',
         );
       });
@@ -282,6 +297,12 @@ module('billing', function (hooks) {
         await handlePaymentSucceeded(
           dbAdapter,
           stripeInvoicePaymentSucceededEvent,
+          async function (stripeUserId: string) {
+            assert.strictEqual(
+              stripeUserId,
+              stripeInvoicePaymentSucceededEvent.data.object.customer,
+            );
+          },
         );
 
         // Assert that new subscription was created
@@ -378,6 +399,12 @@ module('billing', function (hooks) {
         await handlePaymentSucceeded(
           dbAdapter,
           stripeInvoicePaymentSucceededEvent,
+          async function (stripeUserId: string) {
+            assert.strictEqual(
+              stripeUserId,
+              stripeInvoicePaymentSucceededEvent.data.object.customer,
+            );
+          },
         );
 
         // Assert there are now three subscriptions and last one is active
@@ -461,6 +488,12 @@ module('billing', function (hooks) {
         await handlePaymentSucceeded(
           dbAdapter,
           stripeInvoicePaymentSucceededEvent,
+          async function (stripeUserId: string) {
+            assert.strictEqual(
+              stripeUserId,
+              stripeInvoicePaymentSucceededEvent.data.object.customer,
+            );
+          },
         );
 
         // Assert there are now four subscriptions and last one is active
@@ -529,6 +562,12 @@ module('billing', function (hooks) {
         await handlePaymentSucceeded(
           dbAdapter,
           stripeInvoicePaymentSucceededEvent,
+          async function (stripeUserId: string) {
+            assert.strictEqual(
+              stripeUserId,
+              stripeInvoicePaymentSucceededEvent.data.object.customer,
+            );
+          },
         );
 
         // Assert there are now 5 subscriptions and last one is active
@@ -642,6 +681,12 @@ module('billing', function (hooks) {
         await handlePaymentSucceeded(
           dbAdapter,
           stripeInvoicePaymentSucceededEvent,
+          async function (stripeUserId: string) {
+            assert.strictEqual(
+              stripeUserId,
+              stripeInvoicePaymentSucceededEvent.data.object.customer,
+            );
+          },
         );
 
         // Assert that there are now two subscription cycles
@@ -709,6 +754,12 @@ module('billing', function (hooks) {
       await handleSubscriptionDeleted(
         dbAdapter,
         stripeSubscriptionDeletedEvent,
+        async function (stripeUserId: string) {
+          assert.strictEqual(
+            stripeUserId,
+            stripeSubscriptionDeletedEvent.data.object.customer,
+          );
+        },
       );
 
       let subscriptions = await fetchSubscriptionsByUserId(dbAdapter, user.id);
@@ -749,6 +800,12 @@ module('billing', function (hooks) {
       await handleCheckoutSessionCompleted(
         dbAdapter,
         stripeCheckoutSessionCompletedEvent,
+        async function (stripeUserId: string) {
+          assert.strictEqual(
+            stripeUserId,
+            stripeCheckoutSessionCompletedEvent.data.object.customer,
+          );
+        },
       );
 
       let stripeEvents = await fetchStripeEvents(dbAdapter);
@@ -787,6 +844,12 @@ module('billing', function (hooks) {
       await handleCheckoutSessionCompleted(
         dbAdapter,
         stripeCheckoutSessionCompletedEvent,
+        async function (stripeUserId: string) {
+          assert.strictEqual(
+            stripeUserId,
+            stripeCheckoutSessionCompletedEvent.data.object.customer,
+          );
+        },
       );
 
       let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {

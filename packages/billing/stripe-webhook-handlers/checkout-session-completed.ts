@@ -20,6 +20,7 @@ import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,
   event: StripeCheckoutSessionCompletedWebhookEvent,
+  sendBillingNotification: (stripeUserId: string) => Promise<void>,
 ) {
   let txManager = new TransactionManager(dbAdapter as PgAdapter);
 
@@ -60,4 +61,5 @@ export async function handleCheckoutSessionCompleted(
   });
 
   await markStripeEventAsProcessed(dbAdapter, event.id);
+  await sendBillingNotification(event.data.object.customer);
 }
