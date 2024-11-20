@@ -311,6 +311,9 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
       type: 'object',
       properties: {
+        description: {
+          type: 'string',
+        },
         attributes: {
           type: 'object',
           properties: {
@@ -333,6 +336,7 @@ module('Acceptance | Commands tests', function (hooks) {
           type: 'object',
         },
       },
+      required: ['attributes', 'description'],
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
@@ -412,6 +416,9 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
       type: 'object',
       properties: {
+        description: {
+          type: 'string',
+        },
         attributes: {
           type: 'object',
           properties: {
@@ -434,6 +441,7 @@ module('Acceptance | Commands tests', function (hooks) {
           type: 'object',
         },
       },
+      required: ['attributes', 'description'],
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',

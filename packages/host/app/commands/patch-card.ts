@@ -70,6 +70,7 @@ export default class PatchCardCommand extends HostBaseCommand<
             },
           } as ObjectSchema,
         },
+        required: ['cardId', 'patch'],
       } as AttributesSchema,
       relationships: {
         type: 'object',

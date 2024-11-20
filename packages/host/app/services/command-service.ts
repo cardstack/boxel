@@ -55,7 +55,7 @@ export default class CommandService extends Service {
     command: Command<any, any, any>,
     autoExecute: boolean,
   ) {
-    let name = `${command.name}_${shortenUuid(uuidv4())}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
+    let name = `${command.name}_${shortenUuid(uuidv4())}`;
     this.commands.set(name, { command, autoExecute });
     return name;
   }
