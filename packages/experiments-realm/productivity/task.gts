@@ -371,7 +371,7 @@ function getDueDateStatus(dueDateString: string | null) {
 
   const dueDate = new Date(dueDateString);
   const today = new Date();
-  const nextWeek = addWeeks(dueDate, 1);
+  const nextWeek = addWeeks(today, 1);
 
   if (isToday(dueDate)) {
     return {

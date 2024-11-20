@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Move cards-grid fitted template into a component that can be re-used",
+      "taskName": "Create Tag List",
       "taskDetail": null,
       "status": {
-        "index": 2,
-        "label": "Current Sprint"
+        "index": 1,
+        "label": "Next Sprint"
       },
       "priority": {
         "index": null,
@@ -22,12 +22,12 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
       "project": {
         "links": {
-          "self": null
+          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
         }
       },
       "team": {

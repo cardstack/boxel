@@ -17,6 +17,7 @@ export class FilterTrigger extends GlimmerComponent<TriggerSignature> {
       .filter-trigger {
         display: flex;
         align-items: center;
+        font: 600 var(--boxel-font-sm);
       }
     </style>
     {{! template-lint-disable require-scoped-style }}

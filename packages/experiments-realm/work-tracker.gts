@@ -50,7 +50,7 @@ export interface SelectedItem {
   index?: number;
 }
 
-class AppTaskCardIsolated extends Component<typeof AppCard> {
+class WorkTrackerIsolated extends Component<typeof AppCard> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
   private declare assigneeQuery: {
@@ -370,77 +370,71 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   <template>
     <div class='task-app'>
       <div class='filter-section'>
-        {{#if this.initializeDropdownData.isRunning}}
-          isLoading...
-        {{else}}
-          <h2 class='project-title'>Project</h2>
-
-          <div class='filter-dropdown-container'>
-            {{#if this.selectedFilterConfig}}
-              {{#let (this.selectedFilterConfig.options) as |options|}}
-                <FilterDropdown
-                  @searchField={{this.selectedFilterConfig.searchKey}}
-                  @options={{options}}
-                  @realmURLs={{this.realmHrefs}}
-                  @selected={{this.selectedItemsForFilter}}
-                  @onChange={{this.onChange}}
-                  @onClose={{this.onClose}}
-                  as |item|
-                >
-                  {{#let (this.isSelectedItem item) as |isSelected|}}
-                    <StatusPill
-                      @isSelected={{isSelected}}
-                      @label={{if
-                        (eq this.selectedFilter 'status')
-                        item.label
-                        item.name
-                      }}
-                    />
-                  {{/let}}
-                </FilterDropdown>
-              {{/let}}
-            {{else}}
-              <BoxelSelect
-                class='status-select'
-                @selected={{this.selectedFilter}}
-                @options={{this.filterTypes}}
-                @onChange={{this.onSelectFilter}}
-                @placeholder={{'Choose a Filter'}}
-                @matchTriggerWidth={{false}}
-                @triggerComponent={{FilterTrigger}}
+        <div class='filter-dropdown-container'>
+          {{#if this.selectedFilterConfig}}
+            {{#let (this.selectedFilterConfig.options) as |options|}}
+              <FilterDropdown
+                @searchField={{this.selectedFilterConfig.searchKey}}
+                @options={{options}}
+                @realmURLs={{this.realmHrefs}}
+                @selected={{this.selectedItemsForFilter}}
+                @onChange={{this.onChange}}
+                @onClose={{this.onClose}}
                 as |item|
               >
-                {{#let (this.getFilterIcon item) as |Icon|}}
-                  <div class='filter-option'>
-                    {{#if Icon}}
-                      <Icon class='filter-display-icon' />
-                    {{/if}}
-                    <span class='filter-display-text'>{{item}}</span>
-                  </div>
+                {{#let (this.isSelectedItem item) as |isSelected|}}
+                  <StatusPill
+                    @isSelected={{isSelected}}
+                    @label={{if
+                      (eq this.selectedFilter 'status')
+                      item.label
+                      item.name
+                    }}
+                  />
                 {{/let}}
-              </BoxelSelect>
-            {{/if}}
-          </div>
-          <div class='filter-display-sec'>
-            {{#each this.filterTypes as |filterType|}}
-              {{#let (this.selectedFilterItems filterType) as |items|}}
-                <FilterDisplay
-                  @key={{filterType}}
-                  @items={{items}}
-                  @removeItem={{(fn this.removeFilter filterType)}}
-                  @icon={{this.getFilterIcon filterType}}
-                  as |item|
-                >
-                  {{#if (eq filterType 'status')}}
-                    {{item.label}}
-                  {{else}}
-                    {{item.name}}
+              </FilterDropdown>
+            {{/let}}
+          {{else}}
+            <BoxelSelect
+              class='status-select'
+              @selected={{this.selectedFilter}}
+              @options={{this.filterTypes}}
+              @onChange={{this.onSelectFilter}}
+              @placeholder={{'Choose a Filter'}}
+              @matchTriggerWidth={{false}}
+              @triggerComponent={{FilterTrigger}}
+              as |item|
+            >
+              {{#let (this.getFilterIcon item) as |Icon|}}
+                <div class='filter-option'>
+                  {{#if Icon}}
+                    <Icon class='filter-display-icon' />
                   {{/if}}
-                </FilterDisplay>
+                  <span class='filter-display-text'>{{item}}</span>
+                </div>
               {{/let}}
-            {{/each}}
-          </div>
-        {{/if}}
+            </BoxelSelect>
+          {{/if}}
+        </div>
+        <div class='filter-display-sec'>
+          {{#each this.filterTypes as |filterType|}}
+            {{#let (this.selectedFilterItems filterType) as |items|}}
+              <FilterDisplay
+                @key={{filterType}}
+                @items={{items}}
+                @removeItem={{(fn this.removeFilter filterType)}}
+                @icon={{this.getFilterIcon filterType}}
+                as |item|
+              >
+                {{#if (eq filterType 'status')}}
+                  {{item.label}}
+                {{else}}
+                  {{item.name}}
+                {{/if}}
+              </FilterDisplay>
+            {{/let}}
+          {{/each}}
+        </div>
       </div>
       <div class='columns-container'>
         <DndKanbanBoard
@@ -498,7 +492,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         justify-content: space-between;
         gap: var(--boxel-sp);
         align-items: center;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs);
         width: 100%;
       }
       .filter-dropdown-container {
@@ -512,10 +506,6 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         gap: var(--boxel-sp-xxs);
         flex: 1;
         min-width: 0;
-      }
-      .project-title {
-        font-size: var(-- --boxel-sp-lg);
-        font-weight: 600;
       }
       .columns-container {
         display: block;
@@ -615,14 +605,15 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
   }
 }
 
-export class AppTaskCard extends AppCard {
-  static displayName = 'App Task';
+export class WorkTracker extends AppCard {
+  static displayName = 'Work Tracker';
   static icon = Checklist;
+  static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
-  static isolated = AppTaskCardIsolated;
+  static isolated = WorkTrackerIsolated;
   @field title = contains(StringField, {
-    computeVia: function (this: AppTaskCard) {
-      return 'App Task';
+    computeVia: function (this: WorkTracker) {
+      return 'Work Tracker';
     },
   });
 }
