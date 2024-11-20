@@ -474,7 +474,16 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         </DndKanbanBoard>
       </div>
     </div>
-
+    {{!TODO: Get rid of global styles}}
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .ember-power-select-dropdown.ember-basic-dropdown-content--below,
+      .ember-power-select-dropdown.ember-basic-dropdown-content--in-place {
+        border-top: 1px solid #aaaaaa;
+        border-top-left-radius: var(--boxel-border-radius-sm);
+        border-top-right-radius: var(--boxel-border-radius-sm);
+      }
+    </style>
     <style scoped>
       .task-app {
         display: flex;
