@@ -15,6 +15,7 @@ import {
   Pill,
   RadioInput,
   ProgressBar,
+  ProgressRadial,
 } from '@cardstack/boxel-ui/components';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -793,11 +794,11 @@ class TaskIsolated extends Component<typeof Task> {
         </div>
 
         <div class='right-column'>
-          <ProgressBar
+          <ProgressRadial
             @value={{this.progress}}
             @max={{100}}
             @variant='circular'
-            class='progress-bar-circular'
+            class='task-progress-radial'
           />
           {{#if this.hasProgress}}
             <ProgressBar
@@ -805,7 +806,7 @@ class TaskIsolated extends Component<typeof Task> {
               @max={{100}}
               @label={{this.progressLabel}}
               @variant='horizontal'
-              class='progress-bar-horizontal'
+              class='task-progress-bar'
             />
           {{/if}}
         </div>
@@ -937,7 +938,7 @@ class TaskIsolated extends Component<typeof Task> {
       .text-gray {
         color: var(--boxel-400);
       }
-      .progress-bar-horizontal {
+      .task-progress-bar {
         display: none;
         --progress-bar-font-color: var(--boxel-dark);
         border: 0px;
@@ -1023,10 +1024,10 @@ class TaskIsolated extends Component<typeof Task> {
         header {
           display: block;
         }
-        .progress-bar-circular {
+        .task-progress-radial {
           display: none;
         }
-        .progress-bar-horizontal {
+        .task-progress-bar {
           display: block;
         }
         .task-info {
