@@ -33,7 +33,6 @@ import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import User from '@cardstack/boxel-icons/user';
 import FolderGit from '@cardstack/boxel-icons/folder-git';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
@@ -352,7 +351,6 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   @action selectedFilterItems(filterType: FilterType) {
     return this.selectedItems.get(filterType) ?? [];
   }
-
   @action getFilterIcon(filterType: FilterType) {
     switch (filterType) {
       case 'status':
@@ -365,7 +363,6 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         return undefined;
     }
   }
-
   <template>
     <div class='task-app'>
       <div class='filter-section'>
@@ -522,9 +519,23 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       .card {
         height: 170px !important;
       }
-
       .status-select {
         border: none;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 200px;
+      }
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .filter-display-text {
+        word-break: break-word;
       }
     </style>
   </template>
