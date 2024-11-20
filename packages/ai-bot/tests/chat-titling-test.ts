@@ -378,9 +378,13 @@ module('shouldSetRoomTitle', () => {
             toolCall: {
               name: 'patchCard',
               arguments: {
-                card_id: 'http://localhost:4201/experiments/Friend/1',
                 attributes: {
-                  firstName: 'Dave',
+                  cardId: 'http://localhost:4201/experiments/Friend/1',
+                  patch: {
+                    attributes: {
+                      firstName: 'Dave',
+                    },
+                  },
                 },
               },
             },
@@ -443,9 +447,13 @@ module('shouldSetRoomTitle', () => {
             toolCall: {
               name: 'patchCard',
               arguments: {
-                card_id: 'http://localhost:4201/drafts/Friend/1',
                 attributes: {
-                  firstName: 'Dave',
+                  cardId: 'http://localhost:4201/drafts/Friend/1',
+                  patch: {
+                    attributes: {
+                      firstName: 'Dave',
+                    },
+                  },
                 },
               },
             },
