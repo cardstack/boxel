@@ -38,7 +38,7 @@ export default class CreateProductRequirementsInstance extends Command<
       description:
         'This skill card can be used to help with creating product requirements',
       instructions:
-        'You are a helpful assistant that can help with creating product requirements, etc. You *MUST* make the patchCard function call',
+        'Given a prompt, fill in the product requirements document. Update the appTitle. Update the prompt to be grammatically accurate. Description should be 1 or 2 short sentences. In overview, provide 1 or 2 paragraph summary. In schema, make a list of the schema for the app. In Layout & Navigation, provide brief information for the layout and navigation of the app. Offer to update the attached card with this info.',
     });
   }
 
