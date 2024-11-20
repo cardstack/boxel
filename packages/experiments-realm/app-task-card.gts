@@ -351,6 +351,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   @action selectedFilterItems(filterType: FilterType) {
     return this.selectedItems.get(filterType) ?? [];
   }
+
   @action getFilterIcon(filterType: FilterType) {
     switch (filterType) {
       case 'status':
@@ -363,6 +364,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         return undefined;
     }
   }
+
   <template>
     <div class='task-app'>
       <div class='filter-section'>
@@ -383,17 +385,14 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
                   as |item|
                 >
                   {{#let (this.isSelectedItem item) as |isSelected|}}
-                    {{#if (eq this.selectedFilter 'status')}}
-                      <StatusPill
-                        @isSelected={{isSelected}}
-                        @label={{item.label}}
-                      />
-                    {{else}}
-                      <StatusPill
-                        @isSelected={{isSelected}}
-                        @label={{item.name}}
-                      />
-                    {{/if}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{if
+                        (eq this.selectedFilter 'status')
+                        item.label
+                        item.name
+                      }}
+                    />
                   {{/let}}
                 </FilterDropdown>
               {{/let}}
@@ -408,11 +407,17 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
                 @triggerComponent={{FilterTrigger}}
                 as |item|
               >
-                {{item}}
+                {{#let (this.getFilterIcon item) as |Icon|}}
+                  <div class='filter-option'>
+                    {{#if Icon}}
+                      <Icon class='filter-display-icon' />
+                    {{/if}}
+                    <span class='filter-display-text'>{{item}}</span>
+                  </div>
+                {{/let}}
               </BoxelSelect>
             {{/if}}
           </div>
-
           <div class='filter-display-sec'>
             {{#each this.filterTypes as |filterType|}}
               {{#let (this.selectedFilterItems filterType) as |items|}}
@@ -521,6 +526,21 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       }
       .status-select {
         border: none;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 200px;
+      }
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .filter-display-text {
+        word-break: break-word;
       }
       .filter-option {
         display: flex;
