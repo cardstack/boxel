@@ -35,7 +35,6 @@ import User from '@cardstack/boxel-icons/user';
 import FolderGit from '@cardstack/boxel-icons/folder-git';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
-
 import type Owner from '@ember/owner';
 import {
   AnyFilter,
@@ -43,7 +42,7 @@ import {
   Query,
 } from '@cardstack/runtime-common/query';
 
-type FilterType = 'status' | 'assignee' | 'project';
+export type FilterType = 'status' | 'assignee' | 'project';
 
 export interface SelectedItem {
   name?: string;
@@ -66,6 +65,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   };
   filters = {
     status: {
+      searchKey: 'label',
       label: 'Status',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -74,6 +74,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       options: () => TaskStatusField.values,
     },
     assignee: {
+      searchKey: 'name',
       label: 'Assignee',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -82,6 +83,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       options: () => this.assigneeCards,
     },
     project: {
+      searchKey: 'name',
       label: 'Project',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -377,6 +379,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
             {{#if this.selectedFilterConfig}}
               {{#let (this.selectedFilterConfig.options) as |options|}}
                 <FilterDropdown
+                  @searchField={{this.selectedFilterConfig.searchKey}}
                   @options={{options}}
                   @realmURLs={{this.realmHrefs}}
                   @selected={{this.selectedItemsForFilter}}

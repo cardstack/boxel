@@ -5,6 +5,7 @@ import { FilterTrigger } from './filter-trigger';
 interface FilterDropdownSignature {
   Element: HTMLDivElement;
   Args: {
+    searchField: string;
     realmURLs: string[];
     options: any;
     selected: any;
@@ -26,7 +27,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
       @triggerComponent={{FilterTrigger}}
       @initiallyOpened={{true}}
       @searchEnabled={{true}}
-      @searchField='name'
+      @searchField={{@searchField}}
       @closeOnSelect={{false}}
       @onClose={{@onClose}}
       @matchTriggerWidth={{false}}
