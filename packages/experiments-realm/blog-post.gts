@@ -59,6 +59,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
     <style scoped>
       .fitted-blog-post {
         width: 100%;
+        height: 100%;
         display: grid;
         overflow: hidden;
       }
@@ -106,12 +107,11 @@ class FittedTemplate extends Component<typeof BlogPost> {
       .byline,
       .date {
         font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp);
+        letter-spacing: var(--boxel-lsp-sm);
       }
 
-      @container fitted-card ((400px < width) and (height >= 350px)) {
+      @container fitted-card ((450px < width) and (height > 224px)) {
         .fitted-blog-post {
-          height: 100%;
           grid-template:
             'img title title' max-content
             'img desc desc' max-content
@@ -143,9 +143,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (226px < width <= 400px) {
+      @container fitted-card ((226px < width <= 450px) and (height > 224px)) {
         .fitted-blog-post {
-          height: 226px;
           grid-template:
             'img title title' max-content
             'img desc desc' max-content
@@ -165,11 +164,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (width <= 226px) {
+      @container fitted-card ((width <= 226px) and (height > 224px) ) {
         .fitted-blog-post {
-          min-height: 226px;
-          height: auto;
-          max-height: 100%;
           grid-template:
             'img img' 94px
             'title title' max-content
@@ -189,6 +185,56 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .date {
           justify-self: end;
+        }
+      }
+
+      /* Selected view: Strip */
+      @container fitted-card ((width = 300px) and (height = 115px) ) {
+        .fitted-blog-post {
+          grid-template:
+            'img title' max-content
+            'img byline' 1fr
+            'img date' max-content / 78px 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
+        }
+        .title {
+          margin-top: var(--boxel-sp-xs);
+        }
+        .description {
+          display: none;
+        }
+        .byline {
+          align-self: start;
+        }
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+      }
+
+      /* Selected view: Grid */
+      @container fitted-card ((width = 164px) and (height = 224px)) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 92px
+            'title' max-content
+            'byline' 1fr
+            'date' max-content / 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
+        }
+        .description {
+          display: none;
+        }
+        .byline {
+          align-self: start;
+        }
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
         }
       }
     </style>

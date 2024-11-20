@@ -299,7 +299,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
           <:response as |cards|>
             {{#each cards as |card|}}
               <li
-                class='{{@selectedView}}-view-container'
+                class='blog-card {{@selectedView}}-view-container'
                 {{@context.cardComponentModifier
                   cardId=card.url
                   format='data'
@@ -325,35 +325,35 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
     <style scoped>
       .blog-cards {
         display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
-        );
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
         grid-auto-rows: var(--grid-card-height);
         gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
-        padding: var(--boxel-sp-6xs);
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xl) var(--boxel-sp-6xs)
+          var(--boxel-sp-6xs);
         overflow: auto;
       }
       .card-view {
-        --grid-card-height: 370px;
+        --grid-card-width: 1fr;
+        --grid-card-height: 300px;
       }
       .strip-view {
-        --grid-card-min-width: 21.875rem;
-        --grid-card-max-width: calc(50% - var(--boxel-sp));
-        --grid-card-height: 6.125rem;
+        --grid-card-width: 300px;
+        --grid-card-height: 115px;
       }
       .grid-view {
-        --grid-card-min-width: 11.125rem;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: 15.125rem;
+        --grid-card-width: 164px;
+        --grid-card-height: 224px;
+      }
+      .blog-card {
+        max-width: 1440px;
       }
       .card-view-container {
         display: grid;
         grid-template-columns: 1fr 200px;
         gap: var(--boxel-sp-lg);
-        padding: var(--boxel-sp-xs);
+        padding: 10px;
       }
       .card {
         container-name: fitted-card;
