@@ -43,11 +43,22 @@ import AuthorIcon from '@cardstack/boxel-icons/square-user';
 import type { BlogPost } from './blog-post';
 
 type ViewOption = 'card' | 'strip' | 'grid';
+type Sort = Query['sort'];
 
 interface SortOption {
   displayName: string;
-  sort: Query['sort'];
+  sort: Sort;
 }
+const sortByCardTitle: Sort = [
+  {
+    on: {
+      module: `${baseRealm.url}card-api`,
+      name: 'CardDef',
+    },
+    by: 'title',
+    direction: 'asc',
+  },
+];
 const SORT_OPTIONS: SortOption[] = [
   {
     displayName: 'Date Published',
@@ -69,16 +80,7 @@ const SORT_OPTIONS: SortOption[] = [
   },
   {
     displayName: 'A-Z',
-    sort: [
-      {
-        on: {
-          module: `${baseRealm.url}card-api`,
-          name: 'CardDef',
-        },
-        by: 'title',
-        direction: 'asc',
-      },
-    ],
+    sort: sortByCardTitle,
   },
 ];
 
@@ -90,6 +92,8 @@ interface SidebarFilter {
   isCreateNewDisabled?: boolean;
   cardRef?: ResolvedCodeRef;
   query?: Query;
+  isSortDisabled?: boolean;
+  showAdminData?: boolean;
 }
 const FILTERS: SidebarFilter[] = [
   {
@@ -97,12 +101,14 @@ const FILTERS: SidebarFilter[] = [
     icon: BlogPostIcon,
     cardTypeName: 'Blog Post',
     createNewButtonText: 'Post',
+    showAdminData: true,
   },
   {
     displayName: 'Author Bios',
     icon: AuthorIcon,
     cardTypeName: 'Author Bio',
     createNewButtonText: 'Author',
+    isSortDisabled: true,
   },
   {
     displayName: 'Categories',
@@ -110,6 +116,7 @@ const FILTERS: SidebarFilter[] = [
     cardTypeName: 'Category',
     createNewButtonText: 'Category',
     isCreateNewDisabled: true, // TODO: Category cards
+    isSortDisabled: true,
   },
 ];
 
@@ -279,6 +286,7 @@ interface BlogCardsGridSignature {
     realms: URL[];
     selectedView: ViewOption;
     context?: CardContext;
+    displayAdminData?: boolean;
   };
 }
 class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
@@ -313,7 +321,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
                 >
                   <card.component />
                 </CardContainer>
-                {{#if (eq @selectedView 'card')}}
+                {{#if @displayAdminData}}
                   <BlogAdminData @cardId={{card.url}} />
                 {{/if}}
               </li>
@@ -415,11 +423,13 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
           />
-          <SortMenu
-            @options={{this.sortOptions}}
-            @selected={{this.selectedSort}}
-            @onSort={{this.onSort}}
-          />
+          {{#unless this.activeFilter.isSortDisabled}}
+            <SortMenu
+              @options={{this.sortOptions}}
+              @selected={{this.selectedSort}}
+              @onSort={{this.onSort}}
+            />
+          {{/unless}}
         </header>
         {{#if this.query}}
           <BlogCardsGrid
@@ -427,6 +437,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @context={{@context}}
             @query={{this.query}}
             @realms={{this.realms}}
+            @displayAdminData={{this.showAdminData}}
           />
         {{/if}}
       </section>
@@ -532,15 +543,19 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   </template>
 
   filters: SidebarFilter[] = new TrackedArray(FILTERS);
-  sortOptions = SORT_OPTIONS;
+  sortOptions: SortOption[] = SORT_OPTIONS;
 
   @tracked private selectedView: ViewOption = 'card';
-  @tracked private selectedSort: SortOption = this.sortOptions[0];
   @tracked private activeFilter: SidebarFilter = this.filters[0];
+  @tracked private selectedSort: SortOption = this.sortOptions[0];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
     this.loadCardTypes.perform();
+  }
+
+  private get showAdminData() {
+    return this.activeFilter.showAdminData && this.selectedView === 'card';
   }
 
   private get realms() {
@@ -549,7 +564,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 
   private get query() {
     if (this.loadCardTypes.isIdle && this.activeFilter.query) {
-      return { ...this.activeFilter.query, sort: this.selectedSort.sort };
+      let sort = this.activeFilter.isSortDisabled
+        ? sortByCardTitle
+        : this.selectedSort.sort;
+      return { ...this.activeFilter.query, sort };
     }
     return undefined;
   }
@@ -593,7 +611,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 
   @action private onSort(option: SortOption) {
     this.selectedSort = option;
-    this.activeFilter = this.activeFilter;
   }
 
   @action private onFilterChange(filter: SidebarFilter) {
