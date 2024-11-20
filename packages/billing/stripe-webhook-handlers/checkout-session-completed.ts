@@ -30,9 +30,14 @@ export async function handleCheckoutSessionCompleted(
     const matrixUserName = event.data.object.client_reference_id;
 
     if (matrixUserName) {
+      const base64UserId = matrixUserName.replace(/-/g, '+').replace(/_/g, '/');
+      const decodedMatrixUserName = Buffer.from(
+        base64UserId,
+        'base64',
+      ).toString('utf8');
       await updateUserStripeCustomerId(
         dbAdapter,
-        matrixUserName,
+        decodedMatrixUserName,
         stripeCustomerId,
       );
     }

@@ -26,6 +26,7 @@ import {
   enterWorkspace,
   showAllCards,
   setupUser,
+  encodeToAlphanumeric,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -109,7 +110,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     });
 
     // base 64 encode the matrix user id
-    const matrixUserId = Buffer.from('@user1:localhost').toString('base64');
+    const matrixUserId = encodeToAlphanumeric('@user1:localhost');
 
     await assertPaymentSetup(page, matrixUserId);
     await setupPayment(matrixUserId, realmServer, page);
@@ -201,8 +202,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator('[data-test-setup-payment-message]'),
     ).toContainText('Setup your payment method now to enjoy Boxel');
 
-    const user2MatrixUserId =
-      Buffer.from('@user2:localhost').toString('base64');
+    const user2MatrixUserId = encodeToAlphanumeric('@user2:localhost');
 
     await assertPaymentSetup(page, user2MatrixUserId);
     await setupPayment(user2MatrixUserId, realmServer, page);

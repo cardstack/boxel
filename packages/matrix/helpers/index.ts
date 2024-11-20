@@ -599,7 +599,7 @@ export async function setupPayment(
   page?: Page,
 ) {
   // decode the username from base64
-  const decodedUsername = Buffer.from(username, 'base64').toString('utf8');
+  const decodedUsername = decodeFromAlphanumeric(username);
 
   // mock trigger stripe webhook 'checkout.session.completed'
   let freePlan = await realmServer.executeSQL(
@@ -689,7 +689,7 @@ export async function setupUserSubscribed(
   username: string,
   realmServer: IsolatedRealmServer,
 ) {
-  const matrixUserId = Buffer.from(username).toString('base64');
+  const matrixUserId = encodeToAlphanumeric(username);
   await setupUser(username, realmServer);
   await setupPayment(matrixUserId, realmServer);
 }
@@ -759,4 +759,17 @@ export async function waitUntil<T>(
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
+}
+
+export function encodeToAlphanumeric(string: string) {
+  return Buffer.from(string)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, ''); // Remove padding
+}
+
+export function decodeFromAlphanumeric(encodedString: string) {
+  const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(base64, 'base64').toString('utf8');
 }
