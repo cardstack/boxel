@@ -111,11 +111,11 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     .vertical {
+      --boxel-label-font: 600 var(--boxel-font-xs);
       grid-template-rows: auto 1fr;
     }
 
     .vertical .label {
-      --boxel-label-font: 600 var(--boxel-font-xs);
       grid-column: 2;
       line-height: 1rem;
       margin-bottom: var(--boxel-sp-4xs);
