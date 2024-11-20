@@ -216,11 +216,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .editor {
         position: relative;
         display: grid;
-        grid-template-columns: 1fr var(--boxel-icon-lg);
-        padding-left: var(--boxel-sp-xxl);
-      }
-      .editor > :deep(.boxel-card-container.fitted-format) {
-        order: -1;
+        grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
       }
       .remove {
         --icon-color: var(--boxel-light);
@@ -228,6 +224,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         --icon-bg: var(--boxel-dark);
         align-self: auto;
         outline: 0;
+        order: 1;
       }
       .remove:focus,
       .remove:hover {
@@ -241,18 +238,13 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           var(--boxel-box-shadow-hover);
       }
       .add-new {
-        width: calc(100% - var(--boxel-icon-lg));
+        width: calc(100% - var(--boxel-icon-xxl));
+        margin-left: var(--boxel-icon-lg);
+        /* for alignment due to sort handle */
       }
       .sort {
-        position: absolute;
-        top: 0;
-        left: 0;
-
         cursor: move;
         cursor: grab;
-      }
-      .list > li + li > .sort {
-        top: var(--boxel-sp);
       }
       .sort:active {
         cursor: grabbing;
