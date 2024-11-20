@@ -52,7 +52,7 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
       .boxel-radio-option--checked:not(.boxel-radio-option--disabled),
       .boxel-radio-option:focus:not(.boxel-radio-option--disabled),
       .boxel-radio-option:focus-within:not(.boxel-radio-option--disabled) {
-        box-shadow: 0 0 0 2px var(--boxel-highlight);
+        box-shadow: 0 0 0 var(--boxel-outline-width) var(--boxel-highlight);
         outline: 1px solid transparent;
       }
 

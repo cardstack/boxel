@@ -76,8 +76,9 @@
   --boxel-transition: 0.2s ease;
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
+  --boxel-outline-width: 2px;
   --boxel-outline-color: var(--boxel-blue);
-  --boxel-outline: 2px solid var(--boxel-outline-color);
+  --boxel-outline: var(--boxel-outline-width) solid var(--boxel-outline-color);
   --boxel-deep-box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.35);
 
   /* Container sizes */
@@ -117,7 +118,7 @@
   --boxel-blue: #0069f9;
   --boxel-navy: #281e78;
 
-  --boxel-label-color: var(--boxel-dark);
+  --boxel-label-color: currentColor;
   /**** End of revisited colors ****/
 
   /* Primary colors */
