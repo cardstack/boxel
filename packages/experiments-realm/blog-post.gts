@@ -143,17 +143,21 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card ((226px < width <= 450px) and (height > 224px)) {
+      @container fitted-card ((349px < width <= 450px) and (height > 224px)) {
         .fitted-blog-post {
           grid-template:
             'img title title' max-content
             'img desc desc' max-content
-            'img byline date' 1fr / 40% 1fr;
+            'img byline date' 1fr / 45% 1fr;
           gap: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           padding-right: var(--boxel-sp-xs);
         }
         .title {
           margin-top: var(--boxel-sp-xs);
+          font: 700 var(--boxel-font);
+        }
+        .description {
+          font: var(--boxel-font-sm);
         }
         .byline,
         .date {
@@ -164,10 +168,10 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card ((width <= 226px) and (height > 224px) ) {
+      @container fitted-card ((185px < width <= 349px) and (height > 224px) ) {
         .fitted-blog-post {
           grid-template:
-            'img img' 94px
+            'img img' 100px
             'title title' max-content
             'desc desc' max-content
             'byline date' 1fr / 1fr;
@@ -176,8 +180,12 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .fitted-blog-post > *:not(.thumbnail) {
           padding: 0 var(--boxel-sp-xs);
         }
+        .title {
+          font: 700 var(--boxel-font);
+        }
         .description {
           -webkit-line-clamp: 3;
+          font: var(--boxel-font-sm);
         }
         .byline,
         .date {
@@ -185,6 +193,31 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .date {
           justify-self: end;
+        }
+      }
+
+      @container fitted-card ((width <= 185px) and (height > 224px) ) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 92px
+            'title' max-content
+            'desc' max-content
+            'byline' 1fr
+            'date' max-content / 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
+        }
+        .description {
+          -webkit-line-clamp: 3;
+        }
+        .byline {
+          align-self: start;
+          text-wrap: pretty;
+        }
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
         }
       }
 
