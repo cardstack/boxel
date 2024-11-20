@@ -2,7 +2,7 @@
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
   "description": "Access boxel realm data and code from your vscode workspace.",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "publisher": "cardstack",
   "private": true,
   "license": "MIT",
@@ -32,6 +32,11 @@
         "command": "boxel-tools.attachToBoxelWorkspaces",
         "title": "Attach to Boxel Workspaces",
         "category": "Boxel Tools"
+      },
+      {
+        "command": "boxel-tools.reloadSkills",
+        "title": "Reload Skills",
+        "category": "Boxel Tools"
       }
     ],
     "menus": {
@@ -42,8 +47,40 @@
         {
           "command": "boxel-tools.attachToBoxelWorkspaces"
         }
+      ],
+      "view/title": [
+        {
+          "command": "boxel-tools.reloadSkills",
+          "when": "view == codingSkillList",
+          "group": "navigation"
+        }
       ]
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "coding-skills",
+          "title": "Boxel Coding Skills",
+          "icon": "resources/sparkle.svg"
+        }
+      ]
+    },
+    "views": {
+      "coding-skills": [
+        {
+          "id": "codingSkillList",
+          "name": "Cursor Boxel Skills",
+          "icon": "resources/sparkle.svg",
+          "contextualTitle": "Cursor Boxel Skills"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codingSkillList",
+        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your realms to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
+      }
+    ],
     "configuration": [
       {
         "title": "Matrix Server",

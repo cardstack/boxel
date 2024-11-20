@@ -4,8 +4,6 @@
 
 import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
@@ -18,7 +16,6 @@ import {
   apiFor,
   loaderFor,
   hasExecutableExtension,
-  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import { ErrorDetails } from '@cardstack/runtime-common/error';
@@ -55,7 +52,6 @@ interface Args {
   };
 }
 
-const waiter = buildWaiter('card-resource:load-card-waiter');
 const liveCards: WeakMap<
   Loader,
   Map<
@@ -275,33 +271,17 @@ export class CardResource extends Resource<Args> {
   }
 
   private reload = task(async (card: CardDef) => {
-    // we don't await this in the realm subscription callback, so this test
-    // waiter should catch otherwise leaky async in the tests
-    await this.withTestWaiters(async () => {
-      let incomingDoc: SingleCardDocument;
-      try {
-        incomingDoc = (await this.cardService.fetchJSON(
-          card.id,
-          undefined,
-        )) as SingleCardDocument;
-      } catch (err: any) {
-        if (err.status !== 404) {
-          throw err;
-        }
-        // in this case the document was invalidated in the index because the
-        // file was deleted
-        this.clearCardInstance();
-        return;
+    try {
+      await this.cardService.reloadCard(card);
+    } catch (err: any) {
+      if (err.status !== 404) {
+        throw err;
       }
-
-      if (!isSingleCardDocument(incomingDoc)) {
-        throw new Error(
-          `bug: server returned a non card document for ${card.id}:
-        ${JSON.stringify(incomingDoc, null, 2)}`,
-        );
-      }
-      await this.api.updateFromSerialized<typeof CardDef>(card, incomingDoc);
-    });
+      // in this case the document was invalidated in the index because the
+      // file was deleted
+      this.clearCardInstance();
+      return;
+    }
   });
 
   private unsubscribeFromRealm = () => {
@@ -314,21 +294,6 @@ export class CardResource extends Resource<Args> {
       realmSubscribers.delete(this);
     }
   };
-
-  private async withTestWaiters<T>(cb: () => Promise<T>) {
-    let token = waiter.beginAsync();
-    try {
-      let result = await cb();
-      // only do this in test env--this makes sure that we also wait for any
-      // interior card instance async as part of our ember-test-waiters
-      if (isTesting()) {
-        await this.cardService.cardsSettled();
-      }
-      return result;
-    } finally {
-      waiter.endAsync(token);
-    }
-  }
 
   private async updateCardInstance(maybeCard: CardDef | undefined) {
     if (maybeCard) {

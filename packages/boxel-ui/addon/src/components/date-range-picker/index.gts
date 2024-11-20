@@ -14,6 +14,7 @@ import {
 import TriangleLeftIcon from '../../icons/triangle-left.gts';
 import TriangleRightIcon from '../../icons/triangle-right.gts';
 import IconButton from '../icon-button/index.gts';
+import { setupDateLibrary } from './setup.gts';
 
 interface Signature {
   Args: {
@@ -25,12 +26,18 @@ interface Signature {
   Element: HTMLElement;
 }
 
+const dateFormat = 'MMM yyyy';
+const weekdayFormat = 'min';
+
 export default class DateRangePicker extends Component<Signature> {
   @tracked leftCenter: Date;
   @tracked rightCenter: Date;
 
   constructor(owner: any, args: any) {
     super(owner, args);
+
+    setupDateLibrary();
+
     // If both start and end are provided, use them
     if (this.args.start && this.args.end) {
       this.leftCenter = this.args.start;
@@ -78,85 +85,78 @@ export default class DateRangePicker extends Component<Signature> {
   }
 
   <template>
-    <div class='date-range-picker'>
-      <PowerCalendarRange
-        @selected={{@selected}}
-        @onSelect={{@onSelect}}
-        @locale='en-US'
-        ...attributes
-        as |calendar|
-      >
-        <div class='months-container'>
-          <div>
-            <calendar.Nav>
-              <div class='nav-container'>
-                <IconButton
-                  @icon={{TriangleLeftIcon}}
-                  aria-label='Previous month'
-                  {{on 'click' (fn this.onNavigate 'left' 'previous')}}
-                />
-                <div class='month-name'>
-                  {{powerCalendarFormatDate
-                    this.leftCenter
-                    'MMMM yyyy'
-                    locale=calendar.locale
-                  }}
-                </div>
-                <IconButton
-                  @icon={{TriangleRightIcon}}
-                  aria-label='Next month'
-                  {{on 'click' (fn this.onNavigate 'left' 'next')}}
-                />
+    <PowerCalendarRange
+      @selected={{@selected}}
+      @onSelect={{@onSelect}}
+      @locale='en-US'
+      ...attributes
+      as |calendar|
+    >
+      <div class='months-container'>
+        <div class='month-calendar'>
+          <calendar.Nav>
+            <div class='nav-container'>
+              <IconButton
+                @icon={{TriangleLeftIcon}}
+                aria-label='Previous month'
+                {{on 'click' (fn this.onNavigate 'left' 'previous')}}
+              />
+              <div class='month-name'>
+                {{powerCalendarFormatDate
+                  this.leftCenter
+                  dateFormat
+                  locale=calendar.locale
+                }}
               </div>
-            </calendar.Nav>
-            <calendar.Days @center={{this.leftCenter}} />
-          </div>
-
-          <div>
-            <calendar.Nav>
-              <div class='nav-container'>
-                <IconButton
-                  @icon={{TriangleLeftIcon}}
-                  aria-label='Previous month'
-                  {{on 'click' (fn this.onNavigate 'right' 'previous')}}
-                />
-                <div class='month-name'>
-                  {{powerCalendarFormatDate
-                    this.rightCenter
-                    'MMMM yyyy'
-                    locale=calendar.locale
-                  }}
-                </div>
-                <IconButton
-                  @icon={{TriangleRightIcon}}
-                  aria-label='Next month'
-                  {{on 'click' (fn this.onNavigate 'right' 'next')}}
-                />
-              </div>
-            </calendar.Nav>
-            <calendar.Days @center={{this.rightCenter}} />
-          </div>
+              <IconButton
+                @icon={{TriangleRightIcon}}
+                aria-label='Next month'
+                {{on 'click' (fn this.onNavigate 'left' 'next')}}
+              />
+            </div>
+          </calendar.Nav>
+          <calendar.Days
+            @weekdayFormat={{weekdayFormat}}
+            @center={{this.leftCenter}}
+          />
         </div>
-      </PowerCalendarRange>
-    </div>
+
+        <div class='month-calendar'>
+          <calendar.Nav>
+            <div class='nav-container'>
+              <IconButton
+                @icon={{TriangleLeftIcon}}
+                aria-label='Previous month'
+                {{on 'click' (fn this.onNavigate 'right' 'previous')}}
+              />
+              <div class='month-name'>
+                {{powerCalendarFormatDate
+                  this.rightCenter
+                  dateFormat
+                  locale=calendar.locale
+                }}
+              </div>
+              <IconButton
+                @icon={{TriangleRightIcon}}
+                aria-label='Next month'
+                {{on 'click' (fn this.onNavigate 'right' 'next')}}
+              />
+            </div>
+          </calendar.Nav>
+          <calendar.Days
+            @weekdayFormat={{weekdayFormat}}
+            @center={{this.rightCenter}}
+          />
+        </div>
+      </div>
+    </PowerCalendarRange>
     <style scoped>
-      .date-range-picker {
+      .month-calendar {
         width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
       }
-
-      .month-name {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
       .months-container {
         display: flex;
         flex-direction: row;
-        align-items: flex-start;
         gap: var(--boxel-sp-lg);
       }
       .nav-container {
@@ -164,15 +164,29 @@ export default class DateRangePicker extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
+      .days-container {
+        margin-top: auto;
+      }
     </style>
+    {{! 
+    Note: I don't think there is any reason why we can't implement scoped styles here unlike ember-power-select which uses wormholes
+    but we do so for now to avoid the complexity of maintaining fidelity with the way the ember-power-calendar styles are implemented.
+    We do so intentionally to
+    - maintain fidelity with the library
+    - avoid the complexity of implementing :deep() pseudo-class to styles to be applied
+     }}
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .ember-power-calendar-day {
-        width: 2.5em; /*add fixed width to ensure cols of numbers align*/
-        padding: var(--boxel-sp-xxs);
+      .ember-power-calendar {
+        --ember-power-calendar-cell-size: 35px;
+        --ember-power-calendar-row-spacing: var(--boxel-sp-sm);
+        width: 100%;
       }
       .ember-power-calendar-week {
-        gap: var(--boxel-sp-xxs);
+        padding-bottom: var(--ember-power-calendar-row-spacing);
+      }
+      .ember-power-calendar-weekday {
+        padding: var(--boxel-sp-4xs);
       }
     </style>
   </template>

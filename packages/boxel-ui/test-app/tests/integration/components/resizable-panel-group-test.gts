@@ -121,7 +121,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
               max-${orientationProperties.dimension}: 100%;
             }
         `;
-        console.log(renderController.panels[1]);
 
         await render(<template>
           {{! template-lint-disable no-inline-styles }}

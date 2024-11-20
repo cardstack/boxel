@@ -4,7 +4,7 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
@@ -126,35 +126,36 @@ export default class OperatorModeStateService extends Service {
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    let stackItems = this.state?.stacks.flat() ?? [];
-    if (
-      !stackItems.length ||
-      !this.topMostStackItems().some((item) => item.card.id == id)
-    ) {
-      throw new Error(`Please open card '${id}' to make changes to it.`);
+    let card = await this.cardService.getCard(id);
+    let document = await this.cardService.serializeCard(card);
+    if (patch.attributes) {
+      document.data.attributes = mergeWith(
+        document.data.attributes,
+        patch.attributes,
+      );
     }
-    for (let item of stackItems) {
-      if ('card' in item && item.card.id == id) {
-        let document = await this.cardService.serializeCard(item.card);
-        if (patch.attributes) {
-          document.data.attributes = mergeWith(
-            document.data.attributes,
-            patch.attributes,
-          );
-        }
-        if (patch.relationships) {
-          let mergedRel = mergeRelationships(
-            document.data.relationships,
-            patch.relationships,
-          );
-          if (mergedRel && Object.keys(mergedRel).length !== 0) {
-            document.data.relationships = mergedRel;
-          }
-        }
-        await this.cardService.patchCard(item.card, document, patch);
+    if (patch.relationships) {
+      let mergedRel = mergeRelationships(
+        document.data.relationships,
+        patch.relationships,
+      );
+      if (mergedRel && Object.keys(mergedRel).length !== 0) {
+        document.data.relationships = mergedRel;
       }
     }
+    await this.cardService.patchCard(card, document, patch);
+    // TODO: if we introduce an identity map, we would not need this
+    await this.reloadCardIfOpen(card.id);
   });
+
+  async reloadCardIfOpen(id: string) {
+    let stackItems = this.state?.stacks.flat() ?? [];
+    for (let item of stackItems) {
+      if ('card' in item && item.card.id == id) {
+        this.cardService.reloadCard(item.card);
+      }
+    }
+  }
 
   async deleteCard(card: CardDef) {
     // remove all stack items for the deleted card
@@ -344,6 +345,18 @@ export default class OperatorModeStateService extends Service {
     });
   }
 
+  @cached
+  get title() {
+    if (this.state.submode === Submodes.Code) {
+      return `${this.codePathRelativeToRealm} in ${
+        this.realm.info(this.realmURL.href).name
+      }`;
+    } else {
+      let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
+      return itemForTitle?.title ?? 'Boxel';
+    }
+  }
+
   private updateOpenDirsForNestedPath() {
     let localPath = this.codePathRelativeToRealm;
 
@@ -392,6 +405,10 @@ export default class OperatorModeStateService extends Service {
 
   private persist() {
     this.operatorModeController.operatorModeState = this.serialize();
+    // This sets the title of the document for it's appearance in the browser
+    // history (which needs to happen after the history pushState)--the
+    // afterRender is the perfect place for this
+    document.title = this.title;
   }
 
   // Serialized POJO version of state, with only cards that have been saved.
@@ -430,6 +447,21 @@ export default class OperatorModeStateService extends Service {
   // Stringified JSON version of state, with only cards that have been saved, used for the query param
   serialize(): string {
     return stringify(this.rawStateWithSavedCardsOnly())!;
+  }
+
+  async createStackItem(
+    card: CardDef,
+    stackIndex: number,
+    format: 'isolated' | 'edit' = 'isolated',
+  ) {
+    let stackItem = new StackItem({
+      card,
+      stackIndex,
+      owner: this,
+      format,
+    });
+    await stackItem.ready();
+    return stackItem;
   }
 
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
