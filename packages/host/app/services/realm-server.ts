@@ -26,8 +26,9 @@ import type ResetService from './reset';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 
-interface RealmServerTokenClaims {
+export interface RealmServerTokenClaims {
   user: string;
+  sessionRoom: string;
 }
 
 // iat - issued at (seconds since epoch)

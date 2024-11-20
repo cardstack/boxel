@@ -789,6 +789,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 Authorization: createJWT(
                   {
                     user: '@testuser:staging',
+                    sessionRoom: matrixRoomId,
                   },
                   '1d',
                   testRealmSecretSeed,

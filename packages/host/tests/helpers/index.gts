@@ -49,7 +49,9 @@ import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import RealmServerService, {
+  RealmServerTokenClaims,
+} from '@cardstack/host/services/realm-server';
 
 import {
   type CardDef,
@@ -561,7 +563,7 @@ export function setupCardLogs(
 }
 
 export function createJWT(
-  claims: Partial<TokenClaims>,
+  claims: TokenClaims | RealmServerTokenClaims,
   expiration: string,
   secret: string,
 ) {
@@ -663,6 +665,7 @@ export function setupRealmServerEndpoints(
               Authorization: createJWT(
                 {
                   user: '@testuser:staging',
+                  sessionRoom: 'boxel-session-room-id',
                 },
                 '1d',
                 testRealmSecretSeed,

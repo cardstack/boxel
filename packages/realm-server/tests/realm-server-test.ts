@@ -70,7 +70,10 @@ import {
   insertSubscriptionCycle,
   insertSubscription,
 } from '@cardstack/billing/billing-queries';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
+import {
+  createJWT as createRealmServerJWT,
+  RealmServerTokenClaim,
+} from '../utils/jwt';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import Stripe from 'stripe';
 import sinon from 'sinon';
@@ -2869,7 +2872,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3053,7 +3059,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3125,7 +3134,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3262,7 +3274,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send('make a new realm please!');
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
@@ -3277,7 +3292,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3296,7 +3314,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3324,7 +3345,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3351,7 +3375,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3381,7 +3408,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3402,7 +3432,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3433,7 +3466,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3460,7 +3496,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -4816,8 +4855,13 @@ module('Realm server authentication', function (hooks) {
       .set('Content-Type', 'application/json');
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
     let token = response.headers['authorization'];
-    let decoded = jwt.verify(token, secretSeed) as { user: string };
+    let decoded = jwt.verify(token, secretSeed) as RealmServerTokenClaim;
     assert.strictEqual(decoded.user, userId);
+    assert.notStrictEqual(
+      decoded.sessionRoom,
+      undefined,
+      'sessionRoom should be defined',
+    );
   });
 });
 
