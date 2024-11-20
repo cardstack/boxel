@@ -33,10 +33,8 @@ import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import User from '@cardstack/boxel-icons/user';
 import FolderGit from '@cardstack/boxel-icons/folder-git';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
-
 import type Owner from '@ember/owner';
 import {
   AnyFilter,
@@ -67,6 +65,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   };
   filters = {
     status: {
+      searchKey: 'label',
       label: 'Status',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -75,6 +74,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       options: () => TaskStatusField.values,
     },
     assignee: {
+      searchKey: 'name',
       label: 'Assignee',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -83,6 +83,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       options: () => this.assigneeCards,
     },
     project: {
+      searchKey: 'name',
       label: 'Project',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -378,6 +379,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
             {{#if this.selectedFilterConfig}}
               {{#let (this.selectedFilterConfig.options) as |options|}}
                 <FilterDropdown
+                  @searchField={{this.selectedFilterConfig.searchKey}}
                   @options={{options}}
                   @realmURLs={{this.realmHrefs}}
                   @selected={{this.selectedItemsForFilter}}
@@ -386,17 +388,14 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
                   as |item|
                 >
                   {{#let (this.isSelectedItem item) as |isSelected|}}
-                    {{#if (eq this.selectedFilter 'status')}}
-                      <StatusPill
-                        @isSelected={{isSelected}}
-                        @label={{item.label}}
-                      />
-                    {{else}}
-                      <StatusPill
-                        @isSelected={{isSelected}}
-                        @label={{item.name}}
-                      />
-                    {{/if}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{if
+                        (eq this.selectedFilter 'status')
+                        item.label
+                        item.name
+                      }}
+                    />
                   {{/let}}
                 </FilterDropdown>
               {{/let}}
@@ -411,11 +410,17 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
                 @triggerComponent={{FilterTrigger}}
                 as |item|
               >
-                {{item}}
+                {{#let (this.getFilterIcon item) as |Icon|}}
+                  <div class='filter-option'>
+                    {{#if Icon}}
+                      <Icon class='filter-display-icon' />
+                    {{/if}}
+                    <span class='filter-display-text'>{{item}}</span>
+                  </div>
+                {{/let}}
               </BoxelSelect>
             {{/if}}
           </div>
-
           <div class='filter-display-sec'>
             {{#each this.filterTypes as |filterType|}}
               {{#let (this.selectedFilterItems filterType) as |items|}}
@@ -469,7 +474,16 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         </DndKanbanBoard>
       </div>
     </div>
-
+    {{!TODO: Get rid of global styles}}
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .ember-power-select-dropdown.ember-basic-dropdown-content--below,
+      .ember-power-select-dropdown.ember-basic-dropdown-content--in-place {
+        border-top: 1px solid #aaaaaa;
+        border-top-left-radius: var(--boxel-border-radius-sm);
+        border-top-right-radius: var(--boxel-border-radius-sm);
+      }
+    </style>
     <style scoped>
       .task-app {
         display: flex;
@@ -522,9 +536,38 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       .card {
         height: 170px !important;
       }
-
       .status-select {
         border: none;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 200px;
+      }
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .filter-display-text {
+        word-break: break-word;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 200px;
+      }
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .filter-display-text {
+        word-break: break-word;
       }
     </style>
   </template>
