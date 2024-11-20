@@ -217,6 +217,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         position: relative;
         display: grid;
         grid-template-columns: 1fr var(--boxel-icon-lg);
+        padding-left: var(--boxel-sp-xxl);
       }
       .editor > :deep(.boxel-card-container.fitted-format) {
         order: -1;
@@ -245,7 +246,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .sort {
         position: absolute;
         top: 0;
-        left: calc(-1 * var(--boxel-sp-xxl));
+        left: 0;
 
         cursor: move;
         cursor: grab;
