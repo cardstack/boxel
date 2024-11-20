@@ -40,6 +40,7 @@ import BoxelMultiSelect, {
 } from './components/multi-select/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
+import ProgressRadial from './components/progress-radial/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import RealmIcon from './components/realm-icon/index.gts';
 import ResizablePanelGroup, {
@@ -93,6 +94,7 @@ export {
   Modal,
   Pill,
   ProgressBar,
+  ProgressRadial,
   RadioInput,
   RealmIcon,
   ResizablePanel,

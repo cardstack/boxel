@@ -5,6 +5,7 @@ import { FilterTrigger } from './filter-trigger';
 interface FilterDropdownSignature {
   Element: HTMLDivElement;
   Args: {
+    searchField: string;
     realmURLs: string[];
     options: any;
     selected: any;
@@ -19,31 +20,29 @@ interface FilterDropdownSignature {
 export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
   <template>
     <BoxelMultiSelectBasic
-      class='multi-select'
+      class='work-tracker-multi-select'
       @options={{@options}}
       @selected={{@selected}}
       @onChange={{@onChange}}
       @triggerComponent={{FilterTrigger}}
-      @searchEnabled={{true}}
       @initiallyOpened={{true}}
+      @searchEnabled={{true}}
+      @searchField={{@searchField}}
       @closeOnSelect={{false}}
       @onClose={{@onClose}}
       @matchTriggerWidth={{false}}
       ...attributes
       as |item|
     >
-      {{yield item}}
+      <div class='filter-option'>{{yield item}}</div>
     </BoxelMultiSelectBasic>
+
     <style scoped>
-      .multi-select {
+      .work-tracker-multi-select {
         border: none;
       }
-    </style>
-    {{! template-lint-disable require-scoped-style }}
-    <style>
-      .ember-power-select-dropdown.ember-basic-dropdown-content--below {
-        border: 2px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius);
+      .filter-option {
+        width: 200px;
       }
     </style>
   </template>

@@ -2,15 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Lucas",
-      "email": null,
+      "name": "Luke",
+      "email": "",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "team": {
         "links": {
-          "self": null
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       }
     },

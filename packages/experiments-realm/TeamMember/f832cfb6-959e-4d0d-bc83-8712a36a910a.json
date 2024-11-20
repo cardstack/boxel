@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Lucas",
+      "name": "Burcu",
       "email": null,
       "description": null,
       "thumbnailURL": null
@@ -10,7 +10,7 @@
     "relationships": {
       "team": {
         "links": {
-          "self": null
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       }
     },

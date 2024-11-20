@@ -2653,7 +2653,9 @@ module('Integration | operator-mode', function (hooks) {
       Math.round(overlayButtonRect.top),
     );
     assert.strictEqual(
-      Math.round(itemRect.left),
+      Math.round(
+        itemRect.left + 40 / 2,
+      ) /* add icon width / 2 for testing scale */,
       Math.round(overlayButtonRect.left),
     );
 

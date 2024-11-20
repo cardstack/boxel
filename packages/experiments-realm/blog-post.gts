@@ -8,155 +8,266 @@ import {
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import { formatDatetime, toISOString } from './blog-app';
 import { Author } from './author';
-import { markdownToHtml } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import FileStack from '@cardstack/boxel-icons/file-stack';
 
 class FittedTemplate extends Component<typeof BlogPost> {
+  private get authorName() {
+    let author = this.args.model.authorBio;
+    if (author?.firstName || author?.lastName) {
+      let fullName = `${this.args.model.authorBio?.firstName} ${this.args.model.authorBio?.lastName}`;
+      return fullName.trim();
+    }
+    return undefined;
+  }
+
+  private get pubDate() {
+    if (this.args.model.status === 'Published' && this.args.model.publishDate) {
+      return formatDatetime(this.args.model.publishDate, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+    return undefined;
+  }
+
+  private backgroundURL(backgroundURL: string | null | undefined) {
+    if (!backgroundURL) {
+      return;
+    }
+    return htmlSafe(`background-image: url(${backgroundURL});`);
+  }
+
   <template>
-    <div class='fitted-template'>
-      {{#if @model}}
-        <div class='header'>
-          <h3 class='title' data-test-blog-post-title>{{@model.title}}</h3>
-          <span class='author' data-test-blog-post-title>By
-            {{@model.authorBio.firstName}}
-            {{@model.authorBio.lastName}}</span>
-        </div>
-        <div class='content'>
-          {{htmlSafe (markdownToHtml @model.body)}}
-        </div>
-      {{else}}
-        {{! empty links-to field }}
-        <div data-test-empty-field class='empty-field'></div>
+    <article class='fitted-blog-post'>
+      <div class='thumbnail' style={{this.backgroundURL @model.thumbnailURL}} />
+      <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
+      <p class='description'>{{@model.description}}</p>
+      <div class='byline'>{{this.authorName}}</div>
+      {{#if this.pubDate}}
+        {{#if @model.publishDate}}
+          <time class='date' timestamp={{toISOString @model.publishDate}}>
+            {{this.pubDate}}
+          </time>
+        {{/if}}
       {{/if}}
-    </div>
+    </article>
     <style scoped>
-      .fitted-template {
+      .fitted-blog-post {
         width: 100%;
         height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 10px;
-      }
-      .header {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        width: 100%;
-      }
-      .header > * {
+        display: grid;
         overflow: hidden;
-        text-overflow: ellipsis;
+      }
+      .thumbnail {
+        grid-area: img;
+        background-color: var(--boxel-200);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+      }
+      .title {
+        grid-area: title;
         display: -webkit-box;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        text-align: center;
-        margin: 0;
-        width: 100%;
-      }
-      .author {
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-450);
-        line-height: 1.27;
-        letter-spacing: 0.11px;
-        white-space: nowrap;
-      }
-      .content {
-        width: 100%;
+        -webkit-line-clamp: 3;
         overflow: hidden;
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 90%,
-          transparent 100%
-        );
-        mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
+        margin: 0;
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+      .description {
+        grid-area: desc;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+        overflow: hidden;
+        margin: 0;
+        font: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+      .byline {
+        grid-area: byline;
+        align-self: end;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .date {
+        grid-area: date;
+        align-self: end;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .byline,
+      .date {
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
       }
 
-      /* Aspect Ratio <= 1.0 */
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 150px) and (height < 150px)) {
-        .fitted-template {
-          justify-content: center;
+      @container fitted-card ((450px < width) and (height > 224px)) {
+        .fitted-blog-post {
+          grid-template:
+            'img title title' max-content
+            'img desc desc' max-content
+            'img byline date' 1fr / 40% 1fr 1fr;
+          gap: var(--boxel-sp-xs);
+          padding-right: var(--boxel-sp-xl);
+        }
+        .thumbnail {
+          margin-right: var(--boxel-sp-lg);
         }
         .title {
-          font: 700 var(--boxel-font-xs);
-          line-height: 1.27;
-          letter-spacing: 0.11px;
+          margin-top: var(--boxel-sp-lg);
+          font: 700 var(--boxel-font-lg);
+          line-height: 1.4;
+          letter-spacing: var(--boxel-lsp-xs);
         }
-        .author {
-          font: 700 var(--boxel-font-xs);
-          margin: 0;
+        .description {
+          font: var(--boxel-font);
+          letter-spacing: var(--boxel-lsp-xs);
         }
-        .content {
-          display: none;
+        .byline,
+        .date {
+          margin-bottom: var(--boxel-sp-lg);
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
         }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 120px) and (height < 120px)) {
-        .fitted-template {
-          justify-content: center;
-        }
-        .content {
-          display: none;
+        .date {
+          justify-self: end;
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 120px) and (height > 200px)) {
-        .content {
-          -webkit-line-clamp: 8;
+      @container fitted-card ((349px < width <= 450px) and (height > 224px)) {
+        .fitted-blog-post {
+          grid-template:
+            'img title title' max-content
+            'img desc desc' max-content
+            'img byline date' 1fr / 45% 1fr;
+          gap: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          padding-right: var(--boxel-sp-xs);
+        }
+        .title {
+          margin-top: var(--boxel-sp-xs);
+          font: 700 var(--boxel-font);
+        }
+        .description {
+          font: var(--boxel-font-sm);
+        }
+        .byline,
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .date {
+          justify-self: end;
         }
       }
-      /* 1.0 < Aspect Ratio <= 2.0 */
-      @container fitted-card (1.0 < aspect-ratio <= 2.0) and (width > 200px) and (height >= 180px) {
-        .content {
+
+      @container fitted-card ((185px < width <= 349px) and (height > 224px) ) {
+        .fitted-blog-post {
+          grid-template:
+            'img img' 100px
+            'title title' max-content
+            'desc desc' max-content
+            'byline date' 1fr / 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
+        }
+        .title {
+          font: 700 var(--boxel-font);
+        }
+        .description {
+          -webkit-line-clamp: 3;
+          font: var(--boxel-font-sm);
+        }
+        .byline,
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .date {
+          justify-self: end;
+        }
+      }
+
+      @container fitted-card ((width <= 185px) and (height > 224px) ) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 92px
+            'title' max-content
+            'desc' max-content
+            'byline' 1fr
+            'date' max-content / 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
+        }
+        .description {
           -webkit-line-clamp: 3;
         }
-      }
-      @container fitted-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
-        .title {
-          font: 700 var(--boxel-font-xs);
-          line-height: 1.27;
-          letter-spacing: 0.11px;
+        .byline {
+          align-self: start;
+          text-wrap: pretty;
         }
-        .author {
-          font: 700 var(--boxel-font-xs);
-          margin: 0;
-        }
-        .content {
-          display: none;
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
         }
       }
 
-      /* Aspect Ratio < 2.0 */
-      @container fitted-card (2.0 < aspect-ratio) {
-        .fitted-template {
-          justify-content: center;
-          padding: 0 5px;
+      /* Selected view: Strip */
+      @container fitted-card ((width = 300px) and (height = 115px) ) {
+        .fitted-blog-post {
+          grid-template:
+            'img title' max-content
+            'img byline' 1fr
+            'img date' max-content / 78px 1fr;
+          gap: var(--boxel-sp-xxxs);
         }
-        .header {
-          height: 100%;
-          justify-content: center;
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
         }
-        .content {
-          display: none;
-        }
-      }
-      @container fitted-card (2.0 < aspect-ratio) and (height <= 58px) {
         .title {
-          font: 700 var(--boxel-font-xs);
-          line-height: 1.27;
-          letter-spacing: 0.11px;
+          margin-top: var(--boxel-sp-xs);
         }
-        .author {
-          font: 700 var(--boxel-font-xs);
+        .description {
+          display: none;
+        }
+        .byline {
+          align-self: start;
+        }
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
         }
       }
-      @container fitted-card (2.0 < aspect-ratio) and (height <= 30px) {
-        .author {
+
+      /* Selected view: Grid */
+      @container fitted-card ((width = 164px) and (height = 224px)) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 92px
+            'title' max-content
+            'byline' 1fr
+            'date' max-content / 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .fitted-blog-post > *:not(.thumbnail) {
+          padding: 0 var(--boxel-sp-xs);
+        }
+        .description {
           display: none;
+        }
+        .byline {
+          align-self: start;
+        }
+        .date {
+          margin-bottom: var(--boxel-sp-xs);
         }
       }
     </style>

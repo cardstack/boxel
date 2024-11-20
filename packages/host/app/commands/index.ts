@@ -1,6 +1,5 @@
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
-import * as CreateModuleCommandModule from './create-module';
 import * as PatchCardCommandModule from './patch-card';
 import * as ReloadCardCommandModule from './reload-card';
 import * as SaveCardCommandModule from './save-card';
@@ -8,10 +7,6 @@ import * as ShowCardCommandModule from './show-card';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-module',
-    CreateModuleCommandModule,
-  );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card',
     PatchCardCommandModule,
