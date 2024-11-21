@@ -13,11 +13,14 @@ export type TempEvent = Partial<IEvent> & {
   error?: MatrixSDK.MatrixError;
 };
 
-export class RoomState {
-  @tracked _events: DiscreteMatrixEvent[] = [];
+export default class RoomState {
+  @tracked private _events: DiscreteMatrixEvent[] = [];
+  @tracked skills: Skill[] = [];
+
   get events() {
     return this._events;
   }
+
   addEvent(event: TempEvent, oldEventId?: string) {
     let { event_id: eventId, state_key: stateKey } = event;
     eventId = eventId ?? stateKey; // room state may not necessary have an event ID
@@ -63,5 +66,4 @@ export class RoomState {
     this._events[eventIndex] = event as unknown as DiscreteMatrixEvent;
     this._events = [...this._events];
   }
-  @tracked skills: Skill[] = [];
 }

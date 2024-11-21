@@ -49,7 +49,9 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomState, TempEvent } from '@cardstack/host/lib/matrix-classes/room';
+import RoomState, {
+  TempEvent,
+} from '@cardstack/host/lib/matrix-classes/room-state';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -112,7 +114,7 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private rooms: TrackedMap<string, RoomState> = new TrackedMap();
+  private roomStateMap: TrackedMap<string, RoomState> = new TrackedMap();
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -781,19 +783,19 @@ export default class MatrixService extends Service {
     }
   }
 
-  getRoom(roomId: string) {
-    return this.rooms.get(roomId);
+  getRoomState(roomId: string) {
+    return this.roomStateMap.get(roomId);
   }
 
-  private setRoom(roomId: string, room: RoomState) {
-    this.rooms.set(roomId, room);
+  private setRoomState(roomId: string, roomState: RoomState) {
+    this.roomStateMap.set(roomId, roomState);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,
         getRoom(
           this,
           () => roomId,
-          () => this.getRoom(roomId)?.events,
+          () => this.getRoomState(roomId)?.events,
         ),
       );
     }
@@ -819,7 +821,7 @@ export default class MatrixService extends Service {
   @cached
   get roomResources() {
     let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-    for (let roomId of this.rooms.keys()) {
+    for (let roomId of this.roomStateMap.keys()) {
       if (!this.roomResourcesCache.get(roomId)) {
         continue;
       }
@@ -829,7 +831,7 @@ export default class MatrixService extends Service {
   }
 
   private resetState() {
-    this.rooms = new TrackedMap();
+    this.roomStateMap = new TrackedMap();
     this.roomMembershipQueue = [];
     this.roomResourcesCache.clear();
     this.timelineQueue = [];
@@ -889,13 +891,13 @@ export default class MatrixService extends Service {
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let room = this.getRoom(roomId);
-    if (!room) {
-      room = new RoomState();
-      this.setRoom(roomId, room);
+    let roomState = this.getRoomState(roomId);
+    if (!roomState) {
+      roomState = new RoomState();
+      this.setRoomState(roomId, roomState);
     }
 
-    room.addEvent(event, oldEventId);
+    roomState.addEvent(event, oldEventId);
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
@@ -1055,7 +1057,7 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let roomState = await this.getRoom(roomId);
+    let roomState = await this.getRoomState(roomId);
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur

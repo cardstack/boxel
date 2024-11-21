@@ -44,7 +44,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
-import type { RoomState } from '../../lib/matrix-classes/room';
+import type RoomState from '../../lib/matrix-classes/room-state';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -175,7 +175,7 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(
     this,
     () => this.args.roomId,
-    () => this.matrixService.getRoom(this.args.roomId)?.events,
+    () => this.matrixService.getRoomState(this.args.roomId)?.events,
   );
   private autoAttachmentResource = getAutoAttachment(
     this,
@@ -261,8 +261,8 @@ export default class Room extends Component<Signature> {
   private loadRoomSkills = restartableTask(async () => {
     await this.roomResource.loading;
     let defaultSkills = await this.matrixService.loadDefaultSkills();
-    if (this.roomResource.room) {
-      this.roomResource.room.skills = defaultSkills;
+    if (this.roomResource.roomState) {
+      this.roomResource.roomState.skills = defaultSkills;
     }
   });
 
@@ -445,7 +445,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.roomResource.room;
+    let room = this.roomResource.roomState;
     return room;
   }
 
