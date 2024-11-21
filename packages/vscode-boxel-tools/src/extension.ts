@@ -4,8 +4,20 @@ import * as vscode from 'vscode';
 import { RealmFS } from './file-system-provider';
 import { SynapseAuthProvider } from './synapse-auth-provider';
 import { updateDiagnostics } from './diagnostics';
+import { SkillsProvider } from './skills';
+import { RealmAuth } from './realm-auth';
 
 export async function activate(context: vscode.ExtensionContext) {
+  const realmAuth = new RealmAuth();
+
+  const skillsProvider = new SkillsProvider(realmAuth);
+  vscode.window.createTreeView('codingSkillList', {
+    treeDataProvider: skillsProvider,
+  });
+  vscode.commands.registerCommand('boxel-tools.reloadSkills', () => {
+    skillsProvider.refresh();
+  });
+
   const diagnosticCollection =
     vscode.languages.createDiagnosticCollection('boxel-tools');
 
@@ -30,7 +42,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage('Logged out of synapse');
   });
 
-  const realmFs = new RealmFS(context);
+  const realmFs = new RealmFS(context, realmAuth, skillsProvider);
 
   console.log('Registering file system providers now');
   context.subscriptions.push(
@@ -72,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand(
     'boxel-tools.attachToBoxelWorkspaces',
     async (_) => {
+      const realmUrls = await realmAuth.getRealmUrls();
       if (
         !vscode.workspace.workspaceFolders ||
         vscode.workspace.workspaceFolders?.length == 0
@@ -79,7 +92,6 @@ export async function activate(context: vscode.ExtensionContext) {
         realmFs.resetSelectedRealms();
       }
 
-      const realmUrls = await realmFs.getRealmUrls();
       const selectedRealm = await vscode.window.showQuickPick(realmUrls, {
         canPickMany: false,
         placeHolder: 'Select a realm to open',

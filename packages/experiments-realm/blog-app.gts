@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action, get } from '@ember/object';
+import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
@@ -14,6 +15,8 @@ import {
 
 import {
   baseRealm,
+  CardError,
+  getCard,
   SupportedMimeType,
   type Query,
   type ResolvedCodeRef,
@@ -24,10 +27,12 @@ import {
   BoxelDropdown,
   Menu as BoxelMenu,
   CardContainer,
+  FieldContainer,
   FilterList,
+  Pill,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
@@ -35,6 +40,7 @@ import IconComponent from '@cardstack/boxel-icons/captions';
 import CategoriesIcon from '@cardstack/boxel-icons/hierarchy-3';
 import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
+import type { BlogPost } from './blog-post';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -83,6 +89,7 @@ interface SidebarFilter {
   createNewButtonText?: string;
   isCreateNewDisabled?: boolean;
   cardRef?: ResolvedCodeRef;
+  query?: Query;
 }
 const FILTERS: SidebarFilter[] = [
   {
@@ -194,6 +201,78 @@ class SortMenu extends GlimmerComponent<SortMenuSignature> {
   }
 }
 
+export const toISOString = (datetime: Date) => datetime.toISOString();
+
+export const formatDatetime = (
+  datetime: Date,
+  opts: Intl.DateTimeFormatOptions,
+) => {
+  const Format = new Intl.DateTimeFormat('en-US', opts);
+  return Format.format(datetime);
+};
+
+interface CardAdminViewSignature {
+  Args: {
+    cardId: string;
+  };
+  Element: HTMLElement;
+}
+class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
+  <template>
+    <div class='blog-admin' ...attributes>
+      {{#if this.resource.cardError}}
+        Error: Cannot render card "{{@cardId}}"
+      {{else if this.resource.card}}
+        {{#let this.resource.card as |card|}}
+          <FieldContainer
+            class='admin-data'
+            @label='Publish Date'
+            @vertical={{true}}
+          >
+            {{#if card.publishDate}}
+              <time timestamp={{toISOString card.publishDate}}>
+                {{this.formattedDate card.publishDate}}
+              </time>
+            {{else}}
+              N/A
+            {{/if}}
+          </FieldContainer>
+          <FieldContainer class='admin-data' @label='Status' @vertical={{true}}>
+            <Pill class='status-pill'>{{card.status}}</Pill>
+          </FieldContainer>
+        {{/let}}
+      {{/if}}
+    </div>
+    <style scoped>
+      .blog-admin {
+        display: inline-flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+      .admin-data {
+        --boxel-label-font: 600 var(--boxel-font-sm);
+      }
+      .status-pill {
+        --pill-background-color: var(--boxel-200);
+        font-weight: 400;
+      }
+    </style>
+  </template>
+
+  @tracked resource = getCard<BlogPost>(new URL(this.args.cardId));
+
+  formattedDate = (datetime: Date) => {
+    return formatDatetime(datetime, {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour12: true,
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+}
+
 interface BlogCardsGridSignature {
   Args: {
     query: Query;
@@ -220,7 +299,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
           <:response as |cards|>
             {{#each cards as |card|}}
               <li
-                class='card'
+                class='blog-card {{@selectedView}}-view-container'
                 {{@context.cardComponentModifier
                   cardId=card.url
                   format='data'
@@ -228,9 +307,15 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
                   fieldName=undefined
                 }}
               >
-                <CardContainer @displayBoundaries='true'>
-                  {{card.component}}
+                <CardContainer
+                  class='card'
+                  @displayBoundaries={{not (eq @selectedView 'card')}}
+                >
+                  <card.component />
                 </CardContainer>
+                {{#if (eq @selectedView 'card')}}
+                  <BlogAdminData @cardId={{card.url}} />
+                {{/if}}
               </li>
             {{/each}}
           </:response>
@@ -240,33 +325,43 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
     <style scoped>
       .blog-cards {
         display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
-        );
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
         grid-auto-rows: var(--grid-card-height);
         gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
-        padding: var(--boxel-sp-6xs);
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xl) var(--boxel-sp-6xs)
+          var(--boxel-sp-6xs);
         overflow: auto;
       }
       .card-view {
-        --grid-card-height: 21.875rem; /* 350px */
+        --grid-card-width: 1fr;
+        --grid-card-height: 300px;
       }
       .strip-view {
-        --grid-card-min-width: 21.875rem;
-        --grid-card-max-width: calc(50% - var(--boxel-sp));
-        --grid-card-height: 6.125rem;
+        --grid-card-width: 300px;
+        --grid-card-height: 115px;
       }
       .grid-view {
-        --grid-card-min-width: 11.125rem;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: 15.125rem;
+        --grid-card-width: 164px;
+        --grid-card-height: 224px;
+      }
+      .blog-card {
+        max-width: 1440px;
+      }
+      .card-view-container {
+        display: grid;
+        grid-template-columns: 1fr 200px;
+        gap: var(--boxel-sp-lg);
+        padding: 10px;
       }
       .card {
         container-name: fitted-card;
         container-type: size;
+      }
+      .card-view-container :deep(article) {
+        border-radius: var(--boxel-border-radius);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-500);
       }
     </style>
   </template>
@@ -326,12 +421,14 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @onSort={{this.onSort}}
           />
         </header>
-        <BlogCardsGrid
-          @selectedView={{this.selectedView}}
-          @context={{@context}}
-          @query={{this.query}}
-          @realms={{this.realms}}
-        />
+        {{#if this.query}}
+          <BlogCardsGrid
+            @selectedView={{this.selectedView}}
+            @context={{@context}}
+            @query={{this.query}}
+            @realms={{this.realms}}
+          />
+        {{/if}}
       </section>
     </section>
     <style scoped>
@@ -441,7 +538,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   @tracked private selectedSort: SortOption = this.sortOptions[0];
   @tracked private activeFilter: SidebarFilter = this.filters[0];
 
-  constructor(owner: any, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.loadCardTypes.perform();
   }
@@ -451,28 +548,21 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private get query() {
-    let query = {
-      filter: { eq: { _cardType: this.activeFilter.cardTypeName } },
-    };
-    return { ...query, sort: this.selectedSort.sort };
+    if (this.loadCardTypes.isIdle && this.activeFilter.query) {
+      return { ...this.activeFilter.query, sort: this.selectedSort.sort };
+    }
+    return undefined;
   }
 
   private loadCardTypes = restartableTask(async () => {
-    let response = await fetch(`${this.realms[0]}_types`, {
+    let url = `${this.realms[0]}_types`;
+    let response = await fetch(url, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
       },
     });
     if (!response.ok) {
-      let responseText = await response.text();
-      let err = new Error(
-        `status: ${response.status} -
-          ${response.statusText}. ${responseText}`,
-      ) as any;
-
-      err.status = response.status;
-      err.responseText = responseText;
-
+      let err = await CardError.fromFetchResponse(url, response);
       throw err;
     }
     let cardTypeSummaries = (await response.json()).data as {
@@ -485,14 +575,15 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         (s) => s.attributes.displayName === filter.cardTypeName,
       );
       if (!summary) {
-        console.error(`Card type summary not found for ${filter.displayName}`);
         return;
       }
       const lastIndex = summary.id.lastIndexOf('/');
-      filter.cardRef = {
+      let cardRef = {
         module: summary.id.substring(0, lastIndex),
         name: summary.id.substring(lastIndex + 1),
       };
+      filter.cardRef = cardRef;
+      filter.query = { filter: { type: cardRef } };
     }
   });
 
@@ -516,9 +607,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   private createCard = restartableTask(async () => {
     let ref = this.activeFilter.cardRef;
     if (!ref) {
-      console.error(
-        `Can not create new ${this.activeFilter.cardTypeName}. CardRef is not found.`,
-      );
       return;
     }
     let currentRealm = this.realms[0];

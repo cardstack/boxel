@@ -1,8 +1,5 @@
-import { eq } from '@cardstack/boxel-ui/helpers';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-
-import { cssVar } from '../../helpers.ts';
 
 export type BoxelProgressBarPosition = 'start' | 'center' | 'end';
 
@@ -12,7 +9,6 @@ interface Signature {
     max: number;
     position?: BoxelProgressBarPosition;
     value: number;
-    variant?: 'horizontal' | 'circular';
   };
   Element: HTMLDivElement;
 }
@@ -43,30 +39,17 @@ export default class ProgressBar extends Component<Signature> {
       aria-label={{@label}}
       ...attributes
     >
-      {{#if (eq @variant 'circular')}}
-        <div
-          class='progress-bar-circular'
-          style={{cssVar progressPercentage=this.progressPercentage}}
-        >
-          <div class='progress-bar-circular-inner'>
-            <span class='progress-percentage'>{{this.progressPercentage}}</span>
-          </div>
-        </div>
-      {{else}}
-        <div class='progress-bar-horizontal'>
-          <div class='progress-bar-container'>
-            <div class='progress-bar-value' style={{this.progressWidth}}>
-              <div class='progress-bar-info {{this.progressBarPosition}}'>
-                <div class='progress-bar-label'>
-                  {{#if @label}}
-                    {{@label}}
-                  {{/if}}
-                </div>
-              </div>
+      <div class='progress-bar-container'>
+        <div class='progress-bar-value' style={{this.progressWidth}}>
+          <div class='progress-bar-info {{this.progressBarPosition}}'>
+            <div class='progress-bar-label'>
+              {{#if @label}}
+                {{@label}}
+              {{/if}}
             </div>
           </div>
         </div>
-      {{/if}}
+      </div>
     </div>
 
     <style scoped>
@@ -88,9 +71,8 @@ export default class ProgressBar extends Component<Signature> {
             --boxel-progress-bar-font-color,
             var(--boxel-light)
           );
-          --progress-bar-size: 80px;
         }
-        .progress-bar-horizontal {
+        .progress-bar-container {
           height: 1.5em;
           width: 100%;
           background-color: var(--progress-bar-background-color);
@@ -99,15 +81,8 @@ export default class ProgressBar extends Component<Signature> {
           overflow: hidden;
           border: 1px solid var(--boxel-200);
         }
-        .progress-bar-container {
-          height: 100%;
-          width: 100%;
-          position: absolute;
-          top: 0;
-          left: 0;
-        }
         .progress-bar-value {
-          position: relative;
+          position: absolute;
           height: 100%;
           background-color: var(--progress-bar-fill-color);
           border-radius: var(--progress-bar-border-radius) 0 0
@@ -138,31 +113,6 @@ export default class ProgressBar extends Component<Signature> {
           overflow: hidden;
           text-overflow: ellipsis;
           color: var(--progress-bar-font-color);
-        }
-        .progress-bar-circular {
-          width: var(--progress-bar-size);
-          height: var(--progress-bar-size);
-          border-radius: 50%;
-          position: relative;
-          background: conic-gradient(
-            var(--progress-bar-fill-color) 0 var(--progressPercentage),
-            var(--progress-bar-background-color) var(--progressPercentage)
-              80.15%
-          );
-        }
-        .progress-bar-circular-inner {
-          position: absolute;
-          inset: 10px;
-          background: var(--boxel-light);
-          border-radius: 50%;
-          display: grid;
-          place-items: center;
-        }
-
-        .progress-percentage {
-          font-size: var(--boxel-font-sm);
-          font-weight: 600;
-          color: var(--boxel-dark);
         }
       }
     </style>

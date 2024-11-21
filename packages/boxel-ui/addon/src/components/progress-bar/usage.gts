@@ -15,7 +15,6 @@ export default class ProgressBarUsage extends Component {
   @tracked value = 20;
   @tracked label = '';
   @tracked position: BoxelProgressBarPosition = 'end';
-  @tracked variant: 'horizontal' | 'circular' = 'horizontal';
 
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
   declare boxelProgressBarBackgroundColor: CSSVariableInfo;
@@ -52,7 +51,6 @@ export default class ProgressBarUsage extends Component {
             @max={{this.max}}
             @position={{this.position}}
             @label={{this.label}}
-            @variant={{this.variant}}
           />
         </:example>
         <:api as |Args|>
@@ -81,13 +79,6 @@ export default class ProgressBarUsage extends Component {
             @description='Position of the progress bar info'
             @onInput={{fn (mut this.position)}}
           />
-          <Args.String
-            @name='variant'
-            @value={{this.variant}}
-            @options={{array 'horizontal' 'circular'}}
-            @description='Variant of the progress bar'
-            @onInput={{fn (mut this.variant)}}
-          />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
@@ -108,7 +99,7 @@ export default class ProgressBarUsage extends Component {
           />
           <Css.Basic
             @name='boxel-progress-bar-border-radius'
-            @type='size'
+            @type='length'
             @description='Border radius of the progress bar'
             @defaultValue={{this.boxelProgressBarBorderRadius.defaults}}
             @value={{this.boxelProgressBarBorderRadius.value}}
@@ -132,17 +123,6 @@ export default class ProgressBarUsage extends Component {
             @max={{this.max}}
             @position={{this.position}}
             @label={{this.progressValue}}
-            @variant={{'horizontal'}}
-          />
-        </:example>
-      </FreestyleUsage>
-
-      <FreestyleUsage @name='Circular progress bar'>
-        <:example>
-          <BoxelProgressBar
-            @value={{this.value}}
-            @max={{this.max}}
-            @variant={{'circular'}}
           />
         </:example>
       </FreestyleUsage>

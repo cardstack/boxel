@@ -113,6 +113,7 @@ export class ServerState {
     >,
     overrides?: { state_key?: string; origin_server_ts?: number },
   ) {
+    // duplicate the event fully
     let room = event.room_id && this.#rooms.get(event.room_id);
     if (!room) {
       throw new Error(`room ${event.room_id} does not exist`);
@@ -137,8 +138,9 @@ export class ServerState {
       relatesTo.event_id = relatesTo.event_id.replace(/__EVENT_ID__/g, eventId);
     }
     room.events.push(matrixEvent);
-    this.#listeners.forEach((listener) => listener(matrixEvent));
-
+    setTimeout(() => {
+      this.#listeners.forEach((listener) => listener(matrixEvent));
+    }, 0);
     return matrixEvent.event_id;
   }
 
@@ -224,7 +226,7 @@ export class ServerState {
     if (!room) {
       throw new Error(`room ${roomId} does not exist`);
     }
-    return room.events;
+    return [...room.events];
   }
 
   eventId(): string {

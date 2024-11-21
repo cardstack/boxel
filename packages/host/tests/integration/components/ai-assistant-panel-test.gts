@@ -390,8 +390,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -458,8 +462,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Evie' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -479,8 +487,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Jackie' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Jackie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -542,82 +554,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
   });
 
-  test('it only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
-    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-
-    let otherCardID = `${testRealmURL}Person/burcu`;
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'i am the body',
-      msgtype: 'org.boxel.command',
-      formatted_body:
-        'A patch<pre><code>https://www.example.com/path/to/resource?query=param1value&anotherQueryParam=anotherValue&additionalParam=additionalValue&longparameter1=someLongValue1</code></pre>',
-      format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'patchCard',
-          arguments: {
-            card_id: otherCardID,
-            attributes: { firstName: 'Dave' },
-          },
-        },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
-    });
-
-    await waitFor('[data-test-command-apply="ready"]');
-    await click('[data-test-command-apply]');
-
-    await waitFor('[data-test-command-card-idle]');
-    assert
-      .dom('[data-test-card-error]')
-      .containsText(`Please open card '${otherCardID}' to make changes to it.`);
-    assert.dom('[data-test-apply-state="failed"]').exists();
-    assert.dom('[data-test-ai-bot-retry-button]').exists();
-    assert.dom('[data-test-command-apply]').doesNotExist();
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
-      'mouseenter',
-    );
-    await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
-    await percySnapshot(
-      'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
-    );
-
-    await setCardInOperatorModeState(otherCardID);
-    await waitFor('[data-test-person="Burcu"]');
-    click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
-    await waitFor('[data-test-apply-state="applying"]');
-    assert.dom('[data-test-apply-state="applying"]').exists();
-
-    await waitFor('[data-test-command-card-idle]');
-    await waitFor('[data-test-apply-state="applied"]');
-    assert.dom('[data-test-apply-state="applied"]').exists();
-    assert.dom('[data-test-person]').hasText('Dave');
-    assert.dom('[data-test-command-apply]').doesNotExist();
-    assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
-
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
-      'mouseenter',
-    );
-    assert
-      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
-      .exists();
-    await percySnapshot(
-      'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
-    );
-  });
-
   test('it can apply change to nested contains field', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
@@ -627,10 +563,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let payload = {
       name: 'patchCard',
       arguments: {
-        card_id: `${testRealmURL}Person/fadhlan`,
         attributes: {
-          firstName: 'Joy',
-          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+          cardId: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: {
+              firstName: 'Joy',
+              address: { shippingInfo: { preferredCarrier: 'UPS' } },
+            },
+          },
         },
       },
       eventId: 'event1',
@@ -658,14 +598,18 @@ module('Integration | ai-assistant-panel', function (hooks) {
         name: 'patchCard',
         payload: {
           attributes: {
-            address: {
-              shippingInfo: {
-                preferredCarrier: 'UPS',
+            cardId: 'http://test-realm/test/Person/fadhlan',
+            patch: {
+              attributes: {
+                address: {
+                  shippingInfo: {
+                    preferredCarrier: 'UPS',
+                  },
+                },
+                firstName: 'Joy',
               },
             },
-            firstName: 'Joy',
           },
-          card_id: 'http://test-realm/test/Person/fadhlan',
         },
       },
       'it can preview code when a change is proposed',
@@ -698,12 +642,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
             attributes: {
-              address: { shippingInfo: { preferredCarrier: 'Fedex' } },
-            },
-            relationships: {
-              pet: { links: { self: null } },
+              cardId: id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'Fedex' } },
+                },
+                relationships: {
+                  pet: { links: { self: null } },
+                },
+              },
             },
           },
         },
@@ -736,13 +684,17 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
             attributes: {
-              address: { shippingInfo: { preferredCarrier: 'UPS' } },
-            },
-            relationships: {
-              pet: {
-                links: { self: `${testRealmURL}Pet/mango` },
+              cardId: id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'UPS' } },
+                },
+                relationships: {
+                  pet: {
+                    links: { self: `${testRealmURL}Pet/mango` },
+                  },
+                },
               },
             },
           },
@@ -785,8 +737,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-            attributes: { trips: { tripTitle: 'Trip to Japan' } },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: {
+                  trips: {
+                    tripTitle: 'Trip to Japan',
+                  },
+                },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -819,9 +779,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -862,8 +825,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-            attributes: { firstName: 'Jackie' },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: { firstName: 'Jackie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -923,8 +890,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -1198,7 +1169,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
-
     await waitFor('[data-test-ai-assistant-message].is-error');
     await waitUntil(
       () =>
@@ -1231,8 +1201,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -1892,8 +1866,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Evie' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -1961,11 +1939,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
@@ -2025,11 +2005,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
@@ -2084,10 +2066,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              contains: {
-                title: 'Mango',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                contains: {
+                  title: 'Mango',
+                },
               },
             },
           },
@@ -2140,11 +2124,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
               },
             },
           },
@@ -2190,10 +2176,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const roomId = await renderAiAssistantPanel(id);
     const toolArgs = {
       description: 'Search for Person cards',
-      filter: {
-        type: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
+      attributes: {
+        filter: {
+          type: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
         },
       },
     };
@@ -2249,7 +2237,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasText(`Description ${toolArgs.description}`);
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
@@ -2263,10 +2251,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const roomId = await renderAiAssistantPanel(id);
     const toolArgs = {
       description: 'Search for Person cards',
-      filter: {
-        type: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
+      attributes: {
+        filter: {
+          type: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
         },
       },
     };
@@ -2324,7 +2314,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasText(`Description ${toolArgs.description}`);
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });

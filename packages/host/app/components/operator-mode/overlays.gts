@@ -193,7 +193,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         container-type: size;
       }
       .actions-overlay.selected {
-        box-shadow: 0 0 0 2px var(--boxel-highlight);
+        box-shadow: 0 0 0 var(--boxel-outline-width) var(--boxel-highlight);
       }
       .hovered {
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);

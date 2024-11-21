@@ -16,8 +16,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../app-task-card",
-        "name": "AppTaskCard"
+        "module": "../work-tracker",
+        "name": "WorkTracker"
       }
     }
   }
