@@ -253,12 +253,10 @@ process.env.STRIPE_WEBHOOK_SECRET =
   'whsec_xxxxx';
 ```
 
-4. Set Free plan `stripe_plan_id` in database manually
+4. Go to `packages/realm-server` and run the following command to sync the stripe products to the database, make sure you have the stripe api key set
 
 ```
-psql -h localhost -p 5435 -U postgres
-\c boxel
-UPDATE plans SET stripe_plan_id = 'prod_{id_from_stripe_product}' WHERE name='Free';
+pnpm sync-stripe-products
 ```
 
 5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)
