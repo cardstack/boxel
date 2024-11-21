@@ -132,4 +132,22 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('ethers', ethers);
   virtualNetwork.shimModule('super-fast-md5', { md5: (_data: string) => {} });
   virtualNetwork.shimModule('matrix-js-sdk', {});
+  virtualNetwork.shimModule('@cardstack/boxel-host/commands/create-module', {
+    default: class {},
+  });
+  virtualNetwork.shimModule('@cardstack/boxel-host/commands/patch-card', {
+    default: class {},
+  });
+  virtualNetwork.shimModule('@cardstack/boxel-host/commands/reload-card', {
+    default: class {},
+  });
+  virtualNetwork.shimModule('@cardstack/boxel-host/commands/save-card', {
+    default: class {},
+  });
+  virtualNetwork.shimModule('@cardstack/boxel-host/commands/show-card', {
+    default: class {},
+  });
+  virtualNetwork.shimModule('@cardstack/boxel-host/commands/switch-submode', {
+    default: class {},
+  });
 }

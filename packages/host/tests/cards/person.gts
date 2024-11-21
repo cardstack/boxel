@@ -1,5 +1,7 @@
 import { on } from '@ember/modifier';
 
+import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+
 import {
   contains,
   field,
@@ -7,7 +9,6 @@ import {
   CardDef,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import { SwitchSubmodeInput } from 'https://cardstack.com/base/command';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
@@ -35,10 +36,7 @@ export class Person extends CardDef {
         console.error('No command context found');
         return;
       }
-      let switchSubmodeCommand = commandContext.lookupCommand<
-        SwitchSubmodeInput,
-        undefined
-      >('switch-submode');
+      let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
       commandContext.sendAiAssistantMessage({
         prompt: 'Switch to code mode',
         commands: [{ command: switchSubmodeCommand, autoExecute: true }],

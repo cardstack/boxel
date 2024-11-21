@@ -8,10 +8,9 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { ProductRequirementDocument } from '../product-requirement-document';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
-import {
-  PatchCardInput,
-  SaveCardInput,
-} from 'https://cardstack.com/base/command';
+import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
+import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
@@ -54,11 +53,7 @@ export default class CreateProductRequirementsInstance extends Command<
     let prdCard = new ProductRequirementDocument();
     console.log('prdCard', prdCard);
 
-    let saveCardCommand = this.commandContext.lookupCommand<
-      SaveCardInput,
-      undefined
-    >('save-card'); // lookupCommand creates the instance and passes in the context
-    console.log('saveCardCommand', saveCardCommand);
+    let saveCardCommand = new SaveCardCommand(this.commandContext);
     let SaveCardInputType = await saveCardCommand.getInputType();
     await saveCardCommand.execute(
       new SaveCardInputType({
@@ -69,12 +64,9 @@ export default class CreateProductRequirementsInstance extends Command<
     console.log('prdCard after save', prdCard);
 
     // Get patch command, this takes the card and returns a command that can be used to patch the card
-    let patchPRDCommand = this.commandContext.lookupCommand<
-      PatchCardInput,
-      undefined,
-      { cardType: typeof ProductRequirementDocument }
-    >('patch-card', { cardType: ProductRequirementDocument });
-    console.log('patchPRDCommand', patchPRDCommand);
+    let patchPRDCommand = new PatchCardCommand(this.commandContext, {
+      cardType: ProductRequirementDocument,
+    });
 
     // This should return a session ID so that we can potentially send followup messages
     // This should delegate to a matrix service method. Besides actually sending the message,
@@ -102,10 +94,7 @@ export default class CreateProductRequirementsInstance extends Command<
 
     console.log('prdCard after patch', prdCard);
 
-    let reloadCommand = await this.commandContext.lookupCommand<
-      CardDef,
-      undefined
-    >('reload-card');
+    let reloadCommand = new ReloadCardCommand(this.commandContext);
     await reloadCommand.execute(prdCard);
     console.log('prdCard after reload', prdCard);
     let result = new CreateProductRequirementsResult();

@@ -1,17 +1,20 @@
 import { service } from '@ember/service';
 
-import { Command, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
 
-import type CardService from '../services/card-service';
-import type LoaderService from '../services/loader-service';
+import HostBaseCommand from '../lib/host-base-command';
 
-export default class ReloadCardCommand extends Command<CardDef, undefined> {
+import type CardService from '../services/card-service';
+
+export default class ReloadCardCommand extends HostBaseCommand<
+  CardDef,
+  undefined
+> {
   @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
 
   async getInputType() {
     let cardApiModule = await this.loaderService.loader.import<

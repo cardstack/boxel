@@ -55,7 +55,7 @@ export default class CommandService extends Service {
     command: Command<any, any, any>,
     autoExecute: boolean,
   ) {
-    let name = `${command.name}_${shortenUuid(uuidv4())}`; //TODO: use a short uuid here instead -- we need uniqueness across browser runtime instances
+    let name = `${command.name}_${shortenUuid(uuidv4())}`;
     this.commands.set(name, { command, autoExecute });
     return name;
   }
@@ -88,43 +88,15 @@ export default class CommandService extends Service {
     );
   }
 
-  //TODO use create[CommandName] methods to create commands instead of lookupCommand to solve type issues and avoid embroider issues
-  //   OR
-  //TODO use imports and leverage with custom loader maybe import SaveCard from 'http://cardstack.com/host/commannds/save-card'
-  lookupCommand = <
-    CardInputType extends CardDef | undefined,
-    CardResultType extends CardDef | undefined,
-    CommandConfiguration extends any | undefined,
-  >(
-    name: string,
-    configuration: CommandConfiguration | undefined,
-  ): Command<CardInputType, CardResultType, CommandConfiguration> => {
-    let owner = getOwner(this)!;
-    let commandFactory = owner.factoryFor(`command:${name}`);
-    if (!commandFactory) {
-      throw new Error(`Could not find command "${name}"`);
-    }
-    let CommandClass = commandFactory.class as unknown as {
-      new (
-        commandContext: CommandContext,
-        commandConfiguration: CommandConfiguration | undefined,
-      ): Command<CardInputType, CardResultType, CommandConfiguration>;
-    };
-    let instance = new CommandClass(
-      this.commandContext,
-      configuration,
-    ) as Command<CardInputType, CardResultType, CommandConfiguration>;
-    setOwner(instance, owner);
-    return instance;
-  };
-
   get commandContext(): CommandContext {
-    return {
-      lookupCommand: this.lookupCommand,
+    let result = {
       sendAiAssistantMessage: (
         ...args: Parameters<MatrixService['sendAiAssistantMessage']>
       ) => this.matrixService.sendAiAssistantMessage(...args),
     };
+    setOwner(result, getOwner(this)!);
+
+    return result;
   }
 
   //TODO: Convert to non-EC async method after fixing CS-6987

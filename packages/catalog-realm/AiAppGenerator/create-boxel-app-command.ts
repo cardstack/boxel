@@ -1,9 +1,9 @@
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import { ShowCardInput } from 'https://cardstack.com/base/command';
 import { Command } from '@cardstack/runtime-common';
 import CreateProductRequirementsInstance, {
   CreateProductRequirementsInput,
 } from './create-product-requirements-command';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 
 export { CreateProductRequirementsInput };
 
@@ -22,11 +22,9 @@ export default class CreateBoxelApp extends Command<
     let { productRequirements: prdCard } = await createPRDCommand.execute(
       input,
     );
-    let showCardCommand = this.commandContext.lookupCommand<
-      ShowCardInput,
-      undefined
-    >('show-card');
-    let showPRDCardInput = new ShowCardInput();
+    let showCardCommand = new ShowCardCommand(this.commandContext);
+    let ShowPRDCardInput = await showCardCommand.getInputType();
+    let showPRDCardInput = new ShowPRDCardInput();
     showPRDCardInput.cardToShow = prdCard;
     await showCardCommand.execute(showPRDCardInput);
     return prdCard;

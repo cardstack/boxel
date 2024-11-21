@@ -11,6 +11,7 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
+import { shimHostCommands } from '../commands/index';
 import { shimExternals } from '../lib/externals';
 
 import type LoaderService from './loader-service';
@@ -87,6 +88,7 @@ export default class NetworkService extends Service {
       );
     }
     shimExternals(virtualNetwork);
+    shimHostCommands(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
