@@ -119,8 +119,8 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   private rooms: TrackedMap<string, RoomState> = new TrackedMap();
+  private roomResourcesCache: Map<string, RoomResource> = new Map();
 
-  roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -841,7 +841,7 @@ export default class MatrixService extends Service {
 
   @cached
   get roomResources() {
-    let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+    let resources: Map<string, RoomResource> = new Map();
     for (let roomId of this.rooms.keys()) {
       if (!this.roomResourcesCache.get(roomId)) {
         continue;
@@ -902,6 +902,13 @@ export default class MatrixService extends Service {
       undefined,
     );
     return card;
+  }
+
+  async leaveRoom(roomId: string) {
+    await this.client.leave(roomId);
+    await this.client.forget(roomId);
+    this.roomResourcesCache.delete(roomId);
+    this.rooms.delete(roomId);
   }
 
   private addRoomEvent(event: TempEvent, oldEventId?: string) {

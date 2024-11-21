@@ -7,7 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
 
@@ -30,10 +30,7 @@ import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
-import {
-  isMatrixError,
-  eventDebounceMs,
-} from '@cardstack/host/lib/matrix-utils';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -394,7 +391,6 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   }
 
-  @cached
   private get roomResources() {
     return this.matrixService.roomResources;
   }
@@ -545,10 +541,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
-      await this.matrixService.client.leave(roomId);
-      await this.matrixService.client.forget(roomId);
-      await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-      this.matrixService.roomResourcesCache.delete(roomId);
+      await this.matrixService.leaveRoom(roomId);
 
       if (this.newSessionId === roomId) {
         window.localStorage.removeItem(newSessionIdPersistenceKey);
