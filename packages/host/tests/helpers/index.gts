@@ -723,8 +723,4 @@ export function setupRealmServerEndpoints(
   hooks.beforeEach(function () {
     lookupNetworkService().mount(handleRealmServerRequest, { prepend: true });
   });
-
-  hooks.afterEach(function () {
-    lookupNetworkService().virtualNetwork.unmount(handleRealmServerRequest);
-  });
 }
