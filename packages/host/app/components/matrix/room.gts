@@ -68,25 +68,23 @@ export default class Room extends Component<Signature> {
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#if this.messages}}
-            {{#each this.messages as |message i|}}
-              <RoomMessage
-                @roomId={{@roomId}}
-                @message={{message}}
-                @index={{i}}
-                @registerScroller={{this.registerMessageScroller}}
-                @isPending={{this.isPendingMessage message}}
-                @monacoSDK={{@monacoSDK}}
-                @isStreaming={{this.isMessageStreaming message i}}
-                @currentEditor={{this.currentMonacoContainer}}
-                @setCurrentEditor={{this.setCurrentMonacoContainer}}
-                @retryAction={{this.maybeRetryAction i message}}
-                data-test-message-idx={{i}}
-              />
-            {{/each}}
+          {{#each this.messages as |message i|}}
+            <RoomMessage
+              @roomId={{@roomId}}
+              @message={{message}}
+              @index={{i}}
+              @registerScroller={{this.registerMessageScroller}}
+              @isPending={{this.isPendingMessage message}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @retryAction={{this.maybeRetryAction i message}}
+              data-test-message-idx={{i}}
+            />
           {{else}}
             <NewSession @sendPrompt={{this.sendMessage}} />
-          {{/if}}
+          {{/each}}
           {{#if this.room}}
             {{#if this.showUnreadIndicator}}
               <div class='unread-indicator'>
