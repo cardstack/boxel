@@ -3870,6 +3870,21 @@ module('Realm Server', function (hooks) {
     let matrixClient: MatrixClient;
     let roomId: string;
     let userId = '@test_realm:localhost';
+    let waitForBillingNotification = async function (
+      assert: Assert,
+      done: () => void,
+    ) {
+      let messages = await matrixClient.roomMessages(roomId);
+      if (messages[0].content.msgtype === 'org.boxel.realm-server-event') {
+        assert.strictEqual(
+          messages[0].content.body,
+          JSON.stringify({ eventType: 'billing-notification' }),
+        );
+        done();
+      } else {
+        setTimeout(() => waitForBillingNotification(assert, done), 1);
+      }
+    };
 
     setupPermissionedRealm(hooks, {
       '*': ['read', 'write'],
@@ -4140,6 +4155,7 @@ module('Realm Server', function (hooks) {
 
       assert.strictEqual(subscriptions[1].status, 'active');
       assert.strictEqual(subscriptions[1].planId, freePlan.id);
+      waitForBillingNotification(assert, assert.async());
     });
 
     test('ensures the current subscription expires when free plan subscription fails', async function (assert) {
@@ -4317,7 +4333,7 @@ module('Realm Server', function (hooks) {
       );
     });
 
-    test('sends billing notification on successful Stripe webhook handling', async function (assert) {
+    test('sends billing notification on invoice payment succeeded event', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
       await insertUser(dbAdapter, userId!, 'cus_123');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
@@ -4364,21 +4380,46 @@ module('Realm Server', function (hooks) {
         .set('Accept', 'application/json')
         .set('Content-Type', 'application/json')
         .set('stripe-signature', signature);
+      waitForBillingNotification(assert, assert.async());
+    });
 
-      let done = assert.async();
-      let waitForBillingNotification = async function () {
-        let messages = await matrixClient.roomMessages(roomId);
-        if (messages[0].content.msgtype === 'org.boxel.realm-server-event') {
-          assert.strictEqual(
-            messages[0].content.body,
-            JSON.stringify({ eventType: 'billing-notification' }),
-          );
-          done();
-        } else {
-          setTimeout(waitForBillingNotification, 1);
-        }
+    test('sends billing notification on checkout session completed event', async function (assert) {
+      const secret = process.env.STRIPE_WEBHOOK_SECRET;
+      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
+      if (!secret) {
+        throw new Error('STRIPE_WEBHOOK_SECRET is not set');
+      }
+      let event = {
+        id: 'evt_1234567890',
+        object: 'event',
+        data: {
+          object: {
+            id: 'cs_test_1234567890',
+            object: 'checkout.session',
+            client_reference_id: userId,
+            customer: 'cus_123',
+            metadata: {},
+          },
+        },
+        type: 'checkout.session.completed',
       };
-      waitForBillingNotification();
+
+      let payload = JSON.stringify(event);
+      let timestamp = Math.floor(Date.now() / 1000);
+      let signature = Stripe.webhooks.generateTestHeaderString({
+        payload,
+        secret,
+        timestamp,
+      });
+
+      await request
+        .post('/_stripe-webhook')
+        .send(payload)
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('stripe-signature', signature);
+      waitForBillingNotification(assert, assert.async());
     });
   });
 });
