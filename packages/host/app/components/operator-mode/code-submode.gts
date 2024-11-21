@@ -311,7 +311,7 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
-  private get fileErrorMessages() {
+  private get fileErrorMessages(): string[] {
     if (this.isCard) {
       if (this.cardResource.cardError) {
         try {
