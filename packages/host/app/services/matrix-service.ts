@@ -14,7 +14,6 @@ import {
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
-  type IEvent,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
@@ -50,7 +49,7 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+import { RoomState, TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -92,11 +91,6 @@ const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
-
-type TempEvent = Partial<IEvent> & {
-  status: MatrixSDK.EventStatus | null;
-  error?: MatrixSDK.MatrixError;
-};
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -888,27 +882,8 @@ export default class MatrixService extends Service {
   }
 
   private addRoomEvent(event: TempEvent, oldEventId?: string) {
-    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
-    // If we are receiving an event which contains
-    // a data field, we may need to parse it
-    // because matrix doesn't support all json types
-    // Corresponding encoding is done in
-    // sendEvent in the matrix-service
-    if (event.content?.data) {
-      if (typeof event.content.data === 'string') {
-        event.content.data = JSON.parse(event.content.data);
-      }
-    }
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
-    if (!eventId) {
-      throw new Error(
-        `bug: event ID is undefined for event ${JSON.stringify(
-          event,
-          null,
-          2,
-        )}`,
-      );
-    }
+    let { room_id: roomId } = event;
+
     if (!roomId) {
       throw new Error(
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
@@ -920,26 +895,7 @@ export default class MatrixService extends Service {
       this.setRoom(roomId, room);
     }
 
-    // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-    let matchingEvents = room.events.filter(
-      (e) => e.event_id === eventId || e.event_id === oldEventId,
-    );
-    if (matchingEvents.length > 1) {
-      throw new Error(
-        `bug: ${matchingEvents.length} events with the same event_id(s): ${eventId}, ${oldEventId}, expected a maximum of 1`,
-      );
-    }
-    if (matchingEvents.length === 0) {
-      room.events = [
-        ...(room.events ?? []),
-        event as unknown as DiscreteMatrixEvent,
-      ];
-      return;
-    }
-    let eventToReplace = matchingEvents[0];
-    let eventIndex = room.events.indexOf(eventToReplace);
-    room.events[eventIndex] = event as unknown as DiscreteMatrixEvent;
-    room.events = [...room.events];
+    room.addEvent(event, oldEventId);
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
