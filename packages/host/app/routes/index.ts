@@ -33,6 +33,7 @@ export default class Index extends Route<void> {
   @service private declare router: RouterService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+
   didMatrixServiceStart = false;
 
   async fetchCard(url: string) {

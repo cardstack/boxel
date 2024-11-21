@@ -53,7 +53,6 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       width: 550px;
       position: relative;
     }
-
     .header {
       --boxel-header-padding: var(--boxel-sp);
       --boxel-header-text-font: var(--boxel-font);
@@ -65,7 +64,6 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-xxs);
       letter-spacing: var(--boxel-lsp-lg);
     }
-
     .content {
       display: flex;
       flex-direction: column;

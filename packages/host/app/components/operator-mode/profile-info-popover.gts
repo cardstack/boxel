@@ -14,7 +14,6 @@ import {
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import config from '@cardstack/host/config/environment';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -138,62 +137,65 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      <div class='credit-info' data-test-credit-info>
-        <div class='info-group'>
-          <span class='label'>Membership Tier</span>
-          <span class='value' data-test-membership-tier>
-            {{#if this.isLoading}}
-              <LoadingIndicator />
-            {{else}}
-              {{this.plan}}
-            {{/if}}
-          </span>
-        </div>
-        <BoxelButton
-          @kind='secondary-light'
-          @size='small'
-          @disabled={{this.isLoading}}
-          data-test-upgrade-plan-button
-          {{on 'click' @toggleProfileSettings}}
-        >Upgrade Plan</BoxelButton>
-        <div class='info-group'>
-          <span class='label'>Monthly Credit</span>
-          <span
-            class={{cn 'value' out-of-credit=this.isOutOfPlanCreditAllowance}}
-            data-test-monthly-credit
-          >
-            {{#if this.isLoading}}
-              <LoadingIndicator />
-            {{else}}
-              <IconHexagon width='16px' height='16px' />
-              {{this.monthlyCreditText}}
-            {{/if}}
-          </span>
-        </div>
-        <div class='info-group additional-credit'>
-          <span class='label'>Additional Credit</span>
-          <span
-            class={{cn 'value' out-of-credit=this.isOutOfCredit}}
-            data-test-additional-credit
-          >{{#if this.isLoading}}
-              <LoadingIndicator />
-            {{else}}
-              <IconHexagon width='16px' height='16px' />
-              {{this.extraCreditsAvailableInBalance}}
-            {{/if}}</span>
-        </div>
-        <div
-          class={{cn 'buy-more-credits' out-of-credit=this.isOutOfCredit}}
-          data-test-buy-more-credits
-        >
+      {{! Show credit info if the user has an active plan }}
+      {{#if this.plan}}
+        <div class='credit-info' data-test-credit-info>
+          <div class='info-group'>
+            <span class='label'>Membership Tier</span>
+            <span class='value' data-test-membership-tier>
+              {{#if this.isLoading}}
+                <LoadingIndicator />
+              {{else}}
+                {{this.plan}}
+              {{/if}}
+            </span>
+          </div>
           <BoxelButton
-            @kind={{if this.isOutOfCredit 'primary' 'secondary-light'}}
-            @size={{if this.isOutOfCredit 'base' 'small'}}
+            @kind='secondary-light'
+            @size='small'
             @disabled={{this.isLoading}}
+            data-test-upgrade-plan-button
             {{on 'click' @toggleProfileSettings}}
-          >Buy more credits</BoxelButton>
+          >Upgrade Plan</BoxelButton>
+          <div class='info-group'>
+            <span class='label'>Monthly Credit</span>
+            <span
+              class={{cn 'value' out-of-credit=this.isOutOfPlanCreditAllowance}}
+              data-test-monthly-credit
+            >
+              {{#if this.isLoading}}
+                <LoadingIndicator />
+              {{else}}
+                <IconHexagon width='16px' height='16px' />
+                {{this.monthlyCreditText}}
+              {{/if}}
+            </span>
+          </div>
+          <div class='info-group additional-credit'>
+            <span class='label'>Additional Credit</span>
+            <span
+              class={{cn 'value' out-of-credit=this.isOutOfCredit}}
+              data-test-additional-credit
+            >{{#if this.isLoading}}
+                <LoadingIndicator />
+              {{else}}
+                <IconHexagon width='16px' height='16px' />
+                {{this.extraCreditsAvailableInBalance}}
+              {{/if}}</span>
+          </div>
+          <div
+            class={{cn 'buy-more-credits' out-of-credit=this.isOutOfCredit}}
+            data-test-buy-more-credits
+          >
+            <BoxelButton
+              @kind={{if this.isOutOfCredit 'primary' 'secondary-light'}}
+              @size={{if this.isOutOfCredit 'base' 'small'}}
+              @disabled={{this.isLoading}}
+              {{on 'click' @toggleProfileSettings}}
+            >Buy more credits</BoxelButton>
+          </div>
         </div>
-      </div>
+      {{/if}}
     </div>
   </template>
 
