@@ -54,6 +54,9 @@ const ErrorMessage: Record<string, string> = {
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
+  private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
+    new TrackedMap();
+  @tracked private _createEvent: RoomCreateEvent | undefined;
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
@@ -127,11 +130,8 @@ export class RoomResource extends Resource<Args> {
   }
 
   get created() {
-    let event = this.events.find((e) => e.type === 'm.room.create') as
-      | RoomCreateEvent
-      | undefined;
-    if (event) {
-      return new Date(event.origin_server_ts);
+    if (this._createEvent) {
+      return new Date(this._createEvent.origin_server_ts);
     }
     // there is a race condition in the matrix SDK where newly created
     // rooms don't immediately have a created date
@@ -139,11 +139,9 @@ export class RoomResource extends Resource<Args> {
   }
 
   get name() {
-    let events = this.events
-      .filter((e) => e.type === 'm.room.name')
-      .sort(
-        (a, b) => a.origin_server_ts - b.origin_server_ts,
-      ) as RoomNameEvent[];
+    let events = Array.from(this._nameEventsCache.values()).sort(
+      (a, b) => a.origin_server_ts - b.origin_server_ts,
+    ) as RoomNameEvent[];
     if (events.length > 0) {
       return events.pop()!.content.name;
     }
@@ -160,10 +158,19 @@ export class RoomResource extends Resource<Args> {
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
     for (let event of this.events) {
-      if (event.type === 'm.room.member') {
-        await this.loadRoomMemberEvent(roomId, event);
-      } else if (event.type === 'm.room.message') {
-        await this.loadRoomMessage(roomId, event, index);
+      switch (event.type) {
+        case 'm.room.member':
+          await this.loadRoomMemberEvent(roomId, event);
+          break;
+        case 'm.room.message':
+          await this.loadRoomMessage(roomId, event, index);
+          break;
+        case 'm.room.create':
+          await this.loadRoomCreateEvent(roomId, event);
+          break;
+        case 'm.room.name':
+          await this.loadRoomNameEvent(roomId, event);
+          break;
       }
     }
   }
@@ -349,6 +356,18 @@ export class RoomResource extends Resource<Args> {
         (event.content as CardMessageContent).clientGeneratedId ?? event_id,
         messageField as any,
       );
+    }
+  }
+
+  private async loadRoomNameEvent(roomId: string, event: RoomNameEvent) {
+    if (!this._nameEventsCache.has(event.event_id)) {
+      this._nameEventsCache.set(roomId, event);
+    }
+  }
+
+  private async loadRoomCreateEvent(roomId: string, event: RoomCreateEvent) {
+    if (!this._createEvent) {
+      this._createEvent = event;
     }
   }
 
