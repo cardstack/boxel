@@ -206,9 +206,9 @@ export default class RealmServerService extends Service {
     }
 
     let realmServerEvent = JSON.parse(event.content.body) as RealmServerEvent;
-    let listeners = this.eventSubscribers.get(realmServerEvent.eventType);
-    listeners?.forEach(async (listener) => {
-      await listener(realmServerEvent.data);
+    let subscribers = this.eventSubscribers.get(realmServerEvent.eventType);
+    subscribers?.forEach(async (subscriber) => {
+      await subscriber(realmServerEvent.data);
     });
   }
 
@@ -237,7 +237,7 @@ export default class RealmServerService extends Service {
     }
 
     if (!this.claims) {
-      throw new Error('Failed to get realm server token');
+      throw new Error('Failed to get realm server token claims');
     }
 
     return this.claims;

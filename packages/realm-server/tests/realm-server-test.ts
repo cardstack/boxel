@@ -3898,8 +3898,6 @@ module('Realm Server', function (hooks) {
 
       matrixClient = new MatrixClient({
         matrixURL: realmServerTestMatrix.url,
-        // it's a little awkward that we are hijacking a realm user to pretend to
-        // act like a normal user, but that's what's happening here
         username: 'test_realm',
         seed: secretSeed,
       });
