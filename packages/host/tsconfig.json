@@ -25,6 +25,7 @@
     "paths": {
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
+      "@cardstack/boxel-host/commands/*": ["app/commands/*"],
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["types/*"]
     }

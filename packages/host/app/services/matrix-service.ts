@@ -489,7 +489,7 @@ export default class MatrixService extends Service {
       },
     };
     try {
-      return await this.sendEvent(roomId, 'm.reaction', content);
+      return await this.client.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
         `Error sending reaction event: ${
@@ -657,10 +657,13 @@ export default class MatrixService extends Service {
           description: command.description,
           parameters: {
             type: 'object',
-            properties: await command.getInputJsonSchema(
-              this.cardAPI,
-              mappings,
-            ),
+            properties: {
+              description: {
+                type: 'string',
+              },
+              ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
+            },
+            required: ['attributes', 'description'],
           },
         },
       });

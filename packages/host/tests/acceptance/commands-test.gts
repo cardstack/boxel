@@ -10,18 +10,13 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
+import PatchCardCommand from '@cardstack/host/commands/patch-card';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
+import ShowCardCommand from '@cardstack/host/commands/show-card';
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import type {
-  SwitchSubmodeInput,
-  SaveCardInput,
-  ShowCardInput,
-  PatchCardInput,
-} from 'https://cardstack.com/base/command';
-
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import {
   setupLocalIndexing,
@@ -129,13 +124,8 @@ module('Acceptance | Commands tests', function (hooks) {
           topic: 'unset topic',
           participants: input.participants,
         });
-        let saveCardCommand = this.commandContext.lookupCommand<
-          SaveCardInput,
-          undefined
-        >('save-card');
-        const { SaveCardInput } = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
+        let saveCardCommand = new SaveCardCommand(this.commandContext);
+        const SaveCardInput = await saveCardCommand.getInputType();
         await saveCardCommand.execute(
           new SaveCardInput({
             card: meeting,
@@ -144,11 +134,9 @@ module('Acceptance | Commands tests', function (hooks) {
         );
 
         // Mutate and save again
-        let patchCardCommand = this.commandContext.lookupCommand<
-          PatchCardInput,
-          undefined,
-          { cardType: typeof Meeting }
-        >('patch-card', { cardType: Meeting });
+        let patchCardCommand = new PatchCardCommand(this.commandContext, {
+          cardType: Meeting,
+        });
 
         await this.commandContext.sendAiAssistantMessage({
           prompt: `Change the topic of the meeting to "${input.topic}"`,
@@ -158,13 +146,8 @@ module('Acceptance | Commands tests', function (hooks) {
 
         await patchCardCommand.waitForNextCompletion();
 
-        let showCardCommand = this.commandContext.lookupCommand<
-          ShowCardInput,
-          undefined
-        >('show-card');
-        const { ShowCardInput } = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
+        let showCardCommand = new ShowCardCommand(this.commandContext);
+        const ShowCardInput = await showCardCommand.getInputType();
         await showCardCommand.execute(
           new ShowCardInput({
             cardToShow: meeting,
@@ -203,10 +186,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let switchSubmodeCommand = commandContext.lookupCommand<
-            SwitchSubmodeInput,
-            undefined
-          >('switch-submode');
+          let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
           commandContext.sendAiAssistantMessage({
             prompt: 'Switch to code mode',
             commands: [{ command: switchSubmodeCommand, autoExecute }],
@@ -331,6 +311,9 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
       type: 'object',
       properties: {
+        description: {
+          type: 'string',
+        },
         attributes: {
           type: 'object',
           properties: {
@@ -353,6 +336,7 @@ module('Acceptance | Commands tests', function (hooks) {
           type: 'object',
         },
       },
+      required: ['attributes', 'description'],
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
@@ -432,6 +416,9 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
       type: 'object',
       properties: {
+        description: {
+          type: 'string',
+        },
         attributes: {
           type: 'object',
           properties: {
@@ -454,6 +441,7 @@ module('Acceptance | Commands tests', function (hooks) {
           type: 'object',
         },
       },
+      required: ['attributes', 'description'],
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',

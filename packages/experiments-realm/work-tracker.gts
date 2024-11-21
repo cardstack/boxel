@@ -30,9 +30,11 @@ import { FilterTrigger } from './productivity/filter-trigger';
 import getTaskCardsResource from './productivity/task-cards-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
+import User from '@cardstack/boxel-icons/user';
+import FolderGit from '@cardstack/boxel-icons/folder-git';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
-
 import type Owner from '@ember/owner';
 import {
   AnyFilter,
@@ -48,7 +50,7 @@ export interface SelectedItem {
   index?: number;
 }
 
-class AppTaskCardIsolated extends Component<typeof AppCard> {
+class WorkTrackerIsolated extends Component<typeof AppCard> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
   private declare assigneeQuery: {
@@ -63,6 +65,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
   };
   filters = {
     status: {
+      searchKey: 'label',
       label: 'Status',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -71,6 +74,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       options: () => TaskStatusField.values,
     },
     assignee: {
+      searchKey: 'name',
       label: 'Assignee',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -79,6 +83,7 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       options: () => this.assigneeCards,
     },
     project: {
+      searchKey: 'name',
       label: 'Project',
       codeRef: {
         module: `${this.realmHref}productivity/task`,
@@ -349,16 +354,27 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
     return this.selectedItems.get(filterType) ?? [];
   }
 
+  @action getFilterIcon(filterType: FilterType) {
+    switch (filterType) {
+      case 'status':
+        return RectangleEllipsis;
+      case 'assignee':
+        return User;
+      case 'project':
+        return FolderGit;
+      default:
+        return undefined;
+    }
+  }
+
   <template>
     <div class='task-app'>
       <div class='filter-section'>
-        {{#if this.initializeDropdownData.isRunning}}
-          isLoading...
-        {{else}}
-          <h2 class='project-title'>Project</h2>
+        <div class='filter-dropdown-container'>
           {{#if this.selectedFilterConfig}}
             {{#let (this.selectedFilterConfig.options) as |options|}}
               <FilterDropdown
+                @searchField={{this.selectedFilterConfig.searchKey}}
                 @options={{options}}
                 @realmURLs={{this.realmHrefs}}
                 @selected={{this.selectedItemsForFilter}}
@@ -367,17 +383,14 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
                 as |item|
               >
                 {{#let (this.isSelectedItem item) as |isSelected|}}
-                  {{#if (eq this.selectedFilter 'status')}}
-                    <StatusPill
-                      @isSelected={{isSelected}}
-                      @label={{item.label}}
-                    />
-                  {{else}}
-                    <StatusPill
-                      @isSelected={{isSelected}}
-                      @label={{item.name}}
-                    />
-                  {{/if}}
+                  <StatusPill
+                    @isSelected={{isSelected}}
+                    @label={{if
+                      (eq this.selectedFilter 'status')
+                      item.label
+                      item.name
+                    }}
+                  />
                 {{/let}}
               </FilterDropdown>
             {{/let}}
@@ -392,28 +405,36 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
               @triggerComponent={{FilterTrigger}}
               as |item|
             >
-              {{item}}
+              {{#let (this.getFilterIcon item) as |Icon|}}
+                <div class='filter-option'>
+                  {{#if Icon}}
+                    <Icon class='filter-display-icon' />
+                  {{/if}}
+                  <span class='filter-display-text'>{{item}}</span>
+                </div>
+              {{/let}}
             </BoxelSelect>
           {{/if}}
-          <div class='filter-display'>
-            {{#each this.filterTypes as |filterType|}}
-              {{#let (this.selectedFilterItems filterType) as |items|}}
-                <FilterDisplay
-                  @key={{filterType}}
-                  @items={{items}}
-                  @removeItem={{(fn this.removeFilter filterType)}}
-                  as |item|
-                >
-                  {{#if (eq filterType 'status')}}
-                    {{item.label}}
-                  {{else}}
-                    {{item.name}}
-                  {{/if}}
-                </FilterDisplay>
-              {{/let}}
-            {{/each}}
-          </div>
-        {{/if}}
+        </div>
+        <div class='filter-display-sec'>
+          {{#each this.filterTypes as |filterType|}}
+            {{#let (this.selectedFilterItems filterType) as |items|}}
+              <FilterDisplay
+                @key={{filterType}}
+                @items={{items}}
+                @removeItem={{(fn this.removeFilter filterType)}}
+                @icon={{this.getFilterIcon filterType}}
+                as |item|
+              >
+                {{#if (eq filterType 'status')}}
+                  {{item.label}}
+                {{else}}
+                  {{item.name}}
+                {{/if}}
+              </FilterDisplay>
+            {{/let}}
+          {{/each}}
+        </div>
       </div>
       <div class='columns-container'>
         <DndKanbanBoard
@@ -447,7 +468,16 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         </DndKanbanBoard>
       </div>
     </div>
-
+    {{!TODO: Get rid of global styles}}
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .ember-power-select-dropdown.ember-basic-dropdown-content--below,
+      .ember-power-select-dropdown.ember-basic-dropdown-content--in-place {
+        border-top: 1px solid #aaaaaa;
+        border-top-left-radius: var(--boxel-border-radius-sm);
+        border-top-right-radius: var(--boxel-border-radius-sm);
+      }
+    </style>
     <style scoped>
       .task-app {
         display: flex;
@@ -462,10 +492,20 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
         justify-content: space-between;
         gap: var(--boxel-sp);
         align-items: center;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs);
+        width: 100%;
       }
-      .project-title {
-        font-size: var(-- --boxel-sp-lg);
-        font-weight: 600;
+      .filter-dropdown-container {
+        width: auto;
+      }
+      .filter-display-sec {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: end;
+        gap: var(--boxel-sp-xxs);
+        flex: 1;
+        min-width: 0;
       }
       .columns-container {
         display: block;
@@ -486,9 +526,38 @@ class AppTaskCardIsolated extends Component<typeof AppCard> {
       .card {
         height: 170px !important;
       }
-
       .status-select {
         border: none;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 200px;
+      }
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .filter-display-text {
+        word-break: break-word;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 200px;
+      }
+      .filter-display-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .filter-display-text {
+        word-break: break-word;
       }
     </style>
   </template>
@@ -536,14 +605,15 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
   }
 }
 
-export class AppTaskCard extends AppCard {
-  static displayName = 'App Task';
+export class WorkTracker extends AppCard {
+  static displayName = 'Work Tracker';
   static icon = Checklist;
+  static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
-  static isolated = AppTaskCardIsolated;
+  static isolated = WorkTrackerIsolated;
   @field title = contains(StringField, {
-    computeVia: function (this: AppTaskCard) {
-      return 'App Task';
+    computeVia: function (this: WorkTracker) {
+      return 'Work Tracker';
     },
   });
 }

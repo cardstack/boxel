@@ -64,6 +64,22 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
+  test('error entry includes last known good state when available', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('error entry does not include last known good state when not available', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
   test('can get an error doc', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,

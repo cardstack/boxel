@@ -40,8 +40,19 @@ export default class DateRangePicker extends Component<Signature> {
 
     // If both start and end are provided, use them
     if (this.args.start && this.args.end) {
-      this.leftCenter = this.args.start;
-      this.rightCenter = this.args.end;
+      const startMonth = this.args.start.getMonth();
+      const endMonth = this.args.end.getMonth();
+      const startYear = this.args.start.getFullYear();
+      const endYear = this.args.end.getFullYear();
+
+      // If dates are in the same month, show that month and the next month
+      if (startMonth === endMonth && startYear === endYear) {
+        this.leftCenter = this.args.start;
+        this.rightCenter = add(this.args.start, 1, 'month');
+      } else {
+        this.leftCenter = this.args.start;
+        this.rightCenter = this.args.end;
+      }
     }
     // If only start is provided, set right center to next month
     else if (this.args.start) {

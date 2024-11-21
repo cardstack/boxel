@@ -266,9 +266,9 @@ test.describe('Commands', () => {
         toolCall: {
           name: 'patchCard',
           arguments: {
+            description: 'Patching card',
             attributes: {
               cardId,
-              description: 'Patching card',
               patch: {
                 attributes: {
                   firstName: 'Dave',
