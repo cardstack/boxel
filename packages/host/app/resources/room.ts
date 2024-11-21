@@ -47,6 +47,7 @@ const ErrorMessage: Record<string, string> = {
 };
 
 export class RoomResource extends Resource<Args> {
+  private _previousRoomId: string | undefined;
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
@@ -56,20 +57,19 @@ export class RoomResource extends Resource<Args> {
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
   @service private declare cardService: CardService;
-  _roomId: string | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     if (named.roomId) {
       if (this.isNewRoom(named.roomId)) {
         this.resetCache();
       }
-      this._roomId = named.roomId;
+      this._previousRoomId = named.roomId;
       this.loading = this.load.perform(named.roomId);
     }
   }
 
   private isNewRoom(roomId: string) {
-    return this._roomId && roomId !== this._roomId;
+    return this._previousRoomId && roomId !== this._previousRoomId;
   }
 
   private resetCache() {
@@ -120,7 +120,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   get roomId() {
-    return this._roomId;
+    return this._previousRoomId;
   }
 
   get created() {
@@ -136,8 +136,6 @@ export class RoomResource extends Resource<Args> {
   }
 
   get name() {
-    // Read from this.events instead of this.newEvents to avoid a race condition bug where
-    // newEvents never returns the m.room.name while the event is present in events
     let events = this.events
       .filter((e) => e.type === 'm.room.name')
       .sort(
