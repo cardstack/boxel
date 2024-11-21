@@ -30,7 +30,7 @@ test.describe('Login', () => {
 
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
-    // Add 30s to the overall test timeout
+    // Add 120s to the overall test timeout
     test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
@@ -158,6 +158,25 @@ test.describe('Login', () => {
     await page.locator('[data-test-profile-icon-button]').click();
     await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
       '@user1:localhost',
+    );
+    await page.locator('[data-test-signout-button]').click();
+    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+  });
+
+  test('it can logout at payment setup flow', async ({ page }) => {
+    await registerUser(synapse, 'user2', 'pass');
+    await login(page, 'user2', 'pass', {
+      url: appURL,
+      skipOpeningAssistant: true,
+    });
+    await expect(
+      page.locator(
+        '[data-test-profile-icon-button] > [data-test-profile-icon]',
+      ),
+    ).toHaveText('U');
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      '@user2:localhost',
     );
     await page.locator('[data-test-signout-button]').click();
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();

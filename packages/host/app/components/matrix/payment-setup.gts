@@ -1,12 +1,18 @@
 import { service } from '@ember/service';
-import Component from '@glimmer/component';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import InfoCircleIcon from '@cardstack/boxel-icons/info-circle';
 
 import {
   BoxelButton,
   BoxelHeader,
   CardContainer,
+  Avatar,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -18,7 +24,10 @@ import {
   Lock,
 } from '@cardstack/boxel-ui/icons';
 
+import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
+import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import type BillingService from '@cardstack/host/services/billing-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {
@@ -29,9 +38,23 @@ interface Signature {
 
 export default class PaymentSetup extends Component<Signature> {
   @service declare billingService: BillingService;
+  @service private declare matrixService: MatrixService;
+
+  @tracked private profileSettingsOpened = false;
+  @tracked private profileSummaryOpened = false;
 
   get stripePaymentLink() {
     return this.billingService.getStripePaymentLink(this.args.matrixUserId);
+  }
+
+  @action private toggleProfileSettings() {
+    this.profileSettingsOpened = !this.profileSettingsOpened;
+
+    this.profileSummaryOpened = false;
+  }
+
+  @action private toggleProfileSummary() {
+    this.profileSummaryOpened = !this.profileSummaryOpened;
   }
 
   <template>
@@ -116,6 +139,34 @@ export default class PaymentSetup extends Component<Signature> {
           </div>
         </CardContainer>
       </div>
+
+      <button
+        class='profile-icon-button'
+        {{on 'click' this.toggleProfileSummary}}
+        data-test-profile-icon-button
+      >
+        <Avatar
+          @isReady={{this.matrixService.profile.loaded}}
+          @userId={{this.matrixService.userId}}
+          @displayName={{this.matrixService.profile.displayName}}
+        />
+      </button>
+
+      {{#if this.profileSummaryOpened}}
+        <ProfileInfoPopover
+          {{onClickOutside
+            this.toggleProfileSummary
+            exceptSelector='.profile-icon-button'
+          }}
+          @toggleProfileSettings={{this.toggleProfileSettings}}
+        />
+      {{/if}}
+
+      {{#if this.profileSettingsOpened}}
+        <ProfileSettingsModal
+          @toggleProfileSettings={{this.toggleProfileSettings}}
+        />
+      {{/if}}
     </div>
 
     <style scoped>
@@ -253,6 +304,19 @@ export default class PaymentSetup extends Component<Signature> {
         font: var(--boxel-font-xs);
         color: #6f6f6f;
         margin: 0;
+      }
+
+      .profile-icon-button {
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
+        position: absolute;
+        bottom: var(--operator-mode-spacing);
+        left: var(--operator-mode-spacing);
+        padding: 0;
+        background: none;
+        border: none;
+        border-radius: 50px;
+        z-index: var(--host-profile-z-index);
       }
     </style>
   </template>
