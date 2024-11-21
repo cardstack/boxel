@@ -329,7 +329,6 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room2]);
     await isInRoom(page, room2); // remains in same room
     await deleteRoom(page, room2); // current room is deleted
-    await page.locator(`[data-test-close-past-sessions]`).click();
 
     await page.waitForTimeout(500); // wait for new room to be created
     let newRoom = await getRoomId(page);

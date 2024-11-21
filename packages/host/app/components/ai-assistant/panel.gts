@@ -17,7 +17,7 @@ import {
   LoadingIndicator,
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
@@ -87,13 +87,17 @@ export default class AiAssistantPanel extends Component<Signature> {
       });
   }
 
+  get hasMessages() {
+    return (this.roomResource?.messages.length ?? 0) > 0;
+  }
+
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
-        data-test-room-has-messages={{if this.roomResource.messages true false}}
-        data-test-room-is-empty={{if this.roomResource.messages false true}}
+        data-test-room-has-messages={{this.hasMessages}}
+        data-test-room-is-empty={{not this.hasMessages}}
         ...attributes
       >
         <@resizeHandle />
@@ -124,7 +128,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              @disabled={{not this.roomResource.messages.length}}
+              @disabled={{not this.hasMessages}}
               {{on 'click' this.createNewSession}}
               data-test-create-room-btn
             >

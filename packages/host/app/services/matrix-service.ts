@@ -457,6 +457,7 @@ export default class MatrixService extends Service {
         this.client.setPowerLevel(roomId, fullId, AI_BOT_POWER_LEVEL, null);
       }
     });
+    this.rooms.set(roomId, new RoomState());
     return roomId;
   }
 
