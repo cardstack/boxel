@@ -424,7 +424,7 @@ export class RealmServer {
     return realms;
   }
 
-  private sendEvent = async (user: string, eventName: string) => {
+  private sendEvent = async (user: string, eventType: string) => {
     let dmRooms =
       (await this.matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
@@ -432,12 +432,12 @@ export class RealmServer {
     let roomId = dmRooms[user];
     if (!roomId) {
       console.error(
-        `Failed to send event: ${eventName}, cannot find session room for user: ${user}`,
+        `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
       );
     }
 
     await this.matrixClient.sendEvent(roomId, 'm.room.message', {
-      body: `${eventName}`,
+      body: JSON.stringify({ eventType }),
       msgtype: 'org.boxel.realm-server-event',
     });
   };

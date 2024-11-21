@@ -134,22 +134,22 @@ export default async function stripeWebhookHandler(
       await handlePaymentSucceeded(
         dbAdapter,
         event as StripeInvoicePaymentSucceededWebhookEvent,
-        sendBillingNotification,
       );
+      sendBillingNotification(event.data.object.customer);
       break;
     case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure, or payment dispute
       await handleSubscriptionDeleted(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
-        sendBillingNotification,
       );
+      sendBillingNotification(event.data.object.customer);
       break;
     case 'checkout.session.completed':
       await handleCheckoutSessionCompleted(
         dbAdapter,
         event as StripeCheckoutSessionCompletedWebhookEvent,
-        sendBillingNotification,
       );
+      sendBillingNotification(event.data.object.customer);
       break;
   }
   return new Response('ok');

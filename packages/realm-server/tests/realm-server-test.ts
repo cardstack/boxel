@@ -149,7 +149,6 @@ module('Realm Server', function (hooks) {
 
   let testRealm: Realm;
   let testRealmHttpServer: Server;
-  let matrixClient: MatrixClient;
   let request: SuperTest<Test>;
   let dir: DirResult;
   let dbAdapter: PgAdapter;
@@ -170,19 +169,18 @@ module('Realm Server', function (hooks) {
           copySync(join(__dirname, 'cards'), testRealmDir);
         }
         let virtualNetwork = createVirtualNetwork();
-        ({ testRealm, testRealmHttpServer, matrixClient } =
-          await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
+        ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_1'),
+          realmURL: testRealmURL,
+          permissions,
+          dbAdapter: _dbAdapter,
+          runner,
+          publisher,
+          matrixURL,
+          fileSystem,
+        }));
 
         request = supertest(testRealmHttpServer);
       },
@@ -3869,10 +3867,9 @@ module('Realm Server', function (hooks) {
   module('stripe webhook handler', function (hooks) {
     let createSubscriptionStub: sinon.SinonStub;
     let fetchPriceListStub: sinon.SinonStub;
-    let getAccountData: sinon.SinonStub;
-    let sendEvent: sinon.SinonStub;
+    let matrixClient: MatrixClient;
+    let roomId: string;
     let userId = '@test_realm:localhost';
-    let roomId = 'session-room-test';
 
     setupPermissionedRealm(hooks, {
       '*': ['read', 'write'],
@@ -3883,19 +3880,46 @@ module('Realm Server', function (hooks) {
       let stripe = getStripe();
       createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
       fetchPriceListStub = sinon.stub(stripe.prices, 'list');
-      getAccountData = sinon.stub(matrixClient, 'getAccountData');
-      sendEvent = sinon.stub(matrixClient, 'sendEvent');
 
-      getAccountData.resolves({
-        [userId]: 'session-room-test',
+      matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        // it's a little awkward that we are hijacking a realm user to pretend to
+        // act like a normal user, but that's what's happening here
+        username: 'test_realm',
+        seed: secretSeed,
       });
+      await matrixClient.login();
+      let userId = matrixClient.getUserId();
+
+      let response = await request
+        .post('/_server-session')
+        .send(JSON.stringify({ user: userId }))
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json');
+      let json = response.body;
+
+      let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+      if (!rooms.includes(json.room)) {
+        await matrixClient.joinRoom(json.room);
+      }
+
+      await matrixClient.sendEvent(json.room, 'm.room.message', {
+        body: `auth-response: ${json.challenge}`,
+        msgtype: 'm.text',
+      });
+
+      response = await request
+        .post('/_server-session')
+        .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json');
+      roomId = json.room;
     });
 
     hooks.afterEach(async function () {
       createSubscriptionStub.restore();
       fetchPriceListStub.restore();
-      getAccountData.restore();
-      sendEvent.restore();
     });
 
     test('subscribes user back to free plan when the current subscription is expired', async function (assert) {
@@ -3915,16 +3939,6 @@ module('Realm Server', function (hooks) {
         5000,
         'prod_creator',
       );
-      sendEvent.callsFake((_roomId, type, content) => {
-        assert.strictEqual(_roomId, roomId);
-        assert.strictEqual(type, 'm.room.message');
-        assert.deepEqual(content, {
-          body: 'billing-notification',
-          msgtype: 'org.boxel.realm-server-event',
-        });
-
-        return 'test-event-id';
-      });
 
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -4139,16 +4153,6 @@ module('Realm Server', function (hooks) {
         5000,
         'prod_creator',
       );
-      sendEvent.callsFake((_roomId, type, content) => {
-        assert.strictEqual(_roomId, roomId);
-        assert.strictEqual(type, 'm.room.message');
-        assert.deepEqual(content, {
-          body: 'billing-notification',
-          msgtype: 'org.boxel.realm-server-event',
-        });
-
-        return 'test-event-id';
-      });
 
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -4317,16 +4321,6 @@ module('Realm Server', function (hooks) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
       await insertUser(dbAdapter, userId!, 'cus_123');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
-      sendEvent.callsFake((_roomId, type, content) => {
-        assert.strictEqual(_roomId, roomId);
-        assert.strictEqual(type, 'm.room.message');
-        assert.deepEqual(content, {
-          body: 'billing-notification',
-          msgtype: 'org.boxel.realm-server-event',
-        });
-
-        return 'test-event-id';
-      });
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
       }
@@ -4370,6 +4364,21 @@ module('Realm Server', function (hooks) {
         .set('Accept', 'application/json')
         .set('Content-Type', 'application/json')
         .set('stripe-signature', signature);
+
+      let done = assert.async();
+      let waitForBillingNotification = async function () {
+        let messages = await matrixClient.roomMessages(roomId);
+        if (messages[0].content.msgtype === 'org.boxel.realm-server-event') {
+          assert.strictEqual(
+            messages[0].content.body,
+            JSON.stringify({ eventType: 'billing-notification' }),
+          );
+          done();
+        } else {
+          setTimeout(waitForBillingNotification, 1);
+        }
+      };
+      waitForBillingNotification();
     });
   });
 });

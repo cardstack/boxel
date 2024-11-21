@@ -17,7 +17,6 @@ import { getStripe } from './stripe';
 export async function handleSubscriptionDeleted(
   dbAdapter: DBAdapter,
   event: StripeSubscriptionDeletedWebhookEvent,
-  sendBillingNotification: (stripeUserId: string) => Promise<void>,
 ) {
   // It is configured in Stripe that in case the user cancels the subscription using the customer portal,
   // it will be applied at the end of the billing period, not immediately. This means we can safely expire
@@ -78,7 +77,6 @@ export async function handleSubscriptionDeleted(
     }
 
     await markStripeEventAsProcessed(dbAdapter, event.id);
-    await sendBillingNotification(event.data.object.customer);
   });
 }
 
