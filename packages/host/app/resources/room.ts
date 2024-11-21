@@ -84,6 +84,8 @@ export class RoomResource extends Resource<Args> {
     this._messageCache = new TrackedMap();
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
+    this._nameEventsCache = new TrackedMap();
+    this._createEvent = undefined;
   }
 
   private load = restartableTask(async (roomId: string) => {
@@ -91,7 +93,7 @@ export class RoomResource extends Resource<Args> {
       this.roomState = roomId
         ? await this.matrixService.getRoomState(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.room) {
+      if (this.roomState) {
         await this.loadFromEvents(roomId);
       }
     } catch (e) {
@@ -118,7 +120,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get events() {
-    return this.roomState ? this.roomState.events : [];
+    return this.roomState?.events ?? [];
   }
 
   get skills(): Skill[] {
@@ -166,10 +168,10 @@ export class RoomResource extends Resource<Args> {
           await this.loadRoomMessage(roomId, event, index);
           break;
         case 'm.room.create':
-          await this.loadRoomCreateEvent(roomId, event);
+          await this.loadRoomCreateEvent(event);
           break;
         case 'm.room.name':
-          await this.loadRoomNameEvent(roomId, event);
+          await this.loadRoomNameEvent(event);
           break;
       }
     }
@@ -359,13 +361,13 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private async loadRoomNameEvent(roomId: string, event: RoomNameEvent) {
+  private async loadRoomNameEvent(event: RoomNameEvent) {
     if (!this._nameEventsCache.has(event.event_id)) {
-      this._nameEventsCache.set(roomId, event);
+      this._nameEventsCache.set(event.event_id, event);
     }
   }
 
-  private async loadRoomCreateEvent(roomId: string, event: RoomCreateEvent) {
+  private async loadRoomCreateEvent(event: RoomCreateEvent) {
     if (!this._createEvent) {
       this._createEvent = event;
     }
