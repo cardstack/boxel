@@ -153,6 +153,10 @@ class FittedTemplate extends Component<typeof BlogPost> {
       .fitted-blog-post {
         width: 100%;
         height: 100%;
+        min-width: 100px;
+        min-height: 29px;
+        max-width: 500px;
+        max-height: 400px;
         display: grid;
         overflow: hidden;
       }
@@ -167,6 +171,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         grid-area: content;
         gap: var(--boxel-sp-xxxs);
         padding: var(--boxel-sp-xs);
+        overflow: hidden;
       }
       .title {
         grid-area: title;
@@ -209,7 +214,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         letter-spacing: var(--boxel-lsp-sm);
       }
 
-      @container fitted-card (aspect-ratio = 1.0) {
+      @container fitted-card (aspect-ratio <= 1.0) {
         .fitted-blog-post {
           grid-template:
             'img' 42%
@@ -231,7 +236,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (224px <= height < 226px) {
+      /* Aspect ratio < 1.0 (Vertical card) */
+      @container fitted-card (aspect-ratio < 1.0) and (224px <= height <= 225px) {
         .fitted-blog-post {
           grid-template:
             'img' 92px
@@ -252,7 +258,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (180px <= height < 224px) {
+      @container fitted-card (aspect-ratio < 1.0) and (180px <= height <= 223px) {
         .fitted-blog-post {
           grid-template:
             'img' 92px
@@ -276,14 +282,13 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card ((aspect-ratio < 1.0) and (height < 180px) ) {
+      @container fitted-card ((aspect-ratio < 1.0) and (height <= 179px) ) {
         .title {
           font: 700 var(--boxel-font-xs);
-          line-height: 1.27;
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (148px <= height < 180px) {
+      @container fitted-card (aspect-ratio < 1.0) and (148px <= height <= 179px) {
         .fitted-blog-post {
           grid-template:
             'img' 80px
@@ -307,7 +312,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (128px <= height < 148px) {
+      @container fitted-card (aspect-ratio < 1.0) and (128px <= height <= 147px) {
         .fitted-blog-post {
           grid-template:
             'img' 68px
@@ -326,7 +331,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (118px <= height < 128px) {
+      @container fitted-card (aspect-ratio < 1.0) and (118px <= height <= 127px) {
         .fitted-blog-post {
           grid-template:
             'img' 57px
@@ -345,7 +350,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
       @container fitted-card (aspect-ratio < 1.0) and (400px <= height) {
         .fitted-blog-post {
           grid-template:
-            'img' 56%
+            'img' 55%
             'content' 1fr / 1fr;
         }
         .content {
@@ -358,7 +363,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .title {
           font: 700 var(--boxel-font-xs);
-          line-height: 1.27;
         }
         .description {
           -webkit-line-clamp: 5;
@@ -366,6 +370,187 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .date {
           align-self: end;
+        }
+      }
+
+      /* 1.0 < Aspect ratio (Horizontal card) */
+      @container fitted-card ((1.0 < aspect-ratio) and (180px <= height)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / 40% 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'desc' max-content
+            'byline' 1fr
+            'date' max-content / 1fr;
+          gap: var(--boxel-sp-5xs);
+        }
+        .title {
+          -webkit-line-clamp: 2;
+        }
+        .description {
+          -webkit-line-clamp: 3;
+          margin-top: var(--boxel-sp-xxxs);
+        }
+        .byline {
+          align-self: end;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (151px <= height < 180px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / 34% 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'byline' max-content
+            'date' 1fr / 1fr;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+        }
+        .description {
+          display: none;
+        }
+        .date {
+          align-self: end;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height <= 150px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / 26% 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'byline' 1fr
+            'date' max-content / 1fr;
+          gap: var(--boxel-sp-5xs);
+        }
+        .title {
+          -webkit-line-clamp: 2;
+        }
+        .description {
+          display: none;
+        }
+        .byline {
+          align-self: end;
+          margin-top: var(--boxel-sp-xxxs);
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / 35% 1fr;
+        }
+        .title {
+          -webkit-line-clamp: 3;
+          font: 700 var(--boxel-font-xs);
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / max-content 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+        .thumbnail {
+          width: 45px;
+          height: 45px;
+          border-radius: 5px;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 1;
+          text-wrap: nowrap;
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / max-content 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+        .thumbnail {
+          width: 45px;
+          height: 45px;
+          border-radius: 5px;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
+        .fitted-blog-post {
+          grid-template: 'content' 1fr / 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+        .thumbnail,
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+          font: 700 var(--boxel-font-xs);
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
+        .fitted-blog-post {
+          grid-template: 'content' 1fr / 1fr;
+          align-items: center;
+          padding: var(--boxel-sp-xxxs);
+        }
+        .thumbnail,
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+          font: 700 var(--boxel-font-xs);
         }
       }
     </style>
