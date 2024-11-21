@@ -18,6 +18,11 @@ import type {
   ReactionEvent,
   RoomCreateEvent,
   RoomNameEvent,
+  InviteEvent,
+  JoinEvent,
+  LeaveEvent,
+  CardMessageEvent,
+  MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -82,8 +87,7 @@ export class RoomResource extends Resource<Args> {
     try {
       this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined; //look at the note in the EventSendingContext interface for why this is awaited
       if (this.room) {
-        await this.loadRoomMembers(roomId);
-        await this.loadRoomMessages(roomId);
+        await this.loadFromEvents(roomId);
       }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
@@ -91,12 +95,9 @@ export class RoomResource extends Resource<Args> {
   });
 
   get messages() {
-    if (this._messageCache) {
-      return [...this._messageCache.values()].sort(
-        (a, b) => a.created.getTime() - b.created.getTime(),
-      );
-    }
-    return [];
+    return [...this._messageCache.values()].sort(
+      (a, b) => a.created.getTime() - b.created.getTime(),
+    );
   }
 
   get members() {
@@ -154,191 +155,198 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
-  private async loadRoomMembers(roomId: string) {
+  private async loadFromEvents(roomId: string) {
+    let index = this._messageCache.size;
     for (let event of this.events) {
-      if (event.type !== 'm.room.member') {
-        continue;
+      if (event.type === 'm.room.member') {
+        await this.loadRoomMemberEvent(roomId, event);
+      } else if (event.type === 'm.room.message') {
+        await this.loadRoomMessage(roomId, event, index);
       }
-      let userId = event.state_key;
-      let roomMemberArgs = {
-        userId,
-        displayName: event.content.displayname,
-        membership: event.content.membership,
-        membershipDateTime: new Date(event.origin_server_ts) || Date.now(),
-        membershipInitiator: event.sender,
-      };
-      this.upsertRoomMember({
-        roomId,
-        ...roomMemberArgs,
-      });
     }
   }
 
-  private async loadRoomMessages(roomId: string) {
-    let index = this._messageCache.size;
-    for (let event of this.events) {
-      if (event.type !== 'm.room.message') {
-        continue;
-      }
-      let event_id = event.event_id;
-      let update = false;
-      if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
-        // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
-        // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
-        // TOOD: Refactor having many if conditions to some variant of a strategy pattern
-        update = true;
-      } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-        if (
-          'isStreamingFinished' in event.content &&
-          !event.content.isStreamingFinished
-        ) {
-          continue;
-        }
-        event_id = event.content['m.relates_to'].event_id;
-        update = true;
-      }
-      if (this._messageCache.has(event_id) && !update) {
-        continue;
-      }
-      let author = this.upsertRoomMember({
-        roomId,
-        userId: event.sender,
-      });
-      let messageArgs = new Message({
-        author,
-        created: new Date(event.origin_server_ts),
-        updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-        message: event.content.body,
-        formattedMessage: event.content.formatted_body,
-        // These are not guaranteed to exist in the event
-        transactionId: event.unsigned?.transaction_id || null,
-        attachedCardIds: null,
-        attachedSkillCardIds: null,
-        command: null,
-        commandResult: null,
-        status: event.status,
-        eventId: event.event_id,
-        index,
-      });
-      if (event.status === 'cancelled' || event.status === 'not_sent') {
-        (messageArgs as any).errorMessage =
-          event.error?.data.errcode &&
-          Object.keys(ErrorMessage).includes(event.error?.data.errcode)
-            ? ErrorMessage[event.error?.data.errcode]
-            : 'Failed to send';
-      }
-      if ('errorMessage' in event.content) {
-        (messageArgs as any).errorMessage = event.content.errorMessage;
-      }
-      let messageField = undefined;
+  private async loadRoomMemberEvent(
+    roomId: string,
+    event: InviteEvent | JoinEvent | LeaveEvent,
+  ) {
+    let userId = event.state_key;
+    let roomMemberArgs = {
+      userId,
+      displayName: event.content.displayname,
+      membership: event.content.membership,
+      membershipDateTime: new Date(event.origin_server_ts) || Date.now(),
+      membershipInitiator: event.sender,
+    };
+    this.upsertRoomMember({
+      roomId,
+      ...roomMemberArgs,
+    });
+  }
 
-      if (event.content.msgtype === 'org.boxel.cardFragment') {
-        if (!this._fragmentCache.has(event_id)) {
-          this._fragmentCache.set(event_id, event.content);
-        }
-      } else if (event.content.msgtype === 'org.boxel.commandResult') {
-        //don't display command result in the room as a message
-        // TOOD: Refactor having many if conditions to some variant of a strategy pattern
-      } else if (event.content.msgtype === 'org.boxel.message') {
-        // Safely skip over cases that don't have attached cards or a data type
-        let cardDocs = event.content.data?.attachedCardsEventIds
-          ? event.content.data.attachedCardsEventIds.map((eventId) =>
-              this.serializedCardFromFragments(eventId),
-            )
-          : [];
-        let attachedCardIds: string[] = [];
-        cardDocs.map((c) => {
-          if (c.data.id) {
-            attachedCardIds.push(c.data.id);
-          }
-        });
-        if (attachedCardIds.length < cardDocs.length) {
-          throw new Error(`cannot handle cards in room without an ID`);
-        }
-        messageArgs.clientGeneratedId = event.content.clientGeneratedId;
-        messageField = new Message({
-          ...messageArgs,
-          attachedCardIds,
-        });
-      } else if (
-        event.content.msgtype === 'org.boxel.command' &&
-        event.content.data.toolCall
+  private async loadRoomMessage(
+    roomId: string,
+    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
+    index: number,
+  ) {
+    let event_id = event.event_id;
+    let update = false;
+    if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
+      // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
+      // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
+      // TOOD: Refactor having many if conditions to some variant of a strategy pattern
+      update = true;
+    } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      if (
+        'isStreamingFinished' in event.content &&
+        !event.content.isStreamingFinished
       ) {
-        // We only handle patches for now
-        let commandEvent = event as CommandEvent;
-        let command = event.content.data.toolCall;
-        let annotation = this.events.find(
-          (e) =>
-            e.type === 'm.reaction' &&
-            e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-            e.content['m.relates_to']?.event_id ===
-              // If the message is a replacement message, eventId in command payload will be undefined.
-              // Because it will not refer to any other events, so we can use event_id of the message itself.
-              (commandEvent.content.data.eventId ?? event_id),
-        ) as ReactionEvent | undefined;
-
-        let commandResultEvent = this.events.find(
-          (e) =>
-            e.type === 'm.room.message' &&
-            e.content.msgtype === 'org.boxel.commandResult' &&
-            e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-            e.content['m.relates_to'].event_id ===
-              commandEvent.content.data.eventId,
-        ) as CommandResultEvent;
-        let r = commandResultEvent?.content?.result
-          ? await this.commandService.createCommandResultArgs(
-              commandEvent,
-              commandResultEvent,
-            )
-          : undefined;
-
-        let status: CommandStatus =
-          annotation?.content['m.relates_to'].key === 'applied'
-            ? annotation?.content['m.relates_to'].key
-            : 'ready';
-
-        let commandCardArgs = {
-          toolCallId: command.id,
-          eventId: event_id,
-          name: command.name,
-          payload: command.arguments,
-          status,
-        };
-        let commandCard = await this.commandService.createCommand(
-          commandCardArgs,
-        );
-        let commandResult = r
-          ? await this.commandService.createCommandResult(r)
-          : undefined;
-
-        messageField = new Message({
-          ...messageArgs,
-          formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
-          command: commandCard,
-          commandResult,
-          isStreamingFinished: true,
-        });
-      } else {
-        // Text from the AI bot
-        if (event.content.msgtype === 'm.text') {
-          messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
-        }
-        messageField = new Message({ ...messageArgs });
+        return;
       }
+      event_id = event.content['m.relates_to'].event_id;
+      update = true;
+    }
+    if (this._messageCache.has(event_id) && !update) {
+      return;
+    }
+    let author = this.upsertRoomMember({
+      roomId,
+      userId: event.sender,
+    });
+    let messageArgs = new Message({
+      author,
+      created: new Date(event.origin_server_ts),
+      updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
+      message: event.content.body,
+      formattedMessage: event.content.formatted_body,
+      // These are not guaranteed to exist in the event
+      transactionId: event.unsigned?.transaction_id || null,
+      attachedCardIds: null,
+      attachedSkillCardIds: null,
+      command: null,
+      commandResult: null,
+      status: event.status,
+      eventId: event.event_id,
+      index,
+    });
+    if (event.status === 'cancelled' || event.status === 'not_sent') {
+      (messageArgs as any).errorMessage =
+        event.error?.data.errcode &&
+        Object.keys(ErrorMessage).includes(event.error?.data.errcode)
+          ? ErrorMessage[event.error?.data.errcode]
+          : 'Failed to send';
+    }
+    if ('errorMessage' in event.content) {
+      (messageArgs as any).errorMessage = event.content.errorMessage;
+    }
+    let messageField = undefined;
 
-      if (messageField) {
-        // if the message is a replacement for other messages,
-        // use `created` from the oldest one.
-        if (this._messageCache.has(event_id)) {
-          let d1 = this._messageCache.get(event_id)!.created!;
-          let d2 = messageField.created!;
-          messageField.created = d1 < d2 ? d1 : d2;
-        }
-        this._messageCache.set(
-          (event.content as CardMessageContent).clientGeneratedId ?? event_id,
-          messageField as any,
-        );
+    if (event.content.msgtype === 'org.boxel.cardFragment') {
+      if (!this._fragmentCache.has(event_id)) {
+        this._fragmentCache.set(event_id, event.content);
       }
+    } else if (event.content.msgtype === 'org.boxel.commandResult') {
+      //don't display command result in the room as a message
+      // TOOD: Refactor having many if conditions to some variant of a strategy pattern
+    } else if (event.content.msgtype === 'org.boxel.message') {
+      // Safely skip over cases that don't have attached cards or a data type
+      let cardDocs = event.content.data?.attachedCardsEventIds
+        ? event.content.data.attachedCardsEventIds.map((eventId) =>
+            this.serializedCardFromFragments(eventId),
+          )
+        : [];
+      let attachedCardIds: string[] = [];
+      cardDocs.map((c) => {
+        if (c.data.id) {
+          attachedCardIds.push(c.data.id);
+        }
+      });
+      if (attachedCardIds.length < cardDocs.length) {
+        throw new Error(`cannot handle cards in room without an ID`);
+      }
+      messageArgs.clientGeneratedId = event.content.clientGeneratedId;
+      messageField = new Message({
+        ...messageArgs,
+        attachedCardIds,
+      });
+    } else if (
+      event.content.msgtype === 'org.boxel.command' &&
+      event.content.data.toolCall
+    ) {
+      // We only handle patches for now
+      let commandEvent = event as CommandEvent;
+      let command = event.content.data.toolCall;
+      let annotation = this.events.find(
+        (e) =>
+          e.type === 'm.reaction' &&
+          e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+          e.content['m.relates_to']?.event_id ===
+            // If the message is a replacement message, eventId in command payload will be undefined.
+            // Because it will not refer to any other events, so we can use event_id of the message itself.
+            (commandEvent.content.data.eventId ?? event_id),
+      ) as ReactionEvent | undefined;
+
+      let commandResultEvent = this.events.find(
+        (e) =>
+          e.type === 'm.room.message' &&
+          e.content.msgtype === 'org.boxel.commandResult' &&
+          e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+          e.content['m.relates_to'].event_id ===
+            commandEvent.content.data.eventId,
+      ) as CommandResultEvent;
+      let r = commandResultEvent?.content?.result
+        ? await this.commandService.createCommandResultArgs(
+            commandEvent,
+            commandResultEvent,
+          )
+        : undefined;
+
+      let status: CommandStatus =
+        annotation?.content['m.relates_to'].key === 'applied'
+          ? annotation?.content['m.relates_to'].key
+          : 'ready';
+
+      let commandCardArgs = {
+        toolCallId: command.id,
+        eventId: event_id,
+        name: command.name,
+        payload: command.arguments,
+        status,
+      };
+      let commandCard = await this.commandService.createCommand(
+        commandCardArgs,
+      );
+      let commandResult = r
+        ? await this.commandService.createCommandResult(r)
+        : undefined;
+
+      messageField = new Message({
+        ...messageArgs,
+        formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
+        command: commandCard,
+        commandResult,
+        isStreamingFinished: true,
+      });
+    } else {
+      // Text from the AI bot
+      if (event.content.msgtype === 'm.text') {
+        messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+      }
+      messageField = new Message({ ...messageArgs });
+    }
+
+    if (messageField) {
+      // if the message is a replacement for other messages,
+      // use `created` from the oldest one.
+      if (this._messageCache.has(event_id)) {
+        let d1 = this._messageCache.get(event_id)!.created!;
+        let d2 = messageField.created!;
+        messageField.created = d1 < d2 ? d1 : d2;
+      }
+      this._messageCache.set(
+        (event.content as CardMessageContent).clientGeneratedId ?? event_id,
+        messageField as any,
+      );
     }
   }
 

@@ -65,7 +65,7 @@ interface RoomTopicEvent extends RoomStateEvent {
   };
 }
 
-interface InviteEvent extends RoomStateEvent {
+export interface InviteEvent extends RoomStateEvent {
   type: 'm.room.member';
   content: {
     membership: 'invite';
@@ -73,7 +73,7 @@ interface InviteEvent extends RoomStateEvent {
   };
 }
 
-interface JoinEvent extends RoomStateEvent {
+export interface JoinEvent extends RoomStateEvent {
   type: 'm.room.member';
   content: {
     membership: 'join';
@@ -81,7 +81,7 @@ interface JoinEvent extends RoomStateEvent {
   };
 }
 
-interface LeaveEvent extends RoomStateEvent {
+export interface LeaveEvent extends RoomStateEvent {
   type: 'm.room.member';
   content: {
     membership: 'leave';
@@ -89,7 +89,7 @@ interface LeaveEvent extends RoomStateEvent {
   };
 }
 
-interface MessageEvent extends BaseMatrixEvent {
+export interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
     'm.relates_to'?: {
@@ -150,7 +150,7 @@ export interface ReactionEventContent {
   };
 }
 
-interface CardMessageEvent extends BaseMatrixEvent {
+export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
   unsigned: {
