@@ -54,6 +54,7 @@ import {
   insertUser,
   insertPlan,
   fetchSubscriptionsByUserId,
+  cleanWhiteSpace,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -629,6 +630,108 @@ module('Realm Server', function (hooks) {
             },
           },
         });
+      });
+
+      test('serves a card error request without last known good state', async function (assert) {
+        let response = await request
+          .get('/missing-link')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 500, 'HTTP 500 status');
+        let json = response.body;
+        assert.strictEqual(
+          response.get('X-boxel-realm-url'),
+          testRealmURL.href,
+          'realm url header is correct',
+        );
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          'true',
+          'realm is public readable',
+        );
+
+        let errorBody = json.errors[0];
+        assert.ok(errorBody.meta.stack.includes('at CurrentRun.visitFile'));
+        delete errorBody.meta.stack;
+        assert.deepEqual(errorBody, {
+          id: `${testRealmHref}missing-link`,
+          status: 404,
+          title: 'Not Found',
+          message: `missing file ${testRealmHref}does-not-exist.json`,
+          meta: {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+          },
+        });
+      });
+    });
+
+    // using public writable realm to make it easy for test setup for the error tests
+    module('public writable realm', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
+      });
+
+      test('serves a card error request with last known good state', async function (assert) {
+        await request
+          .patch('/hassan')
+          .send({
+            data: {
+              type: 'card',
+              relationships: {
+                friend: {
+                  links: {
+                    self: './does-not-exist',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './friend.gts',
+                  name: 'Friend',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json');
+
+        let response = await request
+          .get('/hassan')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 500, 'HTTP 500 status');
+        let json = response.body;
+        assert.strictEqual(
+          response.get('X-boxel-realm-url'),
+          testRealmURL.href,
+          'realm url header is correct',
+        );
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          'true',
+          'realm is public readable',
+        );
+
+        let errorBody = json.errors[0];
+        let lastKnownGoodHtml = cleanWhiteSpace(
+          errorBody.meta.lastKnownGoodHtml,
+        );
+
+        assert.ok(errorBody.meta.stack.includes('at CurrentRun.visitFile'));
+        assert.strictEqual(errorBody.status, 404);
+        assert.strictEqual(errorBody.title, 'Not Found');
+        assert.strictEqual(
+          errorBody.message,
+          `missing file ${testRealmHref}does-not-exist.json`,
+        );
+        assert.ok(lastKnownGoodHtml.includes('Hassan has a friend'));
+        assert.ok(lastKnownGoodHtml.includes('Jade'));
+        let scopedCssUrls = errorBody.meta.scopedCssUrls;
+        assertScopedCssUrlsContain(
+          assert,
+          scopedCssUrls,
+          cardDefModuleDependencies,
+        );
       });
     });
 

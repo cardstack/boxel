@@ -1,4 +1,5 @@
 import { Memoize } from 'typescript-memoize';
+import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import {
   SupportedMimeType,
   maxLinkDepth,
@@ -8,7 +9,7 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
-  IndexedInstanceOrError,
+  type InstanceOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -34,7 +35,11 @@ interface SearchResultDoc {
 }
 interface SearchResultError {
   type: 'error';
-  error: SerializedError;
+  error: {
+    lastKnownGoodHtml: string | null;
+    scopedCssUrls: string[];
+    errorDetail: SerializedError;
+  };
 }
 
 export class RealmIndexQueryEngine {
@@ -140,7 +145,15 @@ export class RealmIndexQueryEngine {
       return undefined;
     }
     if (instance.type === 'error') {
-      return instance;
+      let scopedCssUrls = (instance.deps ?? []).filter(isScopedCSSRequest);
+      return {
+        type: 'error',
+        error: {
+          errorDetail: instance.error,
+          scopedCssUrls,
+          lastKnownGoodHtml: instance.isolatedHtml ?? null,
+        },
+      };
     }
     doc = {
       data: { ...instance.instance, ...{ links: { self: url.href } } },
@@ -176,7 +189,7 @@ export class RealmIndexQueryEngine {
   async instance(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<IndexedInstanceOrError | undefined> {
+  ): Promise<InstanceOrError | undefined> {
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 

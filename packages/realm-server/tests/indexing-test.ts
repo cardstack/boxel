@@ -18,13 +18,10 @@ import {
   createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
+  cleanWhiteSpace,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
-
-function cleanWhiteSpace(text: string) {
-  return text.replace(/\s+/g, ' ').trim();
-}
 
 function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
@@ -340,10 +337,10 @@ module('indexing', function (hooks) {
       );
       if (entry?.type === 'error') {
         assert.strictEqual(
-          entry.error.detail,
+          entry.error.errorDetail.detail,
           'Encountered error rendering HTML for card: intentional error',
         );
-        assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
+        assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom`]);
       } else {
         assert.ok('false', 'expected search entry to be an error document');
       }
@@ -354,10 +351,10 @@ module('indexing', function (hooks) {
       );
       if (entry?.type === 'error') {
         assert.strictEqual(
-          entry.error.detail,
+          entry.error.errorDetail.detail,
           'Encountered error rendering HTML for card: Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
         );
-        assert.deepEqual(entry.error.deps, [`${testRealm}boom2`]);
+        assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
       } else {
         assert.ok('false', 'expected search entry to be an error document');
       }
@@ -398,7 +395,7 @@ module('indexing', function (hooks) {
       } else {
         assert.ok(
           false,
-          `expected search entry to be a document but was: ${entry?.error.detail}`,
+          `expected search entry to be a document but was: ${entry?.error.errorDetail.detail}`,
         );
       }
     }
@@ -410,10 +407,10 @@ module('indexing', function (hooks) {
     );
     if (entry?.type === 'error') {
       assert.strictEqual(
-        entry.error.detail,
+        entry.error.errorDetail.detail,
         'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed for http://localhost:9000/this-is-a-link-to-nowhere',
       );
-      assert.deepEqual(entry.error.deps, [
+      assert.deepEqual(entry.error.errorDetail.deps, [
         `${testRealm}post`,
         `http://localhost:9000/this-is-a-link-to-nowhere`,
       ]);
@@ -678,8 +675,8 @@ module('indexing', function (hooks) {
       new URL(`${testRealm}post-1`),
     );
     if (actual?.type === 'error') {
-      assert.ok(actual.error.stack, 'stack trace is included');
-      delete actual.error.stack;
+      assert.ok(actual.error.errorDetail.stack, 'stack trace is included');
+      delete actual.error.errorDetail.stack;
       assert.deepEqual(
         // we splat because despite having the same shape, the constructors are different
         { ...actual },
