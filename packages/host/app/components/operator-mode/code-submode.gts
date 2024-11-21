@@ -311,7 +311,7 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
-  private get fileErrorMessage() {
+  private get fileErrorMessages() {
     if (this.isCard) {
       if (this.cardResource.cardError) {
         try {
@@ -854,7 +854,7 @@ export default class CodeSubmode extends Component<Signature> {
 
                         <hr class='preview-error' />
 
-                        {{#each this.fileErrorMessage as |error|}}
+                        {{#each this.fileErrorMessages as |error|}}
                           <pre
                             class='preview-error'
                             data-test-card-preview-error
