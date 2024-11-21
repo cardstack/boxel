@@ -50,7 +50,7 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+import RoomState from '@cardstack/host/lib/matrix-classes/room-state';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -72,7 +72,7 @@ import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
-import { RoomResource, getRoom } from '../resources/room';
+import { RoomResource } from '../resources/room';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
@@ -120,7 +120,7 @@ export default class MatrixService extends Service {
 
   private rooms: TrackedMap<string, RoomState> = new TrackedMap();
 
-  roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
+  roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -791,18 +791,35 @@ export default class MatrixService extends Service {
     return this.rooms.get(roomId);
   }
 
-  private setRoom(roomId: string, room: RoomState) {
-    this.rooms.set(roomId, room);
+  getRoomResource(roomId: string) {
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,
-        getRoom(
-          this,
-          () => roomId,
-          () => this.getRoom(roomId)?.events,
-        ),
+        RoomResource.from(this, () => ({
+          named: {
+            roomId: roomId,
+            events: this.getRoom(roomId)?.events ?? [],
+          },
+        })),
       );
     }
+    return this.roomResourcesCache.get(roomId);
+  }
+
+  private setRoom(roomId: string, room: RoomState) {
+    this.rooms.set(roomId, room);
+    if (this.roomResourcesCache.has(roomId)) {
+      return;
+    }
+    this.roomResourcesCache.set(
+      roomId,
+      RoomResource.from(this, () => ({
+        named: {
+          roomId: roomId,
+          events: this.getRoom(roomId)?.events ?? [],
+        },
+      })),
+    );
   }
 
   async loadDefaultSkills() {
@@ -914,32 +931,13 @@ export default class MatrixService extends Service {
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let room = this.getRoom(roomId);
-    if (!room) {
-      room = new RoomState();
-      this.setRoom(roomId, room);
+    let roomState = this.getRoom(roomId);
+    if (!roomState) {
+      roomState = new RoomState();
+      this.setRoom(roomId, roomState);
     }
 
-    // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-    let matchingEvents = room.events.filter(
-      (e) => e.event_id === eventId || e.event_id === oldEventId,
-    );
-    if (matchingEvents.length > 1) {
-      throw new Error(
-        `bug: ${matchingEvents.length} events with the same event_id(s): ${eventId}, ${oldEventId}, expected a maximum of 1`,
-      );
-    }
-    if (matchingEvents.length === 0) {
-      room.events = [
-        ...(room.events ?? []),
-        event as unknown as DiscreteMatrixEvent,
-      ];
-      return;
-    }
-    let eventToReplace = matchingEvents[0];
-    let eventIndex = room.events.indexOf(eventToReplace);
-    room.events[eventIndex] = event as unknown as DiscreteMatrixEvent;
-    room.events = [...room.events];
+    roomState.addEvent(event as unknown as DiscreteMatrixEvent, oldEventId);
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {

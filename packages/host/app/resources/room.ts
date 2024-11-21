@@ -29,7 +29,7 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import type { Skill } from '../components/ai-assistant/skill-menu';
-import type { RoomState } from '../lib/matrix-classes/room';
+import type RoomState from '../lib/matrix-classes/room-state';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
@@ -112,7 +112,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get events() {
-    return this.room ? this.room.events : [];
+    return this.room?.events ?? [];
   }
 
   get skills(): Skill[] {
@@ -421,17 +421,4 @@ export class RoomResource extends Resource<Args> {
       new TrackedObject({ card, isActive: true }),
     ];
   }
-}
-
-export function getRoom(
-  parent: object,
-  roomId: () => string | undefined,
-  events: () => any | undefined, //TODO: This line of code is needed to get the room to react to new messages. This should be removed in CS-6987
-) {
-  return RoomResource.from(parent, () => ({
-    named: {
-      roomId: roomId(),
-      events: events ? events() : [],
-    },
-  }));
 }

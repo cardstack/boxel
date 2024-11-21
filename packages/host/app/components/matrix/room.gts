@@ -26,7 +26,6 @@ import { unixTime } from '@cardstack/runtime-common';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -44,7 +43,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
-import type { RoomState } from '../../lib/matrix-classes/room';
+import type RoomState from '../../lib/matrix-classes/room-state';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -172,11 +171,14 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  private roomResource = getRoom(
-    this,
-    () => this.args.roomId,
-    () => this.matrixService.getRoom(this.args.roomId)?.events,
-  );
+  get roomResource() {
+    let roomResource = this.matrixService.getRoomResource(this.args.roomId);
+    if (!roomResource) {
+      throw new Error(`Room resource not found for ${this.args.roomId}`);
+    }
+    return roomResource;
+  }
+
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
