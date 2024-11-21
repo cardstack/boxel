@@ -27,10 +27,6 @@ import * as Sentry from '@sentry/node';
 
 import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
-import {
-  getUserByMatrixUserId,
-  sumUpCreditsLedger,
-} from '@cardstack/billing/billing-queries';
 
 let log = logger('ai-bot');
 
