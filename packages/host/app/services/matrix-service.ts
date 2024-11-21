@@ -1087,8 +1087,11 @@ export default class MatrixService extends Service {
           } while (currentFragmentId);
         }
       }
-    } else {
-      await this.realmServer.handleRealmServerEvent(event);
+    } else if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.realm-server-event'
+    ) {
+      await this.realmServer.handleEvent(event);
     }
 
     if (oldEventId) {

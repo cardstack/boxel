@@ -2,9 +2,9 @@ import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
-import { cached, tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
-import { restartableTask, rawTimeout, task, dropTask } from 'ember-concurrency';
+import { restartableTask, rawTimeout, task } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
@@ -31,6 +31,11 @@ export interface RealmServerTokenClaims {
   sessionRoom: string;
 }
 
+interface RealmServerEvent {
+  eventType: string;
+  data: any;
+}
+
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
 type RealmServerJWTPayload = RealmServerTokenClaims & {
@@ -47,24 +52,19 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
-interface SubscriptionData {
-  plan: string | null;
-  creditsAvailableInPlanAllowance: number | null;
-  creditsIncludedInPlanAllowance: number | null;
-  extraCreditsAvailableInBalance: number | null;
-}
+type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
 export default class RealmServerService extends Service {
   @service private declare network: NetworkService;
   @service private declare reset: ResetService;
-  @tracked private _subscriptionData: SubscriptionData | null = null;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
   private ready = new Deferred<void>();
-  private sessionRoomId: string | null = null;
+  private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
+    new Map();
 
   constructor(owner: Owner) {
     super(owner);
@@ -177,36 +177,6 @@ export default class RealmServerService extends Service {
       });
   }
 
-  async fetchSubscriptionData() {
-    if (this.subscriptionData) {
-      return;
-    }
-    await this.fetchSubscriptionDataTask.perform();
-  }
-
-  async handleRealmServerEvent(maybeRealmServerEvent: Partial<IEvent>) {
-    let sessionRoomId = await this.getSessionRoomId();
-    if (
-      maybeRealmServerEvent.room_id !== sessionRoomId ||
-      maybeRealmServerEvent.type !== 'm.room.message' ||
-      maybeRealmServerEvent.content?.msgtype !==
-        'org.boxel.realm-server-event' ||
-      maybeRealmServerEvent.content?.body !== 'billing-notification'
-    ) {
-      return;
-    }
-
-    await this.fetchSubscriptionDataTask.perform();
-  }
-
-  get subscriptionData() {
-    return this._subscriptionData;
-  }
-
-  get fetchingSubscriptionData() {
-    return this.fetchSubscriptionDataTask.isRunning;
-  }
-
   async fetchCatalogRealms() {
     if (this.catalogRealmURLs.length > 0) {
       return;
@@ -229,6 +199,27 @@ export default class RealmServerService extends Service {
     this.ready.fulfill();
   }
 
+  async handleEvent(event: Partial<IEvent>) {
+    let claims = await this.getClaims();
+    if (event.room_id !== claims.sessionRoom || !event.content) {
+      return;
+    }
+
+    let realmServerEvent = JSON.parse(event.content.body) as RealmServerEvent;
+    let listeners = this.eventSubscribers.get(realmServerEvent.eventType);
+    listeners?.forEach(async (listener) => {
+      await listener(realmServerEvent.data);
+    });
+  }
+
+  subscribeEvent(eventType: string, subscriber: RealmServerEventSubscriber) {
+    if (!this.eventSubscribers.has(eventType)) {
+      this.eventSubscribers.set(eventType, []);
+    }
+
+    this.eventSubscribers.get(eventType)!.push(subscriber);
+  }
+
   get url() {
     let url;
     if (hostsOwnAssets) {
@@ -240,78 +231,16 @@ export default class RealmServerService extends Service {
     return new URL(url);
   }
 
-  private fetchSubscriptionDataTask = dropTask(async () => {
-    if (!this.client) {
-      throw new Error(`Cannot fetch subscription data without matrix client`);
-    }
-    await this.login();
-    if (this.auth.type !== 'logged-in') {
-      throw new Error('Could not login to realm server');
+  private async getClaims() {
+    if (!this.claims) {
+      await this.login();
     }
 
-    let response = await this.network.fetch(`${this.url.origin}/_user`, {
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-    });
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
-      );
-    }
-    let json = await response.json();
-    let plan =
-      json.included?.find((i: { type: string }) => i.type === 'plan')
-        ?.attributes?.name ?? null;
-    let creditsAvailableInPlanAllowance =
-      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
-    let creditsIncludedInPlanAllowance =
-      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
-    let extraCreditsAvailableInBalance =
-      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-    this._subscriptionData = {
-      plan,
-      creditsAvailableInPlanAllowance,
-      creditsIncludedInPlanAllowance,
-      extraCreditsAvailableInBalance,
-    };
-  });
-
-  private async getSessionRoomId(): Promise<string> {
-    if (!this.client) {
-      throw new Error(`Cannot get session room id without matrix client`);
+    if (!this.claims) {
+      throw new Error('Failed to get realm server token');
     }
 
-    if (!this.sessionRoomId) {
-      let userId = this.client.getUserId();
-      if (!userId) {
-        throw new Error('userId is undefined');
-      }
-      let response = await this.network.fetch(
-        `${this.url.href}_server-session`,
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-          },
-          body: JSON.stringify({
-            user: userId,
-          }),
-        },
-      );
-
-      if (response.status !== 401) {
-        throw new Error(
-          `unexpected response from POST ${this.url.href}_server-session
-          }: ${response.status} - ${await response.text()}`,
-        );
-      }
-      this.sessionRoomId = (await response.json()).room as string;
-    }
-
-    return this.sessionRoomId;
+    return this.claims;
   }
 
   private get claims(): RealmServerJWTPayload | undefined {
@@ -321,7 +250,7 @@ export default class RealmServerService extends Service {
     return undefined;
   }
 
-  private get token(): string | undefined {
+  get token(): string | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.token;
     }
@@ -366,7 +295,7 @@ export default class RealmServerService extends Service {
 
   // login happens lazily as you need to interact with realm server which
   // currently only constitutes creating realms
-  private async login(): Promise<void> {
+  async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
     }

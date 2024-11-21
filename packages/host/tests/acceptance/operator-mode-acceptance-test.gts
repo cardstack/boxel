@@ -907,7 +907,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 0;
       simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
         msgtype: 'org.boxel.realm-server-event',
-        body: 'billing-notification',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
       });
 
       await click('[data-test-profile-icon-button]');
@@ -923,7 +923,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
       simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
         msgtype: 'org.boxel.realm-server-event',
-        body: 'billing-notification',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
@@ -938,7 +938,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 1000;
       simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
         msgtype: 'org.boxel.realm-server-event',
-        body: 'billing-notification',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');

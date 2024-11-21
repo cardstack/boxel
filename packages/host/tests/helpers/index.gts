@@ -707,11 +707,9 @@ export function setupRealmServerEndpoints(
       return await endpoint.getResponse(req);
     }
 
-    let defaultEndpoint = defaultEndpoints.find((e) =>
-      req.url.includes(e.route),
-    );
-    if (defaultEndpoint) {
-      return await defaultEndpoint.getResponse(req);
+    endpoint = defaultEndpoints.find((e) => req.url.includes(e.route));
+    if (endpoint) {
+      return await endpoint.getResponse(req);
     }
 
     return null;

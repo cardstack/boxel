@@ -23,7 +23,6 @@ import {
   setupLocalIndexing,
   setupServerSentEvents,
   lookupLoaderService,
-  setupRealmServerEndpoints,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -41,7 +40,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
-  setupRealmServerEndpoints(hooks);
 
   let { getRoomEvents, simulateRemoteMessage } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',

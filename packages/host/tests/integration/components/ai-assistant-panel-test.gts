@@ -37,7 +37,6 @@ import {
   getMonacoContent,
   waitForCodeEditor,
   lookupLoaderService,
-  setupRealmServerEndpoints,
 } from '../../helpers';
 import {
   CardDef,
@@ -89,7 +88,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
       return () => (clock += 10);
     })(),
   });
-  setupRealmServerEndpoints(hooks);
 
   let noop = () => {};
 

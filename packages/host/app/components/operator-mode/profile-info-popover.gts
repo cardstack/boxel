@@ -15,8 +15,8 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 import config from '@cardstack/host/config/environment';
+import BillingService from '@cardstack/host/services/billing-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
-import RealmServerService from '@cardstack/host/services/realm-server';
 
 interface ProfileInfoPopoverSignature {
   Args: {
@@ -205,11 +205,11 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     this.fetchCreditInfo.perform();
   }
 
-  @service private declare realmServer: RealmServerService;
+  @service private declare billingService: BillingService;
   @service declare matrixService: MatrixService;
 
   private fetchCreditInfo = task(async () => {
-    await this.realmServer.fetchSubscriptionData();
+    await this.billingService.fetchSubscriptionData();
   });
 
   @action private logout() {
@@ -217,23 +217,24 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   }
 
   private get isLoading() {
-    return this.realmServer.fetchingSubscriptionData;
+    return this.billingService.fetchingSubscriptionData;
   }
 
   private get plan() {
-    return this.realmServer.subscriptionData?.plan;
+    return this.billingService.subscriptionData?.plan;
   }
 
   private get creditsIncludedInPlanAllowance() {
-    return this.realmServer.subscriptionData?.creditsIncludedInPlanAllowance;
+    return this.billingService.subscriptionData?.creditsIncludedInPlanAllowance;
   }
 
   private get creditsAvailableInPlanAllowance() {
-    return this.realmServer.subscriptionData?.creditsAvailableInPlanAllowance;
+    return this.billingService.subscriptionData
+      ?.creditsAvailableInPlanAllowance;
   }
 
   private get extraCreditsAvailableInBalance() {
-    return this.realmServer.subscriptionData?.extraCreditsAvailableInBalance;
+    return this.billingService.subscriptionData?.extraCreditsAvailableInBalance;
   }
 
   private get monthlyCreditText() {
