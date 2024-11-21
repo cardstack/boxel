@@ -1,12 +1,12 @@
-import { service } from '@ember/service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import InfoCircleIcon from '@cardstack/boxel-icons/info-circle';
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import {
   BoxelButton,
