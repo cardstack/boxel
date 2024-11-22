@@ -1123,6 +1123,11 @@ export default class MatrixService extends Service {
           } while (currentFragmentId);
         }
       }
+    } else if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.realm-server-event'
+    ) {
+      await this.realmServer.handleEvent(event);
     }
     await this.addRoomEvent(event, oldEventId);
 

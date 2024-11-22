@@ -99,6 +99,7 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,
   request: Request,
+  sendBillingNotification: (stripeUserId: string) => Promise<void>,
 ): Promise<Response> {
   let signature = request.headers.get('stripe-signature');
 
@@ -134,20 +135,22 @@ export default async function stripeWebhookHandler(
         dbAdapter,
         event as StripeInvoicePaymentSucceededWebhookEvent,
       );
+      sendBillingNotification(event.data.object.customer);
       break;
     case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure, or payment dispute
       await handleSubscriptionDeleted(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
       );
+      sendBillingNotification(event.data.object.customer);
       break;
     case 'checkout.session.completed':
       await handleCheckoutSessionCompleted(
         dbAdapter,
         event as StripeCheckoutSessionCompletedWebhookEvent,
       );
+      sendBillingNotification(event.data.object.customer);
       break;
   }
-
   return new Response('ok');
 }

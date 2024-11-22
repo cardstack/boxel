@@ -165,6 +165,7 @@ export class RealmServer {
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,
           serveFromRealm: this.serveFromRealm,
+          sendEvent: this.sendEvent,
         }),
       )
       .use(this.serveIndex)
@@ -422,6 +423,24 @@ export class RealmServer {
     }
     return realms;
   }
+
+  private sendEvent = async (user: string, eventType: string) => {
+    let dmRooms =
+      (await this.matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+    if (!roomId) {
+      console.error(
+        `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
+      );
+    }
+
+    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
+      body: JSON.stringify({ eventType }),
+      msgtype: 'org.boxel.realm-server-event',
+    });
+  };
 
   // we use a function to get the matrix registration secret because matrix
   // client tests leverage a synapse instance that changes multiple times per
