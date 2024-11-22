@@ -472,3 +472,67 @@ export async function expireRemainingPlanAllowanceInSubscriptionCycle(
     subscriptionCycleId,
   });
 }
+
+export async function spendCredits(
+  dbAdapter: DBAdapter,
+  userId: string,
+  creditsToSpend: number,
+) {
+  let subscription = await getCurrentActiveSubscription(dbAdapter, userId);
+  if (!subscription) {
+    throw new Error('active subscription not found');
+  }
+  let subscriptionCycle = await getMostRecentSubscriptionCycle(
+    dbAdapter,
+    subscription.id,
+  );
+  if (!subscriptionCycle) {
+    throw new Error('subscription cycle not found');
+  }
+  let availablePlanAllowanceCredits = await sumUpCreditsLedger(dbAdapter, {
+    creditType: [
+      'plan_allowance',
+      'plan_allowance_used',
+      'plan_allowance_expired',
+    ],
+    userId,
+  });
+
+  if (availablePlanAllowanceCredits >= creditsToSpend) {
+    await addToCreditsLedger(dbAdapter, {
+      userId,
+      creditAmount: -creditsToSpend,
+      creditType: 'plan_allowance_used',
+      subscriptionCycleId: subscriptionCycle.id,
+    });
+  } else {
+    // If user does not have enough plan allowance credits to cover the spend, try to also use extra credits
+    let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+      creditType: ['extra_credit', 'extra_credit_used'],
+      userId,
+    });
+    let planAllowanceToSpend = availablePlanAllowanceCredits; // Spend all plan allowance credits first
+    let extraCreditsToSpend = creditsToSpend - planAllowanceToSpend;
+    if (extraCreditsToSpend > availableExtraCredits) {
+      extraCreditsToSpend = availableExtraCredits;
+    }
+
+    if (planAllowanceToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -planAllowanceToSpend,
+        creditType: 'plan_allowance_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+    }
+
+    if (extraCreditsToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -extraCreditsToSpend,
+        creditType: 'extra_credit_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+    }
+  }
+}
