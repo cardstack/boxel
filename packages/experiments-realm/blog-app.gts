@@ -348,14 +348,14 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
         grid-template-columns: minmax(650px, 1fr);
       }
       .strip-view {
-        --grid-card-min-width: 164px;
-        --grid-card-max-width: 300px;
+        --grid-card-min-width: 350px;
+        --grid-card-max-width: calc(50% - var(--boxel-sp));
         --grid-card-height: 180px;
       }
       .grid-view {
-        --grid-card-min-width: 164px;
+        --grid-card-min-width: 178px;
         --grid-card-max-width: 226px;
-        --grid-card-height: 226px;
+        --grid-card-height: 242px;
       }
       .card-view-container {
         display: grid;
