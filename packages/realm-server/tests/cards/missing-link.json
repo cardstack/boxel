@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Boris"
+    },
+    "relationships": {
+      "friend": {
+        "links": {
+          "self": "./does-not-exist"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./friend.gts",
+        "name": "Friend"
+      }
+    }
+  }
+}
