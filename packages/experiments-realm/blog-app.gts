@@ -19,6 +19,7 @@ import {
   getCard,
   SupportedMimeType,
   type Query,
+  type Sort,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -43,9 +44,9 @@ import AuthorIcon from '@cardstack/boxel-icons/square-user';
 import type { BlogPost } from './blog-post';
 
 type ViewOption = 'card' | 'strip' | 'grid';
-type Sort = Query['sort'];
 
 interface SortOption {
+  id: string;
   displayName: string;
   sort: Sort;
 }
@@ -61,6 +62,7 @@ const sortByCardTitle: Sort = [
 ];
 const SORT_OPTIONS: SortOption[] = [
   {
+    id: 'datePubDesc',
     displayName: 'Date Published',
     sort: [
       {
@@ -70,6 +72,7 @@ const SORT_OPTIONS: SortOption[] = [
     ],
   },
   {
+    id: 'lastUpdatedDesc',
     displayName: 'Last Updated',
     sort: [
       {
@@ -79,6 +82,7 @@ const SORT_OPTIONS: SortOption[] = [
     ],
   },
   {
+    id: 'cardTitleAsc',
     displayName: 'A-Z',
     sort: sortByCardTitle,
   },
@@ -92,7 +96,8 @@ interface SidebarFilter {
   isCreateNewDisabled?: boolean;
   cardRef?: ResolvedCodeRef;
   query?: Query;
-  isSortDisabled?: boolean;
+  sortOptions?: SortOption[];
+  selectedSort?: SortOption;
   showAdminData?: boolean;
 }
 const FILTERS: SidebarFilter[] = [
@@ -102,13 +107,13 @@ const FILTERS: SidebarFilter[] = [
     cardTypeName: 'Blog Post',
     createNewButtonText: 'Post',
     showAdminData: true,
+    sortOptions: SORT_OPTIONS,
   },
   {
     displayName: 'Author Bios',
     icon: AuthorIcon,
     cardTypeName: 'Author Bio',
     createNewButtonText: 'Author',
-    isSortDisabled: true,
   },
   {
     displayName: 'Categories',
@@ -116,7 +121,6 @@ const FILTERS: SidebarFilter[] = [
     cardTypeName: 'Category',
     createNewButtonText: 'Category',
     isCreateNewDisabled: true, // TODO: Category cards
-    isSortDisabled: true,
   },
 ];
 
@@ -202,7 +206,7 @@ class SortMenu extends GlimmerComponent<SortMenuSignature> {
       return new MenuItem(option.displayName, 'action', {
         action: () => this.args.onSort(option),
         icon: option.sort?.[0].direction === 'desc' ? ArrowDown : ArrowUp,
-        selected: option.displayName === this.args.selected.displayName,
+        selected: option.id === this.args.selected.id,
       });
     });
   }
@@ -423,13 +427,15 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
           />
-          {{#unless this.activeFilter.isSortDisabled}}
-            <SortMenu
-              @options={{this.sortOptions}}
-              @selected={{this.selectedSort}}
-              @onSort={{this.onSort}}
-            />
-          {{/unless}}
+          {{#if this.activeFilter.sortOptions.length}}
+            {{#if this.selectedSort}}
+              <SortMenu
+                @options={{this.activeFilter.sortOptions}}
+                @selected={{this.selectedSort}}
+                @onSort={{this.onSort}}
+              />
+            {{/if}}
+          {{/if}}
         </header>
         {{#if this.query}}
           <BlogCardsGrid
@@ -543,15 +549,20 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   </template>
 
   filters: SidebarFilter[] = new TrackedArray(FILTERS);
-  sortOptions: SortOption[] = SORT_OPTIONS;
 
   @tracked private selectedView: ViewOption = 'card';
   @tracked private activeFilter: SidebarFilter = this.filters[0];
-  @tracked private selectedSort: SortOption = this.sortOptions[0];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
     this.loadCardTypes.perform();
+  }
+
+  private get selectedSort() {
+    if (!this.activeFilter.sortOptions?.length) {
+      return;
+    }
+    return this.activeFilter.selectedSort ?? this.activeFilter.sortOptions[0];
   }
 
   private get showAdminData() {
@@ -564,10 +575,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 
   private get query() {
     if (this.loadCardTypes.isIdle && this.activeFilter.query) {
-      let sort = this.activeFilter.isSortDisabled
-        ? sortByCardTitle
-        : this.selectedSort.sort;
-      return { ...this.activeFilter.query, sort };
+      return {
+        ...this.activeFilter.query,
+        sort: this.selectedSort?.sort ?? sortByCardTitle,
+      };
     }
     return undefined;
   }
@@ -610,7 +621,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   @action private onSort(option: SortOption) {
-    this.selectedSort = option;
+    this.activeFilter.selectedSort = option;
+    this.activeFilter = this.activeFilter;
   }
 
   @action private onFilterChange(filter: SidebarFilter) {
