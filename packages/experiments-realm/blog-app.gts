@@ -305,7 +305,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
             Loading...
           </:loading>
           <:response as |cards|>
-            {{#each cards key='id' as |card|}}
+            {{#each cards key='url' as |card|}}
               <li
                 class='{{@selectedView}}-view-container'
                 {{@context.cardComponentModifier
@@ -345,17 +345,20 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
       }
       .card-view {
         --grid-card-height: 347px;
-        grid-template-columns: minmax(650px, 1fr);
+        grid-template-columns: minmax(750px, 1fr);
       }
       .strip-view {
-        --grid-card-min-width: 350px;
-        --grid-card-max-width: calc(50% - var(--boxel-sp));
+        --grid-card-min-width: 49%;
+        --grid-card-max-width: 1fr;
         --grid-card-height: 180px;
       }
       .grid-view {
-        --grid-card-min-width: 178px;
-        --grid-card-max-width: 226px;
-        --grid-card-height: 242px;
+        --grid-card-min-width: 224px;
+        --grid-card-max-width: 1fr;
+        --grid-card-height: max-content;
+      }
+      .grid-view-container {
+        aspect-ratio: 5/6;
       }
       .card-view-container {
         display: grid;
@@ -547,8 +550,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       }
       .content-grid {
         max-width: calc(var(--content-max-width) - var(--layout-padding));
-        margin-left: var(--layout-padding);
-        margin-bottom: var(--layout-padding);
+        padding-left: var(--layout-padding);
+        padding-bottom: var(--layout-padding);
       }
       .content-title {
         flex-grow: 1;

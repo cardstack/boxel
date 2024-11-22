@@ -155,8 +155,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
         height: 100%;
         min-width: 100px;
         min-height: 29px;
-        max-width: 500px;
-        max-height: 400px;
         display: grid;
         overflow: hidden;
       }
@@ -214,7 +212,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         letter-spacing: var(--boxel-lsp-sm);
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) {
+      @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
         .fitted-blog-post {
           grid-template:
             'img' 42%
@@ -237,7 +235,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
 
       /* Aspect ratio < 1.0 (Vertical card) */
-      @container fitted-card (aspect-ratio < 1.0) and (224px <= height <= 225px) {
+      @container fitted-card (aspect-ratio <= 1.0) and (224px <= height < 226px) {
         .fitted-blog-post {
           grid-template:
             'img' 92px
@@ -258,7 +256,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (180px <= height <= 223px) {
+      @container fitted-card (aspect-ratio <= 1.0) and (180px <= height < 224px) {
         .fitted-blog-post {
           grid-template:
             'img' 92px
@@ -282,13 +280,13 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card ((aspect-ratio < 1.0) and (height <= 179px) ) {
+      @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
         .title {
           font: 700 var(--boxel-font-xs);
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (148px <= height <= 179px) {
+      @container fitted-card (aspect-ratio <= 1.0) and (148px <= height < 180px) {
         .fitted-blog-post {
           grid-template:
             'img' 80px
@@ -312,7 +310,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (128px <= height <= 147px) {
+      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
         .fitted-blog-post {
           grid-template:
             'img' 68px
@@ -331,7 +329,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (118px <= height <= 127px) {
+      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
         .fitted-blog-post {
           grid-template:
             'img' 57px
@@ -347,7 +345,19 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
       }
 
-      @container fitted-card (aspect-ratio < 1.0) and (400px <= height) {
+      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
+        .title {
+          font: 700 var(--boxel-font);
+        }
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (width < 165px)) {
+        .title {
+          font: 700 var(--boxel-font-xs);
+        }
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height)) {
         .fitted-blog-post {
           grid-template:
             'img' 55%
@@ -360,9 +370,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
             'byline' max-content
             'desc' max-content
             'date' 1fr / 1fr;
-        }
-        .title {
-          font: 700 var(--boxel-font-xs);
         }
         .description {
           -webkit-line-clamp: 5;
