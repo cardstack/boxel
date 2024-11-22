@@ -380,7 +380,7 @@ class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
 class BlogAppTemplate extends Component<typeof BlogApp> {
   <template>
     <section class='blog-app'>
-      <aside class='blog-app-column sidebar'>
+      <aside class='sidebar'>
         <header class='sidebar-header' aria-label='blog-header'>
           <img
             class='sidebar-header-thumbnail'
@@ -415,7 +415,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           @onChanged={{this.onFilterChange}}
         />
       </aside>
-      <section class='blog-app-column content'>
+      <section class='content'>
         <header
           class='content-header'
           aria-label={{this.activeFilter.displayName}}
@@ -539,7 +539,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       }
 
       .content-header {
-        max-width: var(--content-max-width);
         min-height: calc(60px + 2 * var(--layout-padding));
         padding: var(--layout-padding);
         display: flex;
@@ -549,7 +548,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
       }
       .content-grid {
-        max-width: calc(var(--content-max-width) - var(--layout-padding));
+        max-width: var(--content-max-width);
         padding-left: var(--layout-padding);
         padding-bottom: var(--layout-padding);
       }
