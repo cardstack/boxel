@@ -3869,6 +3869,14 @@ module('Realm Server', function (hooks) {
         data: [
           {
             type: 'card-type-summary',
+            id: `${testRealm.url}friend/Friend`,
+            attributes: {
+              displayName: 'Friend',
+              total: 2,
+            },
+          },
+          {
+            type: 'card-type-summary',
             id: `${testRealm.url}home/Home`,
             attributes: {
               displayName: 'Home',
@@ -4503,6 +4511,22 @@ module('Realm server with realm mounted at the origin', function (hooks) {
                 kind: 'file',
               },
             },
+            'friend.gts': {
+              links: {
+                related: `${testRealmHref}friend.gts`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'hassan.json': {
+              links: {
+                related: `${testRealmHref}hassan.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'home.gts': {
               links: {
                 related: `${testRealmHref}home.gts`,
@@ -4514,6 +4538,22 @@ module('Realm server with realm mounted at the origin', function (hooks) {
             'index.json': {
               links: {
                 related: `${testRealmHref}index.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'jade.json': {
+              links: {
+                related: `${testRealmHref}jade.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'missing-link.json': {
+              links: {
+                related: `${testRealmHref}missing-link.json`,
               },
               meta: {
                 kind: 'file',

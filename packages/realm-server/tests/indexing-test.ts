@@ -679,17 +679,14 @@ module('indexing', function (hooks) {
       delete actual.error.errorDetail.stack;
       assert.deepEqual(
         // we splat because despite having the same shape, the constructors are different
-        { ...actual },
+        { ...actual.error.errorDetail },
         {
-          type: 'error',
-          error: {
-            isCardError: true,
-            additionalErrors: null,
-            detail: 'http://test-realm/post not found',
-            status: 404,
-            title: 'Not Found',
-            deps: ['http://test-realm/post'],
-          },
+          isCardError: true,
+          additionalErrors: null,
+          detail: 'http://test-realm/post not found',
+          status: 404,
+          title: 'Not Found',
+          deps: ['http://test-realm/post'],
         },
         'card instance is an error document',
       );
