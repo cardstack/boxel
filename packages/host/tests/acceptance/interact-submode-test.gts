@@ -1621,6 +1621,54 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasValue('Updated Pet');
     });
 
+    test<TestContextWithSSE>('tintinthong: card does not receive sse event and update', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: 'http://test-realm/test/',
+            updatedFile: 'http://test-realm/test/Pet/mango.json',
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: ['http://test-realm/test/Pet/mango'],
+            realmURL: 'http://test-realm/test/',
+            // clientRequestId: '526cfeaf-bf9e-4806-bfb4-ab8eabb58f14',
+          },
+        },
+      ];
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await click('[data-test-update-and-save-pet]');
+        },
+      });
+      assert
+        .dom(`[data-test-operator-mode-stack="1"] h2`)
+        .containsText('Updated Pet');
+    });
   });
 
   module('index changes', function () {
