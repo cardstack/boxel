@@ -11,7 +11,7 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { Modal } from '@cardstack/boxel-ui/components';
+import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { or, not } from '@cardstack/boxel-ui/helpers';
 
@@ -168,10 +168,16 @@ export default class OperatorModeContainer extends Component<Signature> {
         (or
           (not this.matrixService.isLoggedIn)
           this.matrixService.isInitializingNewUser
-          this.isUserInfoLoading
         )
       }}
         <Auth />
+      {{else if this.isUserInfoLoading}}
+        <div class='loading-spinner-container'>
+          <div class='loading-spinner'>
+            <LoadingIndicator @color='var(--boxel-teal)' />
+            <div class='loading-spinner-text'>Loading…</div>
+          </div>
+        </div>
       {{else if (not this.isUserSubscribed)}}
         <PaymentSetup
           @matrixUserId={{this.matrixUserId}}
@@ -227,6 +233,24 @@ export default class OperatorModeContainer extends Component<Signature> {
         align-items: center;
         min-height: 100%;
         padding: var(--boxel-sp-lg);
+      }
+      .loading-spinner-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      .loading-spinner {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .loading-spinner-text {
+        color: var(--boxel-light);
+        font-size: 12px;
+        font-weight: 600;
       }
       .loading {
         display: flex;
