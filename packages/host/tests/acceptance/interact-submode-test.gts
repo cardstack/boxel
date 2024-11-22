@@ -1627,7 +1627,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasValue('Updated Pet');
     });
 
-    test<TestContextWithSSE>('tintinthong: card does not receive sse event and update', async function (assert) {
+    test<TestContextWithSSE>('tintinthong: card receives sse event but ignores the update', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
