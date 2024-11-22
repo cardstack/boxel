@@ -35,7 +35,7 @@ import {
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink, Warning } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
@@ -59,13 +59,17 @@ import type {
   FieldType,
 } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../lib/html-component';
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
+
+import CardErrorDetail from './card-error-detail';
 
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
 import type EnvironmentService from '../../services/environment-service';
+import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 
@@ -116,6 +120,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare loaderService: LoaderService;
 
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
@@ -319,20 +324,59 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.item.card;
   }
 
+  @cached
+  get cardError() {
+    return this.args.item.cardError;
+  }
+
+  @cached
+  get lastKnownGoodHtml() {
+    if (this.cardError?.meta.lastKnownGoodHtml) {
+      this.loadScopedCSS.perform();
+      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
+    }
+    return undefined;
+  }
+
+  @cached
+  get cardErrorTitle() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return this.cardError.status === 404 &&
+      // a missing link error looks a lot like a missing card error
+      this.cardError.message.includes('missing')
+      ? `Card Error: Link Not Found`
+      : `Card Error: ${this.cardError.title}`;
+  }
+
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
   });
 
+  private loadScopedCSS = restartableTask(async () => {
+    if (this.cardError?.meta.scopedCssUrls) {
+      await Promise.all(
+        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
+          this.loaderService.loader.import(cssModuleUrl),
+        ),
+      );
+    }
+  });
+
   private subscribeToCard = task(async () => {
     await this.args.item.ready();
-    this.subscribedCard = this.card;
-    let api = this.args.item.api;
-    registerDestructor(this, this.cleanup);
-    api.subscribeToChanges(this.subscribedCard, this.onCardChange);
-    this.refreshSaveMsg = setInterval(
-      () => this.calculateLastSavedMsg(),
-      10 * 1000,
-    ) as unknown as number;
+    // TODO how do we make sure that this is called after the error is cleared?
+    if (!this.cardError) {
+      this.subscribedCard = this.card;
+      let api = this.args.item.api;
+      registerDestructor(this, this.cleanup);
+      api.subscribeToChanges(this.subscribedCard, this.onCardChange);
+      this.refreshSaveMsg = setInterval(
+        () => this.calculateLastSavedMsg(),
+        10 * 1000,
+      ) as unknown as number;
+    }
   });
 
   private cleanup = () => {
@@ -530,6 +574,40 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>
           </div>
+        {{else if this.cardError}}
+          <CardHeader
+            @cardTypeDisplayName={{this.cardErrorTitle}}
+            @cardTypeIcon={{Warning}}
+            @isTopCard={{this.isTopCard}}
+            @onClose={{unless this.isBuried (perform this.closeItem)}}
+            class='stack-item-header'
+            style={{cssVar
+              boxel-card-header-icon-container-min-width=(if
+                this.isBuried '50px' '95px'
+              )
+              boxel-card-header-actions-min-width=(if
+                this.isBuried '50px' '95px'
+              )
+              realm-icon-background=(getContrastColor
+                @item.headerColor 'transparent'
+              )
+            }}
+            role={{if this.isBuried 'button' 'banner'}}
+            {{on
+              'click'
+              (optional
+                (if this.isBuried (fn @dismissStackedCardsAbove @index))
+              )
+            }}
+            data-test-stack-card-header
+          />
+          <div class='stack-item-content card-error' data-test-card-error>
+            {{! TODO show stock error message when no last known good HTML !}}
+            {{#if this.lastKnownGoodHtml}}
+              <this.lastKnownGoodHtml />
+            {{/if}}
+            <CardErrorDetail @error={{this.cardError}} />
+          </div>
         {{else}}
           {{#let (this.realm.info this.card.id) as |realmInfo|}}
             <CardHeader
@@ -724,6 +802,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
+      }
+      .card-error {
+        opacity: 0.4;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: auto;
       }
     </style>
   </template>

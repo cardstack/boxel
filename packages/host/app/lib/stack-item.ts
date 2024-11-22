@@ -93,7 +93,7 @@ export class StackItem {
   }
 
   get cardError() {
-    return this.cardResource?.cardError?.error;
+    return this.cardResource?.cardError;
   }
 
   get isWideFormat() {

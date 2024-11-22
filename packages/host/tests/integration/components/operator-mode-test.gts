@@ -17,7 +17,12 @@ import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, Deferred, Realm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  Deferred,
+  LooseSingleCardDocument,
+  Realm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -99,6 +104,29 @@ module('Integration | operator-mode', function (hooks) {
     let { default: TextAreaField } = textArea;
     let { CardsGrid } = cardsGrid;
     let { CatalogEntry } = catalogEntry;
+
+    // use string source so we can get the transpiled scoped CSS
+    let friendWithCSSSource = `
+      import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
+      export class FriendWithCSS extends CardDef {
+        static displayName = 'Friend';
+        @field friend = linksTo(() => FriendWithCSS);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div class='friend'>
+              <@fields.title />
+              has a friend
+              <@fields.friend />
+            </div>
+            <style scoped>
+              .friend {
+                color: red;
+              }
+            </style>
+          </template>
+        };
+      }
+    `;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -353,6 +381,7 @@ module('Integration | operator-mode', function (hooks) {
           'blog-post.gts': { BlogPost },
           'author.gts': { Author },
           'friend.gts': { Friend },
+          'friend-with-css.gts': friendWithCSSSource,
           'publishing-packet.gts': { PublishingPacket },
           'pet-room.gts': { PetRoom },
           'Pet/mango.json': petMango,
@@ -381,6 +410,59 @@ module('Integration | operator-mode', function (hooks) {
             name: 'Friend A',
             friend: friendB,
           }),
+          'FriendWithCSS/friend-b.json': {
+            data: {
+              attributes: {
+                title: 'Jade',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../friend-with-css.gts',
+                  name: 'FriendWithCSS',
+                },
+              },
+            },
+          } as LooseSingleCardDocument,
+          'FriendWithCSS/friend-a.json': {
+            data: {
+              attributes: {
+                title: 'Hassan',
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './friend-b',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../friend-with-css.gts',
+                  name: 'FriendWithCSS',
+                },
+              },
+            },
+          } as LooseSingleCardDocument,
+          'FriendWithCSS/missing-link.json': {
+            data: {
+              attributes: {
+                title: 'Boris',
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './does-not-exist',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../friend-with-css.gts',
+                  name: 'FriendWithCSS',
+                },
+              },
+            },
+          } as LooseSingleCardDocument,
           'grid.json': new CardsGrid(),
           'CatalogEntry/publishing-packet.json': new CatalogEntry({
             title: 'Publishing Packet',
@@ -463,6 +545,72 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
     assert.dom('[data-test-stack-card]').exists({ count: 2 });
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
+  });
+
+  test('it renders a card with an error that has does not have a last known good state', async function (assert) {
+    await setCardInOperatorModeState(
+      `${testRealmURL}FriendWithCSS/missing-link`,
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .includesText('Link Not Found', 'card error title is displayed');
+  });
+
+  test('it renders a card with an error that has a last known good state', async function (assert) {
+    await testRealm.write(
+      'FriendWithCSS/friend-a.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            name: 'Friend A',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: './does-not-exist',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../friend-with-css.gts',
+              name: 'FriendWithCSS',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    await setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .includesText('Link Not Found', 'card error title is displayed');
+    assert
+      .dom('[data-test-card-error]')
+      .includesText(
+        'Hassan has a friend Jade',
+        'the last known good HTML is rendered',
+      );
+    // use percy snapshot to ensure the CSS has been applied--a red color
+    await percySnapshot(assert);
   });
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
@@ -579,7 +727,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 
-  test('opens workspace chooser after closing the only remainingcard on the stack', async function (assert) {
+  test('opens workspace chooser after closing the only remaining card on the stack', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(

@@ -10,6 +10,8 @@ import { restartableTask } from 'ember-concurrency';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
+import status from 'statuses';
+
 import {
   Loader,
   isSingleCardDocument,
@@ -17,8 +19,6 @@ import {
   loaderFor,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
-
-import { ErrorDetails } from '@cardstack/runtime-common/error';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
@@ -29,9 +29,18 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 
-interface CardError {
-  id: string;
-  error: ErrorDetails;
+export interface CardError {
+  errors: {
+    id: string;
+    status: number;
+    title: string;
+    message: string;
+    meta: {
+      lastKnownGoodHtml: string | null;
+      scopedCssUrls: string[];
+      stack: string | null;
+    };
+  }[];
 }
 
 interface Args {
@@ -71,7 +80,7 @@ const realmSubscriptions: Map<
 export class CardResource extends Resource<Args> {
   url: string | undefined;
   @tracked loaded: Promise<void> | undefined;
-  @tracked cardError: CardError | undefined;
+  @tracked cardError: CardError['errors'][0] | undefined;
   @tracked private _card: CardDef | undefined;
   @tracked private _api: typeof CardAPI | undefined;
   @tracked private staleCard: CardDef | undefined;
@@ -167,10 +176,7 @@ export class CardResource extends Resource<Args> {
     let card = await this.getCard(url);
     if (!card) {
       if (this.cardError) {
-        console.warn(
-          `cannot load card ${this.cardError.id}`,
-          this.cardError.error,
-        );
+        console.warn(`cannot load card ${this.cardError.id}`, this.cardError);
       }
       this.clearCardInstance();
       return;
@@ -262,14 +268,55 @@ export class CardResource extends Resource<Args> {
       );
       return card;
     } catch (error: any) {
-      this.cardError = {
-        id: url.href,
-        error,
-      };
+      let errorResponse: CardError;
+      try {
+        errorResponse = JSON.parse(error.responseText) as CardError;
+      } catch (parseError) {
+        switch (error.status) {
+          // tailor HTTP responses as necessary for better user feedback
+          case 404:
+            errorResponse = {
+              errors: [
+                {
+                  id: url.href,
+                  status: 404,
+                  title: 'Card Not Found',
+                  message: `The card ${url.href} does not exist`,
+                  meta: {
+                    lastKnownGoodHtml: null,
+                    scopedCssUrls: [],
+                    stack: null,
+                  },
+                },
+              ],
+            };
+            break;
+          default:
+            errorResponse = {
+              errors: [
+                {
+                  id: url.href,
+                  status: error.status,
+                  title: status.message[error.status] ?? `HTTP ${error.status}`,
+                  message: `Received HTTP ${error.status} from server ${
+                    error.responseText ?? ''
+                  }`.trim(),
+                  meta: {
+                    lastKnownGoodHtml: null,
+                    scopedCssUrls: [],
+                    stack: null,
+                  },
+                },
+              ],
+            };
+        }
+      }
+      this.cardError = errorResponse.errors[0];
       return;
     }
   }
 
+  // TODO deal with live update of card that goes into and out of an error state
   private reload = task(async (card: CardDef) => {
     try {
       await this.cardService.reloadCard(card);
