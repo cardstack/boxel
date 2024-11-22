@@ -9,6 +9,8 @@ import * as Sentry from '@sentry/node';
 
 let log = logger('ai-bot');
 
+const CREDITS_PER_USD = 1000;
+
 export async function saveUsageCost(
   pgAdapter: PgAdapter,
   matrixUserId: string,
@@ -21,7 +23,7 @@ export async function saveUsageCost(
       delayMs: 500,
     });
 
-    let creditsConsumed = Math.round(costInUsd / 0.001);
+    let creditsConsumed = Math.round(costInUsd * CREDITS_PER_USD);
 
     let user = await getUserByMatrixUserId(pgAdapter, matrixUserId);
 
