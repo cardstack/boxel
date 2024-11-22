@@ -4,10 +4,11 @@ import { service } from '@ember/service';
 
 import { cached } from '@glimmer/tracking';
 
-import { task, restartableTask, rawTimeout } from 'ember-concurrency';
+import { restartableTask, rawTimeout, task } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
+import { type IEvent } from 'matrix-js-sdk';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
@@ -25,8 +26,14 @@ import type ResetService from './reset';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 
-interface RealmServerTokenClaims {
+export interface RealmServerTokenClaims {
   user: string;
+  sessionRoom: string;
+}
+
+interface RealmServerEvent {
+  eventType: string;
+  data: any;
 }
 
 // iat - issued at (seconds since epoch)
@@ -45,12 +52,7 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
-interface CreditInfo {
-  plan: string | null;
-  creditsAvailableInPlanAllowance: number | null;
-  creditsIncludedInPlanAllowance: number | null;
-  extraCreditsAvailableInBalance: number | null;
-}
+type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
 export default class RealmServerService extends Service {
   @service private declare network: NetworkService;
@@ -61,6 +63,8 @@ export default class RealmServerService extends Service {
     { type: 'base', url: baseRealm.url },
   ]);
   private ready = new Deferred<void>();
+  private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
+    new Map();
 
   constructor(owner: Owner) {
     super(owner);
@@ -173,45 +177,6 @@ export default class RealmServerService extends Service {
       });
   }
 
-  async fetchCreditInfo(): Promise<CreditInfo> {
-    if (!this.client) {
-      throw new Error(`Cannot fetch credit info without matrix client`);
-    }
-    await this.login();
-    if (this.auth.type !== 'logged-in') {
-      throw new Error('Could not login to realm server');
-    }
-
-    let response = await this.network.fetch(`${this.url.origin}/_user`, {
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-    });
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
-      );
-    }
-    let json = await response.json();
-    let plan =
-      json.included?.find((i: { type: string }) => i.type === 'plan')
-        ?.attributes?.name ?? null;
-    let creditsAvailableInPlanAllowance =
-      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
-    let creditsIncludedInPlanAllowance =
-      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
-    let extraCreditsAvailableInBalance =
-      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-    return {
-      plan,
-      creditsAvailableInPlanAllowance,
-      creditsIncludedInPlanAllowance,
-      extraCreditsAvailableInBalance,
-    };
-  }
-
   async fetchCatalogRealms() {
     if (this.catalogRealmURLs.length > 0) {
       return;
@@ -234,6 +199,27 @@ export default class RealmServerService extends Service {
     this.ready.fulfill();
   }
 
+  async handleEvent(event: Partial<IEvent>) {
+    let claims = await this.getClaims();
+    if (event.room_id !== claims.sessionRoom || !event.content) {
+      return;
+    }
+
+    let realmServerEvent = JSON.parse(event.content.body) as RealmServerEvent;
+    let subscribers = this.eventSubscribers.get(realmServerEvent.eventType);
+    subscribers?.forEach(async (subscriber) => {
+      await subscriber(realmServerEvent.data);
+    });
+  }
+
+  subscribeEvent(eventType: string, subscriber: RealmServerEventSubscriber) {
+    if (!this.eventSubscribers.has(eventType)) {
+      this.eventSubscribers.set(eventType, []);
+    }
+
+    this.eventSubscribers.get(eventType)!.push(subscriber);
+  }
+
   get url() {
     let url;
     if (hostsOwnAssets) {
@@ -245,6 +231,18 @@ export default class RealmServerService extends Service {
     return new URL(url);
   }
 
+  private async getClaims() {
+    if (!this.claims) {
+      await this.login();
+    }
+
+    if (!this.claims) {
+      throw new Error('Failed to get realm server token claims');
+    }
+
+    return this.claims;
+  }
+
   private get claims(): RealmServerJWTPayload | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.claims;
@@ -252,7 +250,7 @@ export default class RealmServerService extends Service {
     return undefined;
   }
 
-  private get token(): string | undefined {
+  get token(): string | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.token;
     }
@@ -297,7 +295,7 @@ export default class RealmServerService extends Service {
 
   // login happens lazily as you need to interact with realm server which
   // currently only constitutes creating realms
-  private async login(): Promise<void> {
+  async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
     }

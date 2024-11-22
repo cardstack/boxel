@@ -49,7 +49,9 @@ import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import RealmServerService, {
+  RealmServerTokenClaims,
+} from '@cardstack/host/services/realm-server';
 
 import {
   type CardDef,
@@ -465,6 +467,11 @@ export function lookupLoaderService(): LoaderService {
   return owner.lookup('service:loader-service') as LoaderService;
 }
 
+export function lookupService<T extends Service>(name: string): T {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup(`service:${name}`) as T;
+}
+
 export function lookupNetworkService(): NetworkService {
   let owner = (getContext() as TestContext).owner;
   return owner.lookup('service:network') as NetworkService;
@@ -561,7 +568,7 @@ export function setupCardLogs(
 }
 
 export function createJWT(
-  claims: Partial<TokenClaims>,
+  claims: TokenClaims | RealmServerTokenClaims,
   expiration: string,
   secret: string,
 ) {
@@ -630,5 +637,90 @@ export async function elementIsVisible(element: Element) {
     });
 
     intersectionObserver.observe(element);
+  });
+}
+
+type RealmServerEndpoint = {
+  route: string;
+  getResponse: (req: Request) => Promise<Response>;
+};
+export function setupRealmServerEndpoints(
+  hooks: NestedHooks,
+  endpoints?: RealmServerEndpoint[],
+) {
+  let defaultEndpoints: RealmServerEndpoint[] = [
+    {
+      route: '_server-session',
+      getResponse: async function (req: Request) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: 'boxel-session-room-id',
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:staging',
+                  sessionRoom: 'boxel-session-room-id',
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      },
+    },
+    {
+      route: '_user',
+      getResponse: async function (_req: Request) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'user',
+              id: 1,
+              attributes: {
+                matrixUserId: '@testuser:staging',
+                stripeCustomerId: 'stripe-id-1',
+                creditsAvailableInPlanAllowance: null,
+                creditsIncludedInPlanAllowance: null,
+                extraCreditsAvailableInBalance: null,
+              },
+              relationships: {
+                subscription: null,
+              },
+            },
+            included: null,
+          }),
+        );
+      },
+    },
+  ];
+
+  let handleRealmServerRequest = async (req: Request) => {
+    let endpoint = endpoints?.find((e) => req.url.includes(e.route));
+    if (endpoint) {
+      return await endpoint.getResponse(req);
+    }
+
+    endpoint = defaultEndpoints.find((e) => req.url.includes(e.route));
+    if (endpoint) {
+      return await endpoint.getResponse(req);
+    }
+
+    return null;
+  };
+
+  hooks.beforeEach(function () {
+    lookupNetworkService().mount(handleRealmServerRequest, { prepend: true });
   });
 }

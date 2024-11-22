@@ -29,7 +29,7 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import type { Skill } from '../components/ai-assistant/skill-menu';
-import type { RoomState } from '../lib/matrix-classes/room';
+import type RoomState from '../lib/matrix-classes/room-state';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
@@ -51,7 +51,7 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
-  @tracked room: RoomState | undefined;
+  @tracked roomState: RoomState | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
@@ -80,8 +80,10 @@ export class RoomResource extends Resource<Args> {
 
   private load = restartableTask(async (roomId: string) => {
     try {
-      this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.room) {
+      this.roomState = roomId
+        ? await this.matrixService.getRoomState(roomId)
+        : undefined; //look at the note in the EventSendingContext interface for why this is awaited
+      if (this.roomState) {
         await this.loadRoomMembers(roomId);
         await this.loadRoomMessages(roomId);
       }
@@ -112,11 +114,11 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get events() {
-    return this.room ? this.room.events : [];
+    return this.roomState ? this.roomState.events : [];
   }
 
   get skills(): Skill[] {
-    return this.room?.skills ?? [];
+    return this.roomState?.skills ?? [];
   }
 
   get roomId() {
@@ -413,11 +415,11 @@ export class RoomResource extends Resource<Args> {
   }
 
   addSkill(card: SkillCard) {
-    if (!this.room) {
+    if (!this.roomState) {
       return;
     }
-    this.room.skills = [
-      ...this.room.skills,
+    this.roomState.skills = [
+      ...this.roomState.skills,
       new TrackedObject({ card, isActive: true }),
     ];
   }

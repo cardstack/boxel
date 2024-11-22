@@ -313,6 +313,16 @@ export class MockClient implements ExtendedClient {
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
+
+    if (content.body?.match(/SENDING_DELAY_THEN_FAILURE/)) {
+      console.log(
+        'SENDING_DELAY_THEN_FAILURE, setting status to NOT_SENT',
+        localEvent,
+      );
+      localEvent.setStatus(MatrixSDK.EventStatus.NOT_SENT);
+      this.emitLocalEchoUpdated(localEvent);
+      throw new Error('Failed to send event, deliberately');
+    }
     let eventId = this.serverState.addRoomEvent(
       this.loggedInAs || 'unknown_user',
       roomEvent,
@@ -321,9 +331,7 @@ export class MockClient implements ExtendedClient {
       ...localEventData,
       event_id: eventId,
     });
-    if (content.body?.match(/SENDING_DELAY_THEN_FAILURE/)) {
-      matrixEvent.setStatus(MatrixSDK.EventStatus.NOT_SENT);
-    }
+
     this.emitLocalEchoUpdated(matrixEvent, localEventId);
     return { event_id: eventId };
   }

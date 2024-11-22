@@ -48,6 +48,13 @@
   img,
   svg {
     display: inline-block;
+    max-width: 100%;
+  }
+
+  [alt] {
+    color: currentColor;
+    font: var(--boxel-font-xs);
+    letter-spacing: var(--boxel-lsp-sm);
   }
 
   a:hover {

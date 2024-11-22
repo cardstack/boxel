@@ -22,7 +22,7 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": "../TeamMember/b32c3da1-61c1-4d87-acff-a7eecccd8377"
+          "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
         }
       },
       "project": {

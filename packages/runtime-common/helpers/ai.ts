@@ -7,7 +7,7 @@ import type { Tool } from 'https://cardstack.com/base/matrix-event';
 type ArraySchema = {
   type: 'array';
   description?: string;
-  items: Schema;
+  items: AttributesSchema;
   minItems?: number;
   maxItems?: number;
   uniqueItems?: boolean;
@@ -17,7 +17,7 @@ export type ObjectSchema = {
   type: 'object';
   description?: string;
   properties: {
-    [fieldName: string]: Schema;
+    [fieldName: string]: AttributesSchema;
   };
   required?: string[];
 };
@@ -51,7 +51,7 @@ export type RelationshipsSchema = {
   properties: {
     [fieldName: string]: LinksToSchema | LinksToManySchema;
   };
-  required: string[]; // fieldName array;
+  required?: string[]; // fieldName array;
 };
 
 type DateSchema = {
@@ -90,7 +90,7 @@ type EnumSchema = {
   enum: any[];
 };
 
-export type Schema =
+export type AttributesSchema =
   | ArraySchema
   | ObjectSchema
   | DateSchema
@@ -99,12 +99,17 @@ export type Schema =
   | EnumSchema
   | BooleanSchema;
 
+export interface CardSchema {
+  attributes: AttributesSchema;
+  relationships: RelationshipsSchema;
+}
+
 /**
  * A map of the most common field definitions to their JSON Schema
  * representations.
  */
 export async function basicMappings(loader: Loader) {
-  let mappings = new Map<typeof CardAPI.FieldDef, Schema>();
+  let mappings = new Map<typeof CardAPI.FieldDef, AttributesSchema>();
 
   let string: typeof import('https://cardstack.com/base/string') =
     await loader.import('https://cardstack.com/base/string');
@@ -154,14 +159,14 @@ export async function basicMappings(loader: Loader) {
 
 function getPrimitiveType(
   def: typeof CardAPI.BaseDef,
-  mappings: Map<typeof CardAPI.BaseDef, Schema>,
+  mappings: Map<typeof CardAPI.BaseDef, AttributesSchema>,
 ) {
   // If we go beyond fieldDefs there are no matching mappings to use
   if (!('isFieldDef' in def) || !def.isFieldDef) {
     return undefined;
   }
   if (mappings.has(def)) {
-    return { ...mappings.get(def) } as Schema;
+    return { ...mappings.get(def) } as AttributesSchema;
   } else {
     // Try the parent class, recurse up until we hit a type recognised
     return getPrimitiveType(Object.getPrototypeOf(def), mappings);
@@ -180,11 +185,11 @@ function getPrimitiveType(
  * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
  */
-function generatePatchCallSpecification(
+function generateJsonSchemaForContainsFields(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
-  mappings: Map<typeof CardAPI.FieldDef, Schema>,
-): Schema | undefined {
+  mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+): AttributesSchema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -212,11 +217,11 @@ function generatePatchCallSpecification(
       continue;
     }
 
-    let fieldSchemaForSingleItem = generatePatchCallSpecification(
+    let fieldSchemaForSingleItem = generateJsonSchemaForContainsFields(
       field.card,
       cardApi,
       mappings,
-    ) as Schema | undefined;
+    ) as AttributesSchema | undefined;
     // This happens when we have no known schema for the field type
     if (fieldSchemaForSingleItem == undefined) {
       continue;
@@ -244,7 +249,7 @@ type RelationshipFieldInfo = {
   description?: string;
 };
 
-function generatePatchCallRelationshipsSpecification(
+function generateJsonSchemaForLinksToFields(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
 ): RelationshipsSchema | undefined {
@@ -258,7 +263,6 @@ function generatePatchCallRelationshipsSpecification(
   let schema: RelationshipsSchema = {
     type: 'object',
     properties: {},
-    required: [],
   };
   for (let rel of relationships) {
     let relSchema: LinksToSchema = {
@@ -281,6 +285,7 @@ function generatePatchCallRelationshipsSpecification(
             type: 'array',
             items: relSchema,
           };
+    schema.required = schema.required || [];
     schema.required.push(rel.flatFieldName);
     if (rel.description) {
       schema.properties[rel.flatFieldName].description = rel.description;
@@ -335,15 +340,13 @@ function generateRelationshipFieldsInfo(
  * @param mappings - A map of field definitions to JSON schema
  * @returns The generated patch call specification as JSON schema
  */
-export function generateCardPatchCallSpecification(
+export function generateJsonSchemaForCardType(
   def: typeof CardAPI.CardDef,
   cardApi: typeof CardAPI,
-  mappings: Map<typeof CardAPI.FieldDef, Schema>,
-):
-  | { attributes: Schema }
-  | { attributes: Schema; relationships: RelationshipsSchema } {
-  let schema = generatePatchCallSpecification(def, cardApi, mappings) as
-    | Schema
+  mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+): CardSchema {
+  let schema = generateJsonSchemaForContainsFields(def, cardApi, mappings) as
+    | AttributesSchema
     | undefined;
   if (schema == undefined) {
     return {
@@ -351,18 +354,23 @@ export function generateCardPatchCallSpecification(
         type: 'object',
         properties: {},
       },
+      relationships: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
     };
   } else {
-    let relationships = generatePatchCallRelationshipsSpecification(
-      def,
-      cardApi,
-    );
+    let relationships = generateJsonSchemaForLinksToFields(def, cardApi);
     if (
       !relationships ||
       !('required' in relationships) ||
-      !relationships.required.length
+      !(relationships.required?.length ?? 0)
     ) {
-      return { attributes: schema };
+      return {
+        attributes: schema,
+        relationships: { type: 'object', properties: {} },
+      };
     }
     return {
       attributes: schema,
@@ -383,16 +391,26 @@ export function getPatchTool(
       parameters: {
         type: 'object',
         properties: {
-          card_id: {
-            type: 'string',
-            const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
-          },
           description: {
             type: 'string',
           },
-          ...patchSpec,
+          attributes: {
+            type: 'object',
+            properties: {
+              cardId: {
+                type: 'string',
+                const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
+              },
+              patch: {
+                type: 'object',
+                properties: {
+                  ...patchSpec,
+                },
+              },
+            },
+          },
         },
-        required: ['card_id', 'attributes', 'description'],
+        required: ['attributes', 'description'],
       },
     },
   };
@@ -432,15 +450,20 @@ export function getSearchTool() {
           description: {
             type: 'string',
           },
-          filter: {
+          attributes: {
             type: 'object',
             properties: {
-              contains: containsFilterProperty,
-              eq: eqCardTypeFilterProperty,
+              filter: {
+                type: 'object',
+                properties: {
+                  contains: containsFilterProperty,
+                  eq: eqCardTypeFilterProperty,
+                },
+              },
             },
           },
         },
-        required: ['filter', 'description'],
+        required: ['attributes', 'description'],
       },
     },
   };

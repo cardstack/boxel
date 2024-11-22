@@ -15,7 +15,7 @@ import type {
   Tool,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { EventStatus } from 'matrix-js-sdk';
+import { EventStatus, IRoomEvent } from 'matrix-js-sdk';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -769,7 +769,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  firstName: { type: 'string' },
+                  attributes: {
+                    firstName: { type: 'string' },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -891,12 +893,12 @@ module('getModifyPrompt', () => {
         parameters: {
           type: 'object',
           properties: {
-            description: {
-              type: 'string',
-            },
             card_id: {
               type: 'string',
               const: 'http://localhost:4201/experiments/Friend/1',
+            },
+            description: {
+              type: 'string',
             },
             attributes: {
               type: 'object',
@@ -928,7 +930,12 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  firstName: { type: 'string' },
+                  attributes: {
+                    type: 'object',
+                    properties: {
+                      firstName: { type: 'string' },
+                    },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -960,15 +967,30 @@ module('getModifyPrompt', () => {
             description: {
               type: 'string',
             },
-            card_id: {
-              type: 'string',
-              const: 'http://localhost:4201/experiments/Friend/1',
-            },
-            firstName: {
-              type: 'string',
+            attributes: {
+              type: 'object',
+              properties: {
+                cardId: {
+                  type: 'string',
+                  const: 'http://localhost:4201/experiments/Friend/1',
+                },
+                patch: {
+                  type: 'object',
+                  properties: {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        firstName: {
+                          type: 'string',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
-          required: ['card_id', 'attributes', 'description'],
+          required: ['attributes', 'description'],
         },
       },
     });
@@ -989,7 +1011,9 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  firstName: { type: 'string' },
+                  attributes: {
+                    firstName: { type: 'string' },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -1018,7 +1042,12 @@ module('getModifyPrompt', () => {
               openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
               tools: [
                 getPatchTool('http://localhost:4201/experiments/Meeting/2', {
-                  location: { type: 'string' },
+                  attributes: {
+                    type: 'object',
+                    properties: {
+                      location: { type: 'string' },
+                    },
+                  },
                 }),
               ],
               submode: 'interact',
@@ -1048,18 +1077,33 @@ module('getModifyPrompt', () => {
           parameters: {
             type: 'object',
             properties: {
-              card_id: {
-                type: 'string',
-                const: 'http://localhost:4201/experiments/Meeting/2',
-              },
               description: {
                 type: 'string',
               },
-              location: {
-                type: 'string',
+              attributes: {
+                type: 'object',
+                properties: {
+                  cardId: {
+                    type: 'string',
+                    const: 'http://localhost:4201/experiments/Meeting/2',
+                  },
+                  patch: {
+                    type: 'object',
+                    properties: {
+                      attributes: {
+                        type: 'object',
+                        properties: {
+                          location: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
-            required: ['card_id', 'attributes', 'description'],
+            required: ['attributes', 'description'],
           },
         },
       });
@@ -1867,11 +1911,13 @@ module('getModifyPrompt', () => {
               id: 'tool-call-id-1',
               name: 'searchCard',
               arguments: {
-                description: "Search for card instances of type 'Author'",
-                filter: {
-                  type: {
-                    module: 'http://localhost:4201/drafts/author',
-                    name: 'Author',
+                attributes: {
+                  description: "Search for card instances of type 'Author'",
+                  filter: {
+                    type: {
+                      module: 'http://localhost:4201/drafts/author',
+                      name: 'Author',
+                    },
                   },
                 },
               },

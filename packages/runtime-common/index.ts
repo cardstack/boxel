@@ -61,6 +61,7 @@ export interface RealmPrerenderedCards {
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, EveryFilter, Query } from './query';
 import { Loader } from './loader';
+export * from './commands';
 export * from './constants';
 export * from './queue';
 export * from './expression';
@@ -226,11 +227,11 @@ export interface CardSearch {
     loaded: Promise<void>;
     isLoading: boolean;
   };
-  getCard(
+  getCard<T extends CardDef>(
     url: URL,
     opts?: { loader?: Loader; isLive?: boolean },
   ): {
-    card: CardDef | undefined;
+    card: T | undefined;
     loaded: Promise<void> | undefined;
     cardError?: undefined | { id: string; error: Error };
   };
@@ -247,7 +248,7 @@ export function getCards(query: Query, realms?: string[]) {
   return finder?.getCards(query, realms);
 }
 
-export function getCard(
+export function getCard<T extends CardDef>(
   url: URL,
   opts?: { loader?: Loader; isLive?: boolean },
 ) {
@@ -257,7 +258,7 @@ export function getCard(
     return { card: undefined, loaded: undefined };
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCard(url, opts);
+  return finder?.getCard<T>(url, opts);
 }
 
 export function trackCard<T extends object>(

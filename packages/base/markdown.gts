@@ -7,10 +7,22 @@ import AlignBoxLeftMiddleIcon from '@cardstack/boxel-icons/align-box-left-middle
 
 class View extends Component<typeof MarkdownField> {
   <template>
-    <div>
+    <div class='markdown-content'>
       {{! template-lint-disable no-triple-curlies }}
       {{{markdownToHtml @model}}}
     </div>
+    <style scoped>
+      .markdown-content {
+        max-width: 100%;
+        overflow: hidden;
+      }
+      .markdown-content :deep(img, svg) {
+        max-width: 100%;
+      }
+      .markdown-content :deep(pre) {
+        white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
+      }
+    </style>
   </template>
 }
 
