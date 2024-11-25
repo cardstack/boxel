@@ -6,10 +6,10 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
@@ -35,6 +35,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';
 
+import type BillingService from '../../services/billing-service';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -49,11 +50,14 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
+  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare messageService: MessageService;
   @service declare realmServer: RealmServerService;
+
+  @tracked isUserLoggedIn = this.matrixService.isLoggedIn;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -123,18 +127,18 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
-  private fetchUserInfo = trackedFunction(this, async () => {
+  private fetchUserInfo = task(async () => {
     if (isTesting()) {
       return;
     }
-    if (!this.matrixService.isLoggedIn) {
+    if (!this.isUserLoggedIn) {
       return;
     }
-    return await this.realmServer.fetchUser();
+    await this.billingService.fetchSubscriptionData();
   });
 
   private get isUserInfoLoading() {
-    return this.fetchUserInfo.isLoading;
+    return this.fetchUserInfo.isRunning;
   }
 
   private get isUserSubscribed() {
@@ -145,8 +149,8 @@ export default class OperatorModeContainer extends Component<Signature> {
       return false;
     }
     return (
-      !!this.fetchUserInfo.value?.stripeCustomerId &&
-      !!this.fetchUserInfo.value?.plan
+      !!this.billingService.subscriptionData?.stripeCustomerId &&
+      !!this.billingService.subscriptionData?.plan
     );
   }
 

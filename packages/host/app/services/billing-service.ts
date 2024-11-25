@@ -7,11 +7,12 @@ import { dropTask } from 'ember-concurrency';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
 
-import ENV from '@cardstack/host/config/environment';
 const { stripePaymentLink } = ENV;
 
 interface SubscriptionData {
