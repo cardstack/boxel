@@ -21,8 +21,8 @@ interface SidebarLayoutSignature {
 }
 export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
   <template>
-    <section class='sidebar-app'>
-      <aside class='sidebar-app-column sidebar'>
+    <section class='sidebar-layout'>
+      <aside class='sidebar-layout-column sidebar'>
         <header class='sidebar-header' aria-label='sidebar-header'>
           {{yield to='sidebar-header'}}
         </header>
@@ -38,7 +38,7 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
           />
         {{/if}}
       </aside>
-      <section class='sidebar-app-column content'>
+      <section class='sidebar-layout-column content'>
         <header class='content-header' aria-label={{@activeFilter.displayName}}>
           {{yield to='content-header'}}
         </header>
@@ -51,7 +51,7 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
       </section>
     </section>
     <style scoped>
-      .sidebar-app {
+      .sidebar-layout {
         display: flex;
         width: 100%;
         max-width: 100%;
@@ -61,14 +61,14 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
         border-top: 1px solid var(--boxel-400);
         overflow: hidden;
       }
-      .sidebar-app-column {
+      .sidebar-layout-column {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-lg);
         max-width: 100%;
       }
-      .sidebar-app-column + .sidebar-app-column {
+      .sidebar-layout-column + .sidebar-layout-column {
         border-left: 1px solid var(--boxel-400);
       }
       .sidebar {
