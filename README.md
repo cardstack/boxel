@@ -234,7 +234,7 @@ In order to run the boxel-motion demo app:
 
 There is some pre-setup needed to enable free plan on development account:
 
-1. Use stripe cli to listen the webhook
+1. Use stripe cli to listen for the webhooks that Stripe sends to the realm server
 
 ```
 stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
@@ -246,22 +246,21 @@ stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_
 > Ready! You are using Stripe API Version [x]. Your webhook signing secret is whsec_xxxxx
 ```
 
-3. Set STRIPE_WEBHOOK_SECRET environment value in `packages/billing/stripe-webhook-handlers/index.ts` file
+3. Go to `packages/realm-server`, pass STRIPE_WEBHOOK_SECRET & STRIPE_API_KEY environment value and start the realm server
 
 ```
-process.env.STRIPE_WEBHOOK_SECRET =
-  'whsec_xxxxx';
+STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 ```
 
 4. Go to `packages/realm-server` and run the following command to sync the stripe products to the database, make sure you have the stripe api key set
 
 ```
-pnpm sync-stripe-products
+STRIPE_API_KEY=... pnpm sync-stripe-products
 ```
 
 5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)
 
-You should able to subscribed successfully after you perform the steps above.
+You should be able to subscribe successfully after you perform the steps above.
 
 ## Running the Tests
 

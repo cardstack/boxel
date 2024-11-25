@@ -96,7 +96,7 @@
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
     "full-reset": "./scripts/full-reset.sh",
-    "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 STRIPE_API_KEY=... ts-node --transpileOnly scripts/sync-stripe-products.ts"
+    "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts"
   },
   "volta": {
     "extends": "../../package.json"
