@@ -34,18 +34,31 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
         />
       </aside>
       <section class='sidebar-layout-column content'>
-        <header class='content-header' aria-label={{@activeFilter.displayName}}>
-          {{yield to='content-header'}}
-        </header>
-        {{#if (has-block 'content-subheader')}}
-          {{yield to='content-subheader'}}
-        {{/if}}
+        <div class='content-header-wrapper'>
+          <header
+            class='content-header'
+            aria-label={{@activeFilter.displayName}}
+          >
+            {{yield to='content-header'}}
+          </header>
+          {{#if (has-block 'content-subheader')}}
+            <div class='content-subheader'>
+              {{yield to='content-subheader'}}
+            </div>
+          {{/if}}
+        </div>
         {{#if (has-block 'grid')}}
           {{yield to='grid'}}
         {{/if}}
       </section>
     </section>
     <style scoped>
+      .sidebar {
+        width: 255px;
+      }
+      .content {
+        flex-grow: 1;
+      }
       .sidebar-layout {
         display: flex;
         width: 100%;
@@ -105,6 +118,15 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
       }
 
       .content-header {
+        min-height: 60px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+      }
+
+      .content-subheader {
         min-height: 60px;
         display: flex;
         flex-wrap: wrap;

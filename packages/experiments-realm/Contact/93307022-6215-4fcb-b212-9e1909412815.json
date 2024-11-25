@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "type": {
+        "index": null,
+        "label": null
+      },
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/crm-cards",
+        "name": "Contact"
+      }
+    }
+  }
+}

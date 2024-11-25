@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Contacts",
+          "tabId": "Contact",
+          "ref": {
+            "name": "Contact",
+            "module": "crm/contact"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "moduleId": null,
+      "title": null,
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/catalog/app-card",
+        "name": "AppCard"
+      }
+    }
+  }
+}

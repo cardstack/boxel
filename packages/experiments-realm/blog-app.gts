@@ -416,7 +416,11 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             {{on 'click' this.createNew}}
           >
             {{#unless this.createCard.isRunning}}
-              <IconPlus class='create-button-icon' width='15' height='15' />
+              <IconPlus
+                class='sidebar-create-button-icon'
+                width='15'
+                height='15'
+              />
             {{/unless}}
             New
             {{this.activeFilter.createNewButtonText}}
