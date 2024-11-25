@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "lucas",
+      "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1",
+      "primaryEmail": "",
+      "secondaryEmail": "lucas@gmail.com",
+      "phoneMobile": {
+        "country": 1,
+        "area": 615,
+        "number": 1233
+      },
+      "phoneOffice": {
+        "country": 1,
+        "area": 223,
+        "number": 12312
+      },
+      "twitterURL": "#",
+      "linkedInURL": "#",
+      "company": "Cardstack Studio",
+      "status": {
+        "index": 0,
+        "label": "Customer"
+      },
+      "description": ""
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/contact",
+        "name": "Contact"
+      }
+    }
+  }
+}
