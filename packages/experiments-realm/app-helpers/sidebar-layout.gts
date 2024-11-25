@@ -83,24 +83,6 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
         grid-template-columns: auto 1fr;
         column-gap: var(--boxel-sp-xs);
       }
-      .sidebar-header-thumbnail {
-        grid-row: 1 / 3;
-        padding: var(--boxel-sp-6xs);
-        border: 1px solid var(--boxel-450);
-        border-radius: var(--boxel-border-radius-xl);
-      }
-      .sidebar-header-title {
-        align-self: end;
-        margin: 0;
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .sidebar-header-description {
-        grid-column: 2;
-        margin: 0;
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
       .sidebar-create-button {
         --icon-color: currentColor;
         --boxel-loading-indicator-size: 15px;
@@ -140,12 +122,6 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
         align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
-      }
-      .content-title {
-        flex-grow: 1;
-        margin: 0;
-        font: 600 var(--boxel-font-lg);
-        letter-spacing: var(--boxel-lsp-xxs);
       }
     </style>
   </template>
