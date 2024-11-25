@@ -311,7 +311,7 @@ export default class CodeSubmode extends Component<Signature> {
     return null;
   }
 
-  private get fileIncompatibilityErrors() {
+  private get fileErrorMessages(): string[] {
     if (this.isCard) {
       if (this.cardResource.cardError) {
         try {
@@ -320,6 +320,12 @@ export default class CodeSubmode extends Component<Signature> {
           if (error.responseText) {
             let parsedError = JSON.parse(error.responseText);
 
+            // handle instance errors
+            if (parsedError.errors.find((e: any) => e.message)) {
+              return parsedError.errors.map((e: any) => e.message);
+            }
+
+            // otherwise handle module errors
             let allDetails = parsedError.errors
               .concat(
                 ...parsedError.errors.map(
@@ -848,7 +854,7 @@ export default class CodeSubmode extends Component<Signature> {
 
                         <hr class='preview-error' />
 
-                        {{#each this.fileIncompatibilityErrors as |error|}}
+                        {{#each this.fileErrorMessages as |error|}}
                           <pre
                             class='preview-error'
                             data-test-card-preview-error

@@ -54,6 +54,7 @@ import {
   insertUser,
   insertPlan,
   fetchSubscriptionsByUserId,
+  cleanWhiteSpace,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -70,7 +71,10 @@ import {
   insertSubscriptionCycle,
   insertSubscription,
 } from '@cardstack/billing/billing-queries';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
+import {
+  createJWT as createRealmServerJWT,
+  RealmServerTokenClaim,
+} from '../utils/jwt';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import Stripe from 'stripe';
 import sinon from 'sinon';
@@ -629,6 +633,108 @@ module('Realm Server', function (hooks) {
             },
           },
         });
+      });
+
+      test('serves a card error request without last known good state', async function (assert) {
+        let response = await request
+          .get('/missing-link')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 500, 'HTTP 500 status');
+        let json = response.body;
+        assert.strictEqual(
+          response.get('X-boxel-realm-url'),
+          testRealmURL.href,
+          'realm url header is correct',
+        );
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          'true',
+          'realm is public readable',
+        );
+
+        let errorBody = json.errors[0];
+        assert.ok(errorBody.meta.stack.includes('at CurrentRun.visitFile'));
+        delete errorBody.meta.stack;
+        assert.deepEqual(errorBody, {
+          id: `${testRealmHref}missing-link`,
+          status: 404,
+          title: 'Not Found',
+          message: `missing file ${testRealmHref}does-not-exist.json`,
+          meta: {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+          },
+        });
+      });
+    });
+
+    // using public writable realm to make it easy for test setup for the error tests
+    module('public writable realm', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        '*': ['read', 'write'],
+      });
+
+      test('serves a card error request with last known good state', async function (assert) {
+        await request
+          .patch('/hassan')
+          .send({
+            data: {
+              type: 'card',
+              relationships: {
+                friend: {
+                  links: {
+                    self: './does-not-exist',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './friend.gts',
+                  name: 'Friend',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json');
+
+        let response = await request
+          .get('/hassan')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 500, 'HTTP 500 status');
+        let json = response.body;
+        assert.strictEqual(
+          response.get('X-boxel-realm-url'),
+          testRealmURL.href,
+          'realm url header is correct',
+        );
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          'true',
+          'realm is public readable',
+        );
+
+        let errorBody = json.errors[0];
+        let lastKnownGoodHtml = cleanWhiteSpace(
+          errorBody.meta.lastKnownGoodHtml,
+        );
+
+        assert.ok(errorBody.meta.stack.includes('at CurrentRun.visitFile'));
+        assert.strictEqual(errorBody.status, 404);
+        assert.strictEqual(errorBody.title, 'Not Found');
+        assert.strictEqual(
+          errorBody.message,
+          `missing file ${testRealmHref}does-not-exist.json`,
+        );
+        assert.ok(lastKnownGoodHtml.includes('Hassan has a friend'));
+        assert.ok(lastKnownGoodHtml.includes('Jade'));
+        let scopedCssUrls = errorBody.meta.scopedCssUrls;
+        assertScopedCssUrlsContain(
+          assert,
+          scopedCssUrls,
+          cardDefModuleDependencies,
+        );
       });
     });
 
@@ -2867,7 +2973,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3051,7 +3160,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3123,7 +3235,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3260,7 +3375,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send('make a new realm please!');
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
@@ -3275,7 +3393,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3294,7 +3415,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3322,7 +3446,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3349,7 +3476,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT('@mango:boxel.ai', secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3379,7 +3509,10 @@ module('Realm Server', function (hooks) {
         .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
         )
         .send(
           JSON.stringify({
@@ -3400,7 +3533,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3431,7 +3567,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3458,7 +3597,10 @@ module('Realm Server', function (hooks) {
           .set('Content-Type', 'application/json')
           .set(
             'Authorization',
-            `Bearer ${createRealmServerJWT(ownerUserId, secretSeed)}`,
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              secretSeed,
+            )}`,
           )
           .send(
             JSON.stringify({
@@ -3766,6 +3908,14 @@ module('Realm Server', function (hooks) {
         data: [
           {
             type: 'card-type-summary',
+            id: `${testRealm.url}friend/Friend`,
+            attributes: {
+              displayName: 'Friend',
+              total: 2,
+            },
+          },
+          {
+            type: 'card-type-summary',
             id: `${testRealm.url}home/Home`,
             attributes: {
               displayName: 'Home',
@@ -3828,13 +3978,67 @@ module('Realm Server', function (hooks) {
   module('stripe webhook handler', function (hooks) {
     let createSubscriptionStub: sinon.SinonStub;
     let fetchPriceListStub: sinon.SinonStub;
+    let matrixClient: MatrixClient;
+    let roomId: string;
+    let userId = '@test_realm:localhost';
+    let waitForBillingNotification = async function (
+      assert: Assert,
+      done: () => void,
+    ) {
+      let messages = await matrixClient.roomMessages(roomId);
+      if (messages[0].content.msgtype === 'org.boxel.realm-server-event') {
+        assert.strictEqual(
+          messages[0].content.body,
+          JSON.stringify({ eventType: 'billing-notification' }),
+        );
+        done();
+      } else {
+        setTimeout(() => waitForBillingNotification(assert, done), 1);
+      }
+    };
+
+    setupPermissionedRealm(hooks, {
+      '*': ['read', 'write'],
+    });
+
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
-      process.env.STRIPE_API_KEY = 'stripe-api-key';
-      process.env.STRIPE_WEBHOOK_SECRET = 'stripe-webhook-secret';
       let stripe = getStripe();
       createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
       fetchPriceListStub = sinon.stub(stripe.prices, 'list');
+
+      matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: 'test_realm',
+        seed: secretSeed,
+      });
+      await matrixClient.login();
+      let userId = matrixClient.getUserId();
+
+      let response = await request
+        .post('/_server-session')
+        .send(JSON.stringify({ user: userId }))
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json');
+      let json = response.body;
+
+      let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+      if (!rooms.includes(json.room)) {
+        await matrixClient.joinRoom(json.room);
+      }
+
+      await matrixClient.sendEvent(json.room, 'm.room.message', {
+        body: `auth-response: ${json.challenge}`,
+        msgtype: 'm.text',
+      });
+
+      response = await request
+        .post('/_server-session')
+        .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json');
+      roomId = json.room;
     });
 
     hooks.afterEach(async function () {
@@ -3842,17 +4046,9 @@ module('Realm Server', function (hooks) {
       fetchPriceListStub.restore();
     });
 
-    setupPermissionedRealm(hooks, {
-      '*': ['read', 'write'],
-    });
-
     test('subscribes user back to free plan when the current subscription is expired', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let user = await insertUser(
-        dbAdapter,
-        '@test_realm:localhost',
-        'cus_123',
-      );
+      let user = await insertUser(dbAdapter, userId, 'cus_123');
       let freePlan = await insertPlan(
         dbAdapter,
         'Free plan',
@@ -4068,15 +4264,12 @@ module('Realm Server', function (hooks) {
 
       assert.strictEqual(subscriptions[1].status, 'active');
       assert.strictEqual(subscriptions[1].planId, freePlan.id);
+      waitForBillingNotification(assert, assert.async());
     });
 
     test('ensures the current subscription expires when free plan subscription fails', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let user = await insertUser(
-        dbAdapter,
-        '@test_realm:localhost',
-        'cus_123',
-      );
+      let user = await insertUser(dbAdapter, userId, 'cus_123');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       let creatorPlan = await insertPlan(
         dbAdapter,
@@ -4248,6 +4441,95 @@ module('Realm Server', function (hooks) {
         '/_user response is correct',
       );
     });
+
+    test('sends billing notification on invoice payment succeeded event', async function (assert) {
+      const secret = process.env.STRIPE_WEBHOOK_SECRET;
+      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
+      if (!secret) {
+        throw new Error('STRIPE_WEBHOOK_SECRET is not set');
+      }
+      let event = {
+        id: 'evt_1234567890',
+        object: 'event',
+        type: 'invoice.payment_succeeded',
+        data: {
+          object: {
+            id: 'in_1234567890',
+            object: 'invoice',
+            amount_paid: 0, // free plan
+            billing_reason: 'subscription_create',
+            period_end: 1638465600,
+            period_start: 1635873600,
+            subscription: 'sub_1234567890',
+            customer: 'cus_123',
+            lines: {
+              data: [
+                {
+                  amount: 0,
+                  price: { product: 'prod_free' },
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      let payload = JSON.stringify(event);
+      let timestamp = Math.floor(Date.now() / 1000);
+      let signature = Stripe.webhooks.generateTestHeaderString({
+        payload,
+        secret,
+        timestamp,
+      });
+
+      await request
+        .post('/_stripe-webhook')
+        .send(payload)
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('stripe-signature', signature);
+      waitForBillingNotification(assert, assert.async());
+    });
+
+    test('sends billing notification on checkout session completed event', async function (assert) {
+      const secret = process.env.STRIPE_WEBHOOK_SECRET;
+      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
+      if (!secret) {
+        throw new Error('STRIPE_WEBHOOK_SECRET is not set');
+      }
+      let event = {
+        id: 'evt_1234567890',
+        object: 'event',
+        data: {
+          object: {
+            id: 'cs_test_1234567890',
+            object: 'checkout.session',
+            client_reference_id: userId,
+            customer: 'cus_123',
+            metadata: {},
+          },
+        },
+        type: 'checkout.session.completed',
+      };
+
+      let payload = JSON.stringify(event);
+      let timestamp = Math.floor(Date.now() / 1000);
+      let signature = Stripe.webhooks.generateTestHeaderString({
+        payload,
+        secret,
+        timestamp,
+      });
+
+      await request
+        .post('/_stripe-webhook')
+        .send(payload)
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('stripe-signature', signature);
+      waitForBillingNotification(assert, assert.async());
+    });
   });
 });
 
@@ -4400,6 +4682,22 @@ module('Realm server with realm mounted at the origin', function (hooks) {
                 kind: 'file',
               },
             },
+            'friend.gts': {
+              links: {
+                related: `${testRealmHref}friend.gts`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'hassan.json': {
+              links: {
+                related: `${testRealmHref}hassan.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'home.gts': {
               links: {
                 related: `${testRealmHref}home.gts`,
@@ -4411,6 +4709,22 @@ module('Realm server with realm mounted at the origin', function (hooks) {
             'index.json': {
               links: {
                 related: `${testRealmHref}index.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'jade.json': {
+              links: {
+                related: `${testRealmHref}jade.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'missing-link.json': {
+              links: {
+                related: `${testRealmHref}missing-link.json`,
               },
               meta: {
                 kind: 'file',
@@ -4732,8 +5046,13 @@ module('Realm server authentication', function (hooks) {
       .set('Content-Type', 'application/json');
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
     let token = response.headers['authorization'];
-    let decoded = jwt.verify(token, secretSeed) as { user: string };
+    let decoded = jwt.verify(token, secretSeed) as RealmServerTokenClaim;
     assert.strictEqual(decoded.user, userId);
+    assert.notStrictEqual(
+      decoded.sessionRoom,
+      undefined,
+      'sessionRoom should be defined',
+    );
   });
 });
 

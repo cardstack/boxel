@@ -715,7 +715,10 @@ export class Realm {
         await this.checkPermission(request, requestContext, requiredPermission);
       }
       if (!this.#realmIndexQueryEngine) {
-        return systemError(requestContext, 'search index is not available');
+        return systemError({
+          requestContext,
+          message: 'search index is not available',
+        });
       }
       if (this.#router.handles(request)) {
         return this.#router.handle(request, requestContext);
@@ -1189,7 +1192,11 @@ export class Realm {
       if (err.message.startsWith('field validation error')) {
         return badRequest(err.message, requestContext);
       } else {
-        return systemError(requestContext, err.message, err);
+        return systemError({
+          requestContext,
+          message: err.message,
+          additionalError: err,
+        });
       }
     }
     let { lastModified } = await this.write(
@@ -1207,11 +1214,11 @@ export class Realm {
       let err = entry
         ? CardError.fromSerializableError(entry.error)
         : undefined;
-      return systemError(
+      return systemError({
         requestContext,
-        `Unable to index new card, can't find new instance in index`,
-        err,
-      );
+        message: `Unable to index new card, can't find new instance in index`,
+        additionalError: err,
+      });
     }
     let doc: SingleCardDocument = merge({}, entry.doc, {
       data: {
@@ -1249,11 +1256,13 @@ export class Realm {
       return notFound(request, requestContext);
     }
     if (originalMaybeError.type === 'error') {
-      return systemError(
+      return systemError({
         requestContext,
-        `unable to patch card, cannot load original from index`,
-        CardError.fromSerializableError(originalMaybeError.error),
-      );
+        message: `unable to patch card, cannot load original from index`,
+        additionalError: CardError.fromSerializableError(
+          originalMaybeError.error,
+        ),
+      });
     }
     let { doc: original } = originalMaybeError;
     let originalClone = cloneDeep(original);
@@ -1316,7 +1325,11 @@ export class Realm {
       if (err.message.startsWith('field validation error')) {
         return badRequest(err.message, requestContext);
       } else {
-        return systemError(requestContext, err.message, err);
+        return systemError({
+          requestContext,
+          message: err.message,
+          additionalError: err,
+        });
       }
     }
     let { lastModified } = await this.write(
@@ -1332,11 +1345,13 @@ export class Realm {
       },
     );
     if (!entry || entry?.type === 'error') {
-      return systemError(
+      return systemError({
         requestContext,
-        `Unable to index card: can't find patched instance in index`,
-        entry ? CardError.fromSerializableError(entry.error) : undefined,
-      );
+        message: `Unable to index card: can't find patched instance in index`,
+        additionalError: entry
+          ? CardError.fromSerializableError(entry.error)
+          : undefined,
+      });
     }
     let doc: SingleCardDocument = merge({}, entry.doc, {
       data: {
@@ -1380,11 +1395,23 @@ export class Realm {
         return notFound(request, requestContext);
       }
       if (maybeError.type === 'error') {
-        return systemError(
+        return systemError({
           requestContext,
-          `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
-          CardError.fromSerializableError(maybeError.error),
-        );
+          message: `cannot return card from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.detail}`,
+          additionalError: CardError.fromSerializableError(maybeError.error),
+          // This is based on https://jsonapi.org/format/#errors
+          body: {
+            id: url.href,
+            status: maybeError.error.errorDetail.status,
+            title: maybeError.error.errorDetail.title,
+            message: maybeError.error.errorDetail.detail,
+            meta: {
+              lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
+              scopedCssUrls: maybeError.error.scopedCssUrls,
+              stack: maybeError.error.errorDetail.stack,
+            },
+          },
+        });
       }
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };

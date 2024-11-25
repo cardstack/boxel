@@ -241,6 +241,7 @@ export class MatrixClient {
         event_id: string;
         content: {
           body: string;
+          msgtype: string;
         };
       }[];
     };

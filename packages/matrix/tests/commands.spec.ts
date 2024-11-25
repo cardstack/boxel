@@ -44,9 +44,12 @@ test.describe('Commands', () => {
       page.locator(`[data-test-stack-card="${testHost}/mango"]`),
     ).toHaveCount(1);
     await sendMessage(page, room1, 'please change this card');
-    let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
-    let boxelMessageData = JSON.parse(message.content.data);
+    let message;
+    await expect(async () => {
+      message = (await getRoomEvents()).pop()!;
+      expect(message?.content?.msgtype).toStrictEqual('org.boxel.message');
+    }).toPass();
+    let boxelMessageData = JSON.parse(message!.content.data);
 
     expect(boxelMessageData.context.tools.length).toEqual(3);
     let patchCardTool = boxelMessageData.context.tools.find(
@@ -206,9 +209,12 @@ test.describe('Commands', () => {
       )
       .click();
     await sendMessage(page, room1, 'please change this card');
-    let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
-    let boxelMessageData = JSON.parse(message.content.data);
+    let message;
+    await expect(async () => {
+      message = (await getRoomEvents()).pop()!;
+      expect(message?.content?.msgtype).toStrictEqual('org.boxel.message');
+    }).toPass();
+    let boxelMessageData = JSON.parse(message!.content.data);
     expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 

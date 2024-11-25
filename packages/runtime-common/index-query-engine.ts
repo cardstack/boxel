@@ -90,7 +90,30 @@ interface IndexedError {
   error: SerializedError;
 }
 
-export type IndexedInstanceOrError = IndexedInstance | IndexedError;
+interface InstanceError
+  extends Partial<
+    Omit<
+      IndexedInstance,
+      | 'type'
+      | 'realmVersion'
+      | 'realmURL'
+      | 'instance'
+      | 'source'
+      | 'lastModified'
+      | 'resourceCreatedAt'
+    >
+  > {
+  type: 'error';
+  error: SerializedError;
+  realmVersion: number;
+  realmURL: string;
+  instance: CardResource | null;
+  source: string | null;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+}
+
+export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
 
 type GetEntryOptions = WIPOptions;
@@ -208,7 +231,7 @@ export class IndexQueryEngine {
   async getInstance(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<IndexedInstanceOrError | undefined> {
+  ): Promise<InstanceOrError | undefined> {
     let result = (await this.query([
       `SELECT i.*, embedded_html, fitted_html`,
       `FROM boxel_index as i
@@ -235,11 +258,6 @@ export class IndexQueryEngine {
     if (maybeResult.is_deleted) {
       return undefined;
     }
-
-    if (maybeResult.error_doc) {
-      return { type: 'error', error: maybeResult.error_doc };
-    }
-    let instanceEntry = assertIndexEntrySource(maybeResult);
     let {
       url: canonicalURL,
       pristine_doc: instance,
@@ -256,16 +274,8 @@ export class IndexQueryEngine {
       source,
       types,
       deps,
-    } = instanceEntry;
-    if (!instance) {
-      throw new Error(
-        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
-          opts,
-        )} has neither an error_doc nor a pristine_doc`,
-      );
-    }
-    return {
-      type: 'instance',
+    } = maybeResult;
+    let baseResult = {
       canonicalURL,
       realmURL,
       instance,
@@ -278,9 +288,30 @@ export class IndexQueryEngine {
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
       source,
       deps,
-      lastModified: parseInt(lastModified),
-      resourceCreatedAt: parseInt(resourceCreatedAt),
+      lastModified: lastModified != null ? parseInt(lastModified) : null,
+      resourceCreatedAt:
+        resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
       realmVersion,
+    };
+
+    if (maybeResult.error_doc) {
+      return { ...baseResult, type: 'error', error: maybeResult.error_doc };
+    }
+    let instanceEntry = assertIndexEntrySource(maybeResult);
+    if (!instance) {
+      throw new Error(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor a pristine_doc`,
+      );
+    }
+    return {
+      ...baseResult,
+      type: 'instance',
+      instance,
+      source: instanceEntry.source,
+      lastModified: parseInt(instanceEntry.last_modified),
+      resourceCreatedAt: parseInt(instanceEntry.resource_created_at),
     };
   }
 
