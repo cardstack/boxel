@@ -21,9 +21,9 @@ interface SidebarLayoutSignature {
 }
 export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
   <template>
-    <section class='blog-app'>
-      <aside class='blog-app-column sidebar'>
-        <header class='sidebar-header' aria-label='blog-header'>
+    <section class='sidebar-app'>
+      <aside class='sidebar-app-column sidebar'>
+        <header class='sidebar-header' aria-label='sidebar-header'>
           {{yield to='sidebar-header'}}
         </header>
         {{yield to='sidebar-subheader'}}
@@ -38,7 +38,7 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
           />
         {{/if}}
       </aside>
-      <section class='blog-app-column content'>
+      <section class='sidebar-app-column content'>
         <header class='content-header' aria-label={{@activeFilter.displayName}}>
           {{yield to='content-header'}}
         </header>
@@ -51,7 +51,7 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
       </section>
     </section>
     <style scoped>
-      .blog-app {
+      .sidebar-app {
         display: flex;
         width: 100%;
         max-width: 100%;
@@ -61,14 +61,14 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
         border-top: 1px solid var(--boxel-400);
         overflow: hidden;
       }
-      .blog-app-column {
+      .sidebar-app-column {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-lg);
         max-width: 100%;
       }
-      .blog-app-column + .blog-app-column {
+      .sidebar-app-column + .sidebar-app-column {
         border-left: 1px solid var(--boxel-400);
       }
       .sidebar {
