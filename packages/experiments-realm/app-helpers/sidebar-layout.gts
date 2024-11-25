@@ -71,12 +71,6 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
       .sidebar-layout-column + .sidebar-layout-column {
         border-left: 1px solid var(--boxel-400);
       }
-      .sidebar {
-        width: 255px;
-      }
-      .content {
-        flex-grow: 1;
-      }
 
       .sidebar-header {
         display: grid;
