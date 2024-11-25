@@ -883,11 +883,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-profile-icon-button]');
 
       assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('100');
-      assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1000 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
       assert.dom('[data-test-upgrade-plan-button]').exists();
       assert.dom('[data-test-buy-more-credits]').exists();
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
@@ -918,11 +926,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
 
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('100');
-      assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('0 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
       await click('[data-test-profile-icon-button]');
 
@@ -933,11 +949,19 @@ module('Acceptance | operator mode tests', function (hooks) {
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('0');
-      assert.dom('[data-test-additional-credit]').hasClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('0 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('0');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasClass('out-of-credit');
       await click('[data-test-profile-icon-button]');
 
@@ -948,11 +972,19 @@ module('Acceptance | operator mode tests', function (hooks) {
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('0');
-      assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1000 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('0');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
     });
   });

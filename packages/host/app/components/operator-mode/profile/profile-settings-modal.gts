@@ -28,6 +28,7 @@ import { isValidPassword } from '@cardstack/host/lib/matrix-utils';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import ProfileEmail from './profile-email';
+import ProfileSubscription from './profile-subscription';
 
 interface Signature {
   Args: {
@@ -126,6 +127,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
               @changeEmailComplete={{this.completeEmail}}
             />
           {{/if}}
+          <ProfileSubscription />
         </form>
         {{#if (or (bool this.displayNameError) (bool this.error))}}
           <div class='error-message' data-test-profile-save-error>

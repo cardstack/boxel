@@ -4,16 +4,10 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
-
-import {
-  Avatar,
-  BoxelButton,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
-import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
+import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import config from '@cardstack/host/config/environment';
 import BillingService from '@cardstack/host/services/billing-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -140,124 +134,56 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       <ProfileInfo />
       {{! TODO: Remove config.APP.stripeBillingEnabled once the API integration for credit info is completed. }}
       {{#if config.APP.stripeBillingEnabled}}
-        <div class='credit-info' data-test-credit-info>
-          <div class='info-group'>
-            <span class='label'>Membership Tier</span>
-            <span class='value' data-test-membership-tier>
-              {{#if this.isLoading}}
-                <LoadingIndicator />
-              {{else}}
-                {{this.plan}}
-              {{/if}}
-            </span>
-          </div>
-          <BoxelButton
-            @kind='secondary-light'
-            @size='small'
-            @disabled={{this.isLoading}}
-            data-test-upgrade-plan-button
-            {{on 'click' @toggleProfileSettings}}
-          >Upgrade Plan</BoxelButton>
-          <div class='info-group'>
-            <span class='label'>Monthly Credit</span>
-            <span
-              class={{cn 'value' out-of-credit=this.isOutOfPlanCreditAllowance}}
-              data-test-monthly-credit
-            >
-              {{#if this.isLoading}}
-                <LoadingIndicator />
-              {{else}}
-                <IconHexagon width='16px' height='16px' />
-                {{this.monthlyCreditText}}
-              {{/if}}
-            </span>
-          </div>
-          <div class='info-group additional-credit'>
-            <span class='label'>Additional Credit</span>
-            <span
-              class={{cn 'value' out-of-credit=this.isOutOfCredit}}
-              data-test-additional-credit
-            >{{#if this.isLoading}}
-                <LoadingIndicator />
-              {{else}}
-                <IconHexagon width='16px' height='16px' />
-                {{this.extraCreditsAvailableInBalance}}
-              {{/if}}</span>
-          </div>
-          <div
-            class={{cn 'buy-more-credits' out-of-credit=this.isOutOfCredit}}
-            data-test-buy-more-credits
-          >
+        <WithSubscriptionData as |subscriptionData|>
+          <div class='credit-info' data-test-credit-info>
+            <div class='info-group'>
+              <span class='label'>Membership Tier</span>
+              {{subscriptionData.plan}}
+            </div>
             <BoxelButton
-              @kind={{if this.isOutOfCredit 'primary' 'secondary-light'}}
-              @size={{if this.isOutOfCredit 'base' 'small'}}
-              @disabled={{this.isLoading}}
-              {{on 'click' @toggleProfileSettings}}
-            >Buy more credits</BoxelButton>
+              @kind='secondary-light'
+              @size='small'
+              @disabled={{subscriptionData.isLoading}}
+              data-test-upgrade-plan-button
+              {{on 'click' this.billingService.managePlan}}
+            >Upgrade Plan</BoxelButton>
+            <div class='info-group'>
+              <span class='label'>Monthly Credit</span>
+              {{subscriptionData.monthlyCredit}}
+            </div>
+            <div class='info-group additional-credit'>
+              <span class='label'>Additional Credit</span>
+              {{subscriptionData.additionalCredit}}
+            </div>
+            <div
+              class={{cn
+                'buy-more-credits'
+                out-of-credit=subscriptionData.isOutOfCredit
+              }}
+              data-test-buy-more-credits
+            >
+              <BoxelButton
+                @kind={{if
+                  subscriptionData.isOutOfCredit
+                  'primary'
+                  'secondary-light'
+                }}
+                @size={{if subscriptionData.isOutOfCredit 'base' 'small'}}
+                @disabled={{subscriptionData.isLoading}}
+                {{on 'click' @toggleProfileSettings}}
+              >Buy more credits</BoxelButton>
+            </div>
           </div>
-        </div>
+        </WithSubscriptionData>
       {{/if}}
     </div>
   </template>
 
-  constructor(...args: [any, any]) {
-    super(...args);
-    this.fetchCreditInfo.perform();
-  }
-
-  @service private declare billingService: BillingService;
   @service declare matrixService: MatrixService;
-
-  private fetchCreditInfo = task(async () => {
-    await this.billingService.fetchSubscriptionData();
-  });
+  @service declare billingService: BillingService;
 
   @action private logout() {
     this.matrixService.logout();
-  }
-
-  private get isLoading() {
-    return this.billingService.fetchingSubscriptionData;
-  }
-
-  private get plan() {
-    return this.billingService.subscriptionData?.plan;
-  }
-
-  private get creditsIncludedInPlanAllowance() {
-    return this.billingService.subscriptionData?.creditsIncludedInPlanAllowance;
-  }
-
-  private get creditsAvailableInPlanAllowance() {
-    return this.billingService.subscriptionData
-      ?.creditsAvailableInPlanAllowance;
-  }
-
-  private get extraCreditsAvailableInBalance() {
-    return this.billingService.subscriptionData?.extraCreditsAvailableInBalance;
-  }
-
-  private get monthlyCreditText() {
-    return this.creditsAvailableInPlanAllowance != null &&
-      this.creditsIncludedInPlanAllowance != null
-      ? `${this.creditsAvailableInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`
-      : null;
-  }
-
-  private get isOutOfCredit() {
-    return (
-      this.isOutOfPlanCreditAllowance &&
-      (this.extraCreditsAvailableInBalance == null ||
-        this.extraCreditsAvailableInBalance == 0)
-    );
-  }
-
-  private get isOutOfPlanCreditAllowance() {
-    return (
-      this.creditsAvailableInPlanAllowance == null ||
-      this.creditsIncludedInPlanAllowance == null ||
-      this.creditsAvailableInPlanAllowance <= 0
-    );
   }
 }
 

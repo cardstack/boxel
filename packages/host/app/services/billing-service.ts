@@ -5,11 +5,17 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
+import Stripe from 'stripe';
+
 import { SupportedMimeType } from '@cardstack/runtime-common';
+
+import environment from '../config/environment';
 
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
+
+const stripe = new Stripe(environment.stripeApiKey);
 
 interface SubscriptionData {
   plan: string | null;
@@ -18,8 +24,14 @@ interface SubscriptionData {
   extraCreditsAvailableInBalance: number | null;
 }
 
+interface PaymentLink {
+  url: string;
+  creditReloadAmount: number;
+}
+
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
+  private _paymentLinks: PaymentLink[] | null = null;
 
   @service private declare realmServer: RealmServerService;
   @service private declare network: NetworkService;
@@ -36,6 +48,29 @@ export default class BillingService extends Service {
 
   resetState() {
     this._subscriptionData = null;
+    this._paymentLinks = null;
+  }
+
+  managePlan() {
+    window.open(environment.stripeCustomerPortalLink);
+  }
+
+  async fetchPaymentLinks() {
+    if (!this._paymentLinks) {
+      let response = await stripe.paymentLinks.list();
+      this._paymentLinks = response.data
+        .filter((data) => data.metadata.credit_reload_amount)
+        .map((data) => ({
+          url: data.url,
+          creditReloadAmount: Number(data.metadata.credit_reload_amount),
+        }))
+        .sort(
+          (paymentLinkA, paymentLinkB) =>
+            paymentLinkA.creditReloadAmount - paymentLinkB.creditReloadAmount,
+        );
+    }
+
+    return this._paymentLinks;
   }
 
   get subscriptionData() {

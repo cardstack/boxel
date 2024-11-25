@@ -1635,6 +1635,9 @@ importers:
       stream-browserify:
         specifier: ^3.0.0
         version: 3.0.0
+      stripe:
+        specifier: ^17.2.1
+        version: 17.2.1
       super-fast-md5:
         specifier: ^1.0.1
         version: 1.0.1
