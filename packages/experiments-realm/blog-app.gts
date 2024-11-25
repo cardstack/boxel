@@ -234,7 +234,9 @@ interface CardAdminViewSignature {
 }
 class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
   <template>
-    {{#if this.resource.card}}
+    {{#if this.resource.cardError}}
+      Error: Could not load additional info
+    {{else if this.resource.card}}
       <div class='blog-admin' ...attributes>
         {{#let this.resource.card as |card|}}
           <FieldContainer
