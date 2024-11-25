@@ -603,11 +603,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
           />
           <div class='stack-item-content card-error' data-test-card-error>
             {{! TODO show stock error message when no last known good HTML !}}
+            {{! TODO confirm that we render this in edit format of the stack item !}}
             {{#if this.lastKnownGoodHtml}}
               <this.lastKnownGoodHtml />
             {{/if}}
-            <CardErrorDetail @error={{this.cardError}} />
           </div>
+          <CardErrorDetail @error={{this.cardError}} />
         {{else}}
           {{#let (this.realm.info this.card.id) as |realmInfo|}}
             <CardHeader
