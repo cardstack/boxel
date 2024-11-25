@@ -12,7 +12,6 @@ interface SidebarLayoutSignature {
     default: [];
     'sidebar-header': [];
     'sidebar-subheader': [];
-    'sidebar-content': [];
     'content-header': [];
     'content-subheader': [];
     grid: [];
@@ -27,16 +26,12 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
           {{yield to='sidebar-header'}}
         </header>
         {{yield to='sidebar-subheader'}}
-        {{#if (has-block 'sidebar-content')}}
-          {{yield to='sidebar-content'}}
-        {{else}}
-          <FilterList
-            class='sidebar-filters'
-            @filters={{@filters}}
-            @activeFilter={{@activeFilter}}
-            @onChanged={{@onFilterChange}}
-          />
-        {{/if}}
+        <FilterList
+          class='sidebar-filters'
+          @filters={{@filters}}
+          @activeFilter={{@activeFilter}}
+          @onChanged={{@onFilterChange}}
+        />
       </aside>
       <section class='sidebar-layout-column content'>
         <header class='content-header' aria-label={{@activeFilter.displayName}}>
