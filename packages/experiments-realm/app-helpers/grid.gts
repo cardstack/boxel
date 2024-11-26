@@ -7,14 +7,11 @@ import { type Query } from '@cardstack/runtime-common';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
-import { ComponentLike } from '@glint/template';
 export type ViewOption = 'card' | 'strip' | 'grid';
-
-export type HTMLComponent = ComponentLike<{ Args: {} }>;
 
 interface PrerenderedCard {
   url: string;
-  component: HTMLComponent;
+  component: any;
 }
 
 interface CardsGridSignature {
