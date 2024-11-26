@@ -9,7 +9,7 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
 
