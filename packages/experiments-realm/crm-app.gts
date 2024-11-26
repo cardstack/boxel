@@ -280,7 +280,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           <CardsGrid
             @query={{this.query}}
             @realms={{this.realms}}
-            @selectedView='grid'
+            @selectedView={{this.selectedView}}
             @context={{@context}}
           />
         {{/if}}
