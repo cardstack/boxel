@@ -26,7 +26,7 @@ interface CardsGridSignature {
     format: Format;
   };
   Blocks: {
-    'admin-data': [card: PrerenderedCard];
+    adminData: [card: PrerenderedCard];
   };
   Element: HTMLElement;
 }
@@ -62,7 +62,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                 >
                   <card.component />
                 </CardContainer>
-                {{yield card to='admin-data'}}
+                {{yield card to='adminData'}}
               </li>
             {{/each}}
           </:response>
