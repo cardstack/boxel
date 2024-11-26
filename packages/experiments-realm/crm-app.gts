@@ -223,7 +223,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   <template>
     <TabbedHeader
-      @headerTitle={{@model.title}}
       @tabs={{@model.tabs}}
       @setActiveTab={{this.setActiveTab}}
       @activeTabId={{this.activeTab.tabId}}

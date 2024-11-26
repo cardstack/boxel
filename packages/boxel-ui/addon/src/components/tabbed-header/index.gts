@@ -37,7 +37,9 @@ export default class TabbedHeader extends Component<Signature> {
         {{#if (has-block 'headerIcon')}}
           {{yield to='headerIcon'}}
         {{/if}}
-        <h1 class='app-title'>{{@headerTitle}}</h1>
+        {{#if @headerTitle}}
+          <h1 class='app-title'>{{@headerTitle}}</h1>
+        {{/if}}
       </div>
       <nav class='app-nav'>
         <ul class='app-tab-list'>
