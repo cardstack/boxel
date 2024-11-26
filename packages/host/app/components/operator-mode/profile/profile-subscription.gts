@@ -1,10 +1,13 @@
 import { fn } from '@ember/helper';
 
 import { on } from '@ember/modifier';
+import Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { trackedFunction } from 'ember-resources/util/function';
+import { task } from 'ember-concurrency';
+
+import window from 'ember-window-mock';
 
 import {
   BoxelButton,
@@ -60,22 +63,25 @@ export default class ProfileSubscription extends Component<Signature> {
           <div class='buy-more-credits'>
             <span class='buy-more-credits__title'>Buy more credits</span>
             <div class='payment-links'>
-              {{#each this.paymentLinks as |paymentLink|}}
-                {{#if this.fetchPaymentLinks.isPending}}
-                  <LoadingIndicator />
-                {{else}}
-                  <div class='payment-link'>
+              {{#if this.fetchPaymentLinks.isRunning}}
+                <LoadingIndicator />
+              {{else}}
+                {{#each
+                  this.billingService.paymentLinks
+                  as |paymentLink index|
+                }}
+                  <div class='payment-link' data-test-payment-link={{index}}>
                     <span><IconHexagon width='16px' height='16px' />
                       {{paymentLink.creditReloadAmount}}</span>
                     <BoxelButton
                       @kind='secondary-light'
                       @size='extra-small'
                       {{on 'click' (fn this.pay paymentLink.url)}}
-                      data-test-buy-more-button
+                      data-test-pay-button={{index}}
                     >Pay</BoxelButton>
                   </div>
-                {{/if}}
-              {{/each}}
+                {{/each}}
+              {{/if}}
             </div>
           </div>
         </div>
@@ -103,6 +109,7 @@ export default class ProfileSubscription extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding-left: var(--boxel-sp-sm);
         border-left: 5px solid #c6c6c6;
+        min-height: 40px;
       }
       .credit-info__label {
         font: var(--boxel-font-xs);
@@ -148,16 +155,21 @@ export default class ProfileSubscription extends Component<Signature> {
         --icon-color: var(--boxel-teal);
         --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
+      :deep(.boxel-loading-indicator) {
+        width: 100%;
+        text-align: center;
+      }
     </style>
   </template>
 
   @service private declare billingService: BillingService;
 
-  private get paymentLinks() {
-    return this.fetchPaymentLinks.value ?? [];
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.fetchPaymentLinks.perform();
   }
 
-  private fetchPaymentLinks = trackedFunction(this, async () => {
+  private fetchPaymentLinks = task(async () => {
     return await this.billingService.fetchPaymentLinks();
   });
 

@@ -867,6 +867,25 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test(`displays credit info in account popover`, async function (assert) {
+      let countWindowOpenCalled = 0;
+      let mockWindow = {
+        closeCalled: false,
+        close() {
+          this.closeCalled = true;
+        },
+      };
+
+      const originalWindowOpen = window.open;
+      window.open = (url, _target, _feature) => {
+        assert.true(
+          typeof url === 'string'
+            ? url.includes('stripe')
+            : url?.href.includes('stripe'),
+        );
+        countWindowOpenCalled++;
+        return mockWindow as unknown as Window;
+      };
+
       await visitOperatorMode({
         submode: 'interact',
         codePath: `${testRealmURL}employee.gts`,
@@ -901,19 +920,35 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
 
       await click('[data-test-upgrade-plan-button]');
-      assert.dom('[data-test-profile-popover]').doesNotExist();
-      assert
-        .dom('[data-test-boxel-card-container]')
-        .hasClass('profile-settings');
 
-      await click('[aria-label="close modal"]');
-      await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-profile-popover]').exists();
       await click('[data-test-buy-more-credits] button');
       assert.dom('[data-test-profile-popover]').doesNotExist();
       assert
         .dom('[data-test-boxel-card-container]')
         .hasClass('profile-settings');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1000 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
+      await waitFor('[data-test-payment-link]');
+      assert.dom('[data-test-payment-link]').exists({ count: 3 });
+      await click('[data-test-manage-plan-button]');
+      await click('[data-test-pay-button]');
+      assert.strictEqual(
+        countWindowOpenCalled,
+        3,
+        'Correct number of times window.open was called',
+      );
 
       // out of credit
       await click('[aria-label="close modal"]');
@@ -986,6 +1021,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+      window.open = originalWindowOpen;
     });
   });
 });

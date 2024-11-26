@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
+import window from 'ember-window-mock';
 import Stripe from 'stripe';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
@@ -31,7 +32,7 @@ interface PaymentLink {
 
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
-  private _paymentLinks: PaymentLink[] | null = null;
+  @tracked private _paymentLinks: PaymentLink[] | null = null;
 
   @service private declare realmServer: RealmServerService;
   @service private declare network: NetworkService;
@@ -57,21 +58,29 @@ export default class BillingService extends Service {
 
   async fetchPaymentLinks() {
     if (!this._paymentLinks) {
-      let response = await stripe.paymentLinks.list();
-      this._paymentLinks = response.data
-        .filter((data) => data.metadata.credit_reload_amount)
-        .map((data) => ({
-          url: data.url,
-          creditReloadAmount: Number(data.metadata.credit_reload_amount),
-        }))
-        .sort(
-          (paymentLinkA, paymentLinkB) =>
-            paymentLinkA.creditReloadAmount - paymentLinkB.creditReloadAmount,
-        );
+      await this.fetchPaymentLinksTask.perform();
     }
 
     return this._paymentLinks;
   }
+
+  get paymentLinks() {
+    return this._paymentLinks;
+  }
+
+  private fetchPaymentLinksTask = dropTask(async () => {
+    let response = await stripe.paymentLinks.list();
+    this._paymentLinks = response.data
+      .filter((data) => data.metadata.credit_reload_amount)
+      .map((data) => ({
+        url: data.url,
+        creditReloadAmount: Number(data.metadata.credit_reload_amount),
+      }))
+      .sort(
+        (paymentLinkA, paymentLinkB) =>
+          paymentLinkA.creditReloadAmount - paymentLinkB.creditReloadAmount,
+      );
+  });
 
   get subscriptionData() {
     return this._subscriptionData;
