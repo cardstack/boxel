@@ -231,7 +231,6 @@ export class CurrentRun {
     mtimes: LastModifiedTimes,
   ): Promise<void> {
     log.debug(`discovering invalidations in dir ${url.href}`);
-    console.log(`discovering invalidations in dir ${url.href}`);
     let ignorePatterns = await this.#reader.readFile(
       new URL('.gitignore', url),
     );
@@ -282,7 +281,6 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
-    console.log(`begin visiting file ${url.href}`);
     let localPath: string;
     try {
       localPath = this.#realmPaths.local(url);
@@ -346,9 +344,6 @@ export class CurrentRun {
       }
     }
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
-    console.log(
-      `completed visiting file ${url.href} in ${Date.now() - start}ms`,
-    );
   }
 
   private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
@@ -567,6 +562,7 @@ export class CurrentRun {
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: ErrorEntry;
+      identityContext.errors.add(instanceURL.href);
       if (uncaughtError) {
         error = {
           type: 'error',
