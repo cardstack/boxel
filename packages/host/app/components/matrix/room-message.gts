@@ -18,6 +18,7 @@ import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import { isCardInstance, markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import CommandService from '@cardstack/host/services/command-service';
@@ -27,7 +28,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type CommandCard } from 'https://cardstack.com/base/command';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -352,15 +352,12 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
-  run = task(async (command: CommandCard, roomId: string) => {
+  run = task(async (command: MessageCommand, roomId: string) => {
     return this.commandService.run.unlinked().perform(command, roomId);
   });
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.run.isRunning) {
-      return 'applying';
-    }
     if (this.failedCommandState) {
       return 'failed';
     }

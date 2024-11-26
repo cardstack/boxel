@@ -1,3 +1,4 @@
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -6,16 +7,11 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-
-import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
-  CardMessageContent,
   CommandEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
-  ReactionEvent,
   RoomCreateEvent,
   RoomNameEvent,
   InviteEvent,
@@ -33,6 +29,8 @@ import {
 } from '../lib/matrix-classes/member';
 import { Message } from '../lib/matrix-classes/message';
 
+import MessageBuilder from '../lib/matrix-classes/message-builder';
+
 import type { Skill } from '../components/ai-assistant/skill-menu';
 import type RoomState from '../lib/matrix-classes/room-state';
 
@@ -46,10 +44,6 @@ interface Args {
     events: DiscreteMatrixEvent[] | undefined;
   };
 }
-
-const ErrorMessage: Record<string, string> = {
-  ['M_TOO_LARGE']: 'Message is too large',
-};
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
@@ -200,7 +194,7 @@ export class RoomResource extends Resource<Args> {
     event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
     index: number,
   ) {
-    let event_id = event.event_id;
+    let effectiveEventId = event.event_id;
     let update = false;
     if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
       // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
@@ -214,149 +208,47 @@ export class RoomResource extends Resource<Args> {
       ) {
         return;
       }
-      event_id = event.content['m.relates_to'].event_id;
+      effectiveEventId = event.content['m.relates_to'].event_id;
       update = true;
     }
-    if (this._messageCache.has(event_id) && !update) {
+    if (this._messageCache.has(effectiveEventId) && !update) {
       return;
     }
+    if (event.content.msgtype === 'org.boxel.cardFragment') {
+      if (!this._fragmentCache.has(effectiveEventId)) {
+        this._fragmentCache.set(effectiveEventId, event.content);
+      }
+      return;
+    }
+    if (event.content.msgtype === 'org.boxel.commandResult') {
+      //don't display command result in the room as a message
+      return;
+    }
+
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
     });
-    let messageArgs = new Message({
+    let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+      effectiveEventId,
       author,
-      created: new Date(event.origin_server_ts),
-      updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-      message: event.content.body,
-      formattedMessage: event.content.formatted_body,
-      // These are not guaranteed to exist in the event
-      transactionId: event.unsigned?.transaction_id || null,
-      attachedCardIds: null,
-      attachedSkillCardIds: null,
-      command: null,
-      commandResult: null,
-      status: event.status,
-      eventId: event.event_id,
       index,
+      fragmentCache: this._fragmentCache,
+      events: this.events,
     });
-    if (event.status === 'cancelled' || event.status === 'not_sent') {
-      (messageArgs as any).errorMessage =
-        event.error?.data.errcode &&
-        Object.keys(ErrorMessage).includes(event.error?.data.errcode)
-          ? ErrorMessage[event.error?.data.errcode]
-          : 'Failed to send';
-    }
-    if ('errorMessage' in event.content) {
-      (messageArgs as any).errorMessage = event.content.errorMessage;
-    }
-    let messageField = undefined;
 
-    if (event.content.msgtype === 'org.boxel.cardFragment') {
-      if (!this._fragmentCache.has(event_id)) {
-        this._fragmentCache.set(event_id, event.content);
-      }
-    } else if (event.content.msgtype === 'org.boxel.commandResult') {
-      //don't display command result in the room as a message
-      // TOOD: Refactor having many if conditions to some variant of a strategy pattern
-    } else if (event.content.msgtype === 'org.boxel.message') {
-      // Safely skip over cases that don't have attached cards or a data type
-      let cardDocs = event.content.data?.attachedCardsEventIds
-        ? event.content.data.attachedCardsEventIds.map((eventId) =>
-            this.serializedCardFromFragments(eventId),
-          )
-        : [];
-      let attachedCardIds: string[] = [];
-      cardDocs.map((c) => {
-        if (c.data.id) {
-          attachedCardIds.push(c.data.id);
-        }
-      });
-      if (attachedCardIds.length < cardDocs.length) {
-        throw new Error(`cannot handle cards in room without an ID`);
-      }
-      messageArgs.clientGeneratedId = event.content.clientGeneratedId;
-      messageField = new Message({
-        ...messageArgs,
-        attachedCardIds,
-      });
-    } else if (
-      event.content.msgtype === 'org.boxel.command' &&
-      event.content.data.toolCall
-    ) {
-      // We only handle patches for now
-      let commandEvent = event as CommandEvent;
-      let command = event.content.data.toolCall;
-      let annotation = this.events.find(
-        (e) =>
-          e.type === 'm.reaction' &&
-          e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-          e.content['m.relates_to']?.event_id ===
-            // If the message is a replacement message, eventId in command payload will be undefined.
-            // Because it will not refer to any other events, so we can use event_id of the message itself.
-            (commandEvent.content.data.eventId ?? event_id),
-      ) as ReactionEvent | undefined;
-
-      let commandResultEvent = this.events.find(
-        (e) =>
-          e.type === 'm.room.message' &&
-          e.content.msgtype === 'org.boxel.commandResult' &&
-          e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-          e.content['m.relates_to'].event_id ===
-            commandEvent.content.data.eventId,
-      ) as CommandResultEvent;
-      let r = commandResultEvent?.content?.result
-        ? await this.commandService.createCommandResultArgs(
-            commandEvent,
-            commandResultEvent,
-          )
-        : undefined;
-
-      let status: CommandStatus =
-        annotation?.content['m.relates_to'].key === 'applied'
-          ? annotation?.content['m.relates_to'].key
-          : 'ready';
-
-      let commandCardArgs = {
-        toolCallId: command.id,
-        eventId: event_id,
-        name: command.name,
-        payload: command.arguments,
-        status,
-      };
-      let commandCard = await this.commandService.createCommand(
-        commandCardArgs,
-      );
-      let commandResult = r
-        ? await this.commandService.createCommandResult(r)
-        : undefined;
-
-      messageField = new Message({
-        ...messageArgs,
-        formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
-        command: commandCard,
-        commandResult,
-        isStreamingFinished: true,
-      });
-    } else {
-      // Text from the AI bot
-      if (event.content.msgtype === 'm.text') {
-        messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
-      }
-      messageField = new Message({ ...messageArgs });
-    }
-
-    if (messageField) {
+    let messageObject = await messageBuilder.buildMessage();
+    if (messageObject) {
       // if the message is a replacement for other messages,
       // use `created` from the oldest one.
-      if (this._messageCache.has(event_id)) {
-        let d1 = this._messageCache.get(event_id)!.created!;
-        let d2 = messageField.created!;
-        messageField.created = d1 < d2 ? d1 : d2;
+      if (this._messageCache.has(effectiveEventId)) {
+        let d1 = this._messageCache.get(effectiveEventId)!.created!;
+        let d2 = messageObject.created!;
+        messageObject.created = d1 < d2 ? d1 : d2;
       }
       this._messageCache.set(
-        (event.content as CardMessageContent).clientGeneratedId ?? event_id,
-        messageField as any,
+        messageObject.clientGeneratedId ?? effectiveEventId,
+        messageObject as any,
       );
     }
   }
@@ -410,35 +302,6 @@ export class RoomResource extends Resource<Args> {
       return member;
     }
     return member;
-  }
-
-  private serializedCardFromFragments(
-    eventId: string,
-  ): LooseSingleCardDocument {
-    let fragments: CardFragmentContent[] = [];
-    let currentFragment: string | undefined = eventId;
-    do {
-      let fragment = this._fragmentCache.get(currentFragment);
-      if (!fragment) {
-        throw new Error(
-          `No card fragment found in cache for event id ${eventId}`,
-        );
-      }
-      fragments.push(fragment);
-      currentFragment = fragment.data.nextFragment;
-    } while (currentFragment);
-
-    fragments.sort((a, b) => (a.data.index = b.data.index));
-    if (fragments.length !== fragments[0].data.totalParts) {
-      throw new Error(
-        `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
-      );
-    }
-
-    let cardDoc = JSON.parse(
-      fragments.map((f) => f.data.cardFragment).join(''),
-    ) as LooseSingleCardDocument;
-    return cardDoc;
   }
 
   addSkill(card: SkillCard) {

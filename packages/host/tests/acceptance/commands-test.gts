@@ -2,7 +2,13 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { getOwner, setOwner } from '@ember/owner';
 import { service } from '@ember/service';
-import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  findAll,
+  waitUntil,
+  settled,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -159,6 +165,17 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
+    class SleepCommand extends Command<ScheduleMeetingInput, undefined> {
+      static displayName = 'SleepCommand';
+      async getInputType() {
+        return ScheduleMeetingInput;
+      }
+      protected async run() {
+        await delay(1000);
+        return undefined;
+      }
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -210,6 +227,20 @@ module('Acceptance | Commands tests', function (hooks) {
             }),
           );
         };
+        runDelayCommandViaAiAssistant = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+          let sleepCommand = new SleepCommand(commandContext);
+          commandContext.sendAiAssistantMessage({
+            prompt: 'Please delay',
+            roomId: 'mock_room_0',
+            commands: [{ command: sleepCommand, autoExecute: true }],
+          });
+          await sleepCommand.execute(new ScheduleMeetingInput());
+        };
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -239,6 +270,10 @@ module('Acceptance | Commands tests', function (hooks) {
             {{on 'click' this.runScheduleMeetingCommand}}
             data-test-schedule-meeting-button
           >Schedule meeting</button>
+          <button
+            {{on 'click' this.runDelayCommandViaAiAssistant}}
+            data-test-delay-button
+          >Delay with autoExecute</button>
         </template>
       };
     }
@@ -273,7 +308,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('a command sent via sendAiAssistantMessage with autoExecute flag is automatically executed by the bot', async function (assert) {
+  test('a command sent via sendAiAssistantMessage with autoExecute flag is automatically executed by the bot, panel closed', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -373,6 +408,76 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
       .containsText('Switching to code submode');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists();
+  });
+
+  test('a command sent via sendAiAssistantMessage with autoExecute flag is automatically executed by the bot, panel open', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await click('[data-test-open-ai-assistant]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+    );
+    await click('[data-test-delay-button]');
+    await waitUntil(() => getRoomIds().length > 0);
+    let roomId = getRoomIds()[0];
+    let message = getRoomEvents(roomId).pop()!;
+    let boxelMessageData = message.content.data;
+    let toolName = boxelMessageData.context.tools[0].function.name;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Delaying 1 second',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'Delaying 1 second',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            attributes: {},
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+    await waitFor(
+      '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+    );
+    assert
+      .dom(
+        '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+      )
+      .containsText('Please delay');
+    await waitFor(
+      '[data-test-message-idx="1"] [data-test-apply-state="applying"]',
+    );
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applying"]')
+      .exists();
+    await settled();
+    assert
+      .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
+      .containsText('Delaying 1 second');
+    await waitFor(
+      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
+      { timeout: 2000 },
+    );
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();

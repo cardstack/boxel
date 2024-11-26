@@ -11,11 +11,7 @@ import {
 } from './card-api';
 import CodeRefField from './code-ref';
 
-export type CommandStatus = 'applied' | 'ready';
-
-class CommandStatusField extends StringField {
-  static [primitive]: CommandStatus;
-}
+export type CommandStatus = 'applied' | 'ready' | 'applying';
 
 class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
   <template>
@@ -42,14 +38,6 @@ export class CommandObjectField extends FieldDef {
   }
   static edit = CommandObjectFieldTemplate;
   static embedded = CommandObjectFieldTemplate;
-}
-
-export class CommandCard extends CardDef {
-  @field toolCallId = contains(StringField);
-  @field name = contains(StringField);
-  @field payload = contains(CommandObjectField); //arguments of toolCall. Its not called arguments due to lint
-  @field eventId = contains(StringField);
-  @field status = contains(CommandStatusField);
 }
 
 export class SaveCardInput extends CardDef {

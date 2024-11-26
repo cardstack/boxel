@@ -7,6 +7,7 @@ import flatMap from 'lodash/flatMap';
 
 import { IEvent } from 'matrix-js-sdk';
 
+import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -27,13 +28,13 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CommandCard } from 'https://cardstack.com/base/command';
 import type { CommandResult } from 'https://cardstack.com/base/command-result';
 import type {
   CommandEvent,
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
 import CardService from './card-service';
@@ -45,6 +46,7 @@ export default class CommandService extends Service {
   @service private declare cardService: CardService;
   @service private declare realm: Realm;
   @service private declare realmServer: RealmServerService;
+  currentlyExecutingCommandEventIds = new TrackedSet<string>();
 
   private commands: Map<
     string,
@@ -72,20 +74,32 @@ export default class CommandService extends Service {
     if (!command || !autoExecute) {
       return;
     }
-    // Get the input type and validate/construct the payload
-    let InputType = await command.getInputType();
+    this.currentlyExecutingCommandEventIds.add(event.event_id!);
+    try {
+      // Get the input type and validate/construct the payload
+      let InputType = await command.getInputType();
 
-    // Construct a new instance of the input type with the payload
-    let typedInput = new InputType({
-      ...toolCall.arguments.attributes,
-      ...toolCall.arguments.relationships,
-    });
-    await command.execute(typedInput);
-    await this.matrixService.sendReactionEvent(
-      event.room_id!,
-      event.event_id!,
-      'applied',
-    );
+      // Construct a new instance of the input type with the payload
+      let typedInput = new InputType({
+        ...toolCall.arguments.attributes,
+        ...toolCall.arguments.relationships,
+      });
+      let res = await command.execute(typedInput);
+      await this.matrixService.sendReactionEvent(
+        event.room_id!,
+        event.event_id!,
+        'applied',
+      );
+      if (res) {
+        await this.matrixService.sendCommandResultMessage(
+          event.room_id!,
+          event.event_id!,
+          res,
+        );
+      }
+    } finally {
+      this.currentlyExecutingCommandEventIds.delete(event.event_id!);
+    }
   }
 
   get commandContext(): CommandContext {
@@ -100,11 +114,12 @@ export default class CommandService extends Service {
   }
 
   //TODO: Convert to non-EC async method after fixing CS-6987
-  run = task(async (command: CommandCard, roomId: string) => {
+  run = task(async (command: MessageCommand, roomId: string) => {
     let { payload, eventId } = command;
     let res: any;
     try {
       this.matrixService.failedCommandState.delete(eventId);
+      this.currentlyExecutingCommandEventIds.add(eventId);
 
       // lookup command
       let { command: commandToRun } = this.commands.get(command.name) ?? {};
@@ -191,6 +206,8 @@ export default class CommandService extends Service {
           ? e
           : new Error('Command failed.');
       this.matrixService.failedCommandState.set(eventId, error);
+    } finally {
+      this.currentlyExecutingCommandEventIds.delete(eventId);
     }
   });
 
@@ -199,16 +216,6 @@ export default class CommandService extends Service {
       {
         name: 'CommandResult',
         module: `${baseRealm.url}command-result`,
-      },
-      args,
-    );
-  }
-
-  async createCommand(args: Record<string, any>) {
-    return await this.matrixService.createCard<typeof CommandCard>(
-      {
-        name: 'CommandCard',
-        module: `${baseRealm.url}command`,
       },
       args,
     );
