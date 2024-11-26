@@ -11,6 +11,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { Submodes } from '../components/submode-switcher';
 import { getCard } from '../resources/card-resource';
+import BillingService from '../services/billing-service';
 import CardService from '../services/card-service';
 import MatrixService from '../services/matrix-service';
 import RealmService from '../services/realm';
@@ -29,6 +30,7 @@ export default class Index extends Route<void> {
   };
 
   @service private declare matrixService: MatrixService;
+  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service private declare router: RouterService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -59,6 +61,8 @@ export default class Index extends Route<void> {
     if (!this.matrixService.isLoggedIn) {
       return; // Show login component
     }
+
+    await this.billingService.fetchSubscriptionData();
 
     let cardUrl: string | undefined;
 
