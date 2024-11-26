@@ -5,7 +5,7 @@ import type { SidebarFilter } from './filter';
 interface SidebarLayoutSignature {
   Args: {
     filters: SidebarFilter[];
-    activeFilter: SidebarFilter;
+    activeFilter?: SidebarFilter | undefined;
     onFilterChange: (filter: SidebarFilter) => void;
   };
   Blocks: {

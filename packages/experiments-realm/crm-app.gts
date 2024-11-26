@@ -7,11 +7,10 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
-import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
 import {
   BoxelButton,
   TabbedHeader,
@@ -27,6 +26,7 @@ import {
   SupportedMimeType,
   baseRealm,
   type Sort,
+  codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
 import ContactIcon from '@cardstack/boxel-icons/contact';
@@ -35,7 +35,7 @@ import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
-const FILTERS: SidebarFilter[] = [
+const CONTACT_FILTERS: SidebarFilter[] = [
   {
     displayName: 'All Contacts',
     icon: ContactIcon,
@@ -53,6 +53,14 @@ const FILTERS: SidebarFilter[] = [
     icon: HeartHandshakeIcon,
     cardTypeName: 'CRM Customer',
     createNewButtonText: 'Create Customer',
+  },
+];
+const DEAL_FILTERS: SidebarFilter[] = [
+  {
+    displayName: 'All Deals',
+    icon: ContactIcon,
+    cardTypeName: 'CRM Deal',
+    createNewButtonText: 'Create Deal',
   },
 ];
 
@@ -103,25 +111,28 @@ const SORT_OPTIONS: SortOption[] = [
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
   //filters
-  filters: SidebarFilter[] = new TrackedArray(FILTERS);
-  @tracked private activeFilter: SidebarFilter = this.filters[0];
+  filterMap: TrackedMap<string, SidebarFilter[]> = new TrackedMap();
+  @tracked private activeFilter: SidebarFilter | undefined;
   @action private onFilterChange(filter: SidebarFilter) {
     this.activeFilter = filter;
   }
   //sort
   sortOptions = SORT_OPTIONS;
   //tabs
-  @tracked activeTabId?: string;
+  @tracked activeTabId?: string = this.args.model.tabs?.[1]?.tabId;
   @tracked tabs = this.args.model.tabs ?? [];
   @tracked private selectedView: ViewOption = 'card';
   @tracked private selectedSort: SortOption = this.sortOptions[0];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.loadCardTypes.perform();
+    this.filterMap.set('Contact', CONTACT_FILTERS);
+    this.filterMap.set('Deal', DEAL_FILTERS);
+    this.loadAllFilters.perform();
+    this.setActiveFilter();
   }
 
-  private loadCardTypes = restartableTask(async () => {
+  private loadAllFilters = restartableTask(async () => {
     let url = `${this.realms[0]}_types`;
     let response = await fetch(url, {
       headers: {
@@ -137,26 +148,46 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       attributes: { displayName: string; total: number };
     }[];
 
-    for (let filter of this.filters) {
-      let summary = cardTypeSummaries.find(
-        (s) => s.attributes.displayName === filter.cardTypeName,
-      );
-      if (!summary) {
-        return;
+    for (let tab of this.tabs) {
+      let filters = this.filterMap.get(tab.tabId);
+      if (filters) {
+        for (let filter of filters) {
+          let summary = cardTypeSummaries.find(
+            (s) => s.attributes.displayName === filter.cardTypeName,
+          );
+          if (!summary) {
+            return;
+          }
+          const lastIndex = summary.id.lastIndexOf('/');
+          let cardRef = {
+            module: summary.id.substring(0, lastIndex),
+            name: summary.id.substring(lastIndex + 1),
+          };
+          filter.cardRef = cardRef;
+          filter.query = { filter: { type: cardRef } };
+          this.filterMap.set(tab.tabId, filters);
+        }
       }
-      const lastIndex = summary.id.lastIndexOf('/');
-      let cardRef = {
-        module: summary.id.substring(0, lastIndex),
-        name: summary.id.substring(lastIndex + 1),
-      };
-      filter.cardRef = cardRef;
-      filter.query = { filter: { type: cardRef } };
     }
   });
+
+  get filters() {
+    if (this.activeTabId) {
+      return this.filterMap.get(this.activeTabId) ?? [];
+    }
+    return [];
+  }
+
+  @action setActiveFilter() {
+    if (this.activeTabId) {
+      this.activeFilter = this.filterMap.get(this.activeTabId)?.[0];
+    }
+  }
 
   //Tabs
   @action setActiveTab(id: string) {
     this.activeTabId = id;
+    this.setActiveFilter();
   }
   get headerColor() {
     return (
@@ -169,13 +200,26 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       this.tabs.find((t: Tab) => t.tabId === this.activeTabId) ?? this.tabs[0]
     );
   }
+
+  get activeTabRef() {
+    if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
+      return;
+    }
+    if (!this.currentRealm) {
+      return;
+    }
+    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
+  }
   setTabs(tabs: Tab[]) {
     this.args.model.tabs = tabs ?? [];
   }
 
   //misc
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
   private get realms() {
-    return [this.args.model[realmURL]!];
+    return [this.currentRealm!];
   }
 
   //create
@@ -184,7 +228,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   }
 
   private createCard = restartableTask(async () => {
-    let ref = this.activeFilter.cardRef;
+    let ref = this.activeFilter?.cardRef;
     if (!ref) {
       return;
     }
@@ -196,8 +240,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    if (this.loadCardTypes.isIdle && this.activeFilter.query) {
-      console.log('activeFilter.query', this.activeFilter.query);
+    if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
       return {
         filter: {
           type: this.activeFilter.cardRef,
@@ -208,11 +251,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     return;
   }
 
-  get queryString() {
-    return JSON.stringify(this.query);
-  }
-
-  //view and sort
   @action private onChangeView(id: ViewOption) {
     this.selectedView = id;
   }
