@@ -10,10 +10,10 @@ interface SidebarLayoutSignature {
   };
   Blocks: {
     default: [];
-    'sidebar-header': [];
-    'sidebar-subheader': [];
-    'content-header': [];
-    'content-subheader': [];
+    sidebarHeader: [];
+    sidebarSubheader: [];
+    contentHeader: [];
+    contentSubheader: [];
     grid: [];
   };
   Element: HTMLElement;
@@ -23,9 +23,9 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
     <section class='sidebar-layout'>
       <aside class='sidebar'>
         <header class='sidebar-header' aria-label='sidebar-header'>
-          {{yield to='sidebar-header'}}
+          {{yield to='sidebarHeader'}}
         </header>
-        {{yield to='sidebar-subheader'}}
+        {{yield to='sidebarSubheader'}}
         <FilterList
           class='sidebar-filters'
           @filters={{@filters}}
@@ -39,11 +39,11 @@ export class SidebarLayout extends GlimmerComponent<SidebarLayoutSignature> {
             class='content-header'
             aria-label={{@activeFilter.displayName}}
           >
-            {{yield to='content-header'}}
+            {{yield to='contentHeader'}}
           </header>
-          {{#if (has-block 'content-subheader')}}
+          {{#if (has-block 'contentSubheader')}}
             <div class='content-subheader'>
-              {{yield to='content-subheader'}}
+              {{yield to='contentSubheader'}}
             </div>
           {{/if}}
         </div>

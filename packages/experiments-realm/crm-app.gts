@@ -238,7 +238,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
     >
-      <:sidebar-header>
+      <:sidebarHeader>
         <img
           class='sidebar-header-thumbnail'
           src={{@model.thumbnailURL}}
@@ -248,8 +248,8 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         />
         <h1 class='sidebar-header-title'><@fields.title /></h1>
         <p class='sidebar-header-description'><@fields.description /></p>
-      </:sidebar-header>
-      <:content-header>
+      </:sidebarHeader>
+      <:contentHeader>
         <this.activeFilter.icon />
         <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
         {{#if @context.actions.createCard}}
@@ -271,8 +271,8 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
-      </:content-header>
-      <:content-subheader>
+      </:contentHeader>
+      <:contentSubheader>
         <div>
           <BoxelInput @type='search' />
         </div>
@@ -287,7 +287,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @onSort={{this.onSort}}
           />
         </div>
-      </:content-subheader>
+      </:contentSubheader>
       <:grid>
         {{#if this.query}}
           <CardsGrid

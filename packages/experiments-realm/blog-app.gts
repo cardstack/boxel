@@ -146,7 +146,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
     >
-      <:sidebar-header>
+      <:sidebarHeader>
         <img
           class='sidebar-header-thumbnail'
           src={{@model.thumbnailURL}}
@@ -156,8 +156,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         />
         <h1 class='sidebar-header-title'><@fields.title /></h1>
         <p class='sidebar-header-description'><@fields.description /></p>
-      </:sidebar-header>
-      <:sidebar-subheader>
+      </:sidebarHeader>
+      <:sidebarSubheader>
         {{#if @context.actions.createCard}}
           <BoxelButton
             class='sidebar-create-button'
@@ -178,8 +178,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
-      </:sidebar-subheader>
-      <:content-header>
+      </:sidebarSubheader>
+      <:contentHeader>
         <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
         <ViewSelector
           @selectedId={{this.selectedView}}
@@ -195,7 +195,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           {{/if}}
         {{/if}}
 
-      </:content-header>
+      </:contentHeader>
       <:grid>
         {{#if this.query}}
           <div class='content-scroll-container'>
