@@ -338,7 +338,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       /* Content subheader */
       .crm-content-subheader-actions {
         display: flex;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxl);
         align-items: center;
       }
     </style>
