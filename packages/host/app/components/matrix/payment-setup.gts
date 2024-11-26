@@ -2,6 +2,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
+import ENV from '@cardstack/host/config/environment';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -23,6 +25,8 @@ import {
   IconPlus,
   Lock,
 } from '@cardstack/boxel-ui/icons';
+
+const { environment } = ENV;
 
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
@@ -124,6 +128,7 @@ export default class PaymentSetup extends Component<Signature> {
               @href={{this.stripePaymentLink}}
               data-test-setup-payment
               class='setup-button'
+              target={{if (eq environment 'development') '_blank' '_self'}}
             >
               Set up Secure Payment Method
               <span class='lock-icon'><Lock
