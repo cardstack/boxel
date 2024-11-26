@@ -494,7 +494,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.isTopCard &&
       this.animationType === 'opening' &&
       !this.isEditing &&
-      this.args.item.previousFormat !== 'edit'
+      !(this.args.item.format === 'isolated' && this.args.item.request) // Skip animation if we have a request and we're in isolated format, it means we're completing an edit operation
     );
   }
 
