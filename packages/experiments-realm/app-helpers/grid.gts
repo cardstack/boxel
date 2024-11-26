@@ -38,7 +38,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
           <:response as |cards|>
             {{#each cards as |card|}}
               <li
-                class='card {{@selectedView}}-view-container'
+                class='{{@selectedView}}-view-container'
                 {{@context.cardComponentModifier
                   cardId=card.url
                   format='data'
@@ -61,35 +61,37 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
     <style scoped>
       .cards {
         display: grid;
-        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
+        );
         grid-auto-rows: var(--grid-card-height);
         gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
-        padding: var(--boxel-sp-6xs) var(--boxel-sp-xl) var(--boxel-sp-6xs)
-          var(--boxel-sp-6xs);
-        overflow: auto;
+        padding: var(--boxel-sp-6xs);
       }
       .card-view {
-        --grid-card-width: 1fr;
-        --grid-card-height: 300px;
+        --grid-card-height: 347px;
+        grid-template-columns: minmax(750px, 1fr);
       }
       .strip-view {
-        --grid-card-width: 300px;
-        --grid-card-height: 115px;
+        --grid-card-min-width: 49%;
+        --grid-card-max-width: 1fr;
+        --grid-card-height: 180px;
       }
       .grid-view {
-        --grid-card-width: 164px;
-        --grid-card-height: 224px;
+        --grid-card-min-width: 224px;
+        --grid-card-max-width: 1fr;
+        --grid-card-height: max-content;
       }
-      .card {
-        max-width: 1440px;
+      .grid-view-container {
+        aspect-ratio: 5/6;
       }
       .card-view-container {
         display: grid;
-        grid-template-columns: 1fr 200px;
+        grid-template-columns: 1fr 247px;
         gap: var(--boxel-sp-lg);
-        padding: 10px;
       }
       .card {
         container-name: fitted-card;
