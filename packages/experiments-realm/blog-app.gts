@@ -214,7 +214,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         {{#if this.query}}
           <div class='content-scroll-container'>
             <CardsGrid
-              class='content-grid'
               @selectedView={{this.selectedView}}
               @context={{@context}}
               @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
@@ -269,10 +268,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         margin: 0;
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
-      }
-      .content-scroll-container {
-        padding-right: var(--layout-padding);
-        overflow: auto;
       }
     </style>
   </template>
