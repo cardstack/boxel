@@ -2,9 +2,15 @@ import { SidebarFilter } from './app-helpers/filter';
 import { SidebarLayout } from './app-helpers/sidebar-layout';
 import { Tab } from './app-helpers/tabs';
 import { CardsGrid } from './app-helpers/grid';
-import { SortMenu, SortOption } from './app-helpers/sort';
-import { on } from '@ember/modifier';
+import {
+  SortMenu,
+  SortOption,
+  SORT_OPTIONS,
+  sortByCardTitle,
+} from './app-helpers/sort';
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
@@ -24,8 +30,6 @@ import {
   Query,
   CardError,
   SupportedMimeType,
-  baseRealm,
-  type Sort,
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
@@ -64,50 +68,6 @@ const DEAL_FILTERS: SidebarFilter[] = [
   },
 ];
 
-const sortByCardTitle: Sort = [
-  {
-    on: {
-      module: `${baseRealm.url}card-api`,
-      name: 'CardDef',
-    },
-    by: 'title',
-    direction: 'asc',
-  },
-];
-
-const SORT_OPTIONS: SortOption[] = [
-  {
-    displayName: 'Date Published',
-    sort: [
-      {
-        by: 'createdAt',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    displayName: 'Last Updated',
-    sort: [
-      {
-        by: 'lastModified',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    displayName: 'A-Z',
-    sort: [
-      {
-        on: {
-          module: `${baseRealm.url}card-api`,
-          name: 'CardDef',
-        },
-        by: 'title',
-        direction: 'asc',
-      },
-    ],
-  },
-];
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
   //filters
@@ -119,7 +79,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   //sort
   sortOptions = SORT_OPTIONS;
   //tabs
-  @tracked activeTabId?: string = this.args.model.tabs?.[1]?.tabId;
+  @tracked activeTabId?: string = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs ?? [];
   @tracked private selectedView: ViewOption = 'card';
   @tracked private selectedSort: SortOption = this.sortOptions[0];
@@ -335,6 +295,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @realms={{this.realms}}
             @selectedView={{this.selectedView}}
             @context={{@context}}
+            @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
           />
         {{/if}}
       </:grid>
