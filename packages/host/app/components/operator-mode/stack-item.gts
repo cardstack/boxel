@@ -393,7 +393,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       item.clone({
         request,
         format: 'isolated',
-        skipOpeningAnimation: true,
       }),
     );
   });
@@ -495,7 +494,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.isTopCard &&
       this.animationType === 'opening' &&
       !this.isEditing &&
-      !this.args.item.skipOpeningAnimation
+      this.args.item.previousFormat !== 'edit'
     );
   }
 

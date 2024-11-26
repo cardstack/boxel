@@ -16,7 +16,7 @@ interface Args {
   card?: CardDef;
   cardResource?: CardResource;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
-  skipOpeningAnimation?: boolean;
+  previousFormat?: Format;
 }
 
 export class StackItem {
@@ -24,6 +24,7 @@ export class StackItem {
   request?: Deferred<CardDef | undefined>;
   stackIndex: number;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
+  previousFormat?: Format;
   private owner: object;
   private newCard?: CardDef;
   private cardResource?: CardResource;
@@ -39,7 +40,7 @@ export class StackItem {
       cardResource,
       isLinkedCard,
       owner,
-      skipOpeningAnimation,
+      previousFormat,
     } = args;
     if (!card && !cardResource) {
       throw new Error(
@@ -62,7 +63,7 @@ export class StackItem {
     this.request = request;
     this.stackIndex = stackIndex;
     this.isLinkedCard = isLinkedCard;
-    this.skipOpeningAnimation = skipOpeningAnimation;
+    this.previousFormat = previousFormat;
     this.owner = owner;
   }
 
@@ -143,12 +144,12 @@ export class StackItem {
     let {
       card,
       format,
+      previousFormat,
       request,
       isLinkedCard,
       owner,
       cardResource,
       stackIndex,
-      skipOpeningAnimation,
     } = this;
     return new StackItem({
       cardResource,
@@ -158,7 +159,7 @@ export class StackItem {
       isLinkedCard,
       owner,
       stackIndex,
-      skipOpeningAnimation,
+      previousFormat: args.format ? this.format : previousFormat,
       ...args,
     });
   }
