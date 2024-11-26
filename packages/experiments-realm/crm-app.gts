@@ -29,25 +29,28 @@ import {
   type Sort,
 } from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
+import ContactIcon from '@cardstack/boxel-icons/contact';
+import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
+import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
 const FILTERS: SidebarFilter[] = [
   {
     displayName: 'All Contacts',
-    icon: BlogPostIcon,
+    icon: ContactIcon,
     cardTypeName: 'CRM Contact',
     createNewButtonText: 'Create Contact',
   },
   {
     displayName: 'Leads',
-    icon: BlogPostIcon,
+    icon: TargetArrowIcon,
     cardTypeName: 'CRM Lead',
     createNewButtonText: 'Create Lead',
   },
   {
     displayName: 'Customers',
-    icon: BlogPostIcon,
+    icon: HeartHandshakeIcon,
     cardTypeName: 'CRM Customer',
     createNewButtonText: 'Create Customer',
   },
