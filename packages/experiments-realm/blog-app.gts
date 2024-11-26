@@ -16,8 +16,6 @@ import {
   CardError,
   getCard,
   SupportedMimeType,
-  type Query,
-  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
   SORT_OPTIONS,
@@ -27,6 +25,7 @@ import {
 } from './app-helpers/sort';
 import { type ViewOption, CardsGrid } from './app-helpers/grid';
 import { SidebarLayout } from './app-helpers/sidebar-layout';
+import type { SidebarFilter } from './app-helpers/filter';
 
 import {
   BoxelButton,
@@ -37,7 +36,6 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import IconComponent from '@cardstack/boxel-icons/captions';
 import CategoriesIcon from '@cardstack/boxel-icons/hierarchy-3';
 import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
 import BlogAppIcon from '@cardstack/boxel-icons/notebook';
@@ -45,18 +43,6 @@ import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
 import type { BlogPost } from './blog-post';
 
-interface SidebarFilter {
-  displayName: string;
-  icon: typeof IconComponent;
-  cardTypeName: string;
-  createNewButtonText?: string;
-  isCreateNewDisabled?: boolean;
-  cardRef?: ResolvedCodeRef;
-  query?: Query;
-  sortOptions?: SortOption[];
-  selectedSort?: SortOption;
-  showAdminData?: boolean;
-}
 const FILTERS: SidebarFilter[] = [
   {
     displayName: 'Blog Posts',

@@ -10,13 +10,14 @@ import {
 } from './app-helpers/sort';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
+import { restartableTask } from 'ember-concurrency';
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   TabbedHeader,
@@ -32,7 +33,6 @@ import {
   SupportedMimeType,
   codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common';
-import type Owner from '@ember/owner';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
