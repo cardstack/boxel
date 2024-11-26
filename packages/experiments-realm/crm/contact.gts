@@ -142,6 +142,8 @@ class FittedTemplate extends Component<typeof Contact> {
   }
 
   <template>
+    {{! template-lint-disable no-inline-styles }}
+    {{! template-lint-disable style-concatenation }}
     <article class='fitted-contact-card'>
       <div class='avatar-container'>
         <div class='avatar'>
