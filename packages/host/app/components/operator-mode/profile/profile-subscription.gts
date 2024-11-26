@@ -155,7 +155,7 @@ export default class ProfileSubscription extends Component<Signature> {
         --icon-color: var(--boxel-teal);
         --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
-      :deep(.boxel-loading-indicator) {
+      :deep(.buy-more-credits .boxel-loading-indicator) {
         width: 100%;
         text-align: center;
       }
