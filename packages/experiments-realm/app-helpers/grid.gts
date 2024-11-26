@@ -1,13 +1,21 @@
 import GlimmerComponent from '@glimmer/component';
 
-import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { Format, type CardContext } from 'https://cardstack.com/base/card-api';
 
 import { type Query } from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
+import { ComponentLike } from '@glint/template';
 export type ViewOption = 'card' | 'strip' | 'grid';
+
+export type HTMLComponent = ComponentLike<{ Args: {} }>;
+
+interface PrerenderedCard {
+  url: string;
+  component: HTMLComponent;
+}
 
 interface CardsGridSignature {
   Args: {
@@ -15,12 +23,14 @@ interface CardsGridSignature {
     realms: URL[];
     selectedView: ViewOption;
     context?: CardContext;
+    format: Format;
   };
+  Blocks: {
+    'admin-data': [card: PrerenderedCard];
+  };
+  Element: HTMLElement;
 }
 export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
-  get queryString() {
-    return JSON.stringify(this.args.query);
-  }
   <template>
     <ul class='cards {{@selectedView}}-view' data-test-cards-grid-cards>
       {{#let
@@ -29,14 +39,14 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       }}
         <PrerenderedCardSearch
           @query={{@query}}
-          @format='fitted'
+          @format={{@format}}
           @realms={{@realms}}
         >
           <:loading>
             Loading...
           </:loading>
           <:response as |cards|>
-            {{#each cards as |card|}}
+            {{#each cards key='url' as |card|}}
               <li
                 class='{{@selectedView}}-view-container'
                 {{@context.cardComponentModifier
@@ -52,6 +62,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                 >
                   <card.component />
                 </CardContainer>
+                {{yield card to='admin-data'}}
               </li>
             {{/each}}
           </:response>
