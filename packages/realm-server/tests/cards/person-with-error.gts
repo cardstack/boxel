@@ -24,14 +24,6 @@ export class PersonCard extends CardDef {
     },
   });
 
-  // Total photos they appear in (computed)
-  //  @field totalPhotos = contains(NumberField, {
-  //    computeVia: function (this: PersonCard) {
-  //     // Links to photos are dynamically counted
-  //      return this.linksToMany(PhotoCard).length;
-  //    },
-  //  });
-
   static isolated = class Isolated extends Component<typeof this> {
     get query() {
       return {
@@ -40,7 +32,6 @@ export class PersonCard extends CardDef {
             // @ts-expect-error "import.meta" is actually fine to here since
             //  were actually transpile this module in our realm server
             module: new URL('./family_photo_card.gts', import.meta.url).href,
-            // module: //'http://localhost:4201/user/personal/family_photo_card.gts',
             name: 'FamilyPhotoCard',
           },
         },
