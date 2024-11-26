@@ -5,7 +5,6 @@ import {
   fillIn,
   focus,
   blur,
-  setupOnerror,
   triggerEvent,
   triggerKeyEvent,
   typeIn,
@@ -41,6 +40,7 @@ import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import NetworkService from '@cardstack/host/services/network';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
@@ -548,15 +548,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
   });
 
-  // TODO CS-6268 visual indicator for failed auto-save should build off of this test
   test('an error in auto-save is handled gracefully', async function (assert) {
-    let done = assert.async();
-
-    setupOnerror(function (error) {
-      assert.ok(error, 'expected a global error');
-      done();
-    });
-
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await renderComponent(
@@ -570,13 +562,79 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-pet]');
     await waitFor('[data-test-edit-button]');
     await click('[data-test-edit-button]');
-    await fillIn('[data-test-field="boom"] input', 'Bad cat!');
+    fillIn('[data-test-field="boom"] input', 'Bad cat!');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() == 'Saving…',
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() == 'Failed to save: Boom!',
+    );
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await waitFor('[data-test-pet]');
     // Card still runs (our error was designed to only fire during save)
     // despite save error
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
+  });
+
+  test('a 403 from Web Appliction Firewall is handled gracefully when auto-saving', async function (assert) {
+    // TODO: setup virtual network to return WAF 403 when saving
+    let networkService = this.owner.lookup('service:network') as NetworkService;
+    networkService.virtualNetwork.mount(
+      async (req: Request) => {
+        if (req.method === 'PATCH' && req.url.includes('test/Pet/buzz')) {
+          return new Response(
+            '{ message: "Request blocked by Web Application Firewall. See x-blocked-by-waf-rule response header for detail." }',
+            {
+              status: 403,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Blocked-By-WAF-Rule': 'CrossSiteScripting_BODY',
+              },
+            },
+          );
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+    await setCardInOperatorModeState(`${testRealmURL}Pet/buzz`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-field="name"]');
+    await waitFor('[data-test-edit-button]');
+    await click('[data-test-edit-button]');
+    fillIn('[data-test-field="name"] input', 'Fuzz');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() == 'Saving…',
+      { timeoutMessage: 'Waitng for Saving... to appear' },
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() == 'Failed to save: Rejected by firewall',
+      { timeoutMessage: 'Waitng for "Failed to save" to appear' },
+    );
+    assert
+      .dom('[data-test-auto-save-indicator]')
+      .containsText('Failed to save: Rejected by firewall');
   });
 
   test('opens workspace chooser after closing the only remainingcard on the stack', async function (assert) {

@@ -128,6 +128,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
+  @tracked private lastSaveError: Error | undefined;
   private refreshSaveMsg: number | undefined;
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
@@ -350,28 +351,47 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private initiateAutoSaveTask = restartableTask(async () => {
     this.hasUnsavedChanges = true;
     await timeout(this.environmentService.autoSaveDelayMs);
-    this.isSaving = true;
-    await this.args.saveCard(this.card);
-    this.hasUnsavedChanges = false;
-    this.isSaving = false;
-    this.lastSaved = Date.now();
-    this.calculateLastSavedMsg();
+    try {
+      this.isSaving = true;
+      this.lastSaveError = undefined;
+      await timeout(25);
+      await this.args.saveCard(this.card);
+      this.hasUnsavedChanges = false;
+      this.lastSaved = Date.now();
+    } catch (error) {
+      // error will already be logged in CardService
+      this.lastSaveError = error as Error;
+    } finally {
+      this.isSaving = false;
+      this.calculateLastSavedMsg();
+    }
   });
 
   private calculateLastSavedMsg() {
-    // runs frequently, so only change a tracked property if the value has changed
-    if (this.lastSaved == null) {
-      if (this.lastSavedMsg) {
-        this.lastSavedMsg = undefined;
-      }
-    } else {
-      let savedMessage = `Saved ${formatDistanceToNow(this.lastSaved, {
+    let savedMessage: string | undefined;
+    if (this.lastSaveError) {
+      savedMessage = `Failed to save: ${this.getErrorMessage(
+        this.lastSaveError,
+      )}`;
+    } else if (this.lastSaved) {
+      savedMessage = `Saved ${formatDistanceToNow(this.lastSaved, {
         addSuffix: true,
       })}`;
-      if (this.lastSavedMsg != savedMessage) {
-        this.lastSavedMsg = savedMessage;
-      }
     }
+    // runs frequently, so only change a tracked property if the value has changed
+    if (this.lastSavedMsg != savedMessage) {
+      this.lastSavedMsg = savedMessage;
+    }
+  }
+
+  private getErrorMessage(error: Error) {
+    if ((error as any).responseHeaders?.get('x-blocked-by-waf-rule')) {
+      return 'Rejected by firewall';
+    }
+    if (error.message) {
+      return error.message;
+    }
+    return 'Unknown error';
   }
 
   private doneEditing = restartableTask(async () => {
