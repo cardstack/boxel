@@ -1,14 +1,6 @@
 {
   "data": {
     "type": "card",
-    "attributes": {
-      "photoUrl": "http://lukemelia.com/photo-wall/IMG_6618.PNG",
-      "widthInches": 10,
-      "heightInches": 13,
-      "title": "Baby Chiara",
-      "description": "Chiara as a baby model",
-      "thumbnailURL": null
-    },
     "relationships": {
       "taggedPeople.0": {
         "links": {

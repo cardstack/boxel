@@ -1,14 +1,6 @@
 {
   "data": {
     "type": "card",
-    "attributes": {
-      "photoUrl": "https://lukemelia.com/IMG_6615.jpg",
-      "widthInches": 10,
-      "heightInches": 8,
-      "title": "Baby Sophie and parents",
-      "description": "Black & white pick of infant sophie in between her parents",
-      "thumbnailURL": null
-    },
     "relationships": {
       "taggedPeople.0": {
         "links": {
