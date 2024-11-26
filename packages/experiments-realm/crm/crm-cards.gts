@@ -1,4 +1,4 @@
-import { LooseGooseyField } from '../app-helpers/loosey-goosey';
+import { LooseGooseyField } from '../loosey-goosey';
 import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
 
 export class ContactType extends LooseGooseyField {

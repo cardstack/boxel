@@ -3,7 +3,8 @@ import { tracked } from '@glimmer/tracking';
 import { DndColumn, DndItem } from '@cardstack/boxel-ui/components';
 import { type Query } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
-import { TaskStatusField, type LooseyGooseyData, Task } from './task';
+import { TaskStatusField, Task } from './task';
+import type { LooseyGooseyData } from '../loosey-goosey';
 
 import { isEqual } from 'lodash';
 import { Resource } from 'ember-resources';

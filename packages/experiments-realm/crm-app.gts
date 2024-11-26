@@ -1,13 +1,10 @@
-import { SidebarFilter } from './app-helpers/filter';
-import { SidebarLayout } from './app-helpers/sidebar-layout';
-import { Tab } from './app-helpers/tabs';
-import { CardsGrid } from './app-helpers/grid';
+import { CardsGrid } from './components/grid';
+import { Layout, TitleGroup, type LayoutFilter } from './components/layout';
 import {
   SortMenu,
-  SortOption,
-  SORT_OPTIONS,
-  sortByCardTitle,
-} from './app-helpers/sort';
+  type SortOption,
+  sortByCardTitleAsc,
+} from './components/sort';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -26,7 +23,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 // @ts-expect-error path resolution issue
-import { AppCard } from '/catalog/app-card';
+import { AppCard, Tab } from '/catalog/app-card';
 import {
   Query,
   CardError,
@@ -39,12 +36,19 @@ import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
-const CONTACT_FILTERS: SidebarFilter[] = [
+const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Contacts',
     icon: ContactIcon,
     cardTypeName: 'CRM Contact',
     createNewButtonText: 'Create Contact',
+    sortOptions: [
+      {
+        id: 'cardTitleAsc',
+        displayName: 'A-Z',
+        sort: sortByCardTitleAsc,
+      },
+    ],
   },
   {
     displayName: 'Leads',
@@ -59,7 +63,7 @@ const CONTACT_FILTERS: SidebarFilter[] = [
     createNewButtonText: 'Create Customer',
   },
 ];
-const DEAL_FILTERS: SidebarFilter[] = [
+const DEAL_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Deals',
     icon: ContactIcon,
@@ -71,25 +75,22 @@ const DEAL_FILTERS: SidebarFilter[] = [
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
   //filters
-  filterMap: TrackedMap<string, SidebarFilter[]> = new TrackedMap();
-  @tracked private activeFilter: SidebarFilter | undefined;
-  @action private onFilterChange(filter: SidebarFilter) {
+  filterMap: TrackedMap<string, LayoutFilter[]> = new TrackedMap([
+    ['Contact', CONTACT_FILTERS],
+    ['Deal', DEAL_FILTERS],
+  ]);
+  @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
+  @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
   }
-  //sort
-  sortOptions = SORT_OPTIONS;
   //tabs
-  @tracked activeTabId?: string = this.args.model.tabs?.[0]?.tabId;
-  @tracked tabs = this.args.model.tabs ?? [];
+  @tracked activeTabId: string = this.args.model.tabs[0].tabId;
+  @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
-  @tracked private selectedSort: SortOption = this.sortOptions[0];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.filterMap.set('Contact', CONTACT_FILTERS);
-    this.filterMap.set('Deal', DEAL_FILTERS);
     this.loadAllFilters.perform();
-    this.setActiveFilter();
   }
 
   private loadAllFilters = restartableTask(async () => {
@@ -132,16 +133,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   });
 
   get filters() {
-    if (this.activeTabId) {
-      return this.filterMap.get(this.activeTabId) ?? [];
-    }
-    return [];
+    return this.filterMap.get(this.activeTabId)!;
   }
 
   @action setActiveFilter() {
-    if (this.activeTabId) {
-      this.activeFilter = this.filterMap.get(this.activeTabId)?.[0];
-    }
+    this.activeFilter = this.filterMap.get(this.activeTabId)![0];
   }
 
   //Tabs
@@ -198,6 +194,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     });
   });
 
+  private get selectedSort() {
+    if (!this.activeFilter.sortOptions?.length) {
+      return;
+    }
+    return this.activeFilter.selectedSort ?? this.activeFilter.sortOptions[0];
+  }
+
   //query for tabs and filters
   get query() {
     if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
@@ -205,7 +208,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         filter: {
           type: this.activeFilter.cardRef,
         },
-        sort: this.selectedSort?.sort ?? sortByCardTitle,
+        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
       } as Query;
     }
     return;
@@ -215,12 +218,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.selectedView = id;
   }
   @action private onSort(option: SortOption) {
-    this.selectedSort = option;
+    this.activeFilter.selectedSort = option;
     this.activeFilter = this.activeFilter;
   }
 
   <template>
     <TabbedHeader
+      class='crm-app-header'
       @tabs={{@model.tabs}}
       @setActiveTab={{this.setActiveTab}}
       @activeTabId={{this.activeTab.tabId}}
@@ -233,28 +237,33 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       </:headerIcon>
     </TabbedHeader>
 
-    <SidebarLayout
+    <Layout
+      class='crm-app'
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
     >
-      <:sidebarHeader>
-        <img
-          class='sidebar-header-thumbnail'
-          src={{@model.thumbnailURL}}
-          width='60'
-          height='60'
-          alt={{@model.title}}
+      <:sidebar>
+        <TitleGroup
+          @title={{@model.title}}
+          @tagline={{@model.description}}
+          @thumbnailURL={{@model.thumbnailURL}}
+          @element='header'
+          aria-label='Sidebar Header'
         />
-        <h1 class='sidebar-header-title'><@fields.title /></h1>
-        <p class='sidebar-header-description'><@fields.description /></p>
-      </:sidebarHeader>
+      </:sidebar>
       <:contentHeader>
-        <this.activeFilter.icon />
-        <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
+        <h2 class='content-title content-header-row-1'>
+          <this.activeFilter.icon
+            class='content-title-icon'
+            width='35'
+            height='35'
+          />
+          {{this.activeFilter.displayName}}
+        </h2>
         {{#if @context.actions.createCard}}
           <BoxelButton
-            class='sidebar-create-button'
+            class='sidebar-create-button content-header-row-1'
             @kind='primary'
             @size='large'
             @disabled={{this.activeFilter.isCreateNewDisabled}}
@@ -264,30 +273,32 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             {{#unless this.createCard.isRunning}}
               <IconPlus
                 class='sidebar-create-button-icon'
-                width='15'
-                height='15'
+                width='13'
+                height='13'
               />
             {{/unless}}
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
-      </:contentHeader>
-      <:contentSubheader>
-        <div>
+        <div class='search-bar content-header-row-2'>
           <BoxelInput @type='search' />
         </div>
-        <div class='crm-content-subheader-actions'>
-          <ViewSelector
-            @selectedId={{this.selectedView}}
-            @onChange={{this.onChangeView}}
-          />
-          <SortMenu
-            @options={{this.sortOptions}}
-            @selected={{this.selectedSort}}
-            @onSort={{this.onSort}}
-          />
-        </div>
-      </:contentSubheader>
+        <ViewSelector
+          class='view-menu content-header-row-2'
+          @selectedId={{this.selectedView}}
+          @onChange={{this.onChangeView}}
+        />
+        {{#if this.activeFilter.sortOptions.length}}
+          {{#if this.selectedSort}}
+            <SortMenu
+              class='content-header-row-2'
+              @options={{this.activeFilter.sortOptions}}
+              @selected={{this.selectedSort}}
+              @onSort={{this.onSort}}
+            />
+          {{/if}}
+        {{/if}}
+      </:contentHeader>
       <:grid>
         {{#if this.query}}
           <CardsGrid
@@ -299,23 +310,46 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           />
         {{/if}}
       </:grid>
-    </SidebarLayout>
+    </Layout>
     <style scoped>
+      /* hide overlay button visibility during scroll */
+      .crm-app-header {
+        position: relative;
+        z-index: 1;
+      }
+      .crm-app-header :deep(.app-title-group) {
+        display: none;
+      }
       .crm-app {
+        --create-button-width: 172px;
+        --create-button-height: 40px;
+        --search-bar-max-width: 395px;
         display: flex;
         width: 100%;
         max-width: 100%;
         height: 100%;
         max-height: 100vh;
         background-color: var(--boxel-light);
-        border-top: 1px solid var(--boxel-400);
         overflow: hidden;
+      }
+      .content-header-row-1 {
+        margin-top: var(--boxel-sp-xs);
+      }
+      .content-header-row-2 {
+        margin-top: var(--boxel-sp-lg);
       }
       .content-title {
         flex-grow: 1;
-        margin: 0;
+        width: calc(100% - var(--boxel-sp-lg) - var(--create-button-width));
+        min-width: 50%;
+        margin-bottom: 0;
         font: 600 var(--boxel-font-lg);
-        letter-spacing: var(--boxel-lsp-xxs);
+        font-size: 1.5rem;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content-title-icon {
+        vertical-align: bottom;
+        margin-right: var(--boxel-sp-4xs);
       }
       /* Sidebar header */
       .sidebar-header-thumbnail {
@@ -339,7 +373,9 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       /* Create button */
       .sidebar-create-button {
         --icon-color: currentColor;
-        --boxel-loading-indicator-size: 15px;
+        --boxel-loading-indicator-size: 13px;
+        --boxel-button-min-height: var(--create-button-height);
+        --boxel-button-min-width: var(--create-button-width);
         gap: var(--boxel-sp-xs);
         font-weight: 600;
       }
@@ -349,11 +385,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       .sidebar-create-button :deep(.loading-indicator) {
         margin: 0;
       }
-      /* Content subheader */
-      .crm-content-subheader-actions {
-        display: flex;
-        gap: var(--boxel-sp-xxxl);
-        align-items: center;
+      /* Content header */
+      .search-bar {
+        flex-grow: 1;
+        max-width: var(--search-bar-max-width);
+      }
+      .view-menu {
+        margin-left: auto;
       }
     </style>
   </template>

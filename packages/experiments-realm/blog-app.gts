@@ -18,14 +18,12 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
-  SORT_OPTIONS,
   type SortOption,
-  sortByCardTitle,
+  sortByCardTitleAsc,
   SortMenu,
-} from './app-helpers/sort';
-import { type ViewOption, CardsGrid } from './app-helpers/grid';
-import { SidebarLayout } from './app-helpers/sidebar-layout';
-import type { SidebarFilter } from './app-helpers/filter';
+} from './components/sort';
+import { type ViewOption, CardsGrid } from './components/grid';
+import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
   BoxelButton,
@@ -43,7 +41,35 @@ import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
 import type { BlogPost } from './blog-post';
 
-const FILTERS: SidebarFilter[] = [
+export const SORT_OPTIONS: SortOption[] = [
+  {
+    id: 'datePubDesc',
+    displayName: 'Date Published',
+    sort: [
+      {
+        by: 'createdAt',
+        direction: 'desc',
+      },
+    ],
+  },
+  {
+    id: 'lastUpdatedDesc',
+    displayName: 'Last Updated',
+    sort: [
+      {
+        by: 'lastModified',
+        direction: 'desc',
+      },
+    ],
+  },
+  {
+    id: 'cardTitleAsc',
+    displayName: 'A-Z',
+    sort: sortByCardTitleAsc,
+  },
+];
+
+const FILTERS: LayoutFilter[] = [
   {
     displayName: 'Blog Posts',
     icon: BlogPostIcon,
@@ -75,6 +101,15 @@ export const formatDatetime = (
 ) => {
   const Format = new Intl.DateTimeFormat('en-US', opts);
   return Format.format(datetime);
+};
+
+const or = function (item1: any, item2: any) {
+  if (Boolean(item1)) {
+    return item1;
+  } else if (Boolean(item2)) {
+    return item2;
+  }
+  return;
 };
 
 interface CardAdminViewSignature {
@@ -141,23 +176,19 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
 
 class BlogAppTemplate extends Component<typeof BlogApp> {
   <template>
-    <SidebarLayout
+    <Layout
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
     >
-      <:sidebarHeader>
-        <img
-          class='sidebar-header-thumbnail'
-          src={{@model.thumbnailURL}}
-          width='60'
-          height='60'
-          alt={{@model.title}}
+      <:sidebar>
+        <TitleGroup
+          @title={{or @model.title ''}}
+          @tagline={{or @model.description ''}}
+          @thumbnailURL={{or @model.thumbnailURL ''}}
+          @element='header'
+          aria-label='Sidebar Header'
         />
-        <h1 class='sidebar-header-title'><@fields.title /></h1>
-        <p class='sidebar-header-description'><@fields.description /></p>
-      </:sidebarHeader>
-      <:sidebarSubheader>
         {{#if @context.actions.createCard}}
           <BoxelButton
             class='sidebar-create-button'
@@ -178,7 +209,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
-      </:sidebarSubheader>
+      </:sidebar>
       <:contentHeader>
         <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
         <ViewSelector
@@ -194,7 +225,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             />
           {{/if}}
         {{/if}}
-
       </:contentHeader>
       <:grid>
         {{#if this.query}}
@@ -215,27 +245,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           </div>
         {{/if}}
       </:grid>
-
-    </SidebarLayout>
+    </Layout>
     <style scoped>
-      .sidebar-header-thumbnail {
-        grid-row: 1 / 3;
-        padding: var(--boxel-sp-6xs);
-        border: 1px solid var(--boxel-450);
-        border-radius: var(--boxel-border-radius-xl);
-      }
-      .sidebar-header-title {
-        align-self: end;
-        margin: 0;
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .sidebar-header-description {
-        grid-column: 2;
-        margin: 0;
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
       .sidebar-create-button {
         --icon-color: currentColor;
         --boxel-loading-indicator-size: 15px;
@@ -258,10 +269,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     </style>
   </template>
 
-  filters: SidebarFilter[] = new TrackedArray(FILTERS);
+  filters: LayoutFilter[] = new TrackedArray(FILTERS);
 
   @tracked private selectedView: ViewOption = 'card';
-  @tracked private activeFilter: SidebarFilter = this.filters[0];
+  @tracked private activeFilter: LayoutFilter = this.filters[0];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -287,7 +298,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     if (this.loadCardTypes.isIdle && this.activeFilter.query) {
       return {
         ...this.activeFilter.query,
-        sort: this.selectedSort?.sort ?? sortByCardTitle,
+        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
       };
     }
     return undefined;
@@ -335,7 +346,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     this.activeFilter = this.activeFilter;
   }
 
-  @action private onFilterChange(filter: SidebarFilter) {
+  @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
   }
 

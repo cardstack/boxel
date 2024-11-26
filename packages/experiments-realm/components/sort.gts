@@ -13,7 +13,7 @@ import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
 
-export const sortByCardTitle: Sort = [
+export const sortByCardTitleAsc: Sort = [
   {
     on: {
       module: `${baseRealm.url}card-api`,
@@ -30,44 +30,17 @@ export interface SortOption {
   sort: Sort;
 }
 
-export const SORT_OPTIONS: SortOption[] = [
-  {
-    id: 'datePubDesc',
-    displayName: 'Date Published',
-    sort: [
-      {
-        by: 'createdAt',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    id: 'lastUpdatedDesc',
-    displayName: 'Last Updated',
-    sort: [
-      {
-        by: 'lastModified',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    id: 'cardTitleAsc',
-    displayName: 'A-Z',
-    sort: sortByCardTitle,
-  },
-];
-
 interface SortMenuSignature {
   Args: {
     options: SortOption[];
     onSort: (option: SortOption) => void;
     selected: SortOption;
   };
+  Element: HTMLElement;
 }
 export class SortMenu extends GlimmerComponent<SortMenuSignature> {
   <template>
-    <div class='sort'>
+    <div class='sort' ...attributes>
       Sort by
       <BoxelDropdown>
         <:trigger as |bindings|>
