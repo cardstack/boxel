@@ -13,7 +13,7 @@ import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
 
-interface SortOption {
+export interface SortOption {
   displayName: string;
   sort: Query['sort'];
 }

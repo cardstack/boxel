@@ -26,6 +26,7 @@ import {
   CardError,
   SupportedMimeType,
   baseRealm,
+  type Sort,
 } from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
 
@@ -49,6 +50,17 @@ const FILTERS: SidebarFilter[] = [
     icon: BlogPostIcon,
     cardTypeName: 'CRM Customer',
     createNewButtonText: 'Create Customer',
+  },
+];
+
+const sortByCardTitle: Sort = [
+  {
+    on: {
+      module: `${baseRealm.url}card-api`,
+      name: 'CardDef',
+    },
+    by: 'title',
+    direction: 'asc',
   },
 ];
 
@@ -187,6 +199,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         filter: {
           type: this.activeFilter.cardRef,
         },
+        sort: this.selectedSort?.sort ?? sortByCardTitle,
       } as Query;
     }
     return;
