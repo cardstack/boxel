@@ -6,14 +6,13 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { or, not } from '@cardstack/boxel-ui/helpers';
+import { or, not, and } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
 
@@ -56,8 +55,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare messageService: MessageService;
   @service declare realmServer: RealmServerService;
-
-  @tracked isUserLoggedIn = this.matrixService.isLoggedIn;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -127,18 +124,8 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
-  private fetchUserInfo = task(async () => {
-    if (isTesting()) {
-      return;
-    }
-    if (!this.isUserLoggedIn) {
-      return;
-    }
-    await this.billingService.fetchSubscriptionData();
-  });
-
   private get isUserInfoLoading() {
-    return this.fetchUserInfo.isRunning;
+    return this.billingService.fetchingSubscriptionData;
   }
 
   private get isUserSubscribed() {
@@ -175,7 +162,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         )
       }}
         <Auth />
-      {{else if this.isUserInfoLoading}}
+      {{else if (and this.isUserInfoLoading (not this.isUserSubscribed))}}
         <div class='loading-spinner-container'>
           <div class='loading-spinner'>
             <LoadingIndicator @color='var(--boxel-teal)' />

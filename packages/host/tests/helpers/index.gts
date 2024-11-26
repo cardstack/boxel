@@ -624,6 +624,7 @@ export function setupUserSubscription(matrixRoomId: string) {
               Authorization: createJWT(
                 {
                   user: '@testuser:staging',
+                  sessionRoom: matrixRoomId,
                 },
                 '1d',
                 testRealmSecretSeed,

@@ -75,6 +75,7 @@ import { RoomResource, getRoom } from '../resources/room';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
+import type BillingService from './billing-service';
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
@@ -99,6 +100,7 @@ export type OperatorModeContext = {
 
 export default class MatrixService extends Service {
   @service private declare loaderService: LoaderService;
+  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
   @service private declare realm: RealmService;
@@ -385,6 +387,7 @@ export default class MatrixService extends Service {
           this.realmServer.fetchCatalogRealms(),
         ]);
         this.postLoginCompleted = true;
+        await this.billingService.fetchSubscriptionData();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
