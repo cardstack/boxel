@@ -137,7 +137,7 @@ export default class RenderService extends Service {
         if (isCardError(err) && err.status !== 500 && notLoaded) {
           let links =
             typeof notLoaded.reference === 'string'
-              ? notLoaded.reference
+              ? [notLoaded.reference]
               : notLoaded.reference;
           for (let link of links) {
             if (identityContext.errors.has(link)) {
