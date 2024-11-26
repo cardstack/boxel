@@ -2,8 +2,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
-import ENV from '@cardstack/host/config/environment';
-
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -30,6 +28,7 @@ const { environment } = ENV;
 
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
+import ENV from '@cardstack/host/config/environment';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 

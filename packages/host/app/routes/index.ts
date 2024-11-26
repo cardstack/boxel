@@ -2,6 +2,7 @@ import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
 
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
 import stringify from 'safe-stable-stringify';
 
@@ -62,7 +63,11 @@ export default class Index extends Route<void> {
       return; // Show login component
     }
 
-    await this.billingService.fetchSubscriptionData();
+    if (!isTesting()) {
+      // we don't want to fetch subscription data in integration tests
+      // we need to fetch the subscription data right after login
+      await this.billingService.fetchSubscriptionData();
+    }
 
     let cardUrl: string | undefined;
 
