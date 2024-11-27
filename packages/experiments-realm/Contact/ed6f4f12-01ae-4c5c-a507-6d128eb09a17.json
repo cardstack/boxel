@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "David Paul Johnson",
+      "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1",
+      "primaryEmail": "davidpaul@gmail.com",
+      "secondaryEmail": "davidpaul@yahoo.com",
+      "phoneMobile": {
+        "country": 1,
+        "area": 415,
+        "phoneNumber": 1112222
+      },
+      "phoneOffice": {
+        "country": 1,
+        "area": 415,
+        "phoneNumber": 2223456
+      },
+      "socialLinks": {
+        "twitterURL": "https://x.com/",
+        "linkedInURL": ""
+      },
+      "status": {
+        "index": 1,
+        "label": "Lead"
+      },
+      "description": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../CompanyCard/934a7f7b-0a74-4135-95f0-55d965b6c2ab"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/contact",
+        "name": "Contact"
+      }
+    }
+  }
+}

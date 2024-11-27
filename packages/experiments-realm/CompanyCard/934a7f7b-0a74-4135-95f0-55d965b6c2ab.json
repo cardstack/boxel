@@ -2,18 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "type": {
-        "index": null,
-        "label": null
-      },
-      "title": null,
+      "name": "Cardstack Studio",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/crm-cards",
-        "name": "Contact"
+        "module": "../crm/contact",
+        "name": "CompanyCard"
       }
     }
   }
