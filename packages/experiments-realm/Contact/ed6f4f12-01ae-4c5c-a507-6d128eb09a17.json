@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "David Paul",
+      "name": "David Paul Johnson",
       "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1",
       "primaryEmail": "davidpaul@gmail.com",
       "secondaryEmail": "davidpaul@yahoo.com",
@@ -29,7 +29,7 @@
     "relationships": {
       "company": {
         "links": {
-          "self": "../CompanyCard/c76e7c89-603f-4d1c-8b1e-ed8e68993287"
+          "self": "../CompanyCard/934a7f7b-0a74-4135-95f0-55d965b6c2ab"
         }
       }
     },
