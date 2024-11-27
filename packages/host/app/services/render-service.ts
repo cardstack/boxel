@@ -135,13 +135,22 @@ export default class RenderService extends Service {
           isNotLoadedError(e),
         ) as NotLoaded | undefined;
         if (isCardError(err) && err.status !== 500 && notLoaded) {
-          let linkURL = new URL(`${notLoaded.reference}.json`);
-          if (realmPath.inRealm(linkURL)) {
-            await visit(linkURL, identityContext);
-          } else {
-            // in this case the instance we are linked to is a missing instance
-            // in an external realm.
-            throw err;
+          let links =
+            typeof notLoaded.reference === 'string'
+              ? [notLoaded.reference]
+              : notLoaded.reference;
+          for (let link of links) {
+            if (identityContext.errors.has(link)) {
+              throw err; // the linked card was already found to be in an error state
+            }
+            let linkURL = new URL(`${link}.json`);
+            if (realmPath.inRealm(linkURL)) {
+              await visit(linkURL, identityContext);
+            } else {
+              // in this case the instance we are linked to is a missing instance
+              // in an external realm.
+              throw err;
+            }
           }
         } else {
           throw err;

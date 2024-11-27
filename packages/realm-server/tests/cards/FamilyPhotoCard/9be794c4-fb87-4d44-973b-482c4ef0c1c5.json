@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "relationships": {
+      "taggedPeople.0": {
+        "links": {
+          "self": "../PersonCard/936d9784-5e80-4fb5-88e2-8d29a07d07db"
+        }
+      },
+      "taggedPeople.1": {
+        "links": {
+          "self": "../PersonCard/19c90c40-1df9-42e2-8f85-795229a4bc7c"
+        }
+      },
+      "taggedPeople.2": {
+        "links": {
+          "self": "../PersonCard/50812f7d-fa48-46ed-a45d-548cb254cf48"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../family_photo_card",
+        "name": "FamilyPhotoCard"
+      }
+    }
+  }
+}
