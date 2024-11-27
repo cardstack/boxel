@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Contacts",
+          "tabId": "Contact",
+          "ref": {
+            "name": "Contact",
+            "module": "crm/crm-cards"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Deals",
+          "tabId": "Deal",
+          "ref": {
+            "name": "Deal",
+            "module": "crm/crm-cards"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "title": "Vibeverse",
+      "description": "Feel the moment",
+      "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm-app",
+        "name": "CrmApp"
+      }
+    }
+  }
+}
