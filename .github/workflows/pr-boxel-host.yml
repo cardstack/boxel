@@ -61,6 +61,7 @@ jobs:
           MATRIX_URL: https://matrix-staging.stack.cards
           MATRIX_SERVER_NAME: stack.cards
           EXPERIMENTAL_AI_ENABLED: true
+          STRIPE_PAYMENT_LINK: https://buy.stripe.com/test_9AQdUjgaDePb8lWcMN
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
@@ -92,6 +93,7 @@ jobs:
           MATRIX_URL: https://matrix.boxel.ai
           MATRIX_SERVER_NAME: boxel.ai
           EXPERIMENTAL_AI_ENABLED: true
+          STRIPE_PAYMENT_LINK: https://buy.stripe.com/00g29k8zLgI35xK000
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.boxel.ai
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1

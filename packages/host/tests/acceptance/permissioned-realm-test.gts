@@ -8,20 +8,25 @@ import {
   setupAcceptanceTestRealm,
   testRealmURL,
   lookupLoaderService,
+  setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+let matrixRoomId: string;
 module('Acceptance | permissioned realm tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL],
   });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     let loader = lookupLoaderService().loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')

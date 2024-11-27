@@ -22,8 +22,6 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
-      stripeBillingEnabled:
-        process.env.STRIPE_BILLING_ENABLED === 'true' ? true : false,
       experimentalAIEnabled:
         process.env.EXPERIMENTAL_AI_ENABLED === 'true' ? true : false,
     },
@@ -40,6 +38,9 @@ module.exports = function (environment) {
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
+    stripePaymentLink:
+      process.env.STRIPE_PAYMENT_LINK ||
+      'https://buy.stripe.com/test_4gw01WfWb2c1dBm7sv',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,

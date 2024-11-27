@@ -1,5 +1,4 @@
 import type Owner from '@ember/owner';
-import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -69,7 +68,6 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
-import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -110,6 +108,7 @@ export default class MatrixService extends Service {
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
+  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -259,12 +258,12 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
+  get isNewUser() {
+    return this._isNewUser;
+  }
+
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let controller = getOwner(this)!.lookup(
-      'controller:index',
-    ) as IndexController;
-    controller.workspaceChooserOpened = true;
     this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
@@ -277,6 +276,7 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
+    this._isNewUser = true;
     this._isInitializingNewUser = false;
   }
 

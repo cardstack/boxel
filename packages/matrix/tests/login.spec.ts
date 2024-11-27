@@ -6,6 +6,11 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
+import {
   clearLocalStorage,
   assertLoggedIn,
   assertLoggedOut,
@@ -13,7 +18,7 @@ import {
   logout,
   openRoot,
   registerRealmUsers,
-  testHost,
+  setupUserSubscribed,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
@@ -21,23 +26,28 @@ const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
-  test.beforeEach(async ({ page }, testInfo) => {
+  let realmServer: IsolatedRealmServer;
+
+  test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
-    // Add 30s to the overall test timeout
-    testInfo.setTimeout(testInfo.timeout + 30000);
+    // Add 120s to the overall test timeout
+    test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
+    realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
-    await clearLocalStorage(page);
+    await clearLocalStorage(page, appURL);
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
   test.afterEach(async () => {
+    await realmServer.stop();
     await synapseStop(synapse.synapseId);
   });
 
   test('it can login on the realm server home page and see the workspace chooser', async ({
     page,
   }) => {
-    await page.goto(`http://localhost:4202/`); // realm server index page
+    await page.goto(appURL);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1');
@@ -45,12 +55,6 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-
-    await expect(
-      page.locator('[data-test-workspace="Test Workspace A"]'),
-    ).toHaveCount(1);
-
-    await page.locator('[data-test-workspace="Test Workspace A"]').click();
 
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
@@ -65,7 +69,7 @@ test.describe('Login', () => {
   test('it can login after visiting a card and then see the attempted card without choosing a workspace', async ({
     page,
   }) => {
-    await page.goto(`http://localhost:4202/test/hassan`);
+    await page.goto(`${appURL}/hassan`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1');
@@ -81,12 +85,12 @@ test.describe('Login', () => {
     ).toHaveCount(1);
 
     await expect(
-      page.locator(`[data-test-stack-card="${testHost}/hassan"]`),
+      page.locator(`[data-test-stack-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
   });
 
   test('it can login', async ({ page }) => {
-    await openRoot(page);
+    await openRoot(page, appURL);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -103,7 +107,7 @@ test.describe('Login', () => {
       return window.localStorage.getItem('boxel-session');
     });
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
-      `${testHost}/`
+      `${appURL}/`
     ];
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
@@ -111,7 +115,7 @@ test.describe('Login', () => {
       permissions: ('read' | 'write' | 'realm-owner')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
-    expect(claims.realm).toStrictEqual(`${testHost}/`);
+    expect(claims.realm).toStrictEqual(`${appURL}/`);
     expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
@@ -120,7 +124,7 @@ test.describe('Login', () => {
   });
 
   test('it can logout', async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await assertLoggedIn(page);
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
@@ -144,7 +148,7 @@ test.describe('Login', () => {
   });
 
   test('it can logout using the profile popover', async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
 
     await expect(
       page.locator(
@@ -159,10 +163,29 @@ test.describe('Login', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
   });
 
+  test('it can logout at payment setup flow', async ({ page }) => {
+    await registerUser(synapse, 'user2', 'pass');
+    await login(page, 'user2', 'pass', {
+      url: appURL,
+      skipOpeningAssistant: true,
+    });
+    await expect(
+      page.locator(
+        '[data-test-profile-icon-button] > [data-test-profile-icon]',
+      ),
+    ).toHaveText('U');
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      '@user2:localhost',
+    );
+    await page.locator('[data-test-signout-button]').click();
+    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+  });
+
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
-    await openRoot(page);
+    await openRoot(page, appURL);
 
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
@@ -186,7 +209,7 @@ test.describe('Login', () => {
   });
 
   test('it reacts to enter keypresses', async ({ page }) => {
-    await openRoot(page);
+    await openRoot(page, appURL);
 
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('pass');

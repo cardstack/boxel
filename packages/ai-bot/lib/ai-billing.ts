@@ -2,6 +2,7 @@ import {
   getCurrentActiveSubscription,
   getUserByMatrixUserId,
   spendCredits,
+  sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 import { logger, retry } from '@cardstack/runtime-common';
@@ -58,6 +59,25 @@ export async function saveUsageCost(
     Sentry.captureException(err);
     // Don't throw, because we don't want to crash the bot over this
   }
+}
+
+export async function getAvailableCredits(
+  pgAdapter: PgAdapter,
+  matrixUserId: string,
+) {
+  let user = await getUserByMatrixUserId(pgAdapter, matrixUserId);
+
+  if (!user) {
+    throw new Error(
+      `should not happen: user with matrix id ${matrixUserId} not found in the users table`,
+    );
+  }
+
+  let availableCredits = await sumUpCreditsLedger(pgAdapter, {
+    userId: user.id,
+  });
+
+  return availableCredits;
 }
 
 async function fetchGenerationCost(generationId: string) {

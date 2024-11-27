@@ -76,9 +76,10 @@ export * from './fetcher';
 export * from './scoped-css';
 export * from './utils';
 export * from './authorization-middleware';
+export * from './query';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
-export { RealmPaths, Loader, type LocalPath, type Query };
+export { RealmPaths, Loader, type LocalPath };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export {
   cardTypeDisplayName,

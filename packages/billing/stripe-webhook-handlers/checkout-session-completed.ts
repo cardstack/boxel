@@ -32,9 +32,16 @@ export async function handleCheckoutSessionCompleted(
     const matrixUserName = event.data.object.client_reference_id;
 
     if (matrixUserName) {
+      // The matrix user id was encoded to be alphanumeric by replacing + with - and / with _
+      // Now we need to reverse that encoding to get back the original base64 string
+      const base64UserId = matrixUserName.replace(/-/g, '+').replace(/_/g, '/');
+      const decodedMatrixUserName = Buffer.from(
+        base64UserId,
+        'base64',
+      ).toString('utf8');
       await updateUserStripeCustomerId(
         dbAdapter,
-        matrixUserName,
+        decodedMatrixUserName,
         stripeCustomerId,
       );
     }

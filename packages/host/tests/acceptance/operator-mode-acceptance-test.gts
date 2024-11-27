@@ -33,6 +33,7 @@ import {
   lookupNetworkService,
   createJWT,
   testRealmSecretSeed,
+  setupUserSubscription,
   setupRealmServerEndpoints,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -52,6 +53,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     setExpiresInSec(60 * 60);
 
     let loader = lookupLoaderService().loader;
