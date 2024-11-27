@@ -132,9 +132,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (isTesting()) {
       return true;
     }
-    if (this.isUserInfoLoading) {
-      return false;
-    }
     return (
       !!this.billingService.subscriptionData?.stripeCustomerId &&
       !!this.billingService.subscriptionData?.plan

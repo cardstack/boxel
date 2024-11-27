@@ -1,7 +1,7 @@
 import Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
@@ -60,6 +60,7 @@ export default class BillingService extends Service {
     return `${stripePaymentLink}?client_reference_id=${clientReferenceId}`;
   }
 
+  @cached
   get subscriptionData() {
     return this._subscriptionData;
   }
