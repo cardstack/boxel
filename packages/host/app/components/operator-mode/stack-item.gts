@@ -63,8 +63,8 @@ import { htmlComponent } from '../../lib/html-component';
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
 
-import CardErrorDetail from './card-error-detail';
 import CardError from './card-error';
+import CardErrorDetail from './card-error-detail';
 
 import OperatorModeOverlays from './overlays';
 

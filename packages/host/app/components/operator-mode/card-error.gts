@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
 import FileAlert from '@cardstack/boxel-icons/file-alert';
 
 const CardErrorComponent: TemplateOnlyComponent = <template>
