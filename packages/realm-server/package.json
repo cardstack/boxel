@@ -96,6 +96,7 @@
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
     "full-reset": "./scripts/full-reset.sh",
+    "stripe": "docker run --rm --net=host -it stripe/stripe-cli:latest",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts"
   },
   "volta": {
