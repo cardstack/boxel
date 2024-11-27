@@ -32,6 +32,8 @@ let log = logger('ai-bot');
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 
+const MINIMUM_CREDITS = 10;
+
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
@@ -226,11 +228,9 @@ Common issues are:
           senderMatrixUserId,
         );
 
-        let minimumCredits = 10;
-
-        if (availableCredits < minimumCredits) {
+        if (availableCredits < MINIMUM_CREDITS) {
           return responder.onError(
-            `You need a minimum of ${minimumCredits} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+            `You need a minimum of ${MINIMUM_CREDITS} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
           );
         }
 
