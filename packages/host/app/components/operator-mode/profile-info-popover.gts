@@ -14,7 +14,6 @@ import {
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import config from '@cardstack/host/config/environment';
 import BillingService from '@cardstack/host/services/billing-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -138,8 +137,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      {{! TODO: Remove config.APP.stripeBillingEnabled once the API integration for credit info is completed. }}
-      {{#if config.APP.stripeBillingEnabled}}
+      {{! Show credit info if the user has an active plan }}
+      {{#if this.plan}}
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
             <span class='label'>Membership Tier</span>

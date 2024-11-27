@@ -9,7 +9,6 @@ import {
   assertMessages,
   writeMessage,
   sendMessage,
-  testHost,
   reloadAndOpenAiAssistant,
   isInRoom,
   registerRealmUsers,
@@ -17,26 +16,37 @@ import {
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
+  setupUserSubscribed,
 } from '../helpers';
 import {
   synapseStart,
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import {
+  appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
   test.beforeEach(async () => {
+    test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
+    realmServer = await startRealmServer();
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
+    await realmServer.stop();
   });
 
   test(`it can send a message in a room`, async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
@@ -81,7 +91,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, messages);
 
     await logout(page);
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
     await assertMessages(page, messages);
 
@@ -100,7 +110,7 @@ test.describe('Room messages', () => {
     // generally the matrix server paginates after 10 messages
     const totalMessageCount = 20;
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
 
     for (let i = 1; i <= totalMessageCount; i++) {
@@ -108,7 +118,7 @@ test.describe('Room messages', () => {
     }
     await logout(page);
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
 
     await expect(page.locator('[data-test-message-idx]')).toHaveCount(
@@ -117,7 +127,7 @@ test.describe('Room messages', () => {
   });
 
   test(`it can send a markdown message`, async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
@@ -132,7 +142,7 @@ test.describe('Room messages', () => {
   });
 
   test(`it can create a room specific pending message`, async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
     let room2 = await createRoom(page);
@@ -166,8 +176,8 @@ test.describe('Room messages', () => {
   });
 
   test('can add a card to a markdown message', async ({ page }) => {
-    const testCard = `${testHost}/hassan`;
-    await login(page, 'user1', 'pass');
+    const testCard = `${appURL}/hassan`;
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-choose-card-btn]').click();
@@ -206,8 +216,8 @@ test.describe('Room messages', () => {
   test('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
     page,
   }) => {
-    const testCard = `${testHost}/big-card`; // this is a 153KB card
-    await login(page, 'user1', 'pass');
+    const testCard = `${appURL}/big-card`; // this is a 153KB card
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
     await page
@@ -254,8 +264,8 @@ test.describe('Room messages', () => {
   test('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
-    const testCard = `${testHost}/mango-puppy`; // this is a 153KB card
-    await login(page, 'user1', 'pass');
+    const testCard = `${appURL}/mango-puppy`; // this is a 153KB card
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-choose-card-btn]').click();
 
@@ -292,8 +302,8 @@ test.describe('Room messages', () => {
   });
 
   test('can send only a card as a message', async ({ page }) => {
-    const testCard = `${testHost}/hassan`;
-    await login(page, 'user1', 'pass');
+    const testCard = `${appURL}/hassan`;
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
@@ -305,8 +315,8 @@ test.describe('Room messages', () => {
   });
 
   test('can send cards with types unsupported by matrix', async ({ page }) => {
-    const testCard = `${testHost}/type-examples`;
-    await login(page, 'user1', 'pass');
+    const testCard = `${appURL}/type-examples`;
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
 
     // Send a card that contains a type that matrix doesn't support
@@ -320,9 +330,9 @@ test.describe('Room messages', () => {
   });
 
   test('can remove a card from a pending message', async ({ page }) => {
-    const testCard = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
-    await login(page, 'user1', 'pass');
+    const testCard = `${appURL}/hassan`;
+    const testCard2 = `${appURL}/mango`;
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard);
@@ -378,8 +388,8 @@ test.describe('Room messages', () => {
   test('can render multiple cards in a room', async ({ page }) => {
     // the loader deadlocking issue would otherwise prevent this
 
-    const testCard1 = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
+    const testCard1 = `${appURL}/hassan`;
+    const testCard2 = `${appURL}/mango`;
     const message1 = {
       from: 'user1',
       message: 'message 1',
@@ -391,7 +401,7 @@ test.describe('Room messages', () => {
       cards: [{ id: testCard2, title: 'Mango' }],
     };
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
@@ -405,14 +415,14 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1, message2]);
 
     await logout(page);
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
     await assertMessages(page, [message1, message2]);
   });
 
   test('can send multiple cards in a message', async ({ page }) => {
-    const testCard1 = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
+    const testCard1 = `${appURL}/hassan`;
+    const testCard2 = `${appURL}/mango`;
     const message = {
       from: 'user1',
       message: 'message 1',
@@ -422,7 +432,7 @@ test.describe('Room messages', () => {
       ],
     };
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
 
     await selectCardFromCatalog(page, testCard1);
@@ -435,17 +445,17 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message]);
 
     await logout(page);
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
     await assertMessages(page, [message]);
   });
 
   test('attached cards are not duplicated', async ({ page }) => {
-    const testCard1 = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
-    const testCard3 = `${testHost}/type-examples`;
+    const testCard1 = `${appURL}/hassan`;
+    const testCard2 = `${appURL}/mango`;
+    const testCard3 = `${appURL}/type-examples`;
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard2);
@@ -470,13 +480,13 @@ test.describe('Room messages', () => {
   test('displays view all pill if attached card more than 4', async ({
     page,
   }) => {
-    const testCard1 = `${testHost}/hassan`;
-    const testCard2 = `${testHost}/mango`;
-    const testCard3 = `${testHost}/type-examples`;
-    const testCard4 = `${testHost}/fadhlan`;
-    const testCard5 = `${testHost}/van-gogh`;
+    const testCard1 = `${appURL}/hassan`;
+    const testCard2 = `${appURL}/mango`;
+    const testCard3 = `${appURL}/type-examples`;
+    const testCard4 = `${appURL}/fadhlan`;
+    const testCard5 = `${appURL}/van-gogh`;
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard1);
@@ -499,13 +509,13 @@ test.describe('Room messages', () => {
 
   test.describe('auto-attachment of cards in matrix room', () => {
     test.beforeEach(async ({ page }) => {
-      await login(page, 'user1', 'pass');
+      await login(page, 'user1', 'pass', { url: appURL });
       await getRoomId(page);
       await showAllCards(page);
     });
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -525,7 +535,7 @@ test.describe('Room messages', () => {
       ]);
     });
     test('manually attached card is not auto-attached', async ({ page }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await selectCardFromCatalog(page, testCard1);
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
       await page.locator(`[data-test-attached-card]`).hover();
@@ -542,7 +552,7 @@ test.describe('Room messages', () => {
     test('manually attached card overwrites auto-attached card', async ({
       page,
     }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -565,7 +575,7 @@ test.describe('Room messages', () => {
       ]);
     });
     test('does not auto-attach index card', async ({ page }) => {
-      const indexCard = `${testHost}/index`;
+      const indexCard = `${appURL}/index`;
       await expect(
         page.locator(`[data-test-stack-card="${indexCard}"]`),
       ).toHaveCount(1); // The index card appears by default, we verify it exists here
@@ -575,8 +585,8 @@ test.describe('Room messages', () => {
     test('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
-      const testCard1 = `${testHost}/jersey`;
-      const embeddedCard = `${testHost}/justin`;
+      const testCard1 = `${appURL}/jersey`;
+      const embeddedCard = `${appURL}/justin`;
       await showAllCards(page);
       await expect(
         page.locator(
@@ -614,7 +624,7 @@ test.describe('Room messages', () => {
     test('auto-attached card will get auto-remove when closing a stack', async ({
       page,
     }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -635,7 +645,7 @@ test.describe('Room messages', () => {
     });
 
     test('can manually remove auto-attached card', async ({ page }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -660,7 +670,7 @@ test.describe('Room messages', () => {
     test('re-opening previously removed auto-attached card will auto attach again', async ({
       page,
     }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -704,8 +714,8 @@ test.describe('Room messages', () => {
     test('(2 stack) displays both top cards as auto-attached ', async ({
       page,
     }) => {
-      const testCard1 = `${testHost}/hassan`;
-      const testCard2 = `${testHost}/mango`;
+      const testCard1 = `${appURL}/hassan`;
+      const testCard2 = `${appURL}/mango`;
       await setupTwoStackItems(page, testCard1, testCard2);
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(2);
       await expect(
@@ -737,7 +747,7 @@ test.describe('Room messages', () => {
     test('(2 stack) if both top cards are the same, only one auto-attached pill', async ({
       page,
     }) => {
-      const testCard1 = `${testHost}/hassan`;
+      const testCard1 = `${appURL}/hassan`;
       await setupTwoStackItems(page, testCard1, testCard1);
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
       await expect(
@@ -765,7 +775,7 @@ test.describe('Room messages', () => {
       message: 'Make this more polite.', // a prompt on new-session template
       cards: [],
     };
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
@@ -777,10 +787,10 @@ test.describe('Room messages', () => {
   });
 
   test('sending a prompt submits attached cards', async ({ page }) => {
-    const testCard1 = `${testHost}/mango`;
-    const testCard2 = `${testHost}/hassan`;
+    const testCard1 = `${appURL}/mango`;
+    const testCard2 = `${appURL}/hassan`;
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await getRoomId(page);
     await showAllCards(page);
     await page
@@ -848,7 +858,7 @@ test.describe('Room messages', () => {
   test('ai panel stays open when last card is closed and workspace chooser is opened', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
       .click();
@@ -870,9 +880,9 @@ test.describe('Room messages', () => {
   });
 
   test('attaches a card in a conversation multiple times', async ({ page }) => {
-    const testCard = `${testHost}/hassan`;
+    const testCard = `${appURL}/hassan`;
 
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     await showAllCards(page);
 
@@ -919,7 +929,7 @@ test.describe('Room messages', () => {
   });
 
   test('displays error message if message is too large', async ({ page }) => {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
 
     await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
     await page.locator('[data-test-send-message-btn]').click();

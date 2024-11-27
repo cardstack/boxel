@@ -562,6 +562,7 @@ export class CurrentRun {
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: ErrorEntry;
+      identityContext.errors.add(instanceURL.href);
       if (uncaughtError) {
         error = {
           type: 'error',

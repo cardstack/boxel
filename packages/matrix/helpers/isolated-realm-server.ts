@@ -95,21 +95,64 @@ export async function startServer() {
 }
 
 export class IsolatedRealmServer {
+  private stopped: (() => void) | undefined;
+  private sqlResults: ((results: string) => void) | undefined;
+  private sqlError: ((error: string) => void) | undefined;
+
   constructor(
     private realmServerProcess: ReturnType<typeof spawn>,
     readonly realmPath: string, // useful for debugging
-  ) {}
-
-  async stop() {
-    let stopped: () => void;
-    let stop = new Promise<void>((r) => (stopped = r));
-    this.realmServerProcess.on('message', (message) => {
+  ) {
+    realmServerProcess.on('message', (message) => {
       if (message === 'stopped') {
-        stopped();
+        if (!this.stopped) {
+          console.error(`received unprompted server stop`);
+          return;
+        }
+        this.stopped();
+      } else if (
+        typeof message === 'string' &&
+        message.startsWith('sql-results:')
+      ) {
+        let results = message.substring('sql-results:'.length);
+        if (!this.sqlResults) {
+          console.error(`received unprompted SQL: ${results}`);
+          return;
+        }
+        this.sqlResults(results);
+      } else if (
+        typeof message === 'string' &&
+        message.startsWith('sql-error:')
+      ) {
+        let error = message.substring('sql-error:'.length);
+        if (!this.sqlError) {
+          console.error(`received unprompted SQL error: ${error}`);
+          return;
+        }
+        this.sqlError(error);
       }
     });
+  }
+
+  async executeSQL(sql: string): Promise<Record<string, any>[]> {
+    let execute = new Promise<string>(
+      (resolve, reject: (reason: string) => void) => {
+        this.sqlResults = resolve;
+        this.sqlError = reject;
+      },
+    );
+    this.realmServerProcess.send(`execute-sql:${sql}`);
+    let resultsStr = await execute;
+    this.sqlResults = undefined;
+    this.sqlError = undefined;
+    return JSON.parse(resultsStr);
+  }
+
+  async stop() {
+    let stop = new Promise<void>((r) => (this.stopped = r));
     this.realmServerProcess.send('stop');
     await stop;
+    this.stopped = undefined;
     this.realmServerProcess.send('kill');
   }
 }
