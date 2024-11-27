@@ -17,12 +17,16 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
+  assertPaymentSetup,
   assertLoggedOut,
   logout,
   login,
+  setupPayment,
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
+  setupUser,
+  encodeToAlphanumeric,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -105,17 +109,17 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
 
+    // base 64 encode the matrix user id
+    const matrixUserId = encodeToAlphanumeric('@user1:localhost');
+
+    await assertPaymentSetup(page, matrixUserId);
+    await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',
     });
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-    await expect(
-      page.locator(
-        '[data-test-workspace-list] [data-test-workspace-loading-indicator]',
-      ),
-    ).toHaveCount(1);
     await expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]',
@@ -186,11 +190,23 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
 
+    await setupUser('@user2:localhost', realmServer);
+
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
+
+    await expect(
+      page.locator('[data-test-setup-payment-message]'),
+    ).toContainText('Setup your payment method now to enjoy Boxel');
+
+    const user2MatrixUserId = encodeToAlphanumeric('@user2:localhost');
+
+    await assertPaymentSetup(page, user2MatrixUserId);
+    await setupPayment(user2MatrixUserId, realmServer, page);
+
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
       displayName: 'user2',

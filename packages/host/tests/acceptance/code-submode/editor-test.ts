@@ -26,6 +26,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
@@ -33,6 +34,7 @@ import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
+let matrixRoomId: string;
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
   let monacoService: MonacoService;
@@ -42,13 +44,16 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions } = setupMockMatrix(hooks, {
+  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
 
     monacoService = this.owner.lookup(
       'service:monaco-service',

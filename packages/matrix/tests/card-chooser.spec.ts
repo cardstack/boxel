@@ -18,6 +18,7 @@ import {
   login,
   registerRealmUsers,
   showAllCards,
+  setupUserSubscribed,
 } from '../helpers';
 
 test.describe('Card Chooser', () => {
@@ -31,6 +32,7 @@ test.describe('Card Chooser', () => {
 
   async function setupRealms(page: Page) {
     await clearLocalStorage(page, serverIndexUrl);
+    await setupUserSubscribed('@user1:localhost', realmServer);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
