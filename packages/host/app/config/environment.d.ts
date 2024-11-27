@@ -27,5 +27,6 @@ declare const config: {
   minSaveTaskDurationMs: number;
   sqlSchema: string;
   assetsURL: string;
+  stripePaymentLink: string;
   featureFlags?: {};
 };
