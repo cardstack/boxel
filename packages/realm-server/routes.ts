@@ -51,7 +51,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.secretSeed),
     handleFetchUserRequest(args),
   );
-  router.get('/_stripe-links', handleStripeLinksRequest(args));
+  router.get('/_stripe-links', handleStripeLinksRequest());
 
   return router.routes();
 }
