@@ -563,6 +563,32 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-boxel-card-header-title]')
       .includesText('Link Not Found', 'card error title is displayed');
+    assert.dom('[data-test-error-title]').containsText('Link Not Found');
+    await click('[data-test-error-detail-toggle] button');
+    assert
+      .dom('[data-test-error-detail]')
+      .containsText(
+        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+      );
+    assert
+      .dom('[data-test-error-stack]')
+      .containsText('at CurrentRun.visitFile');
+    assert.strictEqual(
+      operatorModeStateService.state?.submode,
+      'interact',
+      'in interact mode',
+    );
+    await click('[data-test-view-in-code-mode-button]');
+    assert.strictEqual(
+      operatorModeStateService.state?.submode,
+      'code',
+      'in code mode',
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.codePath?.href,
+      `${testRealmURL}FriendWithCSS/missing-link.json`,
+      'codePath is correct',
+    );
   });
 
   test('it renders a card with an error that has a last known good state', async function (assert) {
@@ -609,8 +635,35 @@ module('Integration | operator-mode', function (hooks) {
         'Hassan has a friend Jade',
         'the last known good HTML is rendered',
       );
+
     // use percy snapshot to ensure the CSS has been applied--a red color
     await percySnapshot(assert);
+
+    await click('[data-test-error-detail-toggle] button');
+    assert
+      .dom('[data-test-error-detail]')
+      .containsText(
+        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+      );
+    assert
+      .dom('[data-test-error-stack]')
+      .containsText('at CurrentRun.visitFile');
+    assert.strictEqual(
+      operatorModeStateService.state?.submode,
+      'interact',
+      'in interact mode',
+    );
+    await click('[data-test-view-in-code-mode-button]');
+    assert.strictEqual(
+      operatorModeStateService.state?.submode,
+      'code',
+      'in code mode',
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.codePath?.href,
+      `${testRealmURL}FriendWithCSS/friend-a.json`,
+      'codePath is correct',
+    );
   });
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
@@ -2857,7 +2910,7 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 8 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -2877,7 +2930,7 @@ module('Integration | operator-mode', function (hooks) {
         await click('[data-test-close-button]');
       },
     });
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -2893,7 +2946,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 8 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
       .dom(`[data-test-boxel-filter-list-button="All Cards"]`)
