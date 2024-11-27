@@ -2,34 +2,41 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import { Accordion, Button } from '@cardstack/boxel-ui/components';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
+import { dropTask } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+
+import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardError } from '../../resources/card-resource';
+import type CommandService from '../../services/command-service';
 
 interface Signature {
   Args: {
     error: CardError['errors'][0];
+    title?: string;
   };
 }
 
 export default class CardErrorDetail extends Component<Signature> {
-  @tracked showErrorDetail = false;
-
-  // TODO centralize this somewhere
-  get errorTitle() {
-    return this.args.error.status === 404 &&
-      // a missing link error looks a lot like a missing card error
-      this.args.error.message.includes('missing')
-      ? `Link Not Found`
-      : this.args.error.title;
-  }
+  @tracked private showErrorDetail = false;
+  @service private declare commandService: CommandService;
 
   private toggleDetail = () => (this.showErrorDetail = !this.showErrorDetail);
 
-  private viewInCodeMode = () => {
-    // TODO
-  };
+  private viewInCodeMode = dropTask(async () => {
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      this.commandService.commandContext,
+    );
+    const InputType = await switchSubmodeCommand.getInputType();
+    let input = new InputType({
+      submode: 'code',
+      codePath: `${this.args.error.id}.json`,
+    });
+    await switchSubmodeCommand.execute(input);
+  });
 
   <template>
     <Accordion as |A|>
@@ -40,12 +47,14 @@ export default class CardErrorDetail extends Component<Signature> {
         <:title>
           <TriangleAlert />
           An error was encountered on this card:
-          <span class='error-detail'>{{this.errorTitle}}</span>
+          <span class='error-detail'>{{this.args.title}}</span>
         </:title>
         <:content>
           <div class='actions'>
-            <Button @kind='primary' {{on 'click' this.viewInCodeMode}}>View in
-              Code Mode</Button>
+            <Button
+              @kind='primary'
+              {{on 'click' (perform this.viewInCodeMode)}}
+            >View in Code Mode</Button>
           </div>
           <div class='detail'>
             <div class='detail-item'>

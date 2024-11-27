@@ -64,6 +64,7 @@ import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
 
 import CardErrorDetail from './card-error-detail';
+import CardError from './card-error';
 
 import OperatorModeOverlays from './overlays';
 
@@ -339,15 +340,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @cached
-  get cardErrorTitle() {
+  get cardErrorSummary() {
     if (!this.cardError) {
       return undefined;
     }
     return this.cardError.status === 404 &&
       // a missing link error looks a lot like a missing card error
       this.cardError.message.includes('missing')
-      ? `Card Error: Link Not Found`
-      : `Card Error: ${this.cardError.title}`;
+      ? `Link Not Found`
+      : this.cardError.title;
+  }
+
+  get cardErrorTitle() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return `Card Error: ${this.cardErrorSummary}`;
   }
 
   private loadCard = restartableTask(async () => {
@@ -602,13 +610,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
             data-test-stack-card-header
           />
           <div class='stack-item-content card-error' data-test-card-error>
-            {{! TODO show stock error message when no last known good HTML !}}
             {{! TODO confirm that we render this in edit format of the stack item !}}
             {{#if this.lastKnownGoodHtml}}
               <this.lastKnownGoodHtml />
+            {{else}}
+              <CardError />
             {{/if}}
           </div>
-          <CardErrorDetail @error={{this.cardError}} />
+          <CardErrorDetail
+            @error={{this.cardError}}
+            @title={{this.cardErrorSummary}}
+          />
         {{else}}
           {{#let (this.realm.info this.card.id) as |realmInfo|}}
             <CardHeader
