@@ -596,28 +596,135 @@ export class BlogPost extends CardDef {
         <header>
           <h1><@fields.title /></h1>
           <p class='description'><@fields.description /></p>
-          <@fields.authorBio class='byline' />
+          <ul class='info'>
+            {{#if @model.authorBio.title}}
+              <li class='byline'>
+                {{! TODO: use author atom view? }}
+                {{#if @model.authorBio.thumbnailURL}}
+                  <span
+                    class='author-thumbnail'
+                    style={{this.setBackgroundImage
+                      @model.authorBio.thumbnailURL
+                    }}
+                  />
+                {{else}}
+                  <@model.authorBio.constructor.icon
+                    class='author-icon'
+                    width='18'
+                    height='18'
+                  />
+                {{/if}}
+                by
+                {{@model.authorBio.title}}
+              </li>
+            {{/if}}
+            {{#if this.pubDate}}
+              {{#if @model.publishDate}}
+                <li class='pub-date'>
+                  Published on
+                  <time timestamp={{toISOString @model.publishDate}}>
+                    {{this.pubDate}}
+                  </time>
+                </li>
+              {{/if}}
+            {{/if}}
+          </ul>
         </header>
         <@fields.body />
       </article>
       <style scoped>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
         article {
-          padding: var(--boxel-sp) var(--boxel-sp-xl);
+          --markdown-font-family: var(--blog-post-font-family, 'Lora', serif);
+          --markdown-heading-font-family: var(
+            --blog-post-heading-font-family,
+            'Playfair Display',
+            serif
+          );
+          height: max-content;
+          min-height: 100%;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+          background-color: #fcf9f2;
+          font-family: var(--blog-post-font-family, 'Lora', serif);
+        }
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+          font-family: var(
+            --blog-post-heading-font-family,
+            'Playfair Display',
+            serif
+          );
         }
         h1 {
+          font-size: 2.5rem;
+          font-weight: 600;
+          line-height: 1.25;
+          letter-spacing: normal;
           margin-top: 0;
-          font: 600 var(--boxel-font-xl);
-        }
-        img {
-          max-width: 100%;
+          margin-bottom: var(--boxel-sp-lg);
         }
         .description {
-          font: var(--boxel-font);
+          font-size: 1.25rem;
+          font-style: italic;
+        }
+        .info {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+        .info > li + li {
+          border-left: 1px solid black;
+          padding-left: var(--boxel-sp-xs);
         }
         .byline {
-          max-width: 300px;
+          display: inline-flex;
+          align-items: center;
+        }
+        .author-thumbnail,
+        .author-icon {
+          display: inline-block;
+          margin-right: var(--boxel-sp-xxs);
+          vertical-align: text-bottom;
+        }
+        .author-thumbnail {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          overflow: hidden;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
         }
       </style>
     </template>
+
+    private get pubDate() {
+      if (
+        this.args.model.status === 'Published' &&
+        this.args.model.publishDate
+      ) {
+        return formatDatetime(this.args.model.publishDate, {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      }
+      return undefined;
+    }
+
+    setBackgroundImage = (backgroundURL: string | null | undefined) => {
+      if (!backgroundURL) {
+        return;
+      }
+      return htmlSafe(`background-image: url(${backgroundURL});`);
+    };
   };
 }
