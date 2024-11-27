@@ -261,11 +261,11 @@ export class PhoneField extends FieldDef {
 
 class FittedTemplate extends Component<typeof Contact> {
   <template>
-    {{! template-lint-disable no-inline-styles }}
     <article class='fitted-contact-card'>
       <div class='avatar-container'>
         <div
           class='avatar-thumbnail'
+          {{! template-lint-disable no-inline-styles }}
           style={{setBackgroundImage @model.thumbnailURL}}
         />
         <div class='avatar-info'>
@@ -327,6 +327,7 @@ class FittedTemplate extends Component<typeof Contact> {
           <Pill
             class='status-pill'
             data-test-selected-type={{@model.status.label}}
+            {{! template-lint-disable no-inline-styles }}
             style={{htmlSafe
               (concat 'background-color: ' statusIcon.lightColor ';')
             }}
@@ -335,6 +336,7 @@ class FittedTemplate extends Component<typeof Contact> {
               <IconButton
                 @icon={{statusIcon.icon}}
                 class='status-icon'
+                {{! template-lint-disable no-inline-styles }}
                 style={{htmlSafe
                   (concat 'background-color: ' statusIcon.darkColor ';')
                 }}
@@ -485,7 +487,7 @@ class FittedTemplate extends Component<typeof Contact> {
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (226px < height  ) {
+      @container fitted-card (aspect-ratio <= 1.0) and (226px < height) {
         .fitted-contact-card,
         .avatar-container {
           flex-direction: column;
