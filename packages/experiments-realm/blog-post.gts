@@ -8,32 +8,14 @@ import {
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { formatDatetime, toISOString } from './blog-app';
+import { formatDatetime } from './blog-app';
 import { Author } from './author';
-import { htmlSafe } from '@ember/template';
+import { setBackgroundImage } from './components/layout';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import FileStack from '@cardstack/boxel-icons/file-stack';
 
-const setBackgroundImage = (backgroundURL: string | null | undefined) => {
-  if (!backgroundURL) {
-    return;
-  }
-  return htmlSafe(`background-image: url(${backgroundURL});`);
-};
-
 class EmbeddedTemplate extends Component<typeof BlogPost> {
-  private get pubDate() {
-    if (this.args.model.status === 'Published' && this.args.model.publishDate) {
-      return formatDatetime(this.args.model.publishDate, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
-    return undefined;
-  }
-
   <template>
     <article class='embedded-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
@@ -44,12 +26,10 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         @format='atom'
         @displayContainer={{false}}
       />
-      {{#if this.pubDate}}
-        {{#if @model.publishDate}}
-          <time class='date' timestamp={{toISOString @model.publishDate}}>
-            {{this.pubDate}}
-          </time>
-        {{/if}}
+      {{#if @model.datePublishedIsoTimestamp}}
+        <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+          {{@model.formattedDatePublished}}
+        </time>
       {{/if}}
     </article>
     <style scoped>
@@ -129,7 +109,11 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
       .byline,
       .date {
-        margin-bottom: var(--boxel-sp-lg);
+        margin-bottom: var(--boxel-sp-xs);
+        height: 30px; /* author thumbnail max height */
+        display: inline-flex;
+        align-items: center;
+        gap: 0 var(--boxel-sp-xxxs);
         font-weight: 500;
         font-size: var(--boxel-font-size-sm);
         line-height: calc(18 / 13);
@@ -140,17 +124,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 }
 
 class FittedTemplate extends Component<typeof BlogPost> {
-  private get pubDate() {
-    if (this.args.model.status === 'Published' && this.args.model.publishDate) {
-      return formatDatetime(this.args.model.publishDate, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
-    return undefined;
-  }
-
   <template>
     <article class='fitted-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
@@ -158,12 +131,10 @@ class FittedTemplate extends Component<typeof BlogPost> {
         <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
         <p class='description'>{{@model.description}}</p>
         <span class='byline'>{{@model.authorBio.title}}</span>
-        {{#if this.pubDate}}
-          {{#if @model.publishDate}}
-            <time class='date' timestamp={{toISOString @model.publishDate}}>
-              {{this.pubDate}}
-            </time>
-          {{/if}}
+        {{#if @model.datePublishedIsoTimestamp}}
+          <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+            {{@model.formattedDatePublished}}
+          </time>
         {{/if}}
       </div>
     </article>
@@ -624,6 +595,25 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
+
+  get formattedDatePublished() {
+    if (this.status === 'Published' && this.publishDate) {
+      return formatDatetime(this.publishDate, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+    return undefined;
+  }
+
+  get datePublishedIsoTimestamp() {
+    if (this.status === 'Published' && this.publishDate) {
+      return this.publishDate.toISOString();
+    }
+    return undefined;
+  }
+
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
@@ -633,36 +623,20 @@ export class BlogPost extends CardDef {
           <h1><@fields.title /></h1>
           <p class='description'><@fields.description /></p>
           <ul class='info'>
-            {{#if @model.authorBio.title}}
-              <li class='byline'>
-                {{! TODO: use author atom view? }}
-                {{#if @model.authorBio.thumbnailURL}}
-                  <span
-                    class='author-thumbnail'
-                    style={{this.setBackgroundImage
-                      @model.authorBio.thumbnailURL
-                    }}
-                  />
-                {{else}}
-                  <@model.authorBio.constructor.icon
-                    class='author-icon'
-                    width='18'
-                    height='18'
-                  />
-                {{/if}}
-                by
-                {{@model.authorBio.title}}
+            <li class='byline'>
+              <@fields.authorBio
+                class='author'
+                @format='atom'
+                @displayContainer={{false}}
+              />
+            </li>
+            {{#if @model.datePublishedIsoTimestamp}}
+              <li class='pub-date'>
+                Published on
+                <time timestamp={{@model.datePublishedIsoTimestamp}}>
+                  {{this.formattedDatePublished}}
+                </time>
               </li>
-            {{/if}}
-            {{#if this.pubDate}}
-              {{#if @model.publishDate}}
-                <li class='pub-date'>
-                  Published on
-                  <time timestamp={{toISOString @model.publishDate}}>
-                    {{this.pubDate}}
-                  </time>
-                </li>
-              {{/if}}
             {{/if}}
           </ul>
         </header>
@@ -723,26 +697,15 @@ export class BlogPost extends CardDef {
         .byline {
           display: inline-flex;
           align-items: center;
+          gap: 0 var(--boxel-sp-xxxs);
         }
-        .author-thumbnail,
-        .author-icon {
-          display: inline-block;
-          margin-right: var(--boxel-sp-xxs);
-          vertical-align: text-bottom;
-        }
-        .author-thumbnail {
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          overflow: hidden;
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
+        .author {
+          display: contents;
         }
       </style>
     </template>
 
-    private get pubDate() {
+    private get formattedDatePublished() {
       if (
         this.args.model.status === 'Published' &&
         this.args.model.publishDate
@@ -755,12 +718,5 @@ export class BlogPost extends CardDef {
       }
       return undefined;
     }
-
-    setBackgroundImage = (backgroundURL: string | null | undefined) => {
-      if (!backgroundURL) {
-        return;
-      }
-      return htmlSafe(`background-image: url(${backgroundURL});`);
-    };
   };
 }
