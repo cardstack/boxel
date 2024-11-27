@@ -375,6 +375,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribeToCard = task(async () => {
     await this.args.item.ready();
     // TODO how do we make sure that this is called after the error is cleared?
+    // Address this as part of SSE support for card errors
     if (!this.cardError) {
       this.subscribedCard = this.card;
       let api = this.args.item.api;
@@ -610,7 +611,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
             data-test-stack-card-header
           />
           <div class='stack-item-content card-error' data-test-card-error>
-            {{! TODO confirm that we render this in edit format of the stack item !}}
             {{#if this.lastKnownGoodHtml}}
               <this.lastKnownGoodHtml />
             {{else}}

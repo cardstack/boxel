@@ -207,7 +207,7 @@ export class CardResource extends Resource<Args> {
       return;
     }
     realmSubscribers.set(this, {
-      // TODO HASSAN NEXT TASK: FIGURE OUT HOW TO GO IN AN OUT OF ERRORS VIA SSE
+      // TODO figure out how to go in an out of errors via SSE
       unsubscribe: this.messageService.subscribe(
         realmURL.href,
         ({ type, data: dataStr }) => {

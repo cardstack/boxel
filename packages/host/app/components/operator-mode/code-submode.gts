@@ -32,7 +32,6 @@ import {
   type ResolvedCodeRef,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
-// import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -310,58 +309,6 @@ export default class CodeSubmode extends Component<Signature> {
 
     return null;
   }
-
-  // private get fileErrorMessages(): string[] {
-  //   if (this.isCard) {
-  //     if (this.cardResource.cardError) {
-  //       try {
-  //         return this.card
-  //         let error = this.cardResource.cardError;
-
-  //         // if (error.responseText) {
-  //           // let parsedError = JSON.parse(error.responseText);
-
-  //           // handle instance errors
-  //           if (parsedError.errors.find((e: any) => e.message)) {
-  //             return parsedError.errors.map((e: any) => e.message);
-  //           }
-
-  //           // otherwise handle module errors
-  //           let allDetails = parsedError.errors
-  //             .concat(
-  //               ...parsedError.errors.map(
-  //                 (e: SerializedError) => e.additionalErrors,
-  //               ),
-  //             )
-  //             .map((e: SerializedError) => e.detail);
-
-  //           // There’s often a pair of errors where one has an unhelpful prefix like this:
-  //           // cannot return card from index: Not Found - http://test-realm/test/non-card not found
-  //           // http://test-realm/test/non-card not found
-
-  //           let detailsWithoutDuplicateSuffixes = allDetails.reduce(
-  //             (details: string[], currentDetail: string) => {
-  //               return [
-  //                 ...details.filter(
-  //                   (existingDetail) => !existingDetail.endsWith(currentDetail),
-  //                 ),
-  //                 currentDetail,
-  //               ];
-  //             },
-  //             [],
-  //           );
-
-  //           return detailsWithoutDuplicateSuffixes;
-  //         }
-  //       } catch (e) {
-  //         console.log('Error extracting card preview errors', e);
-  //         return [];
-  //       }
-  //     }
-  //   }
-
-  //   return [];
-  // }
 
   private get currentOpenFile() {
     return this.operatorModeStateService.openFile.current;
@@ -855,12 +802,10 @@ export default class CodeSubmode extends Component<Signature> {
 
                         <hr class='preview-error' />
 
-                        {{!-- {{#each this.fileErrorMessages as |error|}} --}}
                         <pre
                           class='preview-error'
                           data-test-card-preview-error
                         >{{this.cardResource.cardError.message}}</pre>
-                        {{!-- {{/each}} --}}
                       </div>
                     </div>
                   {{else if this.fileIncompatibilityMessage}}

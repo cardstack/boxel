@@ -341,7 +341,6 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private close = task(async (item: StackItem) => {
-    // TODO test that a card error stack item can be closed
     if (item.cardError) {
       this.operatorModeStateService.trimItemsFromStack(item);
       return;
