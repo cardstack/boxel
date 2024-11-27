@@ -359,6 +359,7 @@ class FittedTemplate extends Component<typeof Contact> {
         overflow: hidden;
         display: flex;
         gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs);
       }
       .avatar-container {
         grid-area: avatar-container;
