@@ -684,7 +684,7 @@ class FittedTemplate extends Component<typeof Contact> {
 }
 
 export class Contact extends CardDef {
-  static displayName = 'Contact';
+  static displayName = 'CRM Contact';
   @field name = contains(StringField);
   @field primaryEmail = contains(StringField);
   @field secondaryEmail = contains(StringField);
