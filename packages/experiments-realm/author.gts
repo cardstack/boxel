@@ -46,7 +46,8 @@ export class Author extends CardDef {
       {{/if}}
       <style scoped>
         svg {
-          vertical-align: bottom;
+          vertical-align: text-bottom;
+          margin-right: var(--boxel-sp-6xs);
         }
       </style>
     </template>

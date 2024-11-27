@@ -53,17 +53,32 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       {{/if}}
     </article>
     <style scoped>
+      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
       .embedded-blog-post {
+        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         display: grid;
         grid-template:
           'img title title' max-content
           'img desc desc' max-content
-          'img byline date' 1fr / 40% 1fr 1fr;
+          'img byline date' 1fr / 40% 1fr max-content;
         gap: var(--boxel-sp-xs);
         padding-right: var(--boxel-sp-xl);
         overflow: hidden;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-family: var(
+          --blog-post-heading-font-family,
+          'Playfair Display',
+          serif
+        );
+        font-weight: 700;
       }
       .thumbnail {
         grid-area: img;
@@ -80,8 +95,8 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         -webkit-line-clamp: 3;
         overflow: hidden;
         margin: var(--boxel-sp-lg) 0 0;
-        font: 700 var(--boxel-font-lg);
-        line-height: 1.4;
+        font-size: var(--boxel-font-size-lg);
+        line-height: calc(30 / 22);
         letter-spacing: var(--boxel-lsp-xs);
       }
       .description {
@@ -91,7 +106,8 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         -webkit-line-clamp: 4;
         overflow: hidden;
         margin: 0;
-        font: var(--boxel-font);
+        font-size: var(--boxel-font-size);
+        line-height: calc(22 / 16);
         letter-spacing: var(--boxel-lsp-xs);
       }
       .byline {
@@ -114,7 +130,9 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       .byline,
       .date {
         margin-bottom: var(--boxel-sp-lg);
-        font: 500 var(--boxel-font-sm);
+        font-weight: 500;
+        font-size: var(--boxel-font-size-sm);
+        line-height: calc(18 / 13);
         letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
@@ -150,13 +168,29 @@ class FittedTemplate extends Component<typeof BlogPost> {
       </div>
     </article>
     <style scoped>
+      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
       .fitted-blog-post {
+        --xs-line-height: calc(14 / 11);
+        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         min-width: 100px;
         min-height: 29px;
         display: grid;
         overflow: hidden;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-family: var(
+          --blog-post-heading-font-family,
+          'Playfair Display',
+          serif
+        );
+        font-weight: 700;
       }
       .thumbnail {
         grid-area: img;
@@ -167,7 +201,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
       .content {
         grid-area: content;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-4xs);
         padding: var(--boxel-sp-xs);
         overflow: hidden;
       }
@@ -179,7 +213,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         overflow: hidden;
         margin: 0;
 
-        font: 700 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
         letter-spacing: var(--boxel-lsp-sm);
         line-height: 1.3;
       }
@@ -190,8 +224,9 @@ class FittedTemplate extends Component<typeof BlogPost> {
         -webkit-line-clamp: 3;
         overflow: hidden;
         margin: 0;
-        font: var(--boxel-font-xs);
+        font-size: var(--boxel-font-size-xs);
         letter-spacing: var(--boxel-lsp-sm);
+        line-height: var(--xs-line-height);
       }
       .byline {
         grid-area: byline;
@@ -208,8 +243,10 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
       .byline,
       .date {
-        font: 500 var(--boxel-font-xs);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
         letter-spacing: var(--boxel-lsp-sm);
+        line-height: var(--xs-line-height);
       }
 
       @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
@@ -223,7 +260,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
           grid-template:
             'title title' max-content
             'desc desc' max-content
-            'byline date' 1fr / auto auto;
+            'byline date' 1fr / 1fr max-content;
         }
         .byline,
         .date {
@@ -282,7 +319,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
 
       @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
         .title {
-          font: 700 var(--boxel-font-xs);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
         }
       }
 
@@ -347,13 +385,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
 
       @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
         .title {
-          font: 700 var(--boxel-font);
-        }
-      }
-
-      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (width < 165px)) {
-        .title {
-          font: 700 var(--boxel-font-xs);
+          font-size: var(--boxel-font-size);
+          line-height: calc(22 / 16);
         }
       }
 
@@ -458,7 +491,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .title {
           -webkit-line-clamp: 3;
-          font: 700 var(--boxel-font-xs);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
         }
         .description,
         .byline,
@@ -536,7 +570,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .title {
           -webkit-line-clamp: 2;
-          font: 700 var(--boxel-font-xs);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
         }
       }
 
@@ -557,7 +592,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .title {
           -webkit-line-clamp: 2;
-          font: 700 var(--boxel-font-xs);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
         }
       }
     </style>
