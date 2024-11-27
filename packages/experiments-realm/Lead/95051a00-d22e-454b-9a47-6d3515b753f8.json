@@ -12,7 +12,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/crm-cards",
+        "module": "../crm/lead",
         "name": "Lead"
       }
     }
