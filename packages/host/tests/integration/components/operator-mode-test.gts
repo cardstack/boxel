@@ -22,6 +22,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import NetworkService from '@cardstack/host/services/network';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -40,7 +41,6 @@ import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-import NetworkService from '@cardstack/host/services/network';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
