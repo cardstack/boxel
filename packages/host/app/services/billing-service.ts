@@ -6,17 +6,12 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
-import Stripe from 'stripe';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
-
-import environment from '../config/environment';
 
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
-
-const stripe = new Stripe(environment.stripeApiKey);
 
 interface SubscriptionData {
   plan: string | null;
@@ -25,14 +20,15 @@ interface SubscriptionData {
   extraCreditsAvailableInBalance: number | null;
 }
 
-interface PaymentLink {
+interface StripeLink {
+  type: string;
   url: string;
-  creditReloadAmount: number;
+  creditReloadAmount?: number;
 }
 
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
-  @tracked private _paymentLinks: PaymentLink[] | null = null;
+  @tracked private _stripeLinks: StripeLink[] | null = null;
 
   @service private declare realmServer: RealmServerService;
   @service private declare network: NetworkService;
@@ -49,37 +45,60 @@ export default class BillingService extends Service {
 
   resetState() {
     this._subscriptionData = null;
-    this._paymentLinks = null;
+    this._stripeLinks = null;
   }
 
-  managePlan() {
-    window.open(environment.stripeCustomerPortalLink);
+  async managePlan() {
+    await this.fetchStripeLinks();
+    let customerPortalLink = this.stripeLinks?.find(
+      (link) => link.type === 'customer-portal-link',
+    );
+    if (!customerPortalLink) {
+      throw new Error('customer portal link is not found');
+    }
+    window.open(customerPortalLink.url);
   }
 
-  async fetchPaymentLinks() {
-    if (!this._paymentLinks) {
-      await this.fetchPaymentLinksTask.perform();
+  async fetchStripeLinks() {
+    if (this._stripeLinks) {
+      return;
     }
 
-    return this._paymentLinks;
+    await this.fetchStripeLinksTask.perform();
   }
 
-  get paymentLinks() {
-    return this._paymentLinks;
+  get stripeLinks() {
+    return this._stripeLinks;
   }
 
-  private fetchPaymentLinksTask = dropTask(async () => {
-    let response = await stripe.paymentLinks.list();
-    this._paymentLinks = response.data
-      .filter((data) => data.metadata.credit_reload_amount)
-      .map((data) => ({
-        url: data.url,
-        creditReloadAmount: Number(data.metadata.credit_reload_amount),
-      }))
-      .sort(
-        (paymentLinkA, paymentLinkB) =>
-          paymentLinkA.creditReloadAmount - paymentLinkB.creditReloadAmount,
+  private fetchStripeLinksTask = dropTask(async () => {
+    let response = await this.network.fetch(
+      `${this.url.origin}/_stripe-links`,
+      {
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await this.getToken()}`,
+        },
+      },
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
+    }
+
+    let json = (await response.json()) as {
+      data: {
+        type: string;
+        attributes: { url: string; metadata?: { creditReloadAmount: number } };
+      }[];
+    };
+    this._stripeLinks = json.data.map((data) => ({
+      type: data.type,
+      url: data.attributes.url,
+      creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
+    }));
   });
 
   get subscriptionData() {

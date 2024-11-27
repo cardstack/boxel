@@ -4,8 +4,12 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { restartableTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
+
 import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, or } from '@cardstack/boxel-ui/helpers';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import config from '@cardstack/host/config/environment';
@@ -143,9 +147,12 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
             <BoxelButton
               @kind='secondary-light'
               @size='small'
-              @disabled={{subscriptionData.isLoading}}
+              @disabled={{or
+                subscriptionData.isLoading
+                this.managePlan.isRunning
+              }}
               data-test-upgrade-plan-button
-              {{on 'click' this.billingService.managePlan}}
+              {{on 'click' (perform this.managePlan)}}
             >Upgrade Plan</BoxelButton>
             <div class='info-group'>
               <span class='label'>Monthly Credit</span>
@@ -185,6 +192,10 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   @action private logout() {
     this.matrixService.logout();
   }
+
+  private managePlan = restartableTask(async () => {
+    await this.billingService.managePlan();
+  });
 }
 
 export class ProfileInfo extends Component<ProfileInfoSignature> {

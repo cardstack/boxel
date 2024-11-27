@@ -46,12 +46,6 @@ module.exports = function (environment) {
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     featureFlags: {},
-    stripeCustomerPortalLink:
-      process.env.STRIPE_CUSTOMER_PORTAL_LINK ||
-      'https://billing.stripe.com/p/login/test_cN216h3BlbML3FS144',
-    stripeApiKey:
-      process.env.STRIPE_API_KEY ||
-      'sk_test_51Q8hkbPUHhctoJxanM9uVZban3mK5he2g1s7r1gKvBXTpejGxUdJHSjWLlmB8LzIaffiQj9Bj96ag0OxTwNl5BGk00Ov4gjcBC',
   };
 
   if (environment === 'development') {

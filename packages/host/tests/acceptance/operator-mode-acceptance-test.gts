@@ -940,8 +940,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
-      await waitFor('[data-test-payment-link]');
-      assert.dom('[data-test-payment-link]').exists({ count: 3 });
+      assert.dom('[data-test-payment-link]').exists({ count: 2 });
       await click('[data-test-manage-plan-button]');
       await click('[data-test-pay-button]');
       assert.strictEqual(

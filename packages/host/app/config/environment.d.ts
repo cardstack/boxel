@@ -28,6 +28,4 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   featureFlags?: {};
-  stripeCustomerPortalLink: string;
-  stripeApiKey: string;
 };

@@ -5,8 +5,9 @@ import Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 
+import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 
 import {
@@ -14,6 +15,7 @@ import {
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+import { or } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
@@ -43,8 +45,12 @@ export default class ProfileSubscription extends Component<Signature> {
           <BoxelButton
             @kind='secondary-light'
             @size='extra-small'
-            @disabled={{subscriptionData.isLoading}}
-            {{on 'click' this.billingService.managePlan}}
+            @disabled={{or
+              subscriptionData.isLoading
+              this.fetchStripeLinks.isRunning
+              this.managePlan.isRunning
+            }}
+            {{on 'click' (perform this.managePlan)}}
             data-test-manage-plan-button
           >Manage Plan</BoxelButton>
         </div>
@@ -63,11 +69,11 @@ export default class ProfileSubscription extends Component<Signature> {
           <div class='buy-more-credits'>
             <span class='buy-more-credits__title'>Buy more credits</span>
             <div class='payment-links'>
-              {{#if this.fetchPaymentLinks.isRunning}}
+              {{#if this.fetchStripeLinks.isRunning}}
                 <LoadingIndicator />
               {{else}}
                 {{#each
-                  this.billingService.paymentLinks
+                  this.additionalCreditsPaymentLinks
                   as |paymentLink index|
                 }}
                   <div class='payment-link' data-test-payment-link={{index}}>
@@ -166,14 +172,26 @@ export default class ProfileSubscription extends Component<Signature> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.fetchPaymentLinks.perform();
+    this.fetchStripeLinks.perform();
   }
 
-  private fetchPaymentLinks = task(async () => {
-    return await this.billingService.fetchPaymentLinks();
+  private fetchStripeLinks = task(async () => {
+    await this.billingService.fetchStripeLinks();
   });
+
+  private get additionalCreditsPaymentLinks() {
+    return this.billingService.stripeLinks
+      ?.filter((link) => link.creditReloadAmount)
+      .sort(
+        (linkA, linkB) => linkA.creditReloadAmount! - linkB.creditReloadAmount!,
+      );
+  }
 
   private pay(paymentLinkURL: string) {
     window.open(paymentLinkURL);
   }
+
+  private managePlan = restartableTask(async () => {
+    await this.billingService.managePlan();
+  });
 }

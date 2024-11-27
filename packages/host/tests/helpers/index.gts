@@ -704,6 +704,51 @@ export function setupRealmServerEndpoints(
         );
       },
     },
+    {
+      route: '_stripe-links',
+      getResponse: async function (_req: Request) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                type: 'customer-portal-link',
+                id: '1',
+                attributes: {
+                  url: 'https://buy.stripe.com/test_bIY01W11heYNeFqbIH',
+                },
+              },
+              {
+                type: 'free-plan-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3myQ',
+                attributes: {
+                  url: 'https://billing.stripe.com/p/login/test_cN216h3BlbML3Fasdf',
+                },
+              },
+              {
+                type: 'extra-credits-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3myP',
+                attributes: {
+                  url: 'https://buy.stripe.com/test_bIY01W11heYNeFqbIO',
+                  metadata: {
+                    creditReloadAmount: 15000,
+                  },
+                },
+              },
+              {
+                type: 'extra-credits-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3my!',
+                attributes: {
+                  url: 'https://buy.stripe.com/test_bIY01W11hesdfaeEaAs',
+                  metadata: {
+                    creditReloadAmount: 80000,
+                  },
+                },
+              },
+            ],
+          }),
+        );
+      },
+    },
   ];
 
   let handleRealmServerRequest = async (req: Request) => {
