@@ -1,15 +1,19 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
+
 import {
   Component,
   CardDef,
   FieldDef,
   field,
   contains,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import { IconButton, RadioInput, Pill } from '@cardstack/boxel-ui/components';
 import Mail from '@cardstack/boxel-icons/mail';
 import Phone from '@cardstack/boxel-icons/phone';
@@ -19,22 +23,160 @@ import Building from '@cardstack/boxel-icons/building';
 import HeartHandshake from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrow from '@cardstack/boxel-icons/target-arrow';
 
+// helper functions that can share across different formats
+const getStatusIcon = (label: string | undefined) => {
+  switch (label) {
+    case 'Customer':
+      return {
+        icon: HeartHandshake,
+        lightColor: '#8bff98',
+        darkColor: '#01d818',
+      };
+    case 'Lead':
+      return {
+        icon: TargetArrow,
+        lightColor: '#80d3ff',
+        darkColor: '#02a7ff',
+      };
+    default:
+      return null;
+  }
+};
+
+const formatPhone = (phone: any) => {
+  if (!phone) return undefined;
+  return `+${phone.country} (${phone.area}) ${phone.phoneNumber}`;
+};
+
+const formatEmail = (email: string) => {
+  if (!email) return undefined;
+  return email;
+};
+
+const setBackgroundImage = (backgroundURL: string | null | undefined) => {
+  if (!backgroundURL) {
+    return;
+  }
+  return htmlSafe(`background-image: url(${backgroundURL});`);
+};
+
+class ViewCompanyCardTemplate extends Component<typeof CompanyCard> {
+  <template>
+    {{#if @model.name}}
+      <div class='row'>
+        <Building class='icon' />
+        <span class='building-name'>{{@model.name}}</span>
+      </div>
+    {{/if}}
+
+    <style scoped>
+      .icon {
+        width: var(--boxel-icon-xs);
+        height: var(--boxel-icon-xs);
+        flex-shrink: 0;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .row > span {
+        -webkit-line-clamp: 1;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .building-name {
+        font-size: var(--boxel-font-xs);
+        font-weight: 300;
+        text-decoration: underline;
+      }
+    </style>
+  </template>
+}
+
+export class CompanyCard extends CardDef {
+  static displayName = 'Company';
+  @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: CompanyCard) {
+      return this.name;
+    },
+  });
+
+  static embedded = ViewCompanyCardTemplate;
+  static atom = ViewCompanyCardTemplate;
+}
+
+class ViewSocialLinksTemplate extends Component<typeof SocialLinksField> {
+  @action openSocialLink(url: string) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  <template>
+    <div class='social-links'>
+      {{#if @model.twitterURL}}
+        <IconButton
+          {{on 'click' (fn this.openSocialLink @model.twitterURL)}}
+          @icon={{BrandTwitter}}
+          @width='20'
+          @height='20'
+          class='social-link'
+        />
+      {{/if}}
+      {{#if @model.linkedInURL}}
+        <IconButton
+          {{on 'click' (fn this.openSocialLink @model.linkedInURL)}}
+          @icon={{BrandLinkedin}}
+          @width='20'
+          @height='20'
+          class='social-link'
+        />
+      {{/if}}
+    </div>
+
+    <style scoped>
+      .social-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .social-link {
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
+        border: 1px solid var(--boxel-300);
+        border-radius: 5px;
+      }
+      .social-link:hover {
+        border-color: var(--boxel-400);
+        cursor: pointer;
+      }
+    </style>
+  </template>
+}
+
+export class SocialLinksField extends FieldDef {
+  static displayName = 'socialLinks';
+  @field twitterURL = contains(StringField);
+  @field linkedInURL = contains(StringField);
+
+  static embedded = ViewSocialLinksTemplate;
+  static atom = ViewSocialLinksTemplate;
+}
+
 export interface LooseyGooseyData {
   index: number;
   label: string;
-  color?: string;
+  icon: any;
+  lightColor: string;
+  darkColor: string;
 }
 
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
   static values: LooseyGooseyData[] = []; //help with the types
-
-  get color() {
-    return LooseGooseyField.values.find((value) => {
-      return value.label === this.label;
-    })?.color;
-  }
 }
 
 class EditContactStatusTemplate extends Component<typeof ContactStatusField> {
@@ -57,21 +199,19 @@ class EditContactStatusTemplate extends Component<typeof ContactStatusField> {
   }
 
   <template>
-    <div class='priority-field'>
-      <RadioInput
-        @groupDescription='Select Task Priority'
-        @items={{this.statuses}}
-        @checkedId={{this.selectedStatus.label}}
-        @orientation='horizontal'
-        @spacing='default'
-        @keyName='label'
-        as |item|
-      >
-        <item.component @onChange={{fn this.handleStatusChange item.data}}>
-          {{item.data.label}}
-        </item.component>
-      </RadioInput>
-    </div>
+    <RadioInput
+      @groupDescription='Select Status'
+      @items={{this.statuses}}
+      @checkedId={{this.selectedStatus.label}}
+      @orientation='horizontal'
+      @spacing='default'
+      @keyName='label'
+      as |item|
+    >
+      <item.component @onChange={{fn this.handleStatusChange item.data}}>
+        {{item.data.label}}
+      </item.component>
+    </RadioInput>
   </template>
 }
 
@@ -80,8 +220,20 @@ export class ContactStatusField extends LooseGooseyField {
   static displayName = 'status';
 
   static values = [
-    { index: 0, label: 'Customer', color: 'var(--boxel-success)' },
-    { index: 1, label: 'Lead', color: 'var(--boxel-purple-400)' },
+    {
+      index: 0,
+      label: 'Customer',
+      icon: HeartHandshake,
+      lightColor: '#8bff98',
+      darkColor: '#01d818',
+    },
+    {
+      index: 1,
+      label: 'Lead',
+      icon: TargetArrow,
+      lightColor: '#E6F4FF',
+      darkColor: '#0090FF',
+    },
   ];
 
   static edit = EditContactStatusTemplate;
@@ -98,85 +250,56 @@ export class PhoneField extends FieldDef {
   static displayName = 'phoneMobile';
   @field country = contains(NumberField);
   @field area = contains(NumberField);
-  @field number = contains(NumberField);
+  @field phoneNumber = contains(NumberField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      (+<@fields.country />) <@fields.area />-<@fields.number />
+      (+<@fields.country />) <@fields.area />-<@fields.phoneNumber />
     </template>
   };
 }
 
 class FittedTemplate extends Component<typeof Contact> {
-  private formatPhone(phoneMobile: any) {
-    if (!phoneMobile) return undefined;
-    return `+${phoneMobile.country} ${phoneMobile.area}-${phoneMobile.number}`;
-  }
-
-  private formatEmail(email: string) {
-    if (!email) return undefined;
-    return email;
-  }
-
-  private openSocialLink(url: string) {
-    window.open(url, '_blank');
-  }
-
-  private getStatusIcon(label: string | undefined) {
-    switch (label) {
-      case 'Customer':
-        return {
-          icon: HeartHandshake,
-          lightColor: '#8bff98',
-          darkColor: '#01d818',
-        };
-      case 'Lead':
-        return {
-          icon: TargetArrow,
-          lightColor: '#E6F4FF',
-          darkColor: '#0090FF',
-        };
-      default:
-        return null;
-    }
-  }
-
   <template>
-    {{! template-lint-disable no-inline-styles }}
-    {{! template-lint-disable style-concatenation }}
     <article class='fitted-contact-card'>
       <div class='avatar-container'>
-        <div class='avatar'>
-          <img src={{@model.thumbnailURL}} alt={{@model.name}} />
-        </div>
+        <div
+          class='avatar-thumbnail'
+          style={{setBackgroundImage @model.thumbnailURL}}
+        />
         <div class='avatar-info'>
-          <h3 class='name'>{{if @model.name @model.name 'Unnamed Contact'}}</h3>
-          <div class='row'>
-            <Building class='icon' />
-            <span>{{@model.company}}</span>
-          </div>
+          <h3 class='name'>{{if
+              @model.name
+              @model.name
+              'Name not provided'
+            }}</h3>
+          <@fields.company
+            @format='atom'
+            @displayContainer={{false}}
+            class='company-container'
+          />
         </div>
       </div>
 
       <div class='contact-info'>
         {{#if @model.primaryEmail}}
-          <div class='row'>
+          <div class='row primary-email'>
             <Mail class='icon gray' />
-            <span>{{this.formatEmail @model.primaryEmail}}</span>
+            <span>{{formatEmail @model.primaryEmail}}</span>
           </div>
         {{/if}}
 
         {{#if @model.secondaryEmail}}
-          <div class='row'>
+          <div class='row secondary-email'>
             <Mail class='icon gray' />
-            <span>{{this.formatEmail @model.secondaryEmail}}</span>
+            <span>{{formatEmail @model.secondaryEmail}}</span>
           </div>
         {{/if}}
 
         {{#if @model.phoneMobile}}
-          <div class='row'>
+          <div class='row primary-phone'>
             <Phone class='icon gray' />
-            <span>{{this.formatPhone @model.phoneMobile}}</span>
+            <span>{{formatPhone @model.phoneMobile}}</span>
             <Pill class='pill-gray'>
               mobile
             </Pill>
@@ -184,9 +307,9 @@ class FittedTemplate extends Component<typeof Contact> {
         {{/if}}
 
         {{#if @model.phoneOffice}}
-          <div class='row'>
+          <div class='row secondary-phone'>
             <Phone class='icon gray' />
-            <span>{{this.formatPhone @model.phoneOffice}}</span>
+            <span>{{formatPhone @model.phoneOffice}}</span>
             <Pill class='pill-gray'>
               office
             </Pill>
@@ -194,29 +317,14 @@ class FittedTemplate extends Component<typeof Contact> {
         {{/if}}
       </div>
 
-      <div class='social-links'>
-        {{#if @model.twitterURL}}
-          <IconButton
-            @onClick={{fn this.openSocialLink @model.twitterURL}}
-            @icon={{BrandTwitter}}
-            @width='20'
-            @height='20'
-            class='social-link'
-          />
-        {{/if}}
-        {{#if @model.linkedInURL}}
-          <IconButton
-            @onClick={{fn this.openSocialLink @model.linkedInURL}}
-            @icon={{BrandLinkedin}}
-            @width='20'
-            @height='20'
-            class='social-link'
-          />
-        {{/if}}
-      </div>
+      <@fields.socialLinks
+        @format='atom'
+        @displayContainer={{false}}
+        class='social-links-container'
+      />
 
       {{#if @model.status.label}}
-        {{#let (this.getStatusIcon @model.status.label) as |statusIcon|}}
+        {{#let (getStatusIcon @model.status.label) as |statusIcon|}}
           <Pill
             class='status-pill'
             data-test-selected-type={{@model.status.label}}
@@ -238,14 +346,18 @@ class FittedTemplate extends Component<typeof Contact> {
           </Pill>
         {{/let}}
       {{/if}}
-
     </article>
+
     <style scoped>
+      /* Base styles */
       .fitted-contact-card {
         width: 100%;
         height: 100%;
-        padding: var(--boxel-sp-sm);
+        min-width: 100px;
+        min-height: 29px;
         overflow: hidden;
+        display: flex;
+        gap: var(--boxel-sp-sm);
       }
       .avatar-container {
         grid-area: avatar-container;
@@ -253,45 +365,47 @@ class FittedTemplate extends Component<typeof Contact> {
         align-items: center;
         gap: var(--boxel-sp-xxs);
         min-width: 0;
+        width: 100%;
       }
-      .avatar {
-        grid-area: img;
+      .avatar-thumbnail {
+        grid-area: avatar-thumbnail;
         background-color: var(--boxel-200);
         width: 60px;
         height: 60px;
         overflow: hidden;
         flex-shrink: 0;
+        background-size: cover;
+        background-position: center;
         border-radius: 50%;
-      }
-      .avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      .avatar-info {
-        display: inline-flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
-        min-width: 0;
-        flex: 1;
       }
       .name {
         grid-area: name;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
         -webkit-line-clamp: 1;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
         overflow: hidden;
         margin: 0;
         font-size: 1.1rem;
         letter-spacing: var(--boxel-lsp-sm);
       }
+      .avatar-info {
+        grid-area: avatar-info;
+        min-width: 0;
+        width: 100%;
+        overflow: hidden;
+      }
+      .company-container {
+        background: transparent;
+        width: auto;
+        height: auto;
+        overflow: unset;
+      }
       .contact-info {
         grid-area: contact-info;
         font-size: var(--boxel-font-xs);
-        margin-top: var(--boxel-sp);
       }
       .contact-info > * + * {
-        margin-top: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xxs);
       }
       .icon {
         width: var(--boxel-icon-xs);
@@ -308,28 +422,13 @@ class FittedTemplate extends Component<typeof Contact> {
         --pill-background-color: var(--boxel-200);
         border: none;
       }
-      .social-links {
-        grid-area: social-links;
-        display: flex;
-        align-items: center;
-        overflow: hidden;
-        gap: var(--boxel-sp-xxs);
-        margin-top: var(--boxel-sp);
-      }
-      .social-link {
-        --boxel-icon-button-width: var(--boxel-icon-med);
-        --boxel-icon-button-height: var(--boxel-icon-med);
-        border: 1px solid var(--boxel-300);
-        border-radius: 5px;
-      }
-      .social-link:hover {
-        border-color: var(--boxel-400);
-        cursor: pointer;
+      .social-links-container {
+        grid-area: social-links-container;
       }
       .status-pill {
         grid-area: status-pill;
-        display: inline-flex;
-        align-items: center;
+        width: fit-content;
+        height: fit-content;
         overflow: hidden;
         padding: 0;
         margin-top: var(--boxel-sp);
@@ -348,23 +447,228 @@ class FittedTemplate extends Component<typeof Contact> {
       .row {
         display: flex;
         align-items: center;
+        word-break: break-all;
         gap: var(--boxel-sp-xxs);
       }
-      .row > span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+
+      /* Square layout (aspect-ratio = 1.0) or portrait layout with height < 226px */
+      @container fitted-card ((aspect-ratio = 1.0) or ((aspect-ratio < 1.0) and (height < 226px))) {
+        .fitted-contact-card,
+        .avatar-container {
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          padding: var(--boxel-sp-xs);
+        }
+
+        .avatar-info {
+          text-align: center;
+        }
+
+        .avatar-info :global(.row) {
+          justify-content: center;
+        }
+
+        .contact-info,
+        .social-links-container,
+        .status-pill,
+        .secondary-email,
+        .secondary-phone,
+        .pill-gray {
+          display: none;
+        }
       }
 
-      @container fitted-card (width > 350px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-container'
-            'contact-info' max-content
-            'status-pill';
+      @container fitted-card (aspect-ratio <= 1.0) and (226px < height  ) {
+        .fitted-contact-card,
+        .avatar-container {
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          padding: var(--boxel-sp-xs);
+        }
 
+        .avatar-info {
+          text-align: center;
+        }
+
+        .avatar-info .row {
+          justify-content: center;
+        }
+
+        .status-pill {
+          align-self: flex-end;
+        }
+
+        .social-links-container,
+        .secondary-email,
+        .secondary-phone,
+        .pill-gray {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (58px <= height < 180px)) {
+        .fitted-contact-card {
+          align-items: center;
+          align-content: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+
+        .avatar-thumbnail {
+          width: 50px;
+          height: 50px;
+          border-radius: 5px;
+        }
+
+        .contact-info,
+        .social-links-container,
+        .status-pill {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
+        .fitted-contact-card {
+          align-items: center;
+          align-content: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+
+        .avatar-thumbnail {
+          width: 45px;
+          height: 45px;
+          border-radius: 5px;
+        }
+
+        .name {
+          font-size: var(--boxel-font-sm);
+        }
+
+        .contact-info,
+        .status-pill {
+          display: none;
+        }
+      }
+
+      /* Horizontal layouts (aspect-ratio > 1.0) */
+      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height)) {
+        .fitted-contact-card {
+          flex-direction: column;
+          justify-content: center;
           gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-sm);
+        }
+
+        .avatar-thumbnail {
+          width: 40px;
+          height: 40px;
+        }
+
+        .name {
+          font-size: var(--boxel-font-sm);
+        }
+
+        .contact-info {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height < 180px)) {
+        .social-links-container,
+        .status-pill {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (180px <= height)) {
+        .status-pill {
+          align-self: flex-end;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (58px <= height < 115px)) {
+        .fitted-contact-card {
+          display: flex;
+          align-items: center;
+          padding: var(--boxel-sp-sm);
+        }
+
+        .avatar-container {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+          flex: 1;
+        }
+
+        .avatar-thumbnail {
+          width: 40px;
+          height: 40px;
+        }
+
+        .name {
+          font-size: var(--boxel-font-sm);
+        }
+
+        .contact-info,
+        .social-links-container {
+          display: none;
+        }
+      }
+
+      /* Smallest horizontal layout */
+      @container fitted-card ((1.0 < aspect-ratio) and (50px <= height < 58px)) {
+        .fitted-contact-card {
+          grid-template: 'avatar-container' 1fr / 1fr;
+          display: flex;
+          align-items: center;
+          align-content: center;
+          padding: var(--boxel-sp-xxxs);
+        }
+
+        .avatar-thumbnail {
+          width: 32px;
+          height: 32px;
+          border-radius: 5px;
+        }
+
+        .name {
+          font-size: var(--boxel-font-xs);
+        }
+
+        .contact-info,
+        .social-links-container,
+        .status-pill,
+        .company-container {
+          display: none;
+        }
+      }
+
+      /* Fallback for extremely small sizes */
+      @container fitted-card ((1.0 < aspect-ratio) and (height < 50px)) {
+        .fitted-contact-card {
+          grid-template: 'avatar-container';
+          display: flex;
+          align-items: center;
+          align-content: center;
+          padding: var(--boxel-sp-xxxs);
+        }
+
+        .avatar-thumbnail {
+          display: none;
+        }
+
+        .name {
+          font-size: var(--boxel-font-xs);
+        }
+
+        .contact-info,
+        .social-links-container,
+        .status-pill,
+        .company-container {
+          display: none;
         }
       }
     </style>
@@ -379,9 +683,8 @@ export class Contact extends CardDef {
   @field secondaryEmail = contains(StringField);
   @field phoneMobile = contains(PhoneField);
   @field phoneOffice = contains(PhoneField);
-  @field twitterURL = contains(StringField);
-  @field linkedInURL = contains(StringField);
-  @field company = contains(StringField);
+  @field socialLinks = contains(SocialLinksField);
+  @field company = linksTo(CompanyCard);
   @field status = contains(ContactStatusField);
 
   @field title = contains(StringField, {
