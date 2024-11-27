@@ -15,26 +15,26 @@ import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { IconButton, RadioInput, Pill } from '@cardstack/boxel-ui/components';
-import Mail from '@cardstack/boxel-icons/mail';
-import Phone from '@cardstack/boxel-icons/phone';
-import BrandTwitter from '@cardstack/boxel-icons/brand-twitter';
-import BrandLinkedin from '@cardstack/boxel-icons/brand-linkedin';
-import Building from '@cardstack/boxel-icons/building';
-import HeartHandshake from '@cardstack/boxel-icons/heart-handshake';
-import TargetArrow from '@cardstack/boxel-icons/target-arrow';
+import MailIcon from '@cardstack/boxel-icons/mail';
+import PhoneIcon from '@cardstack/boxel-icons/phone';
+import BrandTwitterIcon from '@cardstack/boxel-icons/brand-twitter';
+import BrandLinkedinIcon from '@cardstack/boxel-icons/brand-linkedin';
+import BuildingIcon from '@cardstack/boxel-icons/building';
+import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
+import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 
 // helper functions that can share across different formats
 const getStatusIcon = (label: string | undefined) => {
   switch (label) {
     case 'Customer':
       return {
-        icon: HeartHandshake,
+        icon: HeartHandshakeIcon,
         lightColor: '#8bff98',
         darkColor: '#01d818',
       };
     case 'Lead':
       return {
-        icon: TargetArrow,
+        icon: TargetArrowIcon,
         lightColor: '#80d3ff',
         darkColor: '#02a7ff',
       };
@@ -64,7 +64,7 @@ class ViewCompanyCardTemplate extends Component<typeof CompanyCard> {
   <template>
     {{#if @model.name}}
       <div class='row'>
-        <Building class='icon' />
+        <BuildingIcon class='icon' />
         <span class='building-name'>{{@model.name}}</span>
       </div>
     {{/if}}
@@ -118,7 +118,7 @@ class ViewSocialLinksTemplate extends Component<typeof SocialLinksField> {
       {{#if @model.twitterURL}}
         <IconButton
           {{on 'click' (fn this.openSocialLink @model.twitterURL)}}
-          @icon={{BrandTwitter}}
+          @icon={{BrandTwitterIcon}}
           @width='20'
           @height='20'
           class='social-link'
@@ -127,7 +127,7 @@ class ViewSocialLinksTemplate extends Component<typeof SocialLinksField> {
       {{#if @model.linkedInURL}}
         <IconButton
           {{on 'click' (fn this.openSocialLink @model.linkedInURL)}}
-          @icon={{BrandLinkedin}}
+          @icon={{BrandLinkedinIcon}}
           @width='20'
           @height='20'
           class='social-link'
@@ -146,7 +146,6 @@ class ViewSocialLinksTemplate extends Component<typeof SocialLinksField> {
         --boxel-icon-button-width: var(--boxel-icon-med);
         --boxel-icon-button-height: var(--boxel-icon-med);
         border: 1px solid var(--boxel-300);
-        border-radius: 5px;
       }
       .social-link:hover {
         border-color: var(--boxel-400);
@@ -223,14 +222,14 @@ export class ContactStatusField extends LooseGooseyField {
     {
       index: 0,
       label: 'Customer',
-      icon: HeartHandshake,
+      icon: HeartHandshakeIcon,
       lightColor: '#8bff98',
       darkColor: '#01d818',
     },
     {
       index: 1,
       label: 'Lead',
-      icon: TargetArrow,
+      icon: TargetArrowIcon,
       lightColor: '#E6F4FF',
       darkColor: '#0090FF',
     },
@@ -283,21 +282,21 @@ class FittedTemplate extends Component<typeof Contact> {
       <div class='contact-info'>
         {{#if @model.primaryEmail}}
           <div class='row primary-email'>
-            <Mail class='icon gray' />
+            <MailIcon class='icon gray' />
             <span>{{formatEmail @model.primaryEmail}}</span>
           </div>
         {{/if}}
 
         {{#if @model.secondaryEmail}}
           <div class='row secondary-email'>
-            <Mail class='icon gray' />
+            <MailIcon class='icon gray' />
             <span>{{formatEmail @model.secondaryEmail}}</span>
           </div>
         {{/if}}
 
         {{#if @model.phoneMobile}}
           <div class='row primary-phone'>
-            <Phone class='icon gray' />
+            <PhoneIcon class='icon gray' />
             <span>{{formatPhone @model.phoneMobile}}</span>
             <Pill class='pill-gray'>
               mobile
@@ -307,7 +306,7 @@ class FittedTemplate extends Component<typeof Contact> {
 
         {{#if @model.phoneOffice}}
           <div class='row secondary-phone'>
-            <Phone class='icon gray' />
+            <PhoneIcon class='icon gray' />
             <span>{{formatPhone @model.phoneOffice}}</span>
             <Pill class='pill-gray'>
               office
@@ -407,6 +406,7 @@ class FittedTemplate extends Component<typeof Contact> {
       .contact-info {
         grid-area: contact-info;
         font-size: var(--boxel-font-xs);
+        align-self: normal;
       }
       .contact-info > * + * {
         margin-top: var(--boxel-sp-xxs);
@@ -431,12 +431,11 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .status-pill {
         grid-area: status-pill;
-        width: fit-content;
-        height: fit-content;
-        overflow: hidden;
+        border-color: transparent;
         padding: 0;
-        margin-top: var(--boxel-sp);
-        border: none;
+        flex: none;
+        overflow: hidden;
+        margin-top: auto;
       }
       .status-icon {
         --boxel-icon-button-width: 25px;
@@ -480,6 +479,7 @@ class FittedTemplate extends Component<typeof Contact> {
         .contact-info,
         .social-links-container,
         .status-pill,
+        .primary-email,
         .secondary-email,
         .secondary-phone,
         .pill-gray {
@@ -506,10 +506,10 @@ class FittedTemplate extends Component<typeof Contact> {
 
         .status-pill {
           align-self: flex-end;
-          margin-top: auto;
         }
 
         .social-links-container,
+        .primary-email,
         .secondary-email,
         .secondary-phone,
         .pill-gray {
@@ -528,12 +528,13 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-thumbnail {
           width: 50px;
           height: 50px;
-          border-radius: 5px;
         }
 
-        .contact-info,
         .social-links-container,
-        .status-pill {
+        .primary-email,
+        .secondary-email,
+        .secondary-phone,
+        .pill-gray {
           display: none;
         }
       }
@@ -549,15 +550,17 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-thumbnail {
           width: 45px;
           height: 45px;
-          border-radius: 5px;
         }
 
         .name {
           font-size: var(--boxel-font-sm);
         }
 
-        .contact-info,
-        .status-pill {
+        .social-links-container,
+        .primary-email,
+        .secondary-email,
+        .secondary-phone,
+        .pill-gray {
           display: none;
         }
       }
@@ -576,7 +579,11 @@ class FittedTemplate extends Component<typeof Contact> {
           height: 40px;
         }
 
-        .contact-info {
+        .social-links-container,
+        .primary-email,
+        .secondary-email,
+        .secondary-phone,
+        .pill-gray {
           display: none;
         }
       }
@@ -618,7 +625,8 @@ class FittedTemplate extends Component<typeof Contact> {
         }
 
         .contact-info,
-        .social-links-container {
+        .social-links-container,
+        .status-pill {
           display: none;
         }
       }
@@ -626,7 +634,6 @@ class FittedTemplate extends Component<typeof Contact> {
       /* Smallest horizontal layout */
       @container fitted-card ((1.0 < aspect-ratio) and (50px <= height < 58px)) {
         .fitted-contact-card {
-          grid-template: 'avatar-container' 1fr / 1fr;
           display: flex;
           align-items: center;
           align-content: center;
@@ -636,7 +643,6 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-thumbnail {
           width: 32px;
           height: 32px;
-          border-radius: 5px;
         }
 
         .name {
@@ -661,14 +667,11 @@ class FittedTemplate extends Component<typeof Contact> {
           padding: var(--boxel-sp-xxxs);
         }
 
-        .avatar-thumbnail {
-          display: none;
-        }
-
         .name {
           font-size: var(--boxel-font-xs);
         }
 
+        .avatar-thumbnail,
         .contact-info,
         .social-links-container,
         .status-pill,
@@ -683,7 +686,6 @@ class FittedTemplate extends Component<typeof Contact> {
 export class Contact extends CardDef {
   static displayName = 'Contact';
   @field name = contains(StringField);
-  @field thumbnailURL = contains(StringField);
   @field primaryEmail = contains(StringField);
   @field secondaryEmail = contains(StringField);
   @field phoneMobile = contains(PhoneField);
