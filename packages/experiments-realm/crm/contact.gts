@@ -11,7 +11,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { fn } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { IconButton, RadioInput, Pill } from '@cardstack/boxel-ui/components';
@@ -261,6 +261,7 @@ export class PhoneField extends FieldDef {
 
 class FittedTemplate extends Component<typeof Contact> {
   <template>
+    {{! template-lint-disable no-inline-styles }}
     <article class='fitted-contact-card'>
       <div class='avatar-container'>
         <div
@@ -268,11 +269,9 @@ class FittedTemplate extends Component<typeof Contact> {
           style={{setBackgroundImage @model.thumbnailURL}}
         />
         <div class='avatar-info'>
-          <h3 class='name'>{{if
-              @model.name
-              @model.name
-              'Name not provided'
-            }}</h3>
+          <h3 class='name'>
+            {{if @model.name @model.name 'Name not provided'}}
+          </h3>
           <@fields.company
             @format='atom'
             @displayContainer={{false}}
@@ -328,15 +327,18 @@ class FittedTemplate extends Component<typeof Contact> {
           <Pill
             class='status-pill'
             data-test-selected-type={{@model.status.label}}
-            style='background-color: {{statusIcon.lightColor}};'
+            style={{htmlSafe
+              (concat 'background-color: ' statusIcon.lightColor ';')
+            }}
           >
             <:iconLeft>
               <IconButton
                 @icon={{statusIcon.icon}}
                 class='status-icon'
-                style='background-color: {{statusIcon.darkColor}};'
+                style={{htmlSafe
+                  (concat 'background-color: ' statusIcon.darkColor ';')
+                }}
               />
-
             </:iconLeft>
             <:default>
               <span class='status-label-text'>
@@ -349,7 +351,6 @@ class FittedTemplate extends Component<typeof Contact> {
     </article>
 
     <style scoped>
-      /* Base styles */
       .fitted-contact-card {
         width: 100%;
         height: 100%;
@@ -469,6 +470,10 @@ class FittedTemplate extends Component<typeof Contact> {
           justify-content: center;
         }
 
+        .name {
+          font-size: var(--boxel-font-sm);
+        }
+
         .contact-info,
         .social-links-container,
         .status-pill,
@@ -498,6 +503,7 @@ class FittedTemplate extends Component<typeof Contact> {
 
         .status-pill {
           align-self: flex-end;
+          margin-top: auto;
         }
 
         .social-links-container,
@@ -565,10 +571,6 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-thumbnail {
           width: 40px;
           height: 40px;
-        }
-
-        .name {
-          font-size: var(--boxel-font-sm);
         }
 
         .contact-info {
