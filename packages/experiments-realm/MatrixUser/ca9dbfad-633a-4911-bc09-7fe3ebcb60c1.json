@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "username": "tintinthong",
+      "email": {
+        "value": "tintinthong@cardstack.com"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-user",
+        "name": "MatrixUser"
+      }
+    }
+  }
+}

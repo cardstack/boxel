@@ -1,0 +1,72 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "accountName": "Globex Corporation",
+      "accountAlias": "GlobexCorp",
+      "description": "A global leader in the field of international commerce and innovation.",
+      "contactInformation": {
+        "salutation": "Ms.",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "address": {
+          "streetAddress": "456 Global Plaza",
+          "city": "World City",
+          "region": "Global District",
+          "postalCode": "55555",
+          "poBoxNumber": "789",
+          "country": "Globaland"
+        },
+        "phoneNumber": null,
+        "email": {
+          "value": "info@globexcorp.com"
+        },
+        "website": {
+          "value": "www.globexcorp.com"
+        },
+        "company": "Globex Corporation"
+      },
+      "billingAddress": {
+        "streetAddress": "456 Global Plaza",
+        "city": "World City",
+        "region": "Global District",
+        "postalCode": "55555",
+        "poBoxNumber": "789",
+        "country": "Globaland"
+      },
+      "shippingAddress": {
+        "streetAddress": "789 Trade Route",
+        "city": "Commerce Town",
+        "region": "Trade Zone",
+        "postalCode": "101010",
+        "poBoxNumber": "101",
+        "country": "Marketland"
+      },
+      "numberOfEmployees": 10000,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "owner": {
+        "links": {
+          "self": null
+        }
+      },
+      "parentAccount": {
+        "links": {
+          "self": null
+        }
+      },
+      "company": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/account",
+        "name": "CrmAccount"
+      }
+    }
+  }
+}

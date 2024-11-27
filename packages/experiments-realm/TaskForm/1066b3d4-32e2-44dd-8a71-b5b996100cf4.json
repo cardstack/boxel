@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": "Send Quote",
+      "dueDate": "2024-05-16",
+      "comments": "We are approaching the deadline for our upcoming project, and we need to gather all necessary quotes to ensure we stay on schedule. Kindly submit your quotes by the due date to facilitate a smooth and timely completion of our tasks. Your prompt attention to this matter is greatly appreciated, as it will enable us to move forward efficiently and meet our objectives. Thank you for your cooperation and timely response.",
+      "title": "Call",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "relatedTo": {
+        "links": {
+          "self": "../CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task-form",
+        "name": "TaskForm"
+      }
+    }
+  }
+}

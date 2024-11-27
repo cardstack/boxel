@@ -1,0 +1,72 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "accountName": "Acme Corporation",
+      "accountAlias": "AcmeCorp",
+      "description": "A leading provider of innovative solutions in the technology sector.",
+      "contactInformation": {
+        "salutation": "Mr.",
+        "firstName": "John",
+        "lastName": "Doe",
+        "address": {
+          "streetAddress": "123 Tech Road",
+          "city": "Innovate City",
+          "region": "Silicon Valley",
+          "postalCode": "94016",
+          "poBoxNumber": "456",
+          "country": "USA"
+        },
+        "phoneNumber": null,
+        "email": {
+          "value": "contact@acmecorp.com"
+        },
+        "website": {
+          "value": "www.acmecorp.com"
+        },
+        "company": "Acme Corporation"
+      },
+      "billingAddress": {
+        "streetAddress": "123 Tech Road",
+        "city": "Innovate City",
+        "region": "Silicon Valley",
+        "postalCode": "94016",
+        "poBoxNumber": "456",
+        "country": "USA"
+      },
+      "shippingAddress": {
+        "streetAddress": "123 Tech Road",
+        "city": "Innovate City",
+        "region": "Silicon Valley",
+        "postalCode": "94016",
+        "poBoxNumber": "789",
+        "country": "USA"
+      },
+      "numberOfEmployees": 500,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "owner": {
+        "links": {
+          "self": null
+        }
+      },
+      "parentAccount": {
+        "links": {
+          "self": "./992531db-9912-49eb-9b72-f710cbcdb085"
+        }
+      },
+      "company": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/account",
+        "name": "CrmAccount"
+      }
+    }
+  }
+}
