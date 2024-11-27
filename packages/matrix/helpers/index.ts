@@ -8,6 +8,7 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
+import { IsolatedRealmServer } from './isolated-realm-server';
 
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -575,6 +576,125 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
+export async function assertPaymentSetup(page: Page, username: string) {
+  const stripePaymentLink = 'https://buy.stripe.com/test_4gw01WfWb2c1dBm7sv';
+  const expectedLink = `${stripePaymentLink}?client_reference_id=${username}`;
+  await expect(page.locator('[data-test-setup-payment]')).toHaveAttribute(
+    'href',
+    expectedLink,
+  );
+}
+
+export async function setupUser(
+  username: string,
+  realmServer: IsolatedRealmServer,
+) {
+  await realmServer.executeSQL(
+    `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
+  );
+}
+
+export async function setupPayment(
+  username: string,
+  realmServer: IsolatedRealmServer,
+  page?: Page,
+) {
+  // decode the username from base64
+  const decodedUsername = decodeFromAlphanumeric(username);
+
+  // mock trigger stripe webhook 'checkout.session.completed'
+  let freePlan = await realmServer.executeSQL(
+    `SELECT * FROM plans WHERE name = 'Free'`,
+  );
+
+  const randomNumber = Math.random().toString(36).substring(2, 12);
+
+  let subscriptionId = `sub_${randomNumber}`;
+  let stripeCustomerId = `cus_${randomNumber}`;
+
+  await realmServer.executeSQL(
+    `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${decodedUsername}'`,
+  );
+
+  let findUser = await realmServer.executeSQL(
+    `SELECT * FROM users WHERE matrix_user_id = '${decodedUsername}'`,
+  );
+
+  const userId = findUser[0].id;
+
+  const now = Math.floor(Date.now() / 1000); // Current time in seconds
+  const oneYearFromNow = now + 31536000; // One year in seconds
+  const oneMonthFromNow = now + 2592000; // One month in seconds
+
+  // mock trigger stripe webhook 'invoice.payment_succeeded'
+  await realmServer.executeSQL(
+    `INSERT INTO subscriptions (
+      user_id, 
+      plan_id, 
+      started_at, 
+      ended_at,
+      status, 
+      stripe_subscription_id
+    ) VALUES (
+      '${userId}',
+      '${freePlan[0].id}',
+      ${now},
+      ${oneYearFromNow},
+      'active',
+      '${subscriptionId}'
+    )`,
+  );
+
+  const getSubscription = await realmServer.executeSQL(
+    `SELECT id FROM subscriptions WHERE stripe_subscription_id = '${subscriptionId}'`,
+  );
+  const subscriptionUUID = getSubscription[0].id;
+
+  await realmServer.executeSQL(
+    `INSERT INTO subscription_cycles (
+      subscription_id, 
+      period_start, 
+      period_end
+    ) VALUES (
+      '${subscriptionUUID}',
+      ${now},
+      ${oneMonthFromNow}
+    )`,
+  );
+
+  let subscriptionCycle = await realmServer.executeSQL(
+    `SELECT id FROM subscription_cycles WHERE subscription_id = '${subscriptionUUID}'`,
+  );
+  const subscriptionCycleUUID = subscriptionCycle[0].id;
+
+  await realmServer.executeSQL(
+    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${freePlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
+  );
+
+  // Return url example: https://realms-staging.stack.cards/?from-free-plan-payment-link=true
+  // extract return url from page.url()
+  // assert return url contains ?from-free-plan-payment-link=true
+  if (page) {
+    const currentUrl = new URL(page.url());
+    const currentParams = currentUrl.searchParams;
+    await currentParams.append('from-free-plan-payment-link', 'true');
+    const returnUrl = `${currentUrl.origin}${
+      currentUrl.pathname
+    }?${currentParams.toString()}`;
+
+    await page.goto(returnUrl);
+  }
+}
+
+export async function setupUserSubscribed(
+  username: string,
+  realmServer: IsolatedRealmServer,
+) {
+  const matrixUserId = encodeToAlphanumeric(username);
+  await setupUser(username, realmServer);
+  await setupPayment(matrixUserId, realmServer);
+}
+
 export async function assertLoggedOut(page: Page) {
   await expect(
     page.locator('[data-test-username-field]'),
@@ -607,13 +727,15 @@ export async function getRoomEvents(
     );
     // there will generally be 2 rooms, one is the DM room we do for
     // authentication, the other is the actual chat (with org.boxel.message events)
-    return roomsWithEvents.find((messages) => {
-      return messages.find(
-        (message) =>
-          message.type === 'm.room.message' &&
-          message.content?.msgtype === 'org.boxel.message',
-      );
-    })!;
+    return (
+      roomsWithEvents.find((messages) => {
+        return messages.find(
+          (message) =>
+            message.type === 'm.room.message' &&
+            message.content?.msgtype === 'org.boxel.message',
+        );
+      }) ?? []
+    );
   }
   return await getAllRoomEvents(roomId, accessToken);
 }
@@ -622,4 +744,33 @@ export async function getRoomsFromSync(username = 'user1', password = 'pass') {
   let { accessToken } = await loginUser(username, password);
   let response = (await sync(accessToken)) as any;
   return response.rooms;
+}
+
+export async function waitUntil<T>(
+  condition: () => Promise<T>,
+  timeout = 10000,
+  interval = 250,
+): Promise<T> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const result = await condition();
+    if (result) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  throw new Error('Timeout waiting for condition');
+}
+
+export function encodeToAlphanumeric(string: string) {
+  return Buffer.from(string)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, ''); // Remove padding
+}
+
+export function decodeFromAlphanumeric(encodedString: string) {
+  const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(base64, 'base64').toString('utf8');
 }

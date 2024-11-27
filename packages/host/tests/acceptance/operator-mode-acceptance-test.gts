@@ -7,6 +7,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -32,6 +33,8 @@ import {
   lookupNetworkService,
   createJWT,
   testRealmSecretSeed,
+  setupUserSubscription,
+  setupRealmServerEndpoints,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -42,13 +45,16 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setExpiresInSec, createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
-  });
+  let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL],
+    });
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     setExpiresInSec(60 * 60);
 
     let loader = lookupLoaderService().loader;
@@ -407,6 +413,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    assert.strictEqual(getPageTitle(), 'Test Workspace B');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
@@ -460,6 +467,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
       submode: Submodes.Interact,
     });
+    assert.strictEqual(getPageTitle(), 'Mango');
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
@@ -500,6 +508,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+    assert.strictEqual(
+      getPageTitle(),
+      `address-with-no-embedded-template.gts in Test Workspace B`,
+    );
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
@@ -759,56 +771,47 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     };
 
-    hooks.beforeEach(function () {
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          if (req.url.includes('_server-session')) {
-            let data = await req.json();
-            if (!data.challenge) {
-              return new Response(
-                JSON.stringify({
-                  challenge: 'test',
-                  room: matrixRoomId,
-                }),
-                {
-                  status: 401,
-                },
-              );
-            } else {
-              return new Response('Ok', {
-                status: 200,
-                headers: {
-                  Authorization: createJWT(
-                    {
-                      user: '@testuser:staging',
-                    },
-                    '1d',
-                    testRealmSecretSeed,
-                  ),
-                },
-              });
-            }
-          }
-          return null;
+    setupRealmServerEndpoints(hooks, [
+      {
+        route: '_user',
+        getResponse: async (_req: Request) => {
+          return new Response(JSON.stringify(userResponseBody));
         },
-        { prepend: true },
-      );
-    });
+      },
+      {
+        route: '_server-session',
+        getResponse: async (req: Request) => {
+          let data = await req.json();
+          if (!data.challenge) {
+            return new Response(
+              JSON.stringify({
+                challenge: 'test',
+                room: matrixRoomId,
+              }),
+              {
+                status: 401,
+              },
+            );
+          } else {
+            return new Response('Ok', {
+              status: 200,
+              headers: {
+                Authorization: createJWT(
+                  {
+                    user: '@testuser:staging',
+                    sessionRoom: matrixRoomId,
+                  },
+                  '1d',
+                  testRealmSecretSeed,
+                ),
+              },
+            });
+          }
+        },
+      },
+    ]);
 
     test('can access and save settings via profile info popover', async function (assert) {
-      lookupNetworkService().mount(
-        async (req: Request) => {
-          if (req.url.includes('_user')) {
-            return new Response(JSON.stringify(userResponseBody));
-          }
-          return null;
-        },
-        { prepend: true },
-      );
-
       await visitOperatorMode({
         stacks: [
           [
@@ -912,6 +915,11 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // out of monthly credit
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 0;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
+
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
       assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
@@ -923,6 +931,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // out of monthly credit and additional credit
       userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
       assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
@@ -934,6 +946,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // out of additional credit
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 1000;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
       await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-membership-tier]').hasText('Free');
       assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');

@@ -16,6 +16,7 @@ import {
   addExplicitParens,
   asExpressions,
   every,
+  any,
   query,
   upsert,
   realmVersionExpression,
@@ -142,62 +143,72 @@ export class Batch {
     }
     let href = url.href;
     this.#invalidations.add(url.href);
-    let { nameExpressions, valueExpressions } = asExpressions(
-      {
-        url: href,
-        file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
-        realm_version: this.realmVersion,
-        realm_url: this.realmURL.href,
-        is_deleted: false,
-        indexed_at: Date.now(),
-        ...(entry.type === 'instance'
-          ? {
-              // TODO in followup PR we need to alter the SearchEntry type to use
-              // a document instead of a resource
-              type: 'instance',
-              pristine_doc: entry.resource,
-              search_doc: entry.searchData,
-              isolated_html: entry.isolatedHtml,
-              embedded_html: entry.embeddedHtml,
-              fitted_html: entry.fittedHtml,
-              atom_html: entry.atomHtml,
-              deps: [...entry.deps],
-              types: entry.types,
-              display_names: entry.displayNames,
-              source: entry.source,
-              last_modified: entry.lastModified,
-              resource_created_at: entry.resourceCreatedAt,
-            }
-          : entry.type === 'module'
-          ? {
-              type: 'module',
-              deps: [...entry.deps],
-              source: entry.source,
-              last_modified: entry.lastModified,
-              resource_created_at: entry.resourceCreatedAt,
-              transpiled_code: transpileJS(
-                entry.source,
-                new RealmPaths(this.realmURL).local(url),
-              ),
-            }
-          : {
-              type: 'error',
-              error_doc: entry.error,
-              deps: entry.error.deps,
-            }),
-      } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
-        // we do this because pg automatically casts big ints into strings, so
-        // we unwind that to accurately type the structure that we want to pass
-        // _in_ to the DB
-        last_modified: number;
-        indexed_at: number;
-      },
-      {
-        jsonFields: [...Object.entries(coerceTypes)]
-          .filter(([_, type]) => type === 'JSON')
-          .map(([column]) => column),
-      },
-    );
+    let preparedEntry = {
+      url: href,
+      file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
+      realm_version: this.realmVersion,
+      realm_url: this.realmURL.href,
+      is_deleted: false,
+      indexed_at: Date.now(),
+      ...(entry.type === 'instance'
+        ? {
+            // TODO in followup PR we need to alter the SearchEntry type to use
+            // a document instead of a resource
+            type: 'instance',
+            pristine_doc: entry.resource,
+            search_doc: entry.searchData,
+            isolated_html: entry.isolatedHtml,
+            embedded_html: entry.embeddedHtml,
+            fitted_html: entry.fittedHtml,
+            atom_html: entry.atomHtml,
+            deps: [...entry.deps],
+            types: entry.types,
+            display_names: entry.displayNames,
+            source: entry.source,
+            last_modified: entry.lastModified,
+            resource_created_at: entry.resourceCreatedAt,
+          }
+        : entry.type === 'module'
+        ? {
+            type: 'module',
+            deps: [...entry.deps],
+            source: entry.source,
+            last_modified: entry.lastModified,
+            resource_created_at: entry.resourceCreatedAt,
+            transpiled_code: transpileJS(
+              entry.source,
+              new RealmPaths(this.realmURL).local(url),
+            ),
+          }
+        : {
+            ...((await this.getProductionVersion(url)) ?? {}),
+            type: 'error',
+            error_doc: entry.error,
+          }),
+    } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
+      // we do this because pg automatically casts big ints into strings, so
+      // we unwind that to accurately type the structure that we want to pass
+      // _in_ to the DB
+      last_modified: number;
+      indexed_at: number;
+    };
+
+    if (entry.type === 'error') {
+      // merge the last known good deps with the error deps so we can invalidate
+      // when upstream issue is repaired
+      preparedEntry.deps = [
+        ...new Set([
+          ...(preparedEntry.deps ?? []),
+          ...(entry.error.deps ?? []),
+        ]),
+      ];
+    }
+
+    let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
+      jsonFields: [...Object.entries(coerceTypes)]
+        .filter(([_, type]) => type === 'JSON')
+        .map(([column]) => column),
+    });
 
     await this.query([
       ...upsert(
@@ -220,6 +231,40 @@ export class Batch {
 
   private query(expression: Expression) {
     return query(this.dbAdapter, expression, coerceTypes);
+  }
+
+  private async getProductionVersion(url: URL) {
+    let [entry] = (await this.query([
+      `SELECT i.*`,
+      `FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        realmVersionExpression(),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    if (!entry) {
+      return undefined;
+    }
+
+    let {
+      indexed_at: _remove1,
+      last_modified: _remove2,
+      resource_created_at: _remove3,
+      realm_version: _remove4,
+      ...productionVersion
+    } = entry;
+    return {
+      ...productionVersion,
+      last_modified: entry.last_modified ? parseInt(entry.last_modified) : null,
+      resource_created_at: entry.resource_created_at
+        ? parseInt(entry.resource_created_at)
+        : null,
+    };
   }
 
   private async numberOfIndexEntries() {

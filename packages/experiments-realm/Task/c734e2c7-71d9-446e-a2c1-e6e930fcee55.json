@@ -12,13 +12,17 @@
         "index": 0,
         "label": "Low"
       },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
         }
       },
       "project": {
@@ -29,6 +33,16 @@
       "team": {
         "links": {
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },

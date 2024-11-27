@@ -12,13 +12,17 @@
         "index": null,
         "label": null
       },
+      "dateRange": {
+        "start": "2024-11-13",
+        "end": "2024-12-17"
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
       "project": {
@@ -28,7 +32,17 @@
       },
       "team": {
         "links": {
-          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },

@@ -372,8 +372,6 @@ export default class BoxelMultiSelectUsage extends Component {
             @placeholder='Select assignees'
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
-            @searchField='name'
-            @searchEnabled={{true}}
             @closeOnSelect={{false}}
             @onChange={{this.onSelectAssignees}}
             @ariaLabel='Select assignees'

@@ -1,5 +1,4 @@
 import type Owner from '@ember/owner';
-import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -14,7 +13,6 @@ import {
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
-  type IEvent,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
@@ -31,10 +29,11 @@ import {
   loaderFor,
   LooseCardResource,
   ResolvedCodeRef,
+  Command,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
-  generateCardPatchCallSpecification,
+  generateJsonSchemaForCardType,
   getSearchTool,
   getGenerateAppModuleTool,
 } from '@cardstack/runtime-common/helpers/ai';
@@ -49,7 +48,9 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+import RoomState, {
+  TempEvent,
+} from '@cardstack/host/lib/matrix-classes/room-state';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -67,7 +68,6 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
-import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -76,6 +76,7 @@ import { RoomResource, getRoom } from '../resources/room';
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
+import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -91,11 +92,6 @@ const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
-type TempEvent = Partial<IEvent> & {
-  status: MatrixSDK.EventStatus | null;
-  error?: MatrixSDK.MatrixError;
-};
-
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
@@ -104,6 +100,7 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare realm: RealmService;
   @service private declare matrixSdkLoader: MatrixSDKLoader;
   @service private declare realmServer: RealmServerService;
@@ -111,11 +108,13 @@ export default class MatrixService extends Service {
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
+  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private rooms: TrackedMap<string, RoomState> = new TrackedMap();
+  private roomStateMap: TrackedMap<string, RoomState> = new TrackedMap();
+
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -259,12 +258,12 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
+  get isNewUser() {
+    return this._isNewUser;
+  }
+
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let controller = getOwner(this)!.lookup(
-      'controller:index',
-    ) as IndexController;
-    controller.workspaceChooserOpened = true;
     this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
@@ -277,6 +276,7 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
+    this._isNewUser = true;
     this._isInitializingNewUser = false;
   }
 
@@ -485,7 +485,7 @@ export default class MatrixService extends Service {
       },
     };
     try {
-      return await this.sendEvent(roomId, 'm.reaction', content);
+      return await this.client.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
         `Error sending reaction event: ${
@@ -583,7 +583,7 @@ export default class MatrixService extends Service {
       );
       // Generate tool calls for patching currently open cards permitted for modification
       for (let attachedOpenCard of attachedOpenCards) {
-        let patchSpec = generateCardPatchCallSpecification(
+        let patchSpec = generateJsonSchemaForCardType(
           attachedOpenCard.constructor as typeof CardDef,
           this.cardAPI,
           mappings,
@@ -625,6 +625,76 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
+  }
+
+  public async sendAiAssistantMessage(params: {
+    roomId?: string; // if falsy we create a new room
+    show?: boolean; // if truthy, ensure the side panel to the room
+    prompt: string;
+    attachedCards?: CardDef[];
+    skillCards?: SkillCard[];
+    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
+  }): Promise<{ roomId: string }> {
+    let roomId = params.roomId;
+    if (!roomId) {
+      roomId = await this.createRoom('AI Assistant', [aiBotUsername]);
+    }
+
+    let html = markdownToHtml(params.prompt);
+    let mappings = await basicMappings(this.loaderService.loader);
+    let tools = [];
+    for (let { command, autoExecute } of params.commands ?? []) {
+      // get a registered name for the command
+      let name = this.commandService.registerCommand(command, autoExecute);
+      tools.push({
+        type: 'function',
+        function: {
+          name,
+          description: command.description,
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
+            },
+            required: ['attributes', 'description'],
+          },
+        },
+      });
+    }
+
+    let attachedCardsEventIds = await this.getCardEventIds(
+      params.attachedCards ?? [],
+      roomId,
+      this.cardHashes,
+      { maybeRelativeURL: null },
+    );
+    let attachedSkillEventIds = await this.getCardEventIds(
+      params.skillCards ?? [],
+      roomId,
+      this.skillCardHashes,
+      { includeComputeds: true, maybeRelativeURL: null },
+    );
+
+    let clientGeneratedId = uuidv4();
+
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.message',
+      body: params.prompt || '',
+      format: 'org.matrix.custom.html',
+      formatted_body: html,
+      clientGeneratedId,
+      data: {
+        attachedCardsEventIds,
+        attachedSkillEventIds,
+        context: {
+          tools,
+        },
+      },
+    } as CardMessageContent);
+    return { roomId };
   }
 
   private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
@@ -713,19 +783,19 @@ export default class MatrixService extends Service {
     }
   }
 
-  getRoom(roomId: string) {
-    return this.rooms.get(roomId);
+  getRoomState(roomId: string) {
+    return this.roomStateMap.get(roomId);
   }
 
-  private setRoom(roomId: string, room: RoomState) {
-    this.rooms.set(roomId, room);
+  private setRoomState(roomId: string, roomState: RoomState) {
+    this.roomStateMap.set(roomId, roomState);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,
         getRoom(
           this,
           () => roomId,
-          () => this.getRoom(roomId)?.events,
+          () => this.getRoomState(roomId)?.events,
         ),
       );
     }
@@ -751,7 +821,7 @@ export default class MatrixService extends Service {
   @cached
   get roomResources() {
     let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-    for (let roomId of this.rooms.keys()) {
+    for (let roomId of this.roomStateMap.keys()) {
       if (!this.roomResourcesCache.get(roomId)) {
         continue;
       }
@@ -761,7 +831,7 @@ export default class MatrixService extends Service {
   }
 
   private resetState() {
-    this.rooms = new TrackedMap();
+    this.roomStateMap = new TrackedMap();
     this.roomMembershipQueue = [];
     this.roomResourcesCache.clear();
     this.timelineQueue = [];
@@ -813,52 +883,21 @@ export default class MatrixService extends Service {
     return card;
   }
 
-  private addRoomEvent(event: TempEvent) {
-    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
-    // If we are receiving an event which contains
-    // a data field, we need to parse it
-    // because matrix doesn't support all json types
-    // Corresponding encoding is done in
-    // sendEvent in the matrix-service
-    if (event.content?.data) {
-      if (typeof event.content.data !== 'string') {
-        console.warn(
-          `skipping matrix event ${
-            eventId ?? stateKey
-          }, event.content.data is not serialized properly`,
-        );
-        return;
-      }
-      event.content.data = JSON.parse(event.content.data);
-    }
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
-    if (!eventId) {
-      throw new Error(
-        `bug: event ID is undefined for event ${JSON.stringify(
-          event,
-          null,
-          2,
-        )}`,
-      );
-    }
+  private addRoomEvent(event: TempEvent, oldEventId?: string) {
+    let { room_id: roomId } = event;
+
     if (!roomId) {
       throw new Error(
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let room = this.getRoom(roomId);
-    if (!room) {
-      room = new RoomState();
-      this.setRoom(roomId, room);
+    let roomState = this.getRoomState(roomId);
+    if (!roomState) {
+      roomState = new RoomState();
+      this.setRoomState(roomId, roomState);
     }
 
-    // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-    if (!room.events.find((e) => e.event_id === eventId)) {
-      room.events = [
-        ...(room.events ?? []),
-        event as unknown as DiscreteMatrixEvent,
-      ];
-    }
+    roomState.addEvent(event, oldEventId);
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
@@ -965,9 +1004,6 @@ export default class MatrixService extends Service {
     _room: unknown,
     maybeOldEventId?: string,
   ) => {
-    if (typeof maybeOldEventId !== 'string') {
-      return;
-    }
     this.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });
     debounce(this, this.drainTimeline, 100);
   };
@@ -1021,7 +1057,7 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let roomState = await this.getRoom(roomId);
+    let roomState = await this.getRoomState(roomId);
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur
@@ -1087,50 +1123,24 @@ export default class MatrixService extends Service {
           } while (currentFragmentId);
         }
       }
+    } else if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.realm-server-event'
+    ) {
+      await this.realmServer.handleEvent(event);
     }
-    if (oldEventId) {
-      await this.updateRoomEvent(event, oldEventId);
-    } else {
-      await this.addRoomEvent(event);
+    await this.addRoomEvent(event, oldEventId);
+
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.command'
+    ) {
+      this.commandService.executeCommandEventIfNeeded(event);
     }
 
     if (room.oldState.paginationToken != null) {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
-    }
-  }
-
-  private async updateRoomEvent(event: Partial<IEvent>, oldEventId: string) {
-    if (event.content?.data && typeof event.content.data === 'string') {
-      event.content.data = JSON.parse(event.content.data);
-    }
-    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
-    if (!eventId) {
-      throw new Error(
-        `bug: event ID is undefined for event ${JSON.stringify(
-          event,
-          null,
-          2,
-        )}`,
-      );
-    }
-    if (!roomId) {
-      throw new Error(
-        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
-      );
-    }
-
-    let room = this.getRoom(roomId);
-    if (!room) {
-      throw new Error(
-        `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
-      );
-    }
-    let oldEventIndex = room.events.findIndex((e) => e.event_id === oldEventId);
-    if (oldEventIndex >= 0) {
-      room.events[oldEventIndex] = event as unknown as DiscreteMatrixEvent;
-      room.events = [...room.events];
     }
   }
 }

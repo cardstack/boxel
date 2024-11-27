@@ -5,6 +5,11 @@ import {
   updateUser,
   type SynapseInstance,
 } from '../docker/synapse';
+import {
+  appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
@@ -14,6 +19,7 @@ import {
   validateEmailForResetPassword,
   login,
   registerRealmUsers,
+  setupUserSubscribed,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -25,35 +31,39 @@ const password = 'mypassword1!';
 
 test.describe('Forgot password', () => {
   let synapse: SynapseInstance;
-
-  test.beforeEach(async ({ page }, testInfo) => {
+  let realmServer: IsolatedRealmServer;
+  test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
-    testInfo.setTimeout(testInfo.timeout + 30000);
+    test.setTimeout(120_000);
     synapse = await synapseStart({
       template: 'test',
     });
+
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerRealmUsers(synapse);
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    realmServer = await startRealmServer();
+    await clearLocalStorage(page, appURL);
+    await gotoRegistration(page, appURL);
     await registerUser(synapse, username, password);
     await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: [email],
       displayname: name,
     });
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
 
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
     await smtpStop();
+    await realmServer.stop();
   });
 
   test('It can reset password', async ({ page }) => {
-    await gotoForgotPassword(page);
+    await gotoForgotPassword(page, appURL);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -107,7 +117,10 @@ test.describe('Forgot password', () => {
     ).toContainText('Your password is now reset');
     await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
-    await login(resetPasswordPage, 'user1', 'mypassword2!');
+    await login(resetPasswordPage, 'user1', 'mypassword2!', {
+      url: appURL,
+    });
+
     await assertLoggedIn(resetPasswordPage);
   });
 

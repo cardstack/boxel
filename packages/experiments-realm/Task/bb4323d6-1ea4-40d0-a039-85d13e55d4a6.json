@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Create Tag List",
+      "taskDetail": null,
+      "status": {
+        "index": 1,
+        "label": "Next Sprint"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
+        }
+      },
+      "team": {
+        "links": {
+          "self": null
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "Task"
+      }
+    }
+  }
+}

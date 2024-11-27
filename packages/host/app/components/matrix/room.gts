@@ -44,7 +44,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
-import type { RoomState } from '../../lib/matrix-classes/room';
+import type RoomState from '../../lib/matrix-classes/room-state';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -68,25 +68,23 @@ export default class Room extends Component<Signature> {
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#if this.messages}}
-            {{#each this.messages as |message i|}}
-              <RoomMessage
-                @roomId={{@roomId}}
-                @message={{message}}
-                @index={{i}}
-                @registerScroller={{this.registerMessageScroller}}
-                @isPending={{this.isPendingMessage message}}
-                @monacoSDK={{@monacoSDK}}
-                @isStreaming={{this.isMessageStreaming message i}}
-                @currentEditor={{this.currentMonacoContainer}}
-                @setCurrentEditor={{this.setCurrentMonacoContainer}}
-                @retryAction={{this.maybeRetryAction i message}}
-                data-test-message-idx={{i}}
-              />
-            {{/each}}
+          {{#each this.messages as |message i|}}
+            <RoomMessage
+              @roomId={{@roomId}}
+              @message={{message}}
+              @index={{i}}
+              @registerScroller={{this.registerMessageScroller}}
+              @isPending={{this.isPendingMessage message}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @retryAction={{this.maybeRetryAction i message}}
+              data-test-message-idx={{i}}
+            />
           {{else}}
             <NewSession @sendPrompt={{this.sendMessage}} />
-          {{/if}}
+          {{/each}}
           {{#if this.room}}
             {{#if this.showUnreadIndicator}}
               <div class='unread-indicator'>
@@ -175,7 +173,7 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(
     this,
     () => this.args.roomId,
-    () => this.matrixService.getRoom(this.args.roomId)?.events,
+    () => this.matrixService.getRoomState(this.args.roomId)?.events,
   );
   private autoAttachmentResource = getAutoAttachment(
     this,
@@ -261,8 +259,8 @@ export default class Room extends Component<Signature> {
   private loadRoomSkills = restartableTask(async () => {
     await this.roomResource.loading;
     let defaultSkills = await this.matrixService.loadDefaultSkills();
-    if (this.roomResource.room) {
-      this.roomResource.room.skills = defaultSkills;
+    if (this.roomResource.roomState) {
+      this.roomResource.roomState.skills = defaultSkills;
     }
   });
 
@@ -445,7 +443,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.roomResource.room;
+    let room = this.roomResource.roomState;
     return room;
   }
 
@@ -570,14 +568,18 @@ export default class Room extends Component<Signature> {
       let activeSkillCards = this.skills
         .filter((skill) => skill.isActive)
         .map((c) => c.card);
-      await this.matrixService.sendMessage(
-        this.args.roomId,
-        message,
-        cards,
-        activeSkillCards,
-        clientGeneratedId,
-        context,
-      );
+      try {
+        await this.matrixService.sendMessage(
+          this.args.roomId,
+          message,
+          cards,
+          activeSkillCards,
+          clientGeneratedId,
+          context,
+        );
+      } catch (e) {
+        console.error('Error sending message', e);
+      }
     },
   );
 

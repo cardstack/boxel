@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
-import { action, get } from '@ember/object';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
@@ -9,41 +10,40 @@ import {
   CardDef,
   Component,
   realmURL,
-  type CardContext,
 } from 'https://cardstack.com/base/card-api';
 
 import {
-  baseRealm,
+  CardError,
+  getCard,
   SupportedMimeType,
-  type Query,
-  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import {
+  type SortOption,
+  sortByCardTitleAsc,
+  SortMenu,
+} from './components/sort';
+import { type ViewOption, CardsGrid } from './components/grid';
+import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
   BoxelButton,
-  BoxelDropdown,
-  Menu as BoxelMenu,
-  CardContainer,
-  FilterList,
+  FieldContainer,
+  Pill,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
-import ArrowDown from '@cardstack/boxel-icons/arrow-down';
-import ArrowUp from '@cardstack/boxel-icons/arrow-up';
-import IconComponent from '@cardstack/boxel-icons/captions';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
+
 import CategoriesIcon from '@cardstack/boxel-icons/hierarchy-3';
 import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
+import BlogAppIcon from '@cardstack/boxel-icons/notebook';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
-type ViewOption = 'card' | 'strip' | 'grid';
+import type { BlogPost } from './blog-post';
 
-interface SortOption {
-  displayName: string;
-  sort: Query['sort'];
-}
-const SORT_OPTIONS: SortOption[] = [
+export const SORT_OPTIONS: SortOption[] = [
   {
+    id: 'datePubDesc',
     displayName: 'Date Published',
     sort: [
       {
@@ -53,6 +53,7 @@ const SORT_OPTIONS: SortOption[] = [
     ],
   },
   {
+    id: 'lastUpdatedDesc',
     displayName: 'Last Updated',
     sort: [
       {
@@ -62,34 +63,20 @@ const SORT_OPTIONS: SortOption[] = [
     ],
   },
   {
+    id: 'cardTitleAsc',
     displayName: 'A-Z',
-    sort: [
-      {
-        on: {
-          module: `${baseRealm.url}card-api`,
-          name: 'CardDef',
-        },
-        by: 'title',
-        direction: 'asc',
-      },
-    ],
+    sort: sortByCardTitleAsc,
   },
 ];
 
-interface SidebarFilter {
-  displayName: string;
-  icon: typeof IconComponent;
-  cardTypeName: string;
-  createNewButtonText?: string;
-  isCreateNewDisabled?: boolean;
-  cardRef?: ResolvedCodeRef;
-}
-const FILTERS: SidebarFilter[] = [
+const FILTERS: LayoutFilter[] = [
   {
     displayName: 'Blog Posts',
     icon: BlogPostIcon,
     cardTypeName: 'Blog Post',
     createNewButtonText: 'Post',
+    showAdminData: true,
+    sortOptions: SORT_OPTIONS,
   },
   {
     displayName: 'Author Bios',
@@ -106,187 +93,102 @@ const FILTERS: SidebarFilter[] = [
   },
 ];
 
-interface SortMenuSignature {
-  Args: {
-    options: SortOption[];
-    onSort: (option: SortOption) => void;
-    selected: SortOption;
-  };
-}
-class SortMenu extends GlimmerComponent<SortMenuSignature> {
-  <template>
-    <div class='sort'>
-      Sort by
-      <BoxelDropdown>
-        <:trigger as |bindings|>
-          <BoxelButton class='sort-trigger' {{bindings}}>
-            <span class='sort-trigger-content'>
-              {{@selected.displayName}}
-              {{#if (eq (get @selected.sort '0.direction') 'desc')}}
-                <ArrowDown width='16' height='16' />
-              {{else}}
-                <ArrowUp width='16' height='16' />
-              {{/if}}
-            </span>
-            <DropdownArrowFilled
-              class='sort-trigger-icon'
-              width='10'
-              height='10'
-            />
-          </BoxelButton>
-        </:trigger>
-        <:content as |dd|>
-          <BoxelMenu
-            class='sort-menu'
-            @closeMenu={{dd.close}}
-            @items={{this.sortOptions}}
-          />
-        </:content>
-      </BoxelDropdown>
-    </div>
-    <style scoped>
-      .sort {
-        display: flex;
-        align-items: center;
-        gap: 0 var(--boxel-sp-sm);
-        text-wrap: nowrap;
-      }
-      .sort :deep(.ember-basic-dropdown-content-wormhole-origin) {
-        position: absolute; /* This prevents layout shift when menu opens */
-      }
+export const toISOString = (datetime: Date) => datetime.toISOString();
 
-      .sort-trigger {
-        --boxel-button-border-color: var(--boxel-450);
-        width: 190px;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        padding-right: var(--boxel-sp-xs);
-        padding-left: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-      }
-      .sort-trigger[aria-expanded='true'] .sort-dropdown-icon {
-        transform: scaleY(-1);
-      }
-      .sort-trigger-content {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-      .sort-trigger-icon {
-        flex-shrink: 0;
-      }
+export const formatDatetime = (
+  datetime: Date,
+  opts: Intl.DateTimeFormatOptions,
+) => {
+  const Format = new Intl.DateTimeFormat('en-US', opts);
+  return Format.format(datetime);
+};
 
-      .sort-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
-        width: 190px;
-      }
-    </style>
-  </template>
-
-  private get sortOptions() {
-    return this.args.options.map((option) => {
-      return new MenuItem(option.displayName, 'action', {
-        action: () => this.args.onSort(option),
-        icon: option.sort?.[0].direction === 'desc' ? ArrowDown : ArrowUp,
-        selected: option.displayName === this.args.selected.displayName,
-      });
-    });
+const or = function (item1: any, item2: any) {
+  if (Boolean(item1)) {
+    return item1;
+  } else if (Boolean(item2)) {
+    return item2;
   }
-}
+  return;
+};
 
-interface BlogCardsGridSignature {
+interface CardAdminViewSignature {
   Args: {
-    query: Query;
-    realms: URL[];
-    selectedView: ViewOption;
-    context?: CardContext;
+    cardId: string;
   };
+  Element: HTMLElement;
 }
-class BlogCardsGrid extends GlimmerComponent<BlogCardsGridSignature> {
+class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
   <template>
-    <ul class='blog-cards {{@selectedView}}-view' data-test-cards-grid-cards>
-      {{#let
-        (component @context.prerenderedCardSearchComponent)
-        as |PrerenderedCardSearch|
-      }}
-        <PrerenderedCardSearch
-          @query={{@query}}
-          @format='fitted'
-          @realms={{@realms}}
-        >
-          <:loading>
-            Loading...
-          </:loading>
-          <:response as |cards|>
-            {{#each cards as |card|}}
-              <li
-                class='card'
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-              >
-                <CardContainer @displayBoundaries='true'>
-                  {{card.component}}
-                </CardContainer>
-              </li>
-            {{/each}}
-          </:response>
-        </PrerenderedCardSearch>
-      {{/let}}
-    </ul>
+    {{#if this.resource.cardError}}
+      Error: Could not load additional info
+    {{else if this.resource.card}}
+      <div class='blog-admin' ...attributes>
+        {{#let this.resource.card as |card|}}
+          <FieldContainer
+            class='admin-data'
+            @label='Publish Date'
+            @vertical={{true}}
+          >
+            {{#if card.publishDate}}
+              <time timestamp={{toISOString card.publishDate}}>
+                {{this.formattedDate card.publishDate}}
+              </time>
+            {{else}}
+              N/A
+            {{/if}}
+          </FieldContainer>
+          <FieldContainer class='admin-data' @label='Status' @vertical={{true}}>
+            <Pill class='status-pill'>{{card.status}}</Pill>
+          </FieldContainer>
+        {{/let}}
+      </div>
+    {{/if}}
     <style scoped>
-      .blog-cards {
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
-        );
-        grid-auto-rows: var(--grid-card-height);
+      .blog-admin {
+        display: inline-flex;
+        flex-direction: column;
         gap: var(--boxel-sp);
-        list-style-type: none;
-        margin: 0;
-        padding: var(--boxel-sp-6xs);
-        overflow: auto;
       }
-      .card-view {
-        --grid-card-height: 21.875rem; /* 350px */
+      .admin-data {
+        --boxel-label-font: 600 var(--boxel-font-sm);
       }
-      .strip-view {
-        --grid-card-min-width: 21.875rem;
-        --grid-card-max-width: calc(50% - var(--boxel-sp));
-        --grid-card-height: 6.125rem;
-      }
-      .grid-view {
-        --grid-card-min-width: 11.125rem;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: 15.125rem;
-      }
-      .card {
-        container-name: fitted-card;
-        container-type: size;
+      .status-pill {
+        --pill-background-color: var(--boxel-200);
+        font-weight: 400;
       }
     </style>
   </template>
+
+  @tracked resource = getCard<BlogPost>(new URL(this.args.cardId));
+
+  formattedDate = (datetime: Date) => {
+    return formatDatetime(datetime, {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour12: true,
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
 }
 
 class BlogAppTemplate extends Component<typeof BlogApp> {
   <template>
-    <section class='blog-app'>
-      <aside class='blog-app-column sidebar'>
-        <header class='sidebar-header' aria-label='blog-header'>
-          <img
-            class='sidebar-header-thumbnail'
-            src={{@model.thumbnailURL}}
-            width='60'
-            height='60'
-            alt={{@model.title}}
-          />
-          <h1 class='sidebar-header-title'><@fields.title /></h1>
-          <p class='sidebar-header-description'><@fields.description /></p>
-        </header>
+    <Layout
+      @filters={{this.filters}}
+      @activeFilter={{this.activeFilter}}
+      @onFilterChange={{this.onFilterChange}}
+    >
+      <:sidebar>
+        <TitleGroup
+          @title={{or @model.title ''}}
+          @tagline={{or @model.description ''}}
+          @thumbnailURL={{or @model.thumbnailURL ''}}
+          @element='header'
+          aria-label='Sidebar Header'
+        />
         {{#if @context.actions.createCard}}
           <BoxelButton
             class='sidebar-create-button'
@@ -297,94 +199,54 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             {{on 'click' this.createNew}}
           >
             {{#unless this.createCard.isRunning}}
-              <IconPlus class='create-button-icon' width='15' height='15' />
+              <IconPlus
+                class='sidebar-create-button-icon'
+                width='15'
+                height='15'
+              />
             {{/unless}}
             New
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
-        <FilterList
-          class='sidebar-filters'
-          @filters={{this.filters}}
-          @activeFilter={{this.activeFilter}}
-          @onChanged={{this.onFilterChange}}
+      </:sidebar>
+      <:contentHeader>
+        <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
+        <ViewSelector
+          @selectedId={{this.selectedView}}
+          @onChange={{this.onChangeView}}
         />
-      </aside>
-      <section class='blog-app-column content'>
-        <header
-          class='content-header'
-          aria-label={{this.activeFilter.displayName}}
-        >
-          <h2 class='content-title'>{{this.activeFilter.displayName}}</h2>
-          <ViewSelector
-            @selectedId={{this.selectedView}}
-            @onChange={{this.onChangeView}}
-          />
-          <SortMenu
-            @options={{this.sortOptions}}
-            @selected={{this.selectedSort}}
-            @onSort={{this.onSort}}
-          />
-        </header>
-        <BlogCardsGrid
-          @selectedView={{this.selectedView}}
-          @context={{@context}}
-          @query={{this.query}}
-          @realms={{this.realms}}
-        />
-      </section>
-    </section>
+        {{#if this.activeFilter.sortOptions.length}}
+          {{#if this.selectedSort}}
+            <SortMenu
+              @options={{this.activeFilter.sortOptions}}
+              @selected={{this.selectedSort}}
+              @onSort={{this.onSort}}
+            />
+          {{/if}}
+        {{/if}}
+      </:contentHeader>
+      <:grid>
+        {{#if this.query}}
+          <div class='content-scroll-container'>
+            <CardsGrid
+              @selectedView={{this.selectedView}}
+              @context={{@context}}
+              @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
+              @query={{this.query}}
+              @realms={{this.realms}}
+            >
+              <:adminData as |card|>
+                {{#if this.showAdminData}}
+                  <BlogAdminData @cardId={{card.url}} />
+                {{/if}}
+              </:adminData>
+            </CardsGrid>
+          </div>
+        {{/if}}
+      </:grid>
+    </Layout>
     <style scoped>
-      .blog-app {
-        display: flex;
-        width: 100%;
-        max-width: 100%;
-        height: 100%;
-        max-height: 100vh;
-        background-color: var(--boxel-light);
-        border-top: 1px solid var(--boxel-400);
-        overflow: hidden;
-      }
-      .blog-app-column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        padding: var(--boxel-sp-lg);
-        max-width: 100%;
-      }
-      .blog-app-column + .blog-app-column {
-        border-left: 1px solid var(--boxel-400);
-      }
-      .sidebar {
-        width: 255px;
-      }
-      .content {
-        flex-grow: 1;
-      }
-
-      .sidebar-header {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        column-gap: var(--boxel-sp-xs);
-      }
-      .sidebar-header-thumbnail {
-        grid-row: 1 / 3;
-        padding: var(--boxel-sp-6xs);
-        border: 1px solid var(--boxel-450);
-        border-radius: var(--boxel-border-radius-xl);
-      }
-      .sidebar-header-title {
-        align-self: end;
-        margin: 0;
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .sidebar-header-description {
-        grid-column: 2;
-        margin: 0;
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
       .sidebar-create-button {
         --icon-color: currentColor;
         --boxel-loading-indicator-size: 15px;
@@ -398,33 +260,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         margin: 0;
       }
 
-      /* TODO: fix filter component styles in boxel-ui */
-      .sidebar-filters {
-        width: auto;
-        margin: 0;
-        gap: var(--boxel-sp-4xs);
-      }
-      .sidebar-filters > :deep(button) {
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .sidebar-filters > :deep(button > svg) {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-      }
-
-      .content-header {
-        min-height: 60px;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
-      }
       .content-title {
         flex-grow: 1;
         margin: 0;
@@ -434,16 +269,25 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     </style>
   </template>
 
-  filters: SidebarFilter[] = new TrackedArray(FILTERS);
-  sortOptions = SORT_OPTIONS;
+  filters: LayoutFilter[] = new TrackedArray(FILTERS);
 
   @tracked private selectedView: ViewOption = 'card';
-  @tracked private selectedSort: SortOption = this.sortOptions[0];
-  @tracked private activeFilter: SidebarFilter = this.filters[0];
+  @tracked private activeFilter: LayoutFilter = this.filters[0];
 
-  constructor(owner: any, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.loadCardTypes.perform();
+  }
+
+  private get selectedSort() {
+    if (!this.activeFilter.sortOptions?.length) {
+      return;
+    }
+    return this.activeFilter.selectedSort ?? this.activeFilter.sortOptions[0];
+  }
+
+  private get showAdminData() {
+    return this.activeFilter.showAdminData && this.selectedView === 'card';
   }
 
   private get realms() {
@@ -451,28 +295,24 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private get query() {
-    let query = {
-      filter: { eq: { _cardType: this.activeFilter.cardTypeName } },
-    };
-    return { ...query, sort: this.selectedSort.sort };
+    if (this.loadCardTypes.isIdle && this.activeFilter.query) {
+      return {
+        ...this.activeFilter.query,
+        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
+      };
+    }
+    return undefined;
   }
 
   private loadCardTypes = restartableTask(async () => {
-    let response = await fetch(`${this.realms[0]}_types`, {
+    let url = `${this.realms[0]}_types`;
+    let response = await fetch(url, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
       },
     });
     if (!response.ok) {
-      let responseText = await response.text();
-      let err = new Error(
-        `status: ${response.status} -
-          ${response.statusText}. ${responseText}`,
-      ) as any;
-
-      err.status = response.status;
-      err.responseText = responseText;
-
+      let err = await CardError.fromFetchResponse(url, response);
       throw err;
     }
     let cardTypeSummaries = (await response.json()).data as {
@@ -485,14 +325,15 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         (s) => s.attributes.displayName === filter.cardTypeName,
       );
       if (!summary) {
-        console.error(`Card type summary not found for ${filter.displayName}`);
         return;
       }
       const lastIndex = summary.id.lastIndexOf('/');
-      filter.cardRef = {
+      let cardRef = {
         module: summary.id.substring(0, lastIndex),
         name: summary.id.substring(lastIndex + 1),
       };
+      filter.cardRef = cardRef;
+      filter.query = { filter: { type: cardRef } };
     }
   });
 
@@ -501,11 +342,11 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   @action private onSort(option: SortOption) {
-    this.selectedSort = option;
+    this.activeFilter.selectedSort = option;
     this.activeFilter = this.activeFilter;
   }
 
-  @action private onFilterChange(filter: SidebarFilter) {
+  @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
   }
 
@@ -516,9 +357,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   private createCard = restartableTask(async () => {
     let ref = this.activeFilter.cardRef;
     if (!ref) {
-      console.error(
-        `Can not create new ${this.activeFilter.cardTypeName}. CardRef is not found.`,
-      );
       return;
     }
     let currentRealm = this.realms[0];
@@ -533,6 +371,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 // the many type issues resulting from the lack types from catalog realm
 export class BlogApp extends CardDef {
   static displayName = 'Blog App';
+  static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
   static isolated = BlogAppTemplate;

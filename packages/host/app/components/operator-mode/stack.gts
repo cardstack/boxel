@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import type { Actions } from '@cardstack/runtime-common';
+import type { Actions, CommandContext } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -21,6 +21,7 @@ interface Signature {
     stackItems: StackItem[];
     stackIndex: number;
     publicAPI: Actions;
+    commandContext: CommandContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
@@ -85,6 +86,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @index={{i}}
             @stackItems={{@stackItems}}
             @publicAPI={{@publicAPI}}
+            @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}

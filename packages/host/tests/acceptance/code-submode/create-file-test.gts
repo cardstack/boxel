@@ -16,6 +16,7 @@ import {
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
   lookupNetworkService,
+  setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -175,6 +176,7 @@ const filesB: Record<string, any> = {
   },
 };
 
+let matrixRoomId: string;
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
@@ -202,7 +204,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions } = setupMockMatrix(hooks, {
+  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL, testRealmURL2],
   });
@@ -215,6 +217,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     ({ adapter } = await setupAcceptanceTestRealm({
       contents: files,
     }));
+
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
 
     lookupNetworkService().mount(
       async (req: Request) => {

@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { trackedFunction } from 'ember-resources/util/function';
+import { task } from 'ember-concurrency';
 
 import {
   Avatar,
@@ -14,9 +14,8 @@ import {
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import config from '@cardstack/host/config/environment';
+import BillingService from '@cardstack/host/services/billing-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
-import RealmServerService from '@cardstack/host/services/realm-server';
 
 interface ProfileInfoPopoverSignature {
   Args: {
@@ -138,8 +137,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      {{! TODO: Remove config.APP.stripeBillingEnabled once the API integration for credit info is completed. }}
-      {{#if config.APP.stripeBillingEnabled}}
+      {{! Show credit info if the user has an active plan }}
+      {{#if this.plan}}
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
             <span class='label'>Membership Tier</span>
@@ -200,35 +199,41 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
     </div>
   </template>
 
-  @service private declare realmServer: RealmServerService;
+  constructor(...args: [any, any]) {
+    super(...args);
+    this.fetchCreditInfo.perform();
+  }
+
+  @service private declare billingService: BillingService;
   @service declare matrixService: MatrixService;
+
+  private fetchCreditInfo = task(async () => {
+    await this.billingService.fetchSubscriptionData();
+  });
 
   @action private logout() {
     this.matrixService.logout();
   }
 
-  private fetchCreditInfo = trackedFunction(this, async () => {
-    return await this.realmServer.fetchCreditInfo();
-  });
-
   private get isLoading() {
-    return this.fetchCreditInfo.isLoading;
+    return this.billingService.fetchingSubscriptionData;
   }
 
   private get plan() {
-    return this.fetchCreditInfo.value?.plan;
+    return this.billingService.subscriptionData?.plan;
   }
 
   private get creditsIncludedInPlanAllowance() {
-    return this.fetchCreditInfo.value?.creditsIncludedInPlanAllowance;
+    return this.billingService.subscriptionData?.creditsIncludedInPlanAllowance;
   }
 
   private get creditsAvailableInPlanAllowance() {
-    return this.fetchCreditInfo.value?.creditsAvailableInPlanAllowance;
+    return this.billingService.subscriptionData
+      ?.creditsAvailableInPlanAllowance;
   }
 
   private get extraCreditsAvailableInBalance() {
-    return this.fetchCreditInfo.value?.extraCreditsAvailableInBalance;
+    return this.billingService.subscriptionData?.extraCreditsAvailableInBalance;
   }
 
   private get monthlyCreditText() {

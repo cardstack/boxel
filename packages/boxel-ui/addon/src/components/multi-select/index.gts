@@ -82,7 +82,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @selectedItemComponent={{@selectedItemComponent}}
       @triggerComponent={{@triggerComponent}}
       @afterOptionsComponent={{@afterOptionsComponent}}
-      @beforeOptionsComponent={{@beforeOptionsComponent}}
+      @beforeOptionsComponent={{(component BeforeOptions)}}
       ...attributes
       as |option|
     >

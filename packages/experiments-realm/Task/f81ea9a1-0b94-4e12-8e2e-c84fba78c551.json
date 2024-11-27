@@ -12,6 +12,10 @@
         "index": null,
         "label": null
       },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
       "description": null,
       "thumbnailURL": null
     },
@@ -22,6 +26,21 @@
         }
       },
       "project": {
+        "links": {
+          "self": null
+        }
+      },
+      "team": {
+        "links": {
+          "self": null
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
         "links": {
           "self": null
         }
