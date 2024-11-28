@@ -29,8 +29,11 @@ import {
   Lock,
 } from '@cardstack/boxel-ui/icons';
 
+const { environment } = ENV;
+
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
+import ENV from '@cardstack/host/config/environment';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -52,7 +55,10 @@ export default class PaymentSetup extends Component<Signature> {
     let paymentLink = await this.billingService.getStripePaymentLink(
       this.args.matrixUserId,
     );
-    window.open(paymentLink);
+    window.open(
+      paymentLink,
+      environment === 'development' ? '_blank' : '_self',
+    );
   });
 
   @action private toggleProfileSettings() {
