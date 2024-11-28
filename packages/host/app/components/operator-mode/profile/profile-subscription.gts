@@ -1,13 +1,10 @@
 import { fn } from '@ember/helper';
 
 import { on } from '@ember/modifier';
-import Owner from '@ember/owner';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { restartableTask, task } from 'ember-concurrency';
-
-import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 
 import {
@@ -47,11 +44,10 @@ export default class ProfileSubscription extends Component<Signature> {
             @size='extra-small'
             @disabled={{or
               subscriptionData.isLoading
-              this.fetchStripeLinks.isRunning
-              this.managePlan.isRunning
+              this.billingService.fetchingStripePaymentLinks
             }}
-            {{on 'click' (perform this.managePlan)}}
             data-test-manage-plan-button
+            {{on 'click' this.managePlan}}
           >Manage Plan</BoxelButton>
         </div>
       </FieldContainer>
@@ -69,11 +65,11 @@ export default class ProfileSubscription extends Component<Signature> {
           <div class='buy-more-credits'>
             <span class='buy-more-credits__title'>Buy more credits</span>
             <div class='payment-links'>
-              {{#if this.fetchStripeLinks.isRunning}}
+              {{#if this.billingService.fetchingStripePaymentLinks}}
                 <LoadingIndicator />
               {{else}}
                 {{#each
-                  this.additionalCreditsPaymentLinks
+                  this.billingService.extraCreditsPaymentLinks
                   as |paymentLink index|
                 }}
                   <div class='payment-link' data-test-payment-link={{index}}>
@@ -170,28 +166,11 @@ export default class ProfileSubscription extends Component<Signature> {
 
   @service private declare billingService: BillingService;
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this.fetchStripeLinks.perform();
-  }
-
-  private fetchStripeLinks = task(async () => {
-    await this.billingService.fetchStripeLinks();
-  });
-
-  private get additionalCreditsPaymentLinks() {
-    return this.billingService.stripeLinks
-      ?.filter((link) => link.creditReloadAmount)
-      .sort(
-        (linkA, linkB) => linkA.creditReloadAmount! - linkB.creditReloadAmount!,
-      );
+  @action private managePlan() {
+    window.open(this.billingService.customerPortalLink?.url);
   }
 
   private pay(paymentLinkURL: string) {
     window.open(paymentLinkURL);
   }
-
-  private managePlan = restartableTask(async () => {
-    await this.billingService.managePlan();
-  });
 }

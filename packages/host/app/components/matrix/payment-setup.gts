@@ -8,11 +8,6 @@ import { tracked } from '@glimmer/tracking';
 import InfoCircleIcon from '@cardstack/boxel-icons/info-circle';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { task } from 'ember-concurrency';
-
-import perform from 'ember-concurrency/helpers/perform';
-import window from 'ember-window-mock';
-
 import {
   BoxelButton,
   BoxelHeader,
@@ -51,15 +46,9 @@ export default class PaymentSetup extends Component<Signature> {
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
 
-  setupPaymentMethod = task(async () => {
-    let paymentLink = await this.billingService.getStripePaymentLink(
-      this.args.matrixUserId,
-    );
-    window.open(
-      paymentLink,
-      environment === 'development' ? '_blank' : '_self',
-    );
-  });
+  get stripePaymentLink() {
+    return this.billingService.getStripePaymentLink(this.args.matrixUserId);
+  }
 
   @action private toggleProfileSettings() {
     this.profileSettingsOpened = !this.profileSettingsOpened;
@@ -135,10 +124,11 @@ export default class PaymentSetup extends Component<Signature> {
             <BoxelButton
               @as='anchor'
               @kind='primary'
-              @disabled={{this.setupPaymentMethod.isRunning}}
+              @disabled={{this.billingService.fetchingStripePaymentLinks}}
+              @href={{this.stripePaymentLink}}
               data-test-setup-payment
               class='setup-button'
-              {{on 'click' (perform this.setupPaymentMethod)}}
+              target={{if (eq environment 'development') '_blank' '_self'}}
             >
               Set up Secure Payment Method
               <span class='lock-icon'><Lock width='16px' height='16px' /></span>
