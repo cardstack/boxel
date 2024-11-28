@@ -246,16 +246,16 @@ stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_
 > Ready! You are using Stripe API Version [x]. Your webhook signing secret is whsec_xxxxx
 ```
 
-3. Go to `packages/realm-server`, pass STRIPE_WEBHOOK_SECRET & STRIPE_API_KEY environment value and start the realm server
-
-```
-STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
-```
-
-4. Go to `packages/realm-server` and run the following command to sync the stripe products to the database, make sure you have the stripe api key set
+3. Go to `packages/realm-server` and run the following command to sync the stripe products to the database, make sure you have the stripe api key set. You only need to run this once OR if you want to sync the products again.
 
 ```
 STRIPE_API_KEY=... pnpm sync-stripe-products
+```
+
+4. Go to `packages/realm-server`, pass STRIPE_WEBHOOK_SECRET & STRIPE_API_KEY environment value and start the realm server. STRIPE_WEBHOOK_SECRET is the value you got from stripe cli in Step 2.
+
+```
+STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 ```
 
 5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)

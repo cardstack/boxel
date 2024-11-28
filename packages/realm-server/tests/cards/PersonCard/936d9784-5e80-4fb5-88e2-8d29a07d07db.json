@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": null,
+      "name": "Van Gogh",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/deal",
-        "name": "Deal"
+        "module": "../person-with-error",
+        "name": "PersonCard"
       }
     }
   }
