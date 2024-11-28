@@ -1,14 +1,12 @@
 import {
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   field,
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
 import {
   BoxelSelect,
   Avatar,
@@ -32,24 +30,7 @@ import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import GlimmerComponent from '@glimmer/component';
 import DateRangeField from './date-range-field';
-
-export class LooseGooseyField extends FieldDef {
-  @field index = contains(NumberField); //sorting order
-  @field label = contains(StringField);
-  static values: LooseyGooseyData[] = []; //help with the types
-
-  get color() {
-    return LooseGooseyField.values.find((value) => {
-      return value.label === this.label;
-    })?.color;
-  }
-}
-
-export interface LooseyGooseyData {
-  index: number;
-  label: string;
-  color?: string;
-}
+import { LooseGooseyField, type LooseyGooseyData } from '../loosey-goosey';
 
 class Edit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;

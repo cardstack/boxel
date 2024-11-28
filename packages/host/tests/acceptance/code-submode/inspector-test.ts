@@ -35,6 +35,7 @@ import {
   setupOnSave,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
   type TestContextWithSSE,
   type TestContextWithSave,
   setMonacoContent,
@@ -396,12 +397,13 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
+  let matrixRoomId: string;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions } = setupMockMatrix(hooks, {
+  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL, testRealmURL2],
   });
@@ -411,6 +413,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       [testRealmURL]: ['read', 'write'],
       [testRealmURL2]: ['read', 'write'],
     });
+
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
