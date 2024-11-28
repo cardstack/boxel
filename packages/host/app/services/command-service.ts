@@ -193,6 +193,11 @@ export default class CommandService extends Service {
           String(payload.attached_card_id),
           { attributes: { moduleURL: moduleId } },
         );
+      } else {
+        // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
+        throw new Error(
+          `Unrecognized command: ${command.name}. This command may have been associated with a previous browser session.`,
+        );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
