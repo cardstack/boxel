@@ -38,6 +38,7 @@ import {
   visitOperatorMode,
   lookupLoaderService,
   lookupNetworkService,
+  setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -45,6 +46,7 @@ import { setupApplicationTest } from '../helpers/setup';
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
 
+let matrixRoomId: string;
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
 
@@ -52,12 +54,16 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions, setActiveRealms } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
-  });
+  let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
+    });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');

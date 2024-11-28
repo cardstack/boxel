@@ -21,6 +21,7 @@ import {
   getMonacoContent,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
@@ -205,6 +206,7 @@ const ambiguousDisplayNamesCardSource = `
   }
 `;
 
+let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
 
@@ -226,12 +228,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({

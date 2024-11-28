@@ -4682,6 +4682,22 @@ module('Realm server with realm mounted at the origin', function (hooks) {
                 kind: 'file',
               },
             },
+            'family_photo_card.gts': {
+              links: {
+                related: `${testRealmHref}family_photo_card.gts`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'FamilyPhotoCard/': {
+              links: {
+                related: `${testRealmHref}FamilyPhotoCard/`,
+              },
+              meta: {
+                kind: 'directory',
+              },
+            },
             'friend.gts': {
               links: {
                 related: `${testRealmHref}friend.gts`,
@@ -4746,6 +4762,14 @@ module('Realm server with realm mounted at the origin', function (hooks) {
                 kind: 'file',
               },
             },
+            'person-with-error.gts': {
+              links: {
+                related: `${testRealmHref}person-with-error.gts`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'person.gts': {
               links: {
                 related: `${testRealmHref}person.gts`,
@@ -4760,6 +4784,14 @@ module('Realm server with realm mounted at the origin', function (hooks) {
               },
               meta: {
                 kind: 'file',
+              },
+            },
+            'PersonCard/': {
+              links: {
+                related: `${testRealmHref}PersonCard/`,
+              },
+              meta: {
+                kind: 'directory',
               },
             },
             'query-test-cards.gts': {

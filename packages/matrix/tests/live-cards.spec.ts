@@ -18,6 +18,7 @@ import {
   login,
   registerRealmUsers,
   showAllCards,
+  setupUserSubscribed,
 } from '../helpers';
 
 test.describe('Live Cards', () => {
@@ -37,6 +38,7 @@ test.describe('Live Cards', () => {
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
 
   test.afterEach(async () => {

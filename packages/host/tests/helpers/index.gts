@@ -549,6 +549,96 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
+export function setupUserSubscription(matrixRoomId: string) {
+  const userResponseBody = {
+    data: {
+      type: 'user',
+      id: 1,
+      attributes: {
+        matrixUserId: '@testuser:staging',
+        stripeCustomerId: 'stripe-id-1',
+        creditsAvailableInPlanAllowance: 1000,
+        creditsIncludedInPlanAllowance: 1000,
+        extraCreditsAvailableInBalance: 100,
+      },
+      relationships: {
+        subscription: {
+          data: {
+            type: 'subscription',
+            id: 1,
+          },
+        },
+      },
+    },
+    included: [
+      {
+        type: 'subscription',
+        id: 1,
+        attributes: {
+          startedAt: '2024-10-15T03:42:11.000Z',
+          endedAt: '2025-10-15T03:42:11.000Z',
+          status: 'active',
+        },
+        relationships: {
+          plan: {
+            data: {
+              type: 'plan',
+              id: 1,
+            },
+          },
+        },
+      },
+      {
+        type: 'plan',
+        id: 1,
+        attributes: {
+          name: 'Free',
+          monthlyPrice: 0,
+          creditsIncluded: 1000,
+        },
+      },
+    ],
+  };
+
+  lookupNetworkService().mount(
+    async (req: Request) => {
+      if (req.url.includes('_user')) {
+        return new Response(JSON.stringify(userResponseBody));
+      }
+      if (req.url.includes('_server-session')) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: matrixRoomId,
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:staging',
+                  sessionRoom: matrixRoomId,
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      }
+      return null;
+    },
+    { prepend: true },
+  );
+}
+
 export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);

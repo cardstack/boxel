@@ -10,6 +10,7 @@ For a quickstart, see [here](./QUICKSTART.md)
 - this project uses [volta](https://volta.sh/) for Javascript toolchain version management. Make sure you have the latest verison of volta on your system and have define [the ENV var described here](https://docs.volta.sh/advanced/pnpm).
 - this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 - this project uses [docker](https://docker.com). Make sure to install docker on your system.
+- this project uses [stripe-cli](https://stripe.com/docs/stripe-cli) to test payment flows. Make sure to install stripe-cli on your system.
 - Ensure that node_modules/.bin is in your path. e.g. include `export PATH="./node_modules/.bin:$PATH"` in your .zshrc
 
 ## Orientation
@@ -228,6 +229,38 @@ In order to run the boxel-motion demo app:
 1. `cd packages/boxel-motion/test-app`
 2. `pnpm start`
 3. Visit http://localhost:4200 in your browser
+
+## Payment Setup
+
+There is some pre-setup needed to enable free plan on development account:
+
+1. Use stripe cli to listen for the webhooks that Stripe sends to the realm server
+
+```
+stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
+```
+
+2. You will get webhook signing secret from stripe cli after Step 1 is done
+
+```
+> Ready! You are using Stripe API Version [x]. Your webhook signing secret is whsec_xxxxx
+```
+
+3. Go to `packages/realm-server` and run the following command to sync the stripe products to the database, make sure you have the stripe api key set. You only need to run this once OR if you want to sync the products again.
+
+```
+STRIPE_API_KEY=... pnpm sync-stripe-products
+```
+
+4. Go to `packages/realm-server`, pass STRIPE_WEBHOOK_SECRET & STRIPE_API_KEY environment value and start the realm server. STRIPE_WEBHOOK_SECRET is the value you got from stripe cli in Step 2.
+
+```
+STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
+```
+
+5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)
+
+You should be able to subscribe successfully after you perform the steps above.
 
 ## Running the Tests
 

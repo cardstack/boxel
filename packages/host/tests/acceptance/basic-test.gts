@@ -10,20 +10,25 @@ import {
   setupAcceptanceTestRealm,
   lookupLoaderService,
   testRealmURL,
+  setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+let matrixRoomId: string;
 module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL],
   });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     let loaderService = lookupLoaderService();
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
