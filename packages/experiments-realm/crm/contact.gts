@@ -8,7 +8,6 @@ import {
   field,
   contains,
   linksTo,
-  BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
