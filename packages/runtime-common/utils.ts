@@ -19,3 +19,11 @@ export async function retry<T>(
 
   return null;
 }
+
+export function encodeToAlphanumeric(matrixUserId: string) {
+  return Buffer.from(matrixUserId)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
