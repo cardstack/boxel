@@ -81,7 +81,7 @@ export default function handleStripeLinksRequest(): (
 
     if (creditTopUpPaymentLinks.length !== 3) {
       throw new Error(
-        'Expected exactly three credit top up payment links with metadata.credit_reload_amount defined but none found',
+        `Expected exactly three credit top up payment links with metadata.credit_reload_amount defined but ${creditTopUpPaymentLinks.length} found`,
       );
     }
 
