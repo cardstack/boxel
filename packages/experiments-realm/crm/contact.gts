@@ -22,6 +22,7 @@ import BrandLinkedinIcon from '@cardstack/boxel-icons/brand-linkedin';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+import UserCircleIcon from '@cardstack/boxel-icons/user-circle';
 
 // helper functions that can share across different formats
 const getStatusIcon = (label: string | undefined) => {
@@ -43,8 +44,19 @@ const getStatusIcon = (label: string | undefined) => {
   }
 };
 
-const formatPhone = (phone: any) => {
+interface PhoneFieldSignature {
+  country: number;
+  area: number;
+  phoneNumber: number;
+}
+
+const formatPhone = (phone: PhoneFieldSignature | undefined) => {
   if (!phone) return undefined;
+
+  if (!phone.country || !phone.area || !phone.phoneNumber) {
+    return undefined;
+  }
+
   return `+${phone.country} (${phone.area}) ${phone.phoneNumber}`;
 };
 
@@ -66,6 +78,11 @@ class ViewCompanyCardTemplate extends Component<typeof CompanyCard> {
       <div class='row'>
         <BuildingIcon class='icon' />
         <span class='building-name'>{{@model.name}}</span>
+      </div>
+    {{else}}
+      <div class='row'>
+        <BuildingIcon class='icon' />
+        <span class='no-building'>No Company Assigned</span>
       </div>
     {{/if}}
 
@@ -90,6 +107,10 @@ class ViewCompanyCardTemplate extends Component<typeof CompanyCard> {
         font-size: var(--boxel-font-xs);
         font-weight: 300;
         text-decoration: underline;
+      }
+      .no-buidling {
+        font-size: var(--boxel-font-xs);
+        font-weight: 300;
       }
     </style>
   </template>
@@ -169,9 +190,6 @@ export class SocialLinksField extends FieldDef {
 export interface LooseyGooseyData {
   index: number;
   label: string;
-  icon: any;
-  lightColor: string;
-  darkColor: string;
 }
 
 export class LooseGooseyField extends FieldDef {
@@ -224,16 +242,10 @@ export class ContactStatusField extends LooseGooseyField {
     {
       index: 0,
       label: 'Customer',
-      icon: HeartHandshakeIcon,
-      lightColor: '#8bff98',
-      darkColor: '#01d818',
     },
     {
       index: 1,
       label: 'Lead',
-      icon: TargetArrowIcon,
-      lightColor: '#E6F4FF',
-      darkColor: '#0090FF',
     },
   ];
 
@@ -268,10 +280,14 @@ class EmbeddedTemplate extends Component<typeof Contact> {
           class='avatar-thumbnail'
           {{! template-lint-disable no-inline-styles }}
           style={{setBackgroundImage @model.thumbnailURL}}
-        />
+        >
+          {{#unless @model.thumbnailURL}}
+            <UserCircleIcon width='20' height='20' class='user-icon' />
+          {{/unless}}
+        </div>
         <div class='avatar-info'>
           <h3 class='name'>
-            {{if @model.name @model.name 'Name not provided'}}
+            {{if @model.name @model.name 'No Name Assigned'}}
           </h3>
           <@fields.company
             @format='atom'
@@ -296,7 +312,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
           </div>
         {{/if}}
 
-        {{#if @model.phoneMobile}}
+        {{#if (formatPhone @model.phoneMobile)}}
           <div class='row primary-phone'>
             <PhoneIcon class='icon gray' />
             <span>{{formatPhone @model.phoneMobile}}</span>
@@ -306,7 +322,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
           </div>
         {{/if}}
 
-        {{#if @model.phoneOffice}}
+        {{#if (formatPhone @model.phoneOffice)}}
           <div class='row secondary-phone'>
             <PhoneIcon class='icon gray' />
             <span>{{formatPhone @model.phoneOffice}}</span>
@@ -360,27 +376,34 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         padding: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp);
-        background: white;
-        border-radius: var(--boxel-border-radius);
+        background: var(--boxel-light);
       }
       .avatar-container {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp);
         min-width: 0;
       }
       .avatar-thumbnail {
         background-color: var(--boxel-200);
         width: 60px;
         height: 60px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
         background-size: cover;
         background-position: center;
         border-radius: 50%;
       }
+      .avatar-thumbnail .user-icon {
+        color: var(--boxel-500);
+        width: auto;
+        height: auto;
+      }
       .avatar-info {
         min-width: 0;
+        width: 100%;
         overflow: hidden;
       }
       .name {
@@ -389,13 +412,15 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         text-overflow: ellipsis;
         overflow: hidden;
         margin: 0;
-        font-size: 1.1rem;
+        font-size: var(--boxel-font-size-med);
         font-weight: 600;
         letter-spacing: var(--boxel-lsp-sm);
       }
       .company-container {
         background: transparent;
-        padding: 0;
+        width: auto;
+        height: auto;
+        overflow: unset;
       }
       .contact-info {
         display: flex;
@@ -403,6 +428,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-xs);
         font-size: var(--boxel-font-sm);
         color: var(--boxel-dark);
+        margin-top: var(--boxel-sp);
       }
       .row {
         display: flex;
@@ -412,8 +438,8 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-xxs);
       }
       .icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
         flex-shrink: 0;
       }
       .icon.gray {
@@ -421,14 +447,14 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       }
       .pill-gray {
         font-weight: 500;
-        font-size: 10px;
+        font-size: var(--boxel-font-size-sm);
         word-break: keep-all;
         --pill-background-color: var(--boxel-200);
         border: none;
       }
       .social-links-container {
         display: flex;
-        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp);
       }
       .status-pill {
         border-color: transparent;
@@ -436,6 +462,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         flex: none;
         overflow: hidden;
         align-self: flex-start;
+        margin-top: auto;
       }
       .status-icon {
         --boxel-icon-button-width: var(--boxel-icon-med);
@@ -459,10 +486,14 @@ class FittedTemplate extends Component<typeof Contact> {
           class='avatar-thumbnail'
           {{! template-lint-disable no-inline-styles }}
           style={{setBackgroundImage @model.thumbnailURL}}
-        />
+        >
+          {{#unless @model.thumbnailURL}}
+            <UserCircleIcon width='20' height='20' class='user-icon' />
+          {{/unless}}
+        </div>
         <div class='avatar-info'>
           <h3 class='name'>
-            {{if @model.name @model.name 'Name not provided'}}
+            {{if @model.name @model.name 'No Name Assigned'}}
           </h3>
           <@fields.company
             @format='atom'
@@ -487,7 +518,7 @@ class FittedTemplate extends Component<typeof Contact> {
           </div>
         {{/if}}
 
-        {{#if @model.phoneMobile}}
+        {{#if (formatPhone @model.phoneMobile)}}
           <div class='row primary-phone'>
             <PhoneIcon class='icon gray' />
             <span>{{formatPhone @model.phoneMobile}}</span>
@@ -497,7 +528,7 @@ class FittedTemplate extends Component<typeof Contact> {
           </div>
         {{/if}}
 
-        {{#if @model.phoneOffice}}
+        {{#if (formatPhone @model.phoneOffice)}}
           <div class='row secondary-phone'>
             <PhoneIcon class='icon gray' />
             <span>{{formatPhone @model.phoneOffice}}</span>
@@ -548,48 +579,47 @@ class FittedTemplate extends Component<typeof Contact> {
       .fitted-contact-card {
         width: 100%;
         height: 100%;
-        min-width: 100px;
-        min-height: 29px;
-        overflow: hidden;
+        padding: var(--boxel-sp-lg);
         display: flex;
-        gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-xs);
+        background: var(--boxel-light);
       }
       .avatar-container {
-        grid-area: avatar-container;
         display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
+        align-items: normal;
+        gap: var(--boxel-sp);
         min-width: 0;
-        width: 100%;
       }
       .avatar-thumbnail {
-        grid-area: avatar-thumbnail;
         background-color: var(--boxel-200);
         width: 60px;
         height: 60px;
-        overflow: hidden;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
         background-size: cover;
         background-position: center;
         border-radius: 50%;
       }
+      .avatar-thumbnail .user-icon {
+        color: var(--boxel-500);
+        width: auto;
+        height: auto;
+      }
+      .avatar-info {
+        min-width: 0;
+        width: 100%;
+        overflow: hidden;
+      }
       .name {
-        grid-area: name;
         -webkit-line-clamp: 1;
         text-wrap: nowrap;
         text-overflow: ellipsis;
         overflow: hidden;
         margin: 0;
-        font-size: 1.1rem;
+        font-size: var(--boxel-font-size-med);
         font-weight: 600;
         letter-spacing: var(--boxel-lsp-sm);
-      }
-      .avatar-info {
-        grid-area: avatar-info;
-        min-width: 0;
-        width: 100%;
-        overflow: hidden;
       }
       .company-container {
         background: transparent;
@@ -598,12 +628,12 @@ class FittedTemplate extends Component<typeof Contact> {
         overflow: unset;
       }
       .contact-info {
-        grid-area: contact-info;
-        font-size: var(--boxel-font-xs);
-        align-self: normal;
-      }
-      .contact-info > * + * {
-        margin-top: var(--boxel-sp-xxs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-sm);
+        color: var(--boxel-dark);
+        margin-top: var(--boxel-sp);
       }
       .icon {
         width: var(--boxel-icon-xs);
@@ -615,16 +645,12 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .pill-gray {
         font-weight: 500;
-        font-size: 10px;
+        font-size: var(--boxel-font-size-sm);
         word-break: keep-all;
         --pill-background-color: var(--boxel-200);
         border: none;
       }
-      .social-links-container {
-        grid-area: social-links-container;
-      }
       .status-pill {
-        grid-area: status-pill;
         border-color: transparent;
         padding: 0;
         flex: none;
@@ -637,7 +663,7 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .status-label-text {
         display: block;
-        font-size: 10px;
+        font-size: var(--boxel-font-size-sm);
         padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxs);
         font-weight: 600;
       }
@@ -649,25 +675,31 @@ class FittedTemplate extends Component<typeof Contact> {
       }
 
       /* Square layout (aspect-ratio = 1.0) or portrait layout with height < 226px */
-      @container fitted-card ((aspect-ratio = 1.0) or ((aspect-ratio < 1.0) and (height < 226px))) {
-        .fitted-contact-card,
+      @container fitted-card ((aspect-ratio = 1.0) or ((aspect-ratio < 1.0) and (height <= 226px))) {
+        .fitted-contact-card {
+          flex-direction: column;
+          padding: var(--boxel-sp-sm);
+        }
         .avatar-container {
           flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          padding: var(--boxel-sp-xs);
+        }
+
+        .avatar-thumbnail {
+          width: 50px;
+          height: 50px;
+          margin: 0 auto;
         }
 
         .avatar-info {
           text-align: center;
         }
 
-        .avatar-info :global(.row) {
-          justify-content: center;
+        .name {
+          font-size: var(--boxel-font-size);
         }
 
-        .name {
-          font-size: var(--boxel-font-sm);
+        .avatar-info :global(.row) {
+          justify-content: center;
         }
 
         .contact-info,
@@ -681,21 +713,28 @@ class FittedTemplate extends Component<typeof Contact> {
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (226px < height) {
-        .fitted-contact-card,
+      @container fitted-card (aspect-ratio <= 1.0) and (226px <= height) {
+        .fitted-contact-card {
+          flex-direction: column;
+          padding: var(--boxel-sp-sm);
+        }
+
         .avatar-container {
           flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          padding: var(--boxel-sp-xs);
         }
 
         .avatar-info {
           text-align: center;
         }
 
-        .avatar-info .row {
+        .avatar-info :global(.row) {
           justify-content: center;
+        }
+
+        .avatar-thumbnail {
+          width: 50px;
+          height: 50px;
+          margin: 0 auto;
         }
 
         .status-pill {
@@ -703,7 +742,6 @@ class FittedTemplate extends Component<typeof Contact> {
         }
 
         .social-links-container,
-        .primary-email,
         .secondary-email,
         .secondary-phone,
         .pill-gray {
@@ -713,15 +751,7 @@ class FittedTemplate extends Component<typeof Contact> {
 
       @container fitted-card ((1.0 < aspect-ratio) and (58px <= height < 180px)) {
         .fitted-contact-card {
-          align-items: center;
           align-content: center;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xxs);
-        }
-
-        .avatar-thumbnail {
-          width: 50px;
-          height: 50px;
         }
 
         .social-links-container,
@@ -735,19 +765,8 @@ class FittedTemplate extends Component<typeof Contact> {
 
       @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
         .fitted-contact-card {
-          align-items: center;
           align-content: center;
-          gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-xxs);
-        }
-
-        .avatar-thumbnail {
-          width: 45px;
-          height: 45px;
-        }
-
-        .name {
-          font-size: var(--boxel-font-sm);
         }
 
         .social-links-container,
@@ -763,21 +782,13 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (115px <= height)) {
         .fitted-contact-card {
           flex-direction: column;
-          justify-content: center;
-          gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-sm);
-        }
-
-        .avatar-thumbnail {
-          width: 40px;
-          height: 40px;
         }
 
         .social-links-container,
         .primary-email,
         .secondary-email,
-        .secondary-phone,
-        .pill-gray {
+        .secondary-phone {
           display: none;
         }
       }
@@ -797,24 +808,22 @@ class FittedTemplate extends Component<typeof Contact> {
 
       @container fitted-card ((1.0 < aspect-ratio) and (58px <= height < 115px)) {
         .fitted-contact-card {
-          align-items: center;
           padding: var(--boxel-sp-sm);
         }
 
         .avatar-container {
           display: flex;
-          align-items: center;
           gap: var(--boxel-sp-xxs);
           flex: 1;
         }
 
         .avatar-thumbnail {
-          width: 40px;
-          height: 40px;
+          width: 35px;
+          height: 35px;
         }
 
         .name {
-          font-size: var(--boxel-font-sm);
+          font-size: var(--boxel-font-size-sm);
         }
 
         .contact-info,
@@ -827,7 +836,6 @@ class FittedTemplate extends Component<typeof Contact> {
       /* Smallest horizontal layout */
       @container fitted-card ((1.0 < aspect-ratio) and (50px <= height < 58px)) {
         .fitted-contact-card {
-          align-items: center;
           align-content: center;
           padding: var(--boxel-sp-xxxs);
         }
@@ -835,10 +843,6 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-thumbnail {
           width: 32px;
           height: 32px;
-        }
-
-        .name {
-          font-size: var(--boxel-font-xs);
         }
 
         .contact-info,
@@ -852,9 +856,7 @@ class FittedTemplate extends Component<typeof Contact> {
       /* Fallback for extremely small sizes */
       @container fitted-card ((1.0 < aspect-ratio) and (height < 50px)) {
         .fitted-contact-card {
-          grid-template: 'avatar-container';
           display: flex;
-          align-items: center;
           align-content: center;
           padding: var(--boxel-sp-xxxs);
         }
