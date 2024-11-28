@@ -87,29 +87,31 @@ export default class BillingService extends Service {
         Authorization: `Bearer ${await this.getToken()}`,
       },
     });
-    if (response.status !== 200) {
-      throw new Error(
+
+    if (response.ok) {
+      let json = await response.json();
+      let plan =
+        json.included?.find((i: { type: string }) => i.type === 'plan')
+          ?.attributes?.name ?? null;
+      let creditsAvailableInPlanAllowance =
+        json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
+      let creditsIncludedInPlanAllowance =
+        json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
+      let extraCreditsAvailableInBalance =
+        json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
+      let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
+      this._subscriptionData = {
+        plan,
+        creditsAvailableInPlanAllowance,
+        creditsIncludedInPlanAllowance,
+        extraCreditsAvailableInBalance,
+        stripeCustomerId,
+      };
+    } else {
+      console.error(
         `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
     }
-    let json = await response.json();
-    let plan =
-      json.included?.find((i: { type: string }) => i.type === 'plan')
-        ?.attributes?.name ?? null;
-    let creditsAvailableInPlanAllowance =
-      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
-    let creditsIncludedInPlanAllowance =
-      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
-    let extraCreditsAvailableInBalance =
-      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-    let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
-    this._subscriptionData = {
-      plan,
-      creditsAvailableInPlanAllowance,
-      creditsIncludedInPlanAllowance,
-      extraCreditsAvailableInBalance,
-      stripeCustomerId,
-    };
   });
 
   private async getToken() {
