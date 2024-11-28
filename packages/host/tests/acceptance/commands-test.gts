@@ -240,7 +240,7 @@ module('Acceptance | Commands tests', function (hooks) {
           let sleepCommand = new SleepCommand(commandContext);
           commandContext.sendAiAssistantMessage({
             prompt: 'Please delay',
-            roomId: 'mock_room_0',
+            roomId: 'mock_room_1',
             commands: [{ command: sleepCommand, autoExecute: true }],
           });
           await sleepCommand.execute(new ScheduleMeetingInput());
@@ -436,8 +436,8 @@ module('Acceptance | Commands tests', function (hooks) {
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
     );
     await click('[data-test-delay-button]');
-    await waitUntil(() => getRoomIds().length > 0);
-    let roomId = getRoomIds()[0];
+    await waitUntil(() => getRoomIds().includes('mock_room_1'));
+    let roomId = 'mock_room_1';
     let message = getRoomEvents(roomId).pop()!;
     let boxelMessageData = message.content.data;
     let toolName = boxelMessageData.context.tools[0].function.name;
