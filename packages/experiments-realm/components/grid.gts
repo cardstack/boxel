@@ -60,8 +60,10 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                     <card.component />
                   </CardContainer>
                 </div>
-                {{#if (has-block 'meta')}}
-                  {{yield card to='meta'}}
+                {{#if (eq @selectedView 'card')}}
+                  {{#if (has-block 'meta')}}
+                    {{yield card to='meta'}}
+                  {{/if}}
                 {{/if}}
               </li>
             {{/each}}
