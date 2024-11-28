@@ -1,7 +1,8 @@
 import { getOwner, setOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 
 import flatMap from 'lodash/flatMap';
 
@@ -39,6 +40,8 @@ import { shortenUuid } from '../utils/uuid';
 
 import CardService from './card-service';
 import RealmServerService from './realm-server';
+
+const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
 export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -120,6 +123,7 @@ export default class CommandService extends Service {
     try {
       this.matrixService.failedCommandState.delete(eventId);
       this.currentlyExecutingCommandEventIds.add(eventId);
+      await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
 
       // lookup command
       let { command: commandToRun } = this.commands.get(command.name) ?? {};
