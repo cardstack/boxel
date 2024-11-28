@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Liam O'Connor",
+      "name": "Sophia Nguyen",
       "primaryEmail": null,
       "secondaryEmail": null,
       "phoneMobile": {
@@ -29,14 +29,14 @@
     "relationships": {
       "company": {
         "links": {
-          "self": "../CompanyCard/b9ee2c7c-8e42-4c36-82ee-84f3536bb459"
+          "self": "../CompanyCard/9bef6b44-dde1-46c7-8e18-12f754a4f32c"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/lead",
-        "name": "Lead"
+        "module": "../crm/customer",
+        "name": "Customer"
       }
     }
   }
