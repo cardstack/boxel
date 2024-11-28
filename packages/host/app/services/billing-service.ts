@@ -29,6 +29,8 @@ interface StripeLink {
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
   @tracked private _stripeLinks: StripeLink[] | null = null;
+  private _fetchingSubscriptionData: Promise<void> | null = null;
+  private _fetchingStripeLinks: Promise<void> | null = null;
 
   @service private declare realmServer: RealmServerService;
   @service private declare network: NetworkService;
@@ -38,7 +40,7 @@ export default class BillingService extends Service {
     super(owner);
     this.realmServer.subscribeEvent(
       'billing-notification',
-      this.subscriptionDataRefresher.bind(this),
+      this.fetchSubscriptionData.bind(this),
     );
     this.reset.register(this);
   }
@@ -60,11 +62,10 @@ export default class BillingService extends Service {
   }
 
   async fetchStripeLinks() {
-    if (this._stripeLinks) {
-      return;
+    if (!this._fetchingStripeLinks) {
+      this._fetchingStripeLinks = this.fetchStripeLinksTask.perform();
     }
-
-    await this.fetchStripeLinksTask.perform();
+    await this._fetchingStripeLinks;
   }
 
   get stripeLinks() {
@@ -72,33 +73,40 @@ export default class BillingService extends Service {
   }
 
   private fetchStripeLinksTask = dropTask(async () => {
-    let response = await this.network.fetch(
-      `${this.url.origin}/_stripe-links`,
-      {
-        headers: {
-          Accept: SupportedMimeType.JSONAPI,
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${await this.getToken()}`,
+    try {
+      let response = await this.network.fetch(
+        `${this.url.origin}/_stripe-links`,
+        {
+          headers: {
+            Accept: SupportedMimeType.JSONAPI,
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${await this.getToken()}`,
+          },
         },
-      },
-    );
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
-    }
+      if (response.status !== 200) {
+        throw new Error(
+          `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
+        );
+      }
 
-    let json = (await response.json()) as {
-      data: {
-        type: string;
-        attributes: { url: string; metadata?: { creditReloadAmount: number } };
-      }[];
-    };
-    this._stripeLinks = json.data.map((data) => ({
-      type: data.type,
-      url: data.attributes.url,
-      creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
-    }));
+      let json = (await response.json()) as {
+        data: {
+          type: string;
+          attributes: {
+            url: string;
+            metadata?: { creditReloadAmount: number };
+          };
+        }[];
+      };
+      this._stripeLinks = json.data.map((data) => ({
+        type: data.type,
+        url: data.attributes.url,
+        creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
+      }));
+    } finally {
+      this._fetchingStripeLinks = null;
+    }
   });
 
   get subscriptionData() {
@@ -106,49 +114,49 @@ export default class BillingService extends Service {
   }
 
   get fetchingSubscriptionData() {
-    return this.fetchSubscriptionDataTask.isRunning;
+    return !!this._fetchingSubscriptionData;
   }
 
   async fetchSubscriptionData() {
-    if (this.subscriptionData) {
-      return;
+    if (!this._fetchingSubscriptionData) {
+      this._fetchingSubscriptionData = this.fetchSubscriptionDataTask.perform();
     }
-    await this.fetchSubscriptionDataTask.perform();
-  }
-
-  private async subscriptionDataRefresher() {
-    await this.fetchSubscriptionDataTask.perform();
+    await this._fetchingSubscriptionData;
   }
 
   private fetchSubscriptionDataTask = dropTask(async () => {
-    let response = await this.network.fetch(`${this.url.origin}/_user`, {
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${await this.getToken()}`,
-      },
-    });
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
-      );
+    try {
+      let response = await this.network.fetch(`${this.url.origin}/_user`, {
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await this.getToken()}`,
+        },
+      });
+      if (response.status !== 200) {
+        throw new Error(
+          `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
+        );
+      }
+      let json = await response.json();
+      let plan =
+        json.included?.find((i: { type: string }) => i.type === 'plan')
+          ?.attributes?.name ?? null;
+      let creditsAvailableInPlanAllowance =
+        json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
+      let creditsIncludedInPlanAllowance =
+        json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
+      let extraCreditsAvailableInBalance =
+        json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
+      this._subscriptionData = {
+        plan,
+        creditsAvailableInPlanAllowance,
+        creditsIncludedInPlanAllowance,
+        extraCreditsAvailableInBalance,
+      };
+    } finally {
+      this._fetchingSubscriptionData = null;
     }
-    let json = await response.json();
-    let plan =
-      json.included?.find((i: { type: string }) => i.type === 'plan')
-        ?.attributes?.name ?? null;
-    let creditsAvailableInPlanAllowance =
-      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
-    let creditsIncludedInPlanAllowance =
-      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
-    let extraCreditsAvailableInBalance =
-      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-    this._subscriptionData = {
-      plan,
-      creditsAvailableInPlanAllowance,
-      creditsIncludedInPlanAllowance,
-      extraCreditsAvailableInBalance,
-    };
   });
 
   private async getToken() {
