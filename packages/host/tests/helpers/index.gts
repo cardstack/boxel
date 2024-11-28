@@ -804,21 +804,31 @@ export function setupRealmServerEndpoints(
                 type: 'customer-portal-link',
                 id: '1',
                 attributes: {
-                  url: 'https://buy.stripe.com/test_bIY01W11heYNeFqbIH',
+                  url: 'https://customer-portal-link',
                 },
               },
               {
                 type: 'free-plan-payment-link',
                 id: 'plink_1QP4pEPUHhctoJxaEp1D3myQ',
                 attributes: {
-                  url: 'https://billing.stripe.com/p/login/test_cN216h3BlbML3Fasdf',
+                  url: 'https://free-plan-payment-link',
+                },
+              },
+              {
+                type: 'extra-credits-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3my!',
+                attributes: {
+                  url: 'https://extra-credits-payment-link-1250',
+                  metadata: {
+                    creditReloadAmount: 1250,
+                  },
                 },
               },
               {
                 type: 'extra-credits-payment-link',
                 id: 'plink_1QP4pEPUHhctoJxaEp1D3myP',
                 attributes: {
-                  url: 'https://buy.stripe.com/test_bIY01W11heYNeFqbIO',
+                  url: 'https://extra-credits-payment-link-15000',
                   metadata: {
                     creditReloadAmount: 15000,
                   },
@@ -828,7 +838,7 @@ export function setupRealmServerEndpoints(
                 type: 'extra-credits-payment-link',
                 id: 'plink_1QP4pEPUHhctoJxaEp1D3my!',
                 attributes: {
-                  url: 'https://buy.stripe.com/test_bIY01W11hesdfaeEaAs',
+                  url: 'https://extra-credits-payment-link-80000',
                   metadata: {
                     creditReloadAmount: 80000,
                   },

@@ -129,7 +129,7 @@ export default class BillingService extends Service {
       throw new Error('free payment link is not found');
     }
     const clientReferenceId = this.encodeToAlphanumeric(matrixUserId);
-    return `${this.freePlanPaymentLink}?client_reference_id=${clientReferenceId}`;
+    return `${this.freePlanPaymentLink.url}?client_reference_id=${clientReferenceId}`;
   }
 
   get subscriptionData() {

@@ -870,25 +870,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test(`displays credit info in account popover`, async function (assert) {
-      let countWindowOpenCalled = 0;
-      let mockWindow = {
-        closeCalled: false,
-        close() {
-          this.closeCalled = true;
-        },
-      };
-
-      const originalWindowOpen = window.open;
-      window.open = (url, _target, _feature) => {
-        assert.true(
-          typeof url === 'string'
-            ? url.includes('stripe')
-            : url?.href.includes('stripe'),
-        );
-        countWindowOpenCalled++;
-        return mockWindow as unknown as Window;
-      };
-
       await visitOperatorMode({
         submode: 'interact',
         codePath: `${testRealmURL}employee.gts`,
@@ -921,8 +902,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-upgrade-plan-button]').exists();
       assert.dom('[data-test-buy-more-credits]').exists();
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
-
-      await click('[data-test-upgrade-plan-button]');
+      assert
+        .dom('[data-test-upgrade-plan-button]')
+        .hasAttribute('href', 'https://customer-portal-link');
 
       assert.dom('[data-test-profile-popover]').exists();
       await click('[data-test-buy-more-credits] button');
@@ -943,14 +925,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
-      assert.dom('[data-test-payment-link]').exists({ count: 2 });
-      await click('[data-test-manage-plan-button]');
-      await click('[data-test-pay-button]');
-      assert.strictEqual(
-        countWindowOpenCalled,
-        3,
-        'Correct number of times window.open was called',
-      );
+      assert
+        .dom('[data-test-manage-plan-button]')
+        .hasAttribute('href', 'https://customer-portal-link');
+      assert.dom('[data-test-payment-link]').exists({ count: 3 });
+      assert
+        .dom('[data-test-pay-button="0"]')
+        .hasAttribute('href', 'https://extra-credits-payment-link-1250');
+      assert
+        .dom('[data-test-pay-button="1"]')
+        .hasAttribute('href', 'https://extra-credits-payment-link-15000');
+      assert
+        .dom('[data-test-pay-button="2"]')
+        .hasAttribute('href', 'https://extra-credits-payment-link-80000');
 
       // out of credit
       await click('[aria-label="close modal"]');
@@ -1023,7 +1010,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
-      window.open = originalWindowOpen;
     });
   });
 });

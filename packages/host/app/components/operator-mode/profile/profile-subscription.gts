@@ -1,11 +1,5 @@
-import { fn } from '@ember/helper';
-
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import window from 'ember-window-mock';
 
 import {
   BoxelButton,
@@ -40,14 +34,15 @@ export default class ProfileSubscription extends Component<Signature> {
             </div>
           </div>
           <BoxelButton
+            @as='anchor'
             @kind='secondary-light'
             @size='extra-small'
             @disabled={{or
               subscriptionData.isLoading
               this.billingService.fetchingStripePaymentLinks
             }}
+            @href={{this.billingService.customerPortalLink.url}}
             data-test-manage-plan-button
-            {{on 'click' this.managePlan}}
           >Manage Plan</BoxelButton>
         </div>
       </FieldContainer>
@@ -76,9 +71,10 @@ export default class ProfileSubscription extends Component<Signature> {
                     <span><IconHexagon width='16px' height='16px' />
                       {{paymentLink.creditReloadAmount}}</span>
                     <BoxelButton
+                      @as='anchor'
                       @kind='secondary-light'
                       @size='extra-small'
-                      {{on 'click' (fn this.pay paymentLink.url)}}
+                      @href={{paymentLink.url}}
                       data-test-pay-button={{index}}
                     >Pay</BoxelButton>
                   </div>
@@ -165,12 +161,4 @@ export default class ProfileSubscription extends Component<Signature> {
   </template>
 
   @service private declare billingService: BillingService;
-
-  @action private managePlan() {
-    window.open(this.billingService.customerPortalLink?.url);
-  }
-
-  private pay(paymentLinkURL: string) {
-    window.open(paymentLinkURL);
-  }
 }
