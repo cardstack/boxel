@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContentContainer } from '@cardstack/boxel-ui/components';
 import SquareUser from '@cardstack/boxel-icons/square-user';
+import AuthorIcon from '@cardstack/boxel-icons/user';
 
 export class Author extends CardDef {
   static displayName = 'Author Bio';
@@ -34,6 +35,20 @@ export class Author extends CardDef {
         <h3><@fields.title /></h3>
         <p><@fields.body /></p>
       </CardContentContainer>
+    </template>
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.title}}
+        <AuthorIcon width='18' height='18' />
+        <@fields.title />
+      {{/if}}
+      <style scoped>
+        svg {
+          vertical-align: bottom;
+        }
+      </style>
     </template>
   };
 }

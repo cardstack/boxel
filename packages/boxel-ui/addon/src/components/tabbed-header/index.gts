@@ -21,7 +21,7 @@ interface Signature {
     default: [];
     headerIcon: [];
   };
-  Element: HTMLDivElement;
+  Element: HTMLElement;
 }
 
 export default class TabbedHeader extends Component<Signature> {
@@ -32,6 +32,7 @@ export default class TabbedHeader extends Component<Signature> {
         header-background-color=@headerBackgroundColor
         header-text-color=(getContrastColor @headerBackgroundColor)
       }}
+      ...attributes
     >
       <div class='app-title-group'>
         {{#if (has-block 'headerIcon')}}

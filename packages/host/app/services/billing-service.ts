@@ -18,6 +18,7 @@ interface SubscriptionData {
   creditsAvailableInPlanAllowance: number | null;
   creditsIncludedInPlanAllowance: number | null;
   extraCreditsAvailableInBalance: number | null;
+  stripeCustomerId: string | null;
 }
 
 interface StripeLink {
@@ -109,6 +110,30 @@ export default class BillingService extends Service {
     }
   });
 
+  encodeToAlphanumeric(matrixUserId: string) {
+    return Buffer.from(matrixUserId)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  }
+
+  async getStripePaymentLink(matrixUserId: string): Promise<string> {
+    // We use the matrix user id (@username:example.com) as the client reference id for stripe
+    // so we can identify the user payment in our system when we get the webhook
+    // the client reference id must be alphanumeric, so we encode the matrix user id
+    // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
+    await this.fetchStripeLinks();
+    let freePaymentLink = this._stripeLinks?.find(
+      (link) => link.type === 'free-plan-payment-link',
+    );
+    if (!freePaymentLink) {
+      throw new Error('free payment link is not found');
+    }
+    const clientReferenceId = this.encodeToAlphanumeric(matrixUserId);
+    return `${freePaymentLink}?client_reference_id=${clientReferenceId}`;
+  }
+
   get subscriptionData() {
     return this._subscriptionData;
   }
@@ -148,11 +173,13 @@ export default class BillingService extends Service {
         json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
       let extraCreditsAvailableInBalance =
         json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
+      let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
       this._subscriptionData = {
         plan,
         creditsAvailableInPlanAllowance,
         creditsIncludedInPlanAllowance,
         extraCreditsAvailableInBalance,
+        stripeCustomerId,
       };
     } finally {
       this._fetchingSubscriptionData = null;

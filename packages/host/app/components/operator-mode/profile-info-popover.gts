@@ -12,7 +12,7 @@ import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn, or } from '@cardstack/boxel-ui/helpers';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
-import config from '@cardstack/host/config/environment';
+
 import BillingService from '@cardstack/host/services/billing-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -136,9 +136,9 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      {{! TODO: Remove config.APP.stripeBillingEnabled once the API integration for credit info is completed. }}
-      {{#if config.APP.stripeBillingEnabled}}
-        <WithSubscriptionData as |subscriptionData|>
+      <WithSubscriptionData as |subscriptionData|>
+        {{! Show credit info if the user has an active plan }}
+        {{#if subscriptionData.hasActiveSubscription}}
           <div class='credit-info' data-test-credit-info>
             <div class='info-group'>
               <span class='label'>Membership Tier</span>
@@ -181,8 +181,9 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               >Buy more credits</BoxelButton>
             </div>
           </div>
-        </WithSubscriptionData>
-      {{/if}}
+        {{/if}}
+      </WithSubscriptionData>
+
     </div>
   </template>
 

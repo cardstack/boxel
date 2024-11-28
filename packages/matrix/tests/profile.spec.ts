@@ -13,11 +13,19 @@ import {
   assertLoggedOut,
   assertLoggedIn,
   registerRealmUsers,
+  setupUserSubscribed,
 } from '../helpers';
+import {
+  appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 
 test.describe('Profile', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
   test.beforeEach(async () => {
+    test.setTimeout(120_000);
     synapse = await synapseStart({
       template: 'test',
     });
@@ -27,21 +35,24 @@ test.describe('Profile', () => {
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user0', 'pass');
+    realmServer = await startRealmServer();
     await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
     await updateUser(admin.accessToken, '@user0:localhost', {
       emailAddresses: ['user0@localhost'],
     });
+    await setupUserSubscribed('@user1:localhost', realmServer);
   });
 
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
     await smtpStop();
+    await realmServer.stop();
   });
 
   async function gotoProfileSettings(page: Page) {
-    await login(page, 'user1', 'pass');
+    await login(page, 'user1', 'pass', { url: appURL });
     await page.locator('[data-test-profile-icon-button]').click();
     await page.locator('[data-test-settings-button]').click();
   }

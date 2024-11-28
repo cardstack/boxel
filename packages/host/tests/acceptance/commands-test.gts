@@ -25,6 +25,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupUserSubscription,
   delay,
 } from '../helpers';
 
@@ -43,21 +44,24 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+let matrixRoomId = '';
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { simulateRemoteMessage, getRoomIds, getRoomEvents } = setupMockMatrix(
-    hooks,
-    {
+  let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
+    setupMockMatrix(hooks, {
       loggedInAs: '@testuser:staging',
       activeRealms: [baseRealm.url, testRealmURL],
-    },
-  );
+    });
+
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
+    matrixRoomId = await createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
@@ -292,7 +296,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
     await click('[data-test-switch-to-code-mode-with-autoexecute-button]');
     await waitUntil(() => getRoomIds().length > 0);
-    let roomId = getRoomIds()[0];
+    let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
     let boxelMessageData = message.content.data;
@@ -397,7 +401,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
     await click('[data-test-switch-to-code-mode-without-autoexecute-button]');
     await waitUntil(() => getRoomIds().length > 0);
-    let roomId = getRoomIds()[0];
+    let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
     let boxelMessageData = message.content.data;
@@ -517,7 +521,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => getRoomIds().length > 0);
-    let roomId = getRoomIds()[0];
+    let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
     let boxelMessageData = message.content.data;
