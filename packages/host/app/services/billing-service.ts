@@ -6,8 +6,10 @@ import { cached, tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 
 import { trackedFunction } from 'ember-resources/util/function';
-
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  encodeToAlphanumeric,
+} from '@cardstack/runtime-common';
 
 import NetworkService from './network';
 import RealmServerService from './realm-server';
@@ -112,14 +114,6 @@ export default class BillingService extends Service {
     };
   });
 
-  encodeToAlphanumeric(matrixUserId: string) {
-    return Buffer.from(matrixUserId)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-  }
-
   getStripePaymentLink(matrixUserId: string): string {
     // We use the matrix user id (@username:example.com) as the client reference id for stripe
     // so we can identify the user payment in our system when we get the webhook
@@ -128,7 +122,7 @@ export default class BillingService extends Service {
     if (!this.freePlanPaymentLink) {
       throw new Error('free payment link is not found');
     }
-    const clientReferenceId = this.encodeToAlphanumeric(matrixUserId);
+    const clientReferenceId = encodeToAlphanumeric(matrixUserId);
     return `${this.freePlanPaymentLink.url}?client_reference_id=${clientReferenceId}`;
   }
 
@@ -157,9 +151,10 @@ export default class BillingService extends Service {
         },
       });
       if (response.status !== 200) {
-        throw new Error(
+        console.error(
           `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
         );
+        return;
       }
       let json = await response.json();
       let plan =

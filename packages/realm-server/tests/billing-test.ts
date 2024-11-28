@@ -1,4 +1,4 @@
-import { param, query } from '@cardstack/runtime-common';
+import { encodeToAlphanumeric, param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -726,97 +726,145 @@ module('billing', function (hooks) {
     });
   });
 
-  module('checkout session completed', function (hooks) {
+  module('checkout session completed', function () {
     let user: User;
+    let matrixUserId = '@pepe:cardstack.com';
 
-    hooks.beforeEach(async function () {
-      user = await insertUser(dbAdapter, 'testuser', 'cus_123');
-    });
-
-    test('update user stripe customer id when checkout session completed', async function (assert) {
-      let stripeCheckoutSessionCompletedEvent = {
-        id: 'evt_1234567890',
-        object: 'event',
-        data: {
-          object: {
-            id: 'cs_test_1234567890',
-            object: 'checkout.session',
-            client_reference_id: 'testuser',
-            customer: 'cus_123',
-            metadata: {},
-          },
-        },
-        type: 'checkout.session.completed',
-      } as StripeCheckoutSessionCompletedWebhookEvent;
-
-      await handleCheckoutSessionCompleted(
-        dbAdapter,
-        stripeCheckoutSessionCompletedEvent,
-      );
-
-      let stripeEvents = await fetchStripeEvents(dbAdapter);
-      assert.strictEqual(stripeEvents.length, 1);
-      assert.strictEqual(
-        stripeEvents[0].stripe_event_id,
-        stripeCheckoutSessionCompletedEvent.id,
-      );
-
-      const updatedUser = await fetchUserByStripeCustomerId(
-        dbAdapter,
-        'cus_123',
-      );
-      assert.strictEqual(updatedUser.length, 1);
-      assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
-      assert.strictEqual(updatedUser[0].matrix_user_id, 'testuser');
-    });
-
-    test('add extra credits to user ledger when checkout session completed', async function (assert) {
-      let creatorPlan = await insertPlan(
-        dbAdapter,
-        'Creator',
-        12,
-        2500,
-        'prod_creator',
-      );
-      let subscription = await insertSubscription(dbAdapter, {
-        user_id: user.id,
-        plan_id: creatorPlan.id,
-        started_at: 1,
-        status: 'active',
-        stripe_subscription_id: 'sub_1234567890',
-      });
-      await insertSubscriptionCycle(dbAdapter, {
-        subscriptionId: subscription.id,
-        periodStart: 1,
-        periodEnd: 2,
-      });
-      let stripeCheckoutSessionCompletedEvent = {
-        id: 'evt_1234567890',
-        object: 'event',
-        data: {
-          object: {
-            id: 'cs_test_1234567890',
-            object: 'checkout.session',
-            customer: 'cus_123',
-            metadata: {
-              credit_reload_amount: '25000',
+    module(
+      'without entry in users table before webhook arrival (legacy users registered prior to users table introduction)',
+      function () {
+        test('updates user stripe customer id on checkout session completed', async function (assert) {
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                customer: 'cus_123',
+                metadata: {},
+              },
             },
-          },
-        },
-        type: 'checkout.session.completed',
-      } as StripeCheckoutSessionCompletedWebhookEvent;
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
 
-      await handleCheckoutSessionCompleted(
-        dbAdapter,
-        stripeCheckoutSessionCompletedEvent,
-      );
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
 
-      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
-        userId: user.id,
-        creditType: 'extra_credit',
-      });
-      assert.strictEqual(availableExtraCredits, 25000);
-    });
+          let stripeEvents = await fetchStripeEvents(dbAdapter);
+          assert.strictEqual(stripeEvents.length, 1);
+          assert.strictEqual(
+            stripeEvents[0].stripe_event_id,
+            stripeCheckoutSessionCompletedEvent.id,
+          );
+
+          const updatedUser = await fetchUserByStripeCustomerId(
+            dbAdapter,
+            'cus_123',
+          );
+          assert.strictEqual(updatedUser.length, 1);
+          assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+          assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+        });
+      },
+    );
+
+    module(
+      'with entry in users table before webhook arrival',
+      function (hooks) {
+        hooks.beforeEach(async function () {
+          user = await insertUser(dbAdapter, matrixUserId, 'cus_123');
+        });
+
+        test('updates user stripe customer id on checkout session completed', async function (assert) {
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                customer: 'cus_123',
+                metadata: {},
+              },
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
+
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
+
+          let stripeEvents = await fetchStripeEvents(dbAdapter);
+          assert.strictEqual(stripeEvents.length, 1);
+          assert.strictEqual(
+            stripeEvents[0].stripe_event_id,
+            stripeCheckoutSessionCompletedEvent.id,
+          );
+
+          const updatedUser = await fetchUserByStripeCustomerId(
+            dbAdapter,
+            'cus_123',
+          );
+          assert.strictEqual(updatedUser.length, 1);
+          assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+          assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+        });
+
+        test('add extra credits to user ledger when checkout session completed', async function (assert) {
+          let creatorPlan = await insertPlan(
+            dbAdapter,
+            'Creator',
+            12,
+            2500,
+            'prod_creator',
+          );
+          let subscription = await insertSubscription(dbAdapter, {
+            user_id: user.id,
+            plan_id: creatorPlan.id,
+            started_at: 1,
+            status: 'active',
+            stripe_subscription_id: 'sub_1234567890',
+          });
+          await insertSubscriptionCycle(dbAdapter, {
+            subscriptionId: subscription.id,
+            periodStart: 1,
+            periodEnd: 2,
+          });
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                customer: 'cus_123',
+                metadata: {
+                  credit_reload_amount: '25000',
+                },
+              },
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
+
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
+
+          let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: 'extra_credit',
+          });
+          assert.strictEqual(availableExtraCredits, 25000);
+        });
+      },
+    );
   });
 
   module('AI usage tracking', function (hooks) {
