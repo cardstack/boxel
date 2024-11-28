@@ -315,7 +315,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         {{/if}}
         <div class='search-bar content-header-row-2'>
           <SearchInput
-            class='search-bar-input-light'
             @placeholder={{this.searchPlaceholder}}
             @value={{this.searchKey}}
             @setSearchKey={{this.setSearchKey}}
@@ -430,13 +429,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       }
       .view-menu {
         margin-left: auto;
-      }
-      /* light theme */
-      .search-bar-input-light {
-        --boxel-input-search-background-color: var(--boxel-light);
-        --boxel-input-search-color: var(--boxel-dark);
-        --boxel-input-search-icon-color: var(--boxel-dark);
-        --boxel-input-search-placeholder-color: var(--boxel-dark);
       }
     </style>
   </template>

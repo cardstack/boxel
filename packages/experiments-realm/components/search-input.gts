@@ -41,6 +41,7 @@ export class SearchInput extends Component<Signature> {
 
   <template>
     <BoxelInput
+      class='light-theme'
       @type='search'
       @value={{@value}}
       @placeholder={{@placeholder}}
@@ -48,7 +49,14 @@ export class SearchInput extends Component<Signature> {
       {{on 'keydown' this.onSearchInputKeyDown}}
       autocomplete='off'
       data-test-search-field
-      ...attributes
     />
+    <style scoped>
+      .light-theme {
+        --boxel-input-search-background-color: var(--boxel-light);
+        --boxel-input-search-color: var(--boxel-dark);
+        --boxel-input-search-icon-color: var(--boxel-dark);
+        --boxel-input-search-placeholder-color: var(--boxel-dark);
+      }
+    </style>
   </template>
 }
