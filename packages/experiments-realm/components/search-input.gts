@@ -11,7 +11,6 @@ interface Signature {
     value: string;
     placeholder: string;
     setSearchKey: (searchKey: string) => void;
-    onCancel?: () => void;
   };
   Blocks: {};
 }
@@ -23,7 +22,6 @@ export class SearchInput extends Component<Signature> {
   @action
   private onCancel() {
     this.resetState();
-    this.args.onCancel?.();
   }
 
   private debouncedSetSearchKey = debounce((searchKey: string) => {
