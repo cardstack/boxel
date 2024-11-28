@@ -53,25 +53,25 @@ export default class BillingService extends Service {
 
   @cached
   get customerPortalLink() {
-    return this.stripePaymentLinks.value?.customerPortalLink;
+    return this.stripeLinks.value?.customerPortalLink;
   }
 
   @cached
   get freePlanPaymentLink() {
-    return this.stripePaymentLinks.value?.freePlanPaymentLink;
+    return this.stripeLinks.value?.freePlanPaymentLink;
   }
 
   @cached
   get extraCreditsPaymentLinks() {
-    return this.stripePaymentLinks.value?.extraCreditsPaymentLinks;
+    return this.stripeLinks.value?.extraCreditsPaymentLinks;
   }
 
   @cached
   get fetchingStripePaymentLinks() {
-    return this.stripePaymentLinks.isLoading;
+    return this.stripeLinks.isLoading;
   }
 
-  private stripePaymentLinks = trackedFunction(this, async () => {
+  private stripeLinks = trackedFunction(this, async () => {
     let response = await this.network.fetch(
       `${this.url.origin}/_stripe-links`,
       {
@@ -83,9 +83,10 @@ export default class BillingService extends Service {
       },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
+      console.error(
+        `Failed to fetch stripe payment links for realm server ${this.url.origin}: ${response.status}`,
       );
+      return;
     }
 
     let json = (await response.json()) as {
