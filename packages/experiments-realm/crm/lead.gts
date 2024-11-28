@@ -1,5 +1,5 @@
 import { Contact } from './contact';
 
-export default class Lead extends Contact {
+export class Lead extends Contact {
   static displayName = 'CRM Lead';
 }
