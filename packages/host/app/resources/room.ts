@@ -47,6 +47,7 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
+  private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -75,6 +76,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   private resetCache() {
+    this._messageCreateTimesCache = new Map();
     this._messageCache = new TrackedMap();
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
@@ -199,16 +201,33 @@ export class RoomResource extends Resource<Args> {
     if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
       // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
       // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
-      // TOOD: Refactor having many if conditions to some variant of a strategy pattern
       update = true;
     } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      effectiveEventId = event.content['m.relates_to'].event_id;
       if (
         'isStreamingFinished' in event.content &&
         !event.content.isStreamingFinished
       ) {
+        // we don't need to process this event if it's not finished streaming,
+        // but we do need to note it's creation time so that we can capture the earliest one
+        let earliestKnownCreateTime =
+          this._messageCreateTimesCache.get(effectiveEventId);
+        if (
+          !earliestKnownCreateTime ||
+          earliestKnownCreateTime > event.origin_server_ts
+        ) {
+          this._messageCreateTimesCache.set(
+            effectiveEventId,
+            event.origin_server_ts,
+          );
+          let alreadyProcessedMessage =
+            this._messageCache.get(effectiveEventId);
+          if (alreadyProcessedMessage) {
+            alreadyProcessedMessage.created = new Date(event.origin_server_ts);
+          }
+        }
         return;
       }
-      effectiveEventId = event.content['m.relates_to'].event_id;
       update = true;
     }
     if (this._messageCache.has(effectiveEventId) && !update) {
@@ -242,9 +261,15 @@ export class RoomResource extends Resource<Args> {
       // if the message is a replacement for other messages,
       // use `created` from the oldest one.
       if (this._messageCache.has(effectiveEventId)) {
-        let d1 = this._messageCache.get(effectiveEventId)!.created!;
-        let d2 = messageObject.created!;
-        messageObject.created = d1 < d2 ? d1 : d2;
+        messageObject.created = new Date(
+          Math.min(
+            ...[
+              +this._messageCache.get(effectiveEventId)!.created!,
+              +messageObject.created!,
+              this._messageCreateTimesCache.get(effectiveEventId) ?? +Infinity,
+            ],
+          ),
+        );
       }
       this._messageCache.set(
         messageObject.clientGeneratedId ?? effectiveEventId,
