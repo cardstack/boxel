@@ -620,16 +620,33 @@ export class BlogPost extends CardDef {
     <template>
       <article>
         <header>
-          <h1><@fields.title /></h1>
-          <p class='description'><@fields.description /></p>
-          <ul class='info'>
-            <li class='byline'>
-              <@fields.authorBio
-                class='author'
-                @format='atom'
-                @displayContainer={{false}}
+          {{#if @model.thumbnailURL}}
+            <figure>
+              <img
+                class='featured-image'
+                src={{@model.thumbnailURL}}
+                alt='remote work'
               />
-            </li>
+            </figure>
+          {{/if}}
+          {{#if @model.title}}
+            <h1><@fields.title /></h1>
+          {{/if}}
+          {{#if @model.description}}
+            <p class='description'>
+              <@fields.description />
+            </p>
+          {{/if}}
+          <ul class='info'>
+            {{#if @model.authorBio.title}}
+              <li class='byline'>
+                <@fields.authorBio
+                  class='author'
+                  @format='atom'
+                  @displayContainer={{false}}
+                />
+              </li>
+            {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
               <li class='pub-date'>
                 Published on
@@ -674,8 +691,17 @@ export class BlogPost extends CardDef {
           font-weight: 600;
           line-height: 1.25;
           letter-spacing: normal;
-          margin-top: 0;
           margin-bottom: var(--boxel-sp-lg);
+        }
+        figure {
+          margin: 0;
+        }
+        figcaption {
+          font-style: italic;
+        }
+        .featured-image {
+          border-radius: var(--boxel-border-radius-xl);
+          overflow: hidden;
         }
         .description {
           font-size: 1.25rem;
