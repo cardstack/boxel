@@ -292,9 +292,7 @@ export default class BoxelInput extends Component<Signature> {
         padding-top: var(--boxel-sp-xxxs);
         padding-right: var(--boxel-sp-xl);
         padding-bottom: var(--boxel-sp-xxxs);
-      }
-
-      .search.has-validation {
+        /* to account for the icon being on the left */
         padding-right: unset;
         padding-left: var(--boxel-sp-xxl); /* leave room for icon */
       }
@@ -307,16 +305,12 @@ export default class BoxelInput extends Component<Signature> {
       .search-icon-container {
         --icon-color: var(--boxel-highlight);
 
-        grid-area: post-icon;
+        grid-area: pre-icon;
 
         display: flex;
         height: 100%;
         align-items: center;
         justify-content: center;
-      }
-
-      .search-icon-container.has-validation {
-        grid-area: pre-icon;
       }
 
       .validation-icon-container {
