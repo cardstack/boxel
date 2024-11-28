@@ -3976,7 +3976,7 @@ module('Realm Server', function (hooks) {
     });
   });
 
-  module.only('stripe webhook handler', function (hooks) {
+  module('stripe webhook handler', function (hooks) {
     let createSubscriptionStub: sinon.SinonStub;
     let fetchPriceListStub: sinon.SinonStub;
     let matrixClient: MatrixClient;
