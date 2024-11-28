@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "primaryEmail": null,
+      "secondaryEmail": null,
+      "phoneMobile": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "phoneOffice": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "socialLinks": {
+        "twitterURL": null,
+        "linkedInURL": null
+      },
+      "status": {
+        "index": null,
+        "label": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/lead",
+        "name": "Lead"
+      }
+    }
+  }
+}

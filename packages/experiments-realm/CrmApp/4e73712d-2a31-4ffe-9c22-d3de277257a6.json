@@ -8,7 +8,7 @@
           "tabId": "Contact",
           "ref": {
             "name": "Contact",
-            "module": "crm/crm-cards"
+            "module": "crm/contact"
           },
           "isTable": false
         },
@@ -17,7 +17,7 @@
           "tabId": "Deal",
           "ref": {
             "name": "Deal",
-            "module": "crm/crm-cards"
+            "module": "crm/deal"
           },
           "isTable": false
         }
