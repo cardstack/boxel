@@ -13,6 +13,7 @@ import IconSearch from '../../icons/icon-search.gts';
 import LoadingIndicator from '../../icons/loading-indicator.gts';
 import SuccessBordered from '../../icons/success-bordered.gts';
 import type { Icon } from '../../icons/types.ts';
+import cssVar from '../../helpers/css-var.ts';
 
 type Values<T> = T[keyof T];
 
@@ -185,6 +186,9 @@ export default class BoxelInput extends Component<Signature> {
               'search-icon-container'
               has-validation=this.hasValidation
             }}
+            style={{cssVar
+              search-input-icon-color='var(--boxel-input-search-icon-color)'
+            }}
           >
             <IconSearch class='search-icon' width='20' height='20' />
           </div>
@@ -302,7 +306,11 @@ export default class BoxelInput extends Component<Signature> {
           var(--boxel-border-radius-xl) 0 0;
       }
 
-      .search-icon-container {
+      <<<<<<< Updated upstream ======= .search-icon {
+        --icon-color: var(--search-input-icon-color);
+      }
+
+      >>>>>>>Stashed changes .search-icon-container {
         --icon-color: var(--boxel-highlight);
 
         grid-area: pre-icon;
