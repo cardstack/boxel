@@ -139,15 +139,16 @@ export default class MessageBuilder {
   private async buildMessageCommand() {
     let event = this.event as CommandEvent;
     let command = event.content.data.toolCall;
-    let annotation = this.builderContext.events.find(
-      (e) =>
+    let annotation = this.builderContext.events.find((e: any) => {
+      let r = e.content['m.relates_to'];
+      return (
         e.type === 'm.reaction' &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-        e.content['m.relates_to']?.event_id ===
-          // If the message is a replacement message, eventId in command payload will be undefined.
-          // Because it will not refer to any other events, so we can use event_id of the message itself.
-          (event.content.data.eventId ?? this.builderContext.effectiveEventId),
-    ) as ReactionEvent | undefined;
+        r?.rel_type === 'm.annotation' &&
+        (r?.event_id === event.content.data.eventId ||
+          r?.event_id === event.event_id ||
+          r?.event_id === this.builderContext.effectiveEventId)
+      );
+    }) as ReactionEvent | undefined;
     let status: CommandStatus = 'ready';
     if (annotation?.content['m.relates_to'].key === 'applied') {
       status = 'applied';
