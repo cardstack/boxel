@@ -10,7 +10,6 @@ For a quickstart, see [here](./QUICKSTART.md)
 - this project uses [volta](https://volta.sh/) for Javascript toolchain version management. Make sure you have the latest verison of volta on your system and have define [the ENV var described here](https://docs.volta.sh/advanced/pnpm).
 - this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 - this project uses [docker](https://docker.com). Make sure to install docker on your system.
-- this project uses [stripe-cli](https://stripe.com/docs/stripe-cli) to test payment flows. Make sure to install stripe-cli on your system.
 - Ensure that node_modules/.bin is in your path. e.g. include `export PATH="./node_modules/.bin:$PATH"` in your .zshrc
 
 ## Orientation
@@ -234,10 +233,10 @@ In order to run the boxel-motion demo app:
 
 There is some pre-setup needed to enable free plan on development account:
 
-1. Use stripe cli to listen for the webhooks that Stripe sends to the realm server
+1. Go to `packages/realm-server` and run stripe script to listen for the webhooks that Stripe sends to the realm server
 
 ```
-stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
+pnpm stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
 ```
 
 2. You will get webhook signing secret from stripe cli after Step 1 is done
