@@ -71,6 +71,14 @@ const DEAL_FILTERS: LayoutFilter[] = [
     createNewButtonText: 'Create Deal',
   },
 ];
+const ACCOUNT_FILTERS: LayoutFilter[] = [
+  {
+    displayName: 'Accounts',
+    icon: ContactIcon,
+    cardTypeName: 'Accounts',
+    createNewButtonText: 'Create Account',
+  },
+];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
@@ -78,6 +86,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   filterMap: TrackedMap<string, LayoutFilter[]> = new TrackedMap([
     ['Contact', CONTACT_FILTERS],
     ['Deal', DEAL_FILTERS],
+    ['Account', ACCOUNT_FILTERS],
   ]);
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
@@ -138,12 +147,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   @action setActiveFilter() {
     this.activeFilter = this.filterMap.get(this.activeTabId)![0];
+    console.log(this.activeFilter);
   }
 
   //Tabs
   @action setActiveTab(id: string) {
     this.activeTabId = id;
     this.setActiveFilter();
+    console.log(id);
   }
   get headerColor() {
     return (
