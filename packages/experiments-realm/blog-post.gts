@@ -8,12 +8,12 @@ import {
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { formatDatetime } from './blog-app';
+import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { Author } from './author';
 import { setBackgroundImage } from './components/layout';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
-import FileStack from '@cardstack/boxel-icons/file-stack';
+import BlogIcon from '@cardstack/boxel-icons/notebook';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -578,7 +578,7 @@ class Status extends StringField {
 
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
-  static icon = FileStack;
+  static icon = BlogIcon;
   @field title = contains(StringField);
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
@@ -595,6 +595,7 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
+  @field blog = linksTo(BlogAppCard);
 
   get formattedDatePublished() {
     if (this.status === 'Published' && this.publishDate) {
@@ -620,6 +621,7 @@ export class BlogPost extends CardDef {
     <template>
       <article>
         <header>
+          <@fields.blog class='blog' @displayContainer={{false}} />
           {{#if @model.thumbnailURL}}
             <figure>
               <img
@@ -673,7 +675,7 @@ export class BlogPost extends CardDef {
           );
           height: max-content;
           min-height: 100%;
-          padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+          padding: var(--boxel-sp-sm) var(--boxel-sp-xl) var(--boxel-sp-lg);
           background-color: #fcf9f2;
           font-family: var(--blog-post-font-family, 'Lora', serif);
         }
@@ -705,6 +707,12 @@ export class BlogPost extends CardDef {
         .featured-image {
           border-radius: var(--boxel-border-radius-xl);
           overflow: hidden;
+        }
+        .blog {
+          background-color: inherit;
+        }
+        .blog + figure {
+          margin-top: var(--boxel-sp-sm);
         }
         .description {
           font-size: 1.25rem;

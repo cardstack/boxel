@@ -10,6 +10,9 @@ import {
   CardDef,
   Component,
   realmURL,
+  field,
+  contains,
+  StringField,
 } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -23,7 +26,12 @@ import {
   SortMenu,
 } from './components/sort';
 import { type ViewOption, CardsGrid } from './components/grid';
-import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
+import {
+  TitleGroup,
+  Layout,
+  type LayoutFilter,
+  setBackgroundImage,
+} from './components/layout';
 
 import {
   BoxelButton,
@@ -370,9 +378,58 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 // Using type CardDef instead of AppCard from catalog because of
 // the many type issues resulting from the lack types from catalog realm
 export class BlogApp extends CardDef {
+  @field website = contains(StringField);
   static displayName = 'Blog App';
   static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
   static isolated = BlogAppTemplate;
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <div class='blog'>
+        <div
+          class='blog-thumbnail'
+          style={{setBackgroundImage @model.thumbnailURL}}
+        />
+        <h3 class='title'><@fields.title /></h3>
+        <div class='website'><@fields.website /></div>
+      </div>
+      <style scoped>
+        /* TODO: other fitted sizes */
+        .blog {
+          display: grid;
+          grid-template: 'img title website' 1fr / max-content max-content 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          width: 100%;
+          height: 100%;
+          margin: auto;
+          padding: var(--boxel-sp-xxxs);
+          overflow: hidden;
+        }
+        .blog-thumbnail {
+          grid-area: img;
+          width: 40px;
+          height: 40px;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+          border: 1px solid var(--boxel-450);
+          border-radius: var(--boxel-border-radius-lg);
+          overflow: hidden;
+        }
+        .title {
+          grid-area: title;
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .website {
+          grid-area: website;
+          justify-self: end;
+        }
+      </style>
+    </template>
+  };
 }
