@@ -1,5 +1,6 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
 
 import {
   Component,
@@ -19,9 +20,10 @@ import MailIcon from '@cardstack/boxel-icons/mail';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 import BrandTwitterIcon from '@cardstack/boxel-icons/brand-twitter';
 import BrandLinkedinIcon from '@cardstack/boxel-icons/brand-linkedin';
-import BuildingIcon from '@cardstack/boxel-icons/building';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+
+import { Company } from './company';
 
 // helper functions that can share across different formats
 const getStatusIcon = (label: string | undefined) => {
@@ -59,54 +61,6 @@ const setBackgroundImage = (backgroundURL: string | null | undefined) => {
   }
   return htmlSafe(`background-image: url(${backgroundURL});`);
 };
-
-class ViewCompanyCardTemplate extends Component<typeof CompanyCard> {
-  <template>
-    {{#if @model.name}}
-      <div class='row'>
-        <BuildingIcon class='icon' />
-        <span class='building-name'>{{@model.name}}</span>
-      </div>
-    {{/if}}
-
-    <style scoped>
-      .icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        flex-shrink: 0;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-      .row > span {
-        -webkit-line-clamp: 1;
-        text-wrap: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-      .building-name {
-        font-size: var(--boxel-font-xs);
-        font-weight: 300;
-        text-decoration: underline;
-      }
-    </style>
-  </template>
-}
-
-export class CompanyCard extends CardDef {
-  static displayName = 'Company';
-  @field name = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: CompanyCard) {
-      return this.name;
-    },
-  });
-
-  static embedded = ViewCompanyCardTemplate;
-  static atom = ViewCompanyCardTemplate;
-}
 
 class ViewSocialLinksTemplate extends Component<typeof SocialLinksField> {
   @action openSocialLink(url: string) {
@@ -686,12 +640,13 @@ class FittedTemplate extends Component<typeof Contact> {
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
   @field name = contains(StringField);
+  @field position = contains(StringField);
   @field primaryEmail = contains(StringField);
   @field secondaryEmail = contains(StringField);
   @field phoneMobile = contains(PhoneField);
   @field phoneOffice = contains(PhoneField);
   @field socialLinks = contains(SocialLinksField);
-  @field company = linksTo(CompanyCard);
+  @field company = linksTo(Company);
   @field status = contains(ContactStatusField);
 
   @field title = contains(StringField, {

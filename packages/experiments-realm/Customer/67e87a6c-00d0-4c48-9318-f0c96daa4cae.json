@@ -2,9 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
-      "primaryEmail": null,
-      "secondaryEmail": null,
+      "name": "Richard Mille",
+      "position": "Operation Manager",
+      "primaryEmail": "richardmille@g.com",
+      "secondaryEmail": "richardmille@gmail.com",
       "phoneMobile": {
         "country": null,
         "area": null,
@@ -20,8 +21,8 @@
         "linkedInURL": null
       },
       "status": {
-        "index": null,
-        "label": null
+        "index": 1,
+        "label": "Lead"
       },
       "description": null,
       "thumbnailURL": null
@@ -29,7 +30,7 @@
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../Company/05326db9-ea5c-4f20-b516-ac3f2282e973"
         }
       }
     },

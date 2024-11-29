@@ -47,15 +47,16 @@ class ViewCompanyCardTemplate extends Component<typeof Company> {
 export class Company extends CardDef {
   static displayName = 'Company';
   //Company Data - name etc
+  @field name = contains(StringField);
+  @field logoUrl = contains(StringField);
+  @field website = contains(StringField);
+  @field location = contains(Address);
+
   @field title = contains(StringField, {
     computeVia: function (this: Company) {
       return this.name;
     },
   });
-  @field name = contains(StringField);
-  @field logoUrl = contains(StringField);
-  @field website = contains(StringField);
-  @field location = contains(Address);
 
   static embedded = ViewCompanyCardTemplate;
   static atom = ViewCompanyCardTemplate;
