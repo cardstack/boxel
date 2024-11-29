@@ -1,7 +1,7 @@
 import Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
@@ -50,22 +50,18 @@ export default class BillingService extends Service {
     this._subscriptionData = null;
   }
 
-  @cached
   get customerPortalLink() {
     return this.stripeLinks.value?.customerPortalLink;
   }
 
-  @cached
   get freePlanPaymentLink() {
     return this.stripeLinks.value?.freePlanPaymentLink;
   }
 
-  @cached
   get extraCreditsPaymentLinks() {
     return this.stripeLinks.value?.extraCreditsPaymentLinks;
   }
 
-  @cached
   get fetchingStripePaymentLinks() {
     return this.stripeLinks.isLoading;
   }
@@ -81,7 +77,7 @@ export default class BillingService extends Service {
         },
       },
     );
-    if (response.status !== 200) {
+    if (!response.ok) {
       console.error(
         `Failed to fetch stripe payment links for realm server ${this.url.origin}: ${response.status}`,
       );
@@ -151,7 +147,7 @@ export default class BillingService extends Service {
         Authorization: `Bearer ${await this.getToken()}`,
       },
     });
-    if (response.status !== 200) {
+    if (!response.ok) {
       console.error(
         `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );

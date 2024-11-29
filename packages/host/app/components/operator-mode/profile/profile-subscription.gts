@@ -6,7 +6,6 @@ import {
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { or } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
@@ -37,10 +36,7 @@ export default class ProfileSubscription extends Component<Signature> {
             @as='anchor'
             @kind='secondary-light'
             @size='extra-small'
-            @disabled={{or
-              subscriptionData.isLoading
-              this.billingService.fetchingStripePaymentLinks
-            }}
+            @disabled={{this.billingService.fetchingStripePaymentLinks}}
             @href={{this.billingService.customerPortalLink.url}}
             data-test-manage-plan-button
           >Manage Plan</BoxelButton>
