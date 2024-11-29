@@ -32,7 +32,6 @@ interface StripeLink {
 
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
-  private _fetchingSubscriptionData: Promise<void> | null = null;
 
   @service private declare realmServer: RealmServerService;
   @service private declare network: NetworkService;
@@ -42,7 +41,7 @@ export default class BillingService extends Service {
     super(owner);
     this.realmServer.subscribeEvent(
       'billing-notification',
-      this.fetchSubscriptionData.bind(this),
+      this.subscriptionDataRefresher.bind(this),
     );
     this.reset.register(this);
   }
@@ -133,52 +132,52 @@ export default class BillingService extends Service {
   }
 
   get fetchingSubscriptionData() {
-    return !!this._fetchingSubscriptionData;
+    return this.fetchSubscriptionDataTask.isRunning;
   }
 
-  async fetchSubscriptionData() {
-    if (!this._fetchingSubscriptionData) {
-      this._fetchingSubscriptionData = this.fetchSubscriptionDataTask.perform();
+  fetchSubscriptionData() {
+    if (this.subscriptionData) {
+      return;
     }
-    await this._fetchingSubscriptionData;
+    this.fetchSubscriptionDataTask.perform();
+  }
+
+  private async subscriptionDataRefresher() {
+    await this.fetchSubscriptionDataTask.perform();
   }
 
   private fetchSubscriptionDataTask = dropTask(async () => {
-    try {
-      let response = await this.network.fetch(`${this.url.origin}/_user`, {
-        headers: {
-          Accept: SupportedMimeType.JSONAPI,
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${await this.getToken()}`,
-        },
-      });
-      if (response.status !== 200) {
-        console.error(
-          `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
-        );
-        return;
-      }
-      let json = await response.json();
-      let plan =
-        json.included?.find((i: { type: string }) => i.type === 'plan')
-          ?.attributes?.name ?? null;
-      let creditsAvailableInPlanAllowance =
-        json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
-      let creditsIncludedInPlanAllowance =
-        json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
-      let extraCreditsAvailableInBalance =
-        json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-      let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
-      this._subscriptionData = {
-        plan,
-        creditsAvailableInPlanAllowance,
-        creditsIncludedInPlanAllowance,
-        extraCreditsAvailableInBalance,
-        stripeCustomerId,
-      };
-    } finally {
-      this._fetchingSubscriptionData = null;
+    let response = await this.network.fetch(`${this.url.origin}/_user`, {
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${await this.getToken()}`,
+      },
+    });
+    if (response.status !== 200) {
+      console.error(
+        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
+      );
+      return;
     }
+    let json = await response.json();
+    let plan =
+      json.included?.find((i: { type: string }) => i.type === 'plan')
+        ?.attributes?.name ?? null;
+    let creditsAvailableInPlanAllowance =
+      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
+    let creditsIncludedInPlanAllowance =
+      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
+    let extraCreditsAvailableInBalance =
+      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
+    let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
+    this._subscriptionData = {
+      plan,
+      creditsAvailableInPlanAllowance,
+      creditsIncludedInPlanAllowance,
+      extraCreditsAvailableInBalance,
+      stripeCustomerId,
+    };
   });
 
   private async getToken() {

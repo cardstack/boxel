@@ -3,8 +3,6 @@ import { hash } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
-
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
@@ -75,18 +73,11 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
 
   constructor(...args: [any, any]) {
     super(...args);
-    this.fetchCreditInfo.perform();
+    this.billingService.fetchSubscriptionData();
   }
 
-  private fetchCreditInfo = task(async () => {
-    await this.billingService.fetchSubscriptionData();
-  });
-
   private get isLoading() {
-    return (
-      this.fetchCreditInfo.isRunning ||
-      this.billingService.fetchingSubscriptionData
-    );
+    return this.billingService.fetchingSubscriptionData;
   }
 
   private get plan() {
