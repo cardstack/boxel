@@ -627,6 +627,9 @@ export class BlogPost extends CardDef {
                 src={{@model.thumbnailURL}}
                 alt='remote work'
               />
+              <figcaption>
+                Success in remote work is achievable with the right approach.
+              </figcaption>
             </figure>
           {{/if}}
           {{#if @model.title}}
