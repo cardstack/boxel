@@ -120,11 +120,8 @@ export default class BillingService extends Service {
     // so we can identify the user payment in our system when we get the webhook
     // the client reference id must be alphanumeric, so we encode the matrix user id
     // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
-    if (!this.freePlanPaymentLink) {
-      throw new Error('free payment link is not found');
-    }
     const clientReferenceId = encodeToAlphanumeric(matrixUserId);
-    return `${this.freePlanPaymentLink.url}?client_reference_id=${clientReferenceId}`;
+    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}`;
   }
 
   get subscriptionData() {

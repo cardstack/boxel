@@ -17,7 +17,6 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
-  assertPaymentSetup,
   assertLoggedOut,
   logout,
   login,
@@ -111,8 +110,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     // base 64 encode the matrix user id
     const matrixUserId = encodeToAlphanumeric('@user1:localhost');
-
-    await assertPaymentSetup(page, matrixUserId);
     await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
@@ -204,7 +201,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     const user2MatrixUserId = encodeToAlphanumeric('@user2:localhost');
 
-    await assertPaymentSetup(page, user2MatrixUserId);
     await setupPayment(user2MatrixUserId, realmServer, page);
 
     await assertLoggedIn(page, {
