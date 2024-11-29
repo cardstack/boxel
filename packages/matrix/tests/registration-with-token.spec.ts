@@ -26,7 +26,6 @@ import {
   showAllCards,
   setupUser,
   encodeToAlphanumeric,
-  decodeFromAlphanumeric,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
