@@ -26,6 +26,7 @@ import {
   showAllCards,
   setupUser,
   encodeToAlphanumeric,
+  decodeFromAlphanumeric,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -107,6 +108,12 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
         });
       },
     });
+
+    await page.bringToFront();
+
+    await expect(page.locator('[data-test-email-validated]')).toContainText(
+      'Success! Your email has been validated',
+    );
 
     // base 64 encode the matrix user id
     const matrixUserId = encodeToAlphanumeric('@user1:localhost');
