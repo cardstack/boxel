@@ -45,21 +45,18 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
               <li class='{{@selectedView}}-view-container'>
-                <div
+                <CardContainer
                   {{@context.cardComponentModifier
                     cardId=card.url
                     format='data'
                     fieldType=undefined
                     fieldName=undefined
                   }}
+                  class='card'
+                  @displayBoundaries={{not (eq @selectedView 'card')}}
                 >
-                  <CardContainer
-                    class='card'
-                    @displayBoundaries={{not (eq @selectedView 'card')}}
-                  >
-                    <card.component />
-                  </CardContainer>
-                </div>
+                  <card.component />
+                </CardContainer>
                 {{#if (eq @selectedView 'card')}}
                   {{#if (has-block 'meta')}}
                     {{yield card to='meta'}}
