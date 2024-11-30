@@ -584,7 +584,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('a 403 from Web Appliction Firewall is handled gracefully when auto-saving', async function (assert) {
-    // TODO: setup virtual network to return WAF 403 when saving
     let networkService = this.owner.lookup('service:network') as NetworkService;
     networkService.virtualNetwork.mount(
       async (req: Request) => {
