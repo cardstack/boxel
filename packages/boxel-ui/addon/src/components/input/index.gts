@@ -4,6 +4,7 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
+import cssVar from '../../helpers/css-var.ts';
 import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
@@ -13,7 +14,6 @@ import IconSearch from '../../icons/icon-search.gts';
 import LoadingIndicator from '../../icons/loading-indicator.gts';
 import SuccessBordered from '../../icons/success-bordered.gts';
 import type { Icon } from '../../icons/types.ts';
-import cssVar from '../../helpers/css-var.ts';
 
 type Values<T> = T[keyof T];
 
