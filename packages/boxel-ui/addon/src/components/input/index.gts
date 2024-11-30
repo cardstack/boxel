@@ -4,7 +4,6 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
-import cssVar from '../../helpers/css-var.ts';
 import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
@@ -186,9 +185,6 @@ export default class BoxelInput extends Component<Signature> {
               'search-icon-container'
               has-validation=this.hasValidation
             }}
-            style={{cssVar
-              search-input-icon-color='var(--boxel-input-search-icon-color)'
-            }}
           >
             <IconSearch class='search-icon' width='20' height='20' />
           </div>
@@ -306,11 +302,7 @@ export default class BoxelInput extends Component<Signature> {
           var(--boxel-border-radius-xl) 0 0;
       }
 
-      <<<<<<< Updated upstream ======= .search-icon {
-        --icon-color: var(--search-input-icon-color);
-      }
-
-      >>>>>>>Stashed changes .search-icon-container {
+      .search-icon-container {
         --icon-color: var(--boxel-highlight);
 
         grid-area: pre-icon;
