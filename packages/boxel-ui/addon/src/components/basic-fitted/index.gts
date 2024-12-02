@@ -18,7 +18,7 @@ interface Signature {
 
 export default class BasicFitted extends Component<Signature> {
   <template>
-    <div class='fitted-template'>
+    <div class='fitted-template' ...attributes>
       {{#if @isEmpty}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
