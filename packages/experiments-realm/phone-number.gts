@@ -7,12 +7,12 @@ import {
   CardDef,
 } from 'https://cardstack.com/base/card-api';
 import { LooseGooseyField, LooseyGooseyData } from './loosey-goosey';
-import { PhoneInput } from '@cardstack/boxel-ui/components';
-import Phone from '@cardstack/boxel-icons/phone';
+import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import PhoneIcon from '@cardstack/boxel-icons/phone';
 
 class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
   @tracked label: string | undefined = this.args.model.label;
@@ -70,10 +70,23 @@ export class PhoneNumber extends StringField {
 
   static atom = class Atom extends Component<typeof PhoneNumber> {
     <template>
-      <div>
-        <Phone />
-        {{@model}}
+      <div class='row'>
+        <PhoneIcon class='icon gray' />
+        <span>{{@model}}</span>
       </div>
+      <style scoped>
+        .row {
+          display: flex;
+          align-items: center;
+          word-break: break-all;
+          gap: var(--boxel-sp-xxs);
+        }
+        .icon {
+          width: var(--boxel-icon-xs);
+          height: var(--boxel-icon-xs);
+          flex-shrink: 0;
+        }
+      </style>
     </template>
   };
 }
@@ -84,7 +97,27 @@ export class ContactPhoneNumber extends FieldDef {
 
   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
     <template>
-      <@fields.value /> {{@model.type.label}}
+      <div class='row'>
+        <@fields.value @format='atom' />
+        <Pill class='gray'>
+          {{@model.type.label}}
+        </Pill>
+      </div>
+      <style scoped>
+        .row {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+          word-break: break-all;
+        }
+        .gray {
+          font-weight: 300;
+          font-size: 10px;
+          word-break: keep-all;
+          --pill-background-color: var(--boxel-200);
+          border: none;
+        }
+      </style>
     </template>
   };
 }
