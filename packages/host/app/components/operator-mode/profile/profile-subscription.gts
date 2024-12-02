@@ -38,6 +38,7 @@ export default class ProfileSubscription extends Component<Signature> {
             @size='extra-small'
             @disabled={{this.billingService.fetchingStripePaymentLinks}}
             @href={{this.billingService.customerPortalLink.url}}
+            target='_blank'
             data-test-manage-plan-button
           >Manage Plan</BoxelButton>
         </div>
@@ -71,6 +72,7 @@ export default class ProfileSubscription extends Component<Signature> {
                       @kind='secondary-light'
                       @size='extra-small'
                       @href={{paymentLink.url}}
+                      target='_blank'
                       data-test-pay-button={{index}}
                     >Pay</BoxelButton>
                   </div>

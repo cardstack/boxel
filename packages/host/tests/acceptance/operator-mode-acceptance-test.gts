@@ -905,6 +905,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-upgrade-plan-button]')
         .hasAttribute('href', 'https://customer-portal-link');
+      assert
+        .dom('[data-test-upgrade-plan-button]')
+        .hasAttribute('target', '_blank');
 
       assert.dom('[data-test-profile-popover]').exists();
       await click('[data-test-buy-more-credits] button');
@@ -928,16 +931,22 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-manage-plan-button]')
         .hasAttribute('href', 'https://customer-portal-link');
+      assert
+        .dom('[data-test-manage-plan-button]')
+        .hasAttribute('target', '_blank');
       assert.dom('[data-test-payment-link]').exists({ count: 3 });
       assert
         .dom('[data-test-pay-button="0"]')
         .hasAttribute('href', 'https://extra-credits-payment-link-1250');
+      assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
       assert
         .dom('[data-test-pay-button="1"]')
         .hasAttribute('href', 'https://extra-credits-payment-link-15000');
+      assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
       assert
         .dom('[data-test-pay-button="2"]')
         .hasAttribute('href', 'https://extra-credits-payment-link-80000');
+      assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
 
       // out of credit
       await click('[aria-label="close modal"]');

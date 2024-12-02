@@ -149,6 +149,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
                 this.billingService.fetchingStripePaymentLinks
               }}
               @href={{this.billingService.customerPortalLink.url}}
+              target='_blank'
               data-test-upgrade-plan-button
             >Upgrade Plan</BoxelButton>
             <div class='info-group'>
