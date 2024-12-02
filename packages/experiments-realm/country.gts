@@ -107,6 +107,14 @@ export class CountryField extends FieldDef {
   @field name = contains(StringField);
   @field code = contains(StringField);
   static edit = CountryFieldEdit;
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.name}}
+        {{@model.name}}
+      {{/if}}
+    </template>
+  };
 }
 
 export class CardWithCountryField extends CardDef {
@@ -115,7 +123,7 @@ export class CardWithCountryField extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <@fields.country />
+      <@fields.country @format='atom' />
     </template>
   };
 }
