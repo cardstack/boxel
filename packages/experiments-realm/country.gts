@@ -12,6 +12,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import type Owner from '@ember/owner';
+// @ts-ignore
 import countryDataFind from 'https://esm.run/country-data-find@0.0.5';
 
 export class Country extends CardDef {
