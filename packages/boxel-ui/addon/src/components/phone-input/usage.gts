@@ -1,7 +1,8 @@
-import Component from '@glimmer/component';
-import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
 import PhoneInput from './index.gts';
 
 export default class PhoneInputUsage extends Component {

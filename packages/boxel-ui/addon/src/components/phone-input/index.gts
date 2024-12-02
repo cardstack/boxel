@@ -20,8 +20,8 @@ import BoxelInputGroup from '../input-group/index.gts';
 
 interface Signature {
   Args: {
-    value: string;
     onInput: (value: string) => void;
+    value: string;
   };
   Blocks: {
     default: [];
@@ -32,12 +32,12 @@ interface Signature {
 interface CountryInfo {
   callingCode?: CountryCallingCode;
   code: CountryCode;
-  name?: string;
-  flag?: string;
   example?: {
     callingCode: CountryCallingCode;
     nationalNumber: string;
   };
+  flag?: string;
+  name?: string;
 }
 
 const getCountryInfo = (countryCode: CountryCode): CountryInfo | undefined => {
@@ -148,5 +148,5 @@ export interface SelectedItemSignature {
   Element: HTMLElement;
 }
 
-const PhoneSelectedItem: TemplateOnlyComponent<SelectedItemSignature> =
+const PhoneSelectedItem: TemplateOnlyComponent<SelectedItemSignature> = [
   <template><div>{{@option.flag}} +{{@option.callingCode}}</div></template>;
