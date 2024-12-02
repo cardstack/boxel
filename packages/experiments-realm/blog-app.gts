@@ -245,11 +245,11 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
               @query={{this.query}}
               @realms={{this.realms}}
             >
-              <:adminData as |card|>
+              <:meta as |card|>
                 {{#if this.showAdminData}}
                   <BlogAdminData @cardId={{card.url}} />
                 {{/if}}
-              </:adminData>
+              </:meta>
             </CardsGrid>
           </div>
         {{/if}}

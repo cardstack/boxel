@@ -72,6 +72,7 @@ export class ShowCardInput extends CardDef {
 
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
+  @field codePath = contains(StringField);
 }
 
 export class CreateModuleInput extends CardDef {

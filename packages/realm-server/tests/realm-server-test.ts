@@ -662,6 +662,7 @@ module('Realm Server', function (hooks) {
           status: 404,
           title: 'Not Found',
           message: `missing file ${testRealmHref}does-not-exist.json`,
+          realm: testRealmHref,
           meta: {
             lastKnownGoodHtml: null,
             scopedCssUrls: [],

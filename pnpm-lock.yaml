@@ -1353,6 +1353,9 @@ importers:
       '@types/rsvp':
         specifier: ^4.0.9
         version: 4.0.9
+      '@types/statuses':
+        specifier: ^2.0.5
+        version: 2.0.5
       '@types/uuid':
         specifier: ^9.0.8
         version: 9.0.8
@@ -1632,6 +1635,9 @@ importers:
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0
+      statuses:
+        specifier: ^2.0.1
+        version: 2.0.1
       stream-browserify:
         specifier: ^3.0.0
         version: 3.0.0
@@ -7390,6 +7396,10 @@ packages:
 
   /@types/sinonjs__fake-timers@8.1.5:
     resolution: {integrity: sha512-mQkU2jY8jJEF7YHjHvsQO8+3ughTL1mcnn96igfhONmR+fUPSKIkefQYpSe8bsly2Ep7oQbn/6VG5/9/0qcArQ==}
+    dev: true
+
+  /@types/statuses@2.0.5:
+    resolution: {integrity: sha512-jmIUGWrAiwu3dZpxntxieC+1n/5c3mjrImkmOSQ2NC5uP6cYO4aAZDdSmRcI5C1oiTmqlZGHC+/NmJrKogbP5A==}
     dev: true
 
   /@types/stream-chain@2.0.1:
