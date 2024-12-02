@@ -324,6 +324,9 @@ module('Acceptance | Commands tests', function (hooks) {
             submode: {
               type: 'string',
             },
+            codePath: {
+              type: 'string',
+            },
             title: {
               type: 'string',
             },
@@ -427,6 +430,9 @@ module('Acceptance | Commands tests', function (hooks) {
           type: 'object',
           properties: {
             submode: {
+              type: 'string',
+            },
+            codePath: {
               type: 'string',
             },
             title: {

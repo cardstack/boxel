@@ -44,11 +44,15 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
         this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
-        this.operatorModeStateService.updateCodePath(
-          this.lastCardInRightMostStack
-            ? new URL(this.lastCardInRightMostStack.id + '.json')
-            : null,
-        );
+        if (input.codePath) {
+          this.operatorModeStateService.updateCodePath(new URL(input.codePath));
+        } else {
+          this.operatorModeStateService.updateCodePath(
+            this.lastCardInRightMostStack
+              ? new URL(this.lastCardInRightMostStack.id + '.json')
+              : null,
+          );
+        }
         break;
       default:
         throw new Error(`invalid submode specified: ${input.submode}`);
