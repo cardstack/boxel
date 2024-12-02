@@ -38,7 +38,7 @@ export class UrlField extends StringField {
         {{#if (isValidUrl @model)}}
           <a href={{@model}}>{{@model}}</a>
         {{else}}
-          Invalid URL provided
+          Invalid URL
         {{/if}}
       {{/if}}
     </template>
