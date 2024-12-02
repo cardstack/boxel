@@ -35,6 +35,7 @@ export interface CardError {
     status: number;
     title: string;
     message: string;
+    realm: string;
     meta: {
       lastKnownGoodHtml: string | null;
       scopedCssUrls: string[];
@@ -283,6 +284,7 @@ export class CardResource extends Resource<Args> {
                   status: 404,
                   title: 'Card Not Found',
                   message: `The card ${url.href} does not exist`,
+                  realm: error.responseHeaders.get('X-Boxel-Realm-Url'),
                   meta: {
                     lastKnownGoodHtml: null,
                     scopedCssUrls: [],
@@ -302,6 +304,7 @@ export class CardResource extends Resource<Args> {
                   message: `Received HTTP ${error.status} from server ${
                     error.responseText ?? ''
                   }`.trim(),
+                  realm: error.responseHeaders.get('X-Boxel-Realm-Url'),
                   meta: {
                     lastKnownGoodHtml: null,
                     scopedCssUrls: [],

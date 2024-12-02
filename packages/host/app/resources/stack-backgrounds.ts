@@ -5,6 +5,7 @@ import { Resource } from 'ember-resources';
 
 import type { Stack } from '../components/operator-mode/interact-submode';
 import type CardService from '../services/card-service';
+import type RealmService from '../services/realm';
 
 interface Args {
   positional: [stacks: Stack[]];
@@ -13,6 +14,7 @@ interface Args {
 export class StackBackgroundsResource extends Resource<Args> {
   @tracked value: (string | undefined | null)[] = [];
   @service declare cardService: CardService;
+  @service declare realm: RealmService;
 
   get backgroundImageURLs() {
     return this.value?.map((u) => (u ? u : undefined)) ?? [];
@@ -47,7 +49,9 @@ export class StackBackgroundsResource extends Resource<Args> {
         let bottomMostStackItem = stack[0];
         await bottomMostStackItem.ready;
         if (bottomMostStackItem.cardError) {
-          return undefined;
+          await this.realm.ensureRealmMeta(bottomMostStackItem.cardError.realm);
+          return this.realm.info(bottomMostStackItem.cardError.realm)
+            ?.backgroundURL;
         }
         return (await this.cardService.getRealmInfo(bottomMostStackItem.card))
           ?.backgroundURL;
