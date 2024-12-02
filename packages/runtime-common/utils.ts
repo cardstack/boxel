@@ -20,10 +20,21 @@ export async function retry<T>(
   return null;
 }
 
-export function encodeToAlphanumeric(matrixUserId: string) {
-  return Buffer.from(matrixUserId)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+export function encodeWebSafeBase64(decoded: string) {
+  return (
+    Buffer.from(decoded)
+      .toString('base64')
+      // Replace + with - and / with _ to make base64 URL-safe (this is a requirement for client_reference_id query param in Stripe payment link)
+      // Then remove any trailing = padding characters that are added by base64 encoding
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+  );
+}
+
+export function decodeWebSafeBase64(encoded: string) {
+  return Buffer.from(
+    encoded.replace(/-/g, '+').replace(/_/g, '/'),
+    'base64',
+  ).toString('utf8');
 }

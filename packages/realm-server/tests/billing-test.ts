@@ -1,4 +1,4 @@
-import { encodeToAlphanumeric, param, query } from '@cardstack/runtime-common';
+import { encodeWebSafeBase64, param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -741,7 +741,7 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 customer: 'cus_123',
                 metadata: {},
               },
@@ -787,7 +787,7 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 customer: 'cus_123',
                 metadata: {},
               },
@@ -843,7 +843,8 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                customer: 'cus_123',
+                customer: null,
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 metadata: {
                   credit_reload_amount: '25000',
                 },
