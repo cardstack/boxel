@@ -1,3 +1,4 @@
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -20,6 +21,16 @@ interface Signature {
 }
 
 export default class ProfileSubscription extends Component<Signature> {
+  @service private declare billingService: BillingService;
+  @service private declare matrixService: MatrixService;
+
+  @action
+  urlWithClientReferenceId(url: string) {
+    return `${url}?client_reference_id=${encodeWebSafeBase64(
+      this.matrixService.userId as string,
+    )}`;
+  }
+
   <template>
     <WithSubscriptionData as |subscriptionData|>
       <FieldContainer
@@ -161,13 +172,4 @@ export default class ProfileSubscription extends Component<Signature> {
       }
     </style>
   </template>
-
-  @service private declare billingService: BillingService;
-  @service private declare matrixService: MatrixService;
-
-  urlWithClientReferenceId(url: string) {
-    return `${url}?client_reference_id=${encodeWebSafeBase64(
-      this.matrixService.userId as string,
-    )}`;
-  }
 }
