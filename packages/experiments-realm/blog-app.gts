@@ -26,12 +26,7 @@ import {
   SortMenu,
 } from './components/sort';
 import { type ViewOption, CardsGrid } from './components/grid';
-import {
-  TitleGroup,
-  Layout,
-  type LayoutFilter,
-  setBackgroundImage,
-} from './components/layout';
+import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
   BasicFitted,
