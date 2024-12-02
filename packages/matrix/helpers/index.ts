@@ -576,15 +576,6 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
-export async function assertPaymentSetup(page: Page, username: string) {
-  const stripePaymentLink = 'https://buy.stripe.com/test_4gw01WfWb2c1dBm7sv';
-  const expectedLink = `${stripePaymentLink}?client_reference_id=${username}`;
-  await expect(page.locator('[data-test-setup-payment]')).toHaveAttribute(
-    'href',
-    expectedLink,
-  );
-}
-
 export async function setupUser(
   username: string,
   realmServer: IsolatedRealmServer,
