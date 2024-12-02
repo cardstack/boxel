@@ -45,7 +45,10 @@ const getCountryInfo = (countryCode: CountryCode): CountryInfo | undefined => {
   let callingCode = getCountryCallingCode(countryCode);
   let c = countries[countryCode as TCountryCode];
   if (c === undefined) {
-    return undefined;
+    //here some country code may not be found due to the discrepancy between countries-list and libphonenumber-js library
+    //Only scenario where this is true is the usage of "AC"
+    //Most countries consider "AC" Ascension Island as part of "SH" Saint Helena
+    return;
   }
   return {
     code: countryCode,
@@ -61,7 +64,7 @@ const getCountryInfo = (countryCode: CountryCode): CountryInfo | undefined => {
   };
 };
 
-export default class PhoneInput extends Component<Signature> {
+class PhoneInput extends Component<Signature> {
   @tracked items: Array<CountryInfo> = [];
   @tracked selectedItem: CountryInfo = getCountryInfo('US')!;
   @tracked validationState: InputValidationState = 'initial';
@@ -148,5 +151,7 @@ export interface SelectedItemSignature {
   Element: HTMLElement;
 }
 
-const PhoneSelectedItem: TemplateOnlyComponent<SelectedItemSignature> = [
+const PhoneSelectedItem: TemplateOnlyComponent<SelectedItemSignature> =
   <template><div>{{@option.flag}} +{{@option.callingCode}}</div></template>;
+
+export default PhoneInput;
