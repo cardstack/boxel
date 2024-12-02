@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "country": {
-        "name": "Cambodia",
-        "code": "KH"
+        "name": null,
+        "code": null
       },
       "title": null,
       "description": null,
