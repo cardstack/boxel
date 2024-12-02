@@ -44,7 +44,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
-import type RoomState from '../../lib/matrix-classes/room-state';
+import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -173,7 +173,7 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(
     this,
     () => this.args.roomId,
-    () => this.matrixService.getRoomState(this.args.roomId)?.events,
+    () => this.matrixService.getRoomData(this.args.roomId)?.events,
   );
   private autoAttachmentResource = getAutoAttachment(
     this,
@@ -184,7 +184,7 @@ export default class Room extends Component<Signature> {
   @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private roomScrollState: WeakMap<
-    RoomState,
+    RoomData,
     {
       messageElemements: WeakMap<HTMLElement, number>;
       messageScrollers: Map<number, Element['scrollIntoView']>;
@@ -198,7 +198,6 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
-    this.loadRoomSkills.perform();
   }
 
   private scrollState() {
@@ -255,14 +254,6 @@ export default class Room extends Component<Signature> {
   private get messageVisibilityObserver() {
     return this.scrollState().messageVisibilityObserver;
   }
-
-  private loadRoomSkills = restartableTask(async () => {
-    await this.roomResource.loading;
-    let defaultSkills = await this.matrixService.loadDefaultSkills();
-    if (this.roomResource.roomState) {
-      this.roomResource.roomState.skills = defaultSkills;
-    }
-  });
 
   private registerMessageScroller = ({
     index,
@@ -443,7 +434,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.roomResource.roomState;
+    let room = this.roomResource.matrixRoom;
     return room;
   }
 
@@ -565,15 +556,11 @@ export default class Room extends Component<Signature> {
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
-      let activeSkillCards = this.skills
-        .filter((skill) => skill.isActive)
-        .map((c) => c.card);
       try {
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
-          activeSkillCards,
           clientGeneratedId,
           context,
         );
@@ -617,9 +604,9 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  @action private attachSkill(card: SkillCard) {
-    this.roomResource?.addSkill(card);
-  }
+  private attachSkill = (card: SkillCard) => {
+    this.matrixService.addSkillCardsToRoom(this.args.roomId, [card]);
+  };
 }
 
 declare module '@glint/environment-ember-loose/registry' {

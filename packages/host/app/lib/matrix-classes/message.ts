@@ -34,7 +34,6 @@ interface RoomMessageRequired {
 interface RoomMessageOptional {
   transactionId?: string | null;
   attachedCardIds?: string[] | null;
-  attachedSkillCardIds?: string[] | null;
   isStreamingFinished?: boolean;
   index?: number;
   errorMessage?: string;
@@ -103,9 +102,5 @@ export class Message implements RoomMessageInterface {
 
   get attachedResources(): AttachedCardResource[] | undefined {
     return this.getCardResources(this.attachedCardIds);
-  }
-
-  get attachedSkills(): AttachedCardResource[] | undefined {
-    return this.getCardResources(this.attachedSkillCardIds);
   }
 }

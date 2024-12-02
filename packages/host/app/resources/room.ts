@@ -4,9 +4,12 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  getCard,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
@@ -25,8 +28,6 @@ import type {
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
-
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -34,11 +35,12 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import type { Skill } from '../components/ai-assistant/skill-menu';
-import type RoomState from '../lib/matrix-classes/room-state';
+import type Room from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 interface Args {
   named: {
@@ -60,7 +62,7 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
-  @tracked roomState: RoomState | undefined;
+  @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
@@ -90,10 +92,10 @@ export class RoomResource extends Resource<Args> {
 
   private load = restartableTask(async (roomId: string) => {
     try {
-      this.roomState = roomId
-        ? await this.matrixService.getRoomState(roomId)
+      this.matrixRoom = roomId
+        ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.roomState) {
+      if (this.matrixRoom) {
         await this.loadFromEvents(roomId);
       }
     } catch (e) {
@@ -120,11 +122,34 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get events() {
-    return this.roomState?.events ?? [];
+    return this.matrixRoom?.events ?? [];
   }
 
   get skills(): Skill[] {
-    return this.roomState?.skills ?? [];
+    let skillsConfig = this.matrixRoom?.skillsConfig;
+    if (!skillsConfig) {
+      return [];
+    }
+    let result: Skill[] = [];
+    for (let eventId of [
+      ...skillsConfig.enabledEventIds,
+      ...skillsConfig.disabledEventIds,
+    ]) {
+      let cardDoc = this.serializedCardFromFragments(eventId);
+      if (!cardDoc.data.id) {
+        continue;
+      }
+      let card = getCard(new URL(cardDoc.data.id))?.card as
+        | SkillCard
+        | undefined;
+      if (card) {
+        result.push({
+          card,
+          isActive: skillsConfig.enabledEventIds.includes(eventId),
+        });
+      }
+    }
+    return result;
   }
 
   get roomId() {
@@ -141,13 +166,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   get name() {
-    let events = Array.from(this._nameEventsCache.values()).sort(
-      (a, b) => a.origin_server_ts - b.origin_server_ts,
-    ) as RoomNameEvent[];
-    if (events.length > 0) {
-      return events.pop()!.content.name;
-    }
-    return;
+    return this.matrixRoom?.name;
   }
 
   get lastActiveTimestamp() {
@@ -233,7 +252,6 @@ export class RoomResource extends Resource<Args> {
       // These are not guaranteed to exist in the event
       transactionId: event.unsigned?.transaction_id || null,
       attachedCardIds: null,
-      attachedSkillCardIds: null,
       command: null,
       commandResult: null,
       status: event.status,
@@ -439,16 +457,6 @@ export class RoomResource extends Resource<Args> {
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
     return cardDoc;
-  }
-
-  addSkill(card: SkillCard) {
-    if (!this.roomState) {
-      return;
-    }
-    this.roomState.skills = [
-      ...this.roomState.skills,
-      new TrackedObject({ card, isActive: true }),
-    ];
   }
 }
 

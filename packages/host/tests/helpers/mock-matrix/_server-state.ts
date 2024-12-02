@@ -1,10 +1,18 @@
 import type * as MatrixSDK from 'matrix-js-sdk';
+
 type IEvent = MatrixSDK.IEvent;
 
 export class ServerState {
   #roomCounter = 0;
   #eventCounter = 0;
-  #rooms: Map<string, { events: IEvent[]; receipts: IEvent[] }> = new Map();
+  #rooms: Map<
+    string,
+    {
+      events: IEvent[];
+      receipts: IEvent[];
+      roomState: Record<string, Record<string, any>>;
+    }
+  > = new Map();
   #listeners: ((event: IEvent) => void)[] = [];
   #displayName: string;
   #now: () => number;
@@ -45,7 +53,7 @@ export class ServerState {
       throw new Error(`room ${roomId} already exists`);
     }
 
-    this.#rooms.set(roomId, { events: [], receipts: [] });
+    this.#rooms.set(roomId, { events: [], receipts: [], roomState: {} });
 
     this.addRoomEvent(
       sender,
@@ -103,6 +111,44 @@ export class ServerState {
     );
 
     return roomId;
+  }
+
+  getRoomState(
+    roomId: string,
+    eventType: string,
+    stateKey?: string,
+  ): Record<string, any> {
+    return this.#rooms.get(roomId)?.roomState[eventType]?.[stateKey ?? ''];
+  }
+
+  setRoomState(
+    sender: string,
+    roomId: string,
+    eventType: string,
+    content: Record<string, any>,
+    stateKey?: string,
+    timestamp: number = this.#now(),
+  ) {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+    if (!room.roomState[eventType]) {
+      room.roomState[eventType] = {};
+    }
+    room.roomState[eventType][stateKey ?? ''] = content;
+    return this.addRoomEvent(
+      sender,
+      {
+        room_id: roomId,
+        type: eventType,
+        content,
+        state_key: stateKey,
+      },
+      {
+        origin_server_ts: timestamp,
+      },
+    );
   }
 
   addRoomEvent(
