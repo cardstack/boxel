@@ -42,12 +42,17 @@ function getCountryFlagEmoji(countryCode: string) {
 interface CountryData {
   code: string;
   name: string;
-  emoji: string;
+  emoji?: string;
 }
 
 class CountryFieldEdit extends Component<typeof CountryField> {
-  @tracked countryDataFindLib: any;
-  @tracked country: CountryData | undefined;
+  @tracked country: CountryData | undefined =
+    this.args.model.name && this.args.model.code
+      ? {
+          name: this.args.model.name,
+          code: this.args.model.code,
+        }
+      : undefined;
   @tracked countries: CountryData[] = [];
 
   constructor(owner: Owner, args: any) {
@@ -59,27 +64,40 @@ class CountryFieldEdit extends Component<typeof CountryField> {
     this.countries = countryDataFind.Array().map((country: any) => {
       return {
         code: country.ISO2_CODE,
-        name: country.LIST_OF_NAME.ENG,
+        name: country.LIST_OF_NAME.ENG[0],
         emoji: getCountryFlagEmoji(country.ISO2_CODE),
       } as CountryData;
     });
   });
 
-  @action onSelectCountry(country: any) {
+  @action onSelectCountry(country: CountryData) {
     this.country = country;
+    this.args.model.name = country.name;
+    this.args.model.code = country.code;
+  }
+
+  @action countryEmoji(countryCode: string) {
+    return this.countries?.find((country) => country.code === countryCode)
+      ?.emoji;
   }
 
   <template>
-    <BoxelSelect
-      @options={{this.countries}}
-      @selected={{this.country}}
-      @onSelect={{@set}}
-      @onChange={{this.onSelectCountry}}
-      as |country|
-    >
-      {{country.emoji}}
-      {{country.name}}
-    </BoxelSelect>
+    {{#if this.loadCountries.isRunning}}
+      Loading countries...
+    {{else}}
+      <BoxelSelect
+        @placeholder={{'Choose a country'}}
+        @options={{this.countries}}
+        @selected={{this.country}}
+        @onChange={{this.onSelectCountry}}
+        as |country|
+      >
+        {{#let (this.countryEmoji country.code) as |emoji|}}
+          {{emoji}}
+        {{/let}}
+        {{country.name}}
+      </BoxelSelect>
+    {{/if}}
   </template>
 }
 
