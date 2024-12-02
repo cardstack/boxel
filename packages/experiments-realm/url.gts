@@ -49,6 +49,7 @@ function isValidUrl(urlString: string): boolean {
 
 //TODO: Remove after URL field is implemented
 export class CardWithURL extends CardDef {
+  static displayName = 'Card with URL';
   @field url = contains(UrlField);
   static isolated = class Isolated extends Component<typeof CardWithURL> {
     <template>
