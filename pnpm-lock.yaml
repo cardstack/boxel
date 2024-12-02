@@ -773,6 +773,9 @@ importers:
       classnames:
         specifier: ^2.3.2
         version: 2.3.2
+      countries-list:
+        specifier: ^3.1.1
+        version: 3.1.1
       dayjs:
         specifier: ^1.11.7
         version: 1.11.7
@@ -830,6 +833,9 @@ importers:
       focus-trap:
         specifier: ^7.4.3
         version: 7.4.3
+      libphonenumber-js:
+        specifier: ^1.11.15
+        version: 1.11.15
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -11933,6 +11939,10 @@ packages:
       typescript: 5.1.6
     dev: true
 
+  /countries-list@3.1.1:
+    resolution: {integrity: sha512-nPklKJ5qtmY5MdBKw1NiBAoyx5Sa7p2yPpljZyQ7gyCN1m+eMFs9I6CT37Mxt8zvR5L3VzD3DJBE4WQzX3WF4A==}
+    dev: false
+
   /crc32-stream@2.0.0:
     resolution: {integrity: sha512-UjZSqFCbn+jZUHJIh6Y3vMF7EJLcJWNm4tKDf2peJRwlZKHvkkvOMTvAei6zjU9gO1xONVr3rRFw0gixm2eUng==}
     engines: {node: '>= 0.10.0'}
@@ -19217,6 +19227,10 @@ packages:
       prelude-ls: 1.2.1
       type-check: 0.4.0
     dev: true
+
+  /libphonenumber-js@1.11.15:
+    resolution: {integrity: sha512-M7+rtYi9l5RvMmHyjyoF3BHHUpXTYdJ0PezZGHNs0GyW1lO+K7jxlXpbdIb7a56h0nqLYdjIw+E+z0ciGaJP7g==}
+    dev: false
 
   /line-column@1.0.2:
     resolution: {integrity: sha512-Ktrjk5noGYlHsVnYWh62FLVs4hTb8A3e+vucNZMgPeAOITdshMSgv4cCZQeRDjm7+goqmo6+liZwTXo+U3sVww==}
