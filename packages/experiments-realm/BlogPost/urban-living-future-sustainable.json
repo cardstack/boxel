@@ -14,6 +14,11 @@
         "links": {
           "self": null
         }
+      },
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
       }
     },
     "meta": {
