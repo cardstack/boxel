@@ -34,6 +34,7 @@ import {
 } from './components/layout';
 
 import {
+  BasicFitted,
   BoxelButton,
   FieldContainer,
   Pill,
@@ -341,7 +342,12 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         name: summary.id.substring(lastIndex + 1),
       };
       filter.cardRef = cardRef;
-      filter.query = { filter: { type: cardRef } };
+      filter.query = {
+        filter: {
+          on: cardRef,
+          eq: { 'blog.id': this.args.model.id! },
+        },
+      };
     }
   });
 
@@ -386,48 +392,43 @@ export class BlogApp extends CardDef {
   static isolated = BlogAppTemplate;
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <div class='blog'>
-        <div
-          class='blog-thumbnail'
-          style={{setBackgroundImage @model.thumbnailURL}}
-        />
-        <h3 class='title'><@fields.title /></h3>
-        <div class='website'><@fields.website /></div>
-      </div>
+      <BasicFitted
+        class='fitted-blog'
+        @thumbnailURL={{@model.thumbnailURL}}
+        @primary={{@model.title}}
+        @secondary={{@model.website}}
+      />
       <style scoped>
-        /* TODO: other fitted sizes */
-        .blog {
-          display: grid;
-          grid-template: 'img title website' 1fr / max-content max-content 1fr;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          width: 100%;
-          height: 100%;
-          margin: auto;
-          padding: var(--boxel-sp-xxxs);
-          overflow: hidden;
+        .fitted-blog :deep(.card-description) {
+          display: none;
         }
-        .blog-thumbnail {
-          grid-area: img;
-          width: 40px;
-          height: 40px;
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
-          border: 1px solid var(--boxel-450);
-          border-radius: var(--boxel-border-radius-lg);
-          overflow: hidden;
-        }
-        .title {
-          grid-area: title;
-          margin: 0;
-          font-size: var(--boxel-font-size-sm);
-          font-weight: 600;
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .website {
-          grid-area: website;
-          justify-self: end;
+
+        @container fitted-card ((2.0 < aspect-ratio) and (400px <= width ) and (height < 115px)) {
+          .fitted-blog {
+            padding: var(--boxel-sp-xxxs);
+            align-items: center;
+          }
+          .fitted-blog :deep(.card-thumbnail) {
+            border: 1px solid var(--boxel-450);
+            border-radius: var(--boxel-border-radius-lg);
+            width: 40px;
+            height: 40px;
+            overflow: hidden;
+          }
+          .fitted-blog :deep(.info-section) {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--boxel-sp-xs);
+          }
+          .fitted-blog :deep(.card-title) {
+            -webkit-line-clamp: 2;
+            font-weight: 600;
+          }
+          .fitted-blog :deep(.card-display-name) {
+            margin: 0;
+            overflow: hidden;
+          }
         }
       </style>
     </template>
