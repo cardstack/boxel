@@ -124,16 +124,14 @@ export default class PaymentSetup extends Component<Signature> {
             <BoxelButton
               @as='anchor'
               @kind='primary'
+              @disabled={{this.billingService.fetchingStripePaymentLinks}}
               @href={{this.stripePaymentLink}}
               data-test-setup-payment
               class='setup-button'
               target={{if (eq environment 'development') '_blank' '_self'}}
             >
               Set up Secure Payment Method
-              <span class='lock-icon'><Lock
-                  width='16cpx'
-                  height='16px'
-                /></span>
+              <span class='lock-icon'><Lock width='16px' height='16px' /></span>
             </BoxelButton>
 
             <p class='payment-note'>

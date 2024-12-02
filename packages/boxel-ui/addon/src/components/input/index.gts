@@ -4,6 +4,7 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
+import cssVar from '../../helpers/css-var.ts';
 import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
@@ -185,6 +186,9 @@ export default class BoxelInput extends Component<Signature> {
               'search-icon-container'
               has-validation=this.hasValidation
             }}
+            style={{cssVar
+              search-input-icon-color='var(--boxel-input-search-icon-color)'
+            }}
           >
             <IconSearch class='search-icon' width='20' height='20' />
           </div>
@@ -292,9 +296,7 @@ export default class BoxelInput extends Component<Signature> {
         padding-top: var(--boxel-sp-xxxs);
         padding-right: var(--boxel-sp-xl);
         padding-bottom: var(--boxel-sp-xxxs);
-      }
-
-      .search.has-validation {
+        /* to account for the icon being on the left */
         padding-right: unset;
         padding-left: var(--boxel-sp-xxl); /* leave room for icon */
       }
@@ -303,20 +305,17 @@ export default class BoxelInput extends Component<Signature> {
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl) 0 0;
       }
+      .search-icon {
+        --icon-color: var(--search-input-icon-color, var(--boxel-highlight));
+      }
 
       .search-icon-container {
-        --icon-color: var(--boxel-highlight);
-
-        grid-area: post-icon;
+        grid-area: pre-icon;
 
         display: flex;
         height: 100%;
         align-items: center;
         justify-content: center;
-      }
-
-      .search-icon-container.has-validation {
-        grid-area: pre-icon;
       }
 
       .validation-icon-container {
