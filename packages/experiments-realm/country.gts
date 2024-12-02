@@ -74,7 +74,6 @@ class CountryFieldEdit extends Component<typeof CountryField> {
       @options={{this.countries}}
       @selected={{this.country}}
       @onSelect={{@set}}
-      @loadingMessage='Loading countries...'
       @onChange={{this.onSelectCountry}}
       as |country|
     >
