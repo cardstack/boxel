@@ -40,22 +40,29 @@ export class SearchInput extends Component<Signature> {
   }
 
   <template>
-    <BoxelInput
-      class='light-theme'
-      @type='search'
-      @value={{@value}}
-      @placeholder={{@placeholder}}
-      @onInput={{this.onInput}}
-      {{on 'keydown' this.onSearchInputKeyDown}}
-      autocomplete='off'
-      data-test-search-field
-    />
+    <div class='light-theme'>
+      <BoxelInput
+        @type='search'
+        @value={{@value}}
+        @placeholder={{@placeholder}}
+        @onInput={{this.onInput}}
+        {{on 'keydown' this.onSearchInputKeyDown}}
+        autocomplete='off'
+        data-test-search-field
+      />
+    </div>
     <style scoped>
-      .light-theme {
+      /*
+      TODO: This is a workaround to override the default search. Should refactor boxel input to have light/dark theme
+      */
+      .light-theme :deep(.search) {
         --boxel-input-search-background-color: var(--boxel-light);
         --boxel-input-search-color: var(--boxel-dark);
-        --boxel-input-search-icon-color: var(--boxel-dark);
         --boxel-input-search-placeholder-color: var(--boxel-dark);
+      }
+
+      .light-theme :deep(.search-icon) {
+        --boxel-input-search-icon-color: var(--boxel-dark);
       }
     </style>
   </template>
