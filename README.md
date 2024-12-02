@@ -236,7 +236,7 @@ There is some pre-setup needed to enable free plan on development account:
 1. Go to `packages/realm-server` and run stripe script to listen for the webhooks that Stripe sends to the realm server
 
 ```
-pnpm stripe listen --forward-to localhost:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
+pnpm stripe listen --forward-to host.docker.internal:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
 ```
 
 2. You will get webhook signing secret from stripe cli after Step 1 is done
