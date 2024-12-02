@@ -341,14 +341,13 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private close = task(async (item: StackItem) => {
+    // close the item first so user doesn't have to wait for the save to complete
+    this.operatorModeStateService.trimItemsFromStack(item);
     if (item.cardError) {
-      this.operatorModeStateService.trimItemsFromStack(item);
       return;
     }
 
     let { card, request } = item;
-    // close the item first so user doesn't have to wait for the save to complete
-    this.operatorModeStateService.trimItemsFromStack(item);
 
     // only save when closing a stack item in edit mode. there should be no unsaved
     // changes in isolated mode because they were saved when user toggled between
