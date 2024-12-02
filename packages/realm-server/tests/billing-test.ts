@@ -1,4 +1,9 @@
-import { encodeWebSafeBase64, param, query } from '@cardstack/runtime-common';
+import {
+  decodeWebSafeBase64,
+  encodeWebSafeBase64,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -80,6 +85,19 @@ async function fetchCreditsLedgerByUser(
       }) as LedgerEntry,
   );
 }
+
+module('billing utils', function () {
+  test('encoding client_reference_id to be web safe in payment links', function (assert) {
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@mike_1:cardstack.com')),
+      '@mike_1:cardstack.com',
+    );
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@hans.müller:matrix.de')),
+      '@hans.müller:matrix.de',
+    );
+  });
+});
 
 module('billing', function (hooks) {
   let dbAdapter: PgAdapter;
