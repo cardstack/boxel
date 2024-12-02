@@ -23,7 +23,7 @@ interface CardsGridSignature {
     format: Format;
   };
   Blocks: {
-    adminData: [card: PrerenderedCard];
+    meta: [card: PrerenderedCard];
   };
   Element: HTMLElement;
 }
@@ -44,22 +44,24 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
           </:loading>
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
-              <li
-                class='{{@selectedView}}-view-container'
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-              >
+              <li class='{{@selectedView}}-view-container'>
                 <CardContainer
+                  {{@context.cardComponentModifier
+                    cardId=card.url
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
                   class='card'
                   @displayBoundaries={{not (eq @selectedView 'card')}}
                 >
                   <card.component />
                 </CardContainer>
-                {{yield card to='adminData'}}
+                {{#if (eq @selectedView 'card')}}
+                  {{#if (has-block 'meta')}}
+                    {{yield card to='meta'}}
+                  {{/if}}
+                {{/if}}
               </li>
             {{/each}}
           </:response>
