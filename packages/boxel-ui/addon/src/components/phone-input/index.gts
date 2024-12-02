@@ -148,10 +148,16 @@ export interface SelectedItemSignature {
   Args: {
     option: any;
   };
-  Element: HTMLElement;
+  Element: HTMLDivElement;
 }
 
 const PhoneSelectedItem: TemplateOnlyComponent<SelectedItemSignature> =
-  <template><div>{{@option.flag}} +{{@option.callingCode}}</div></template>;
+// eslint-disable-next-line prettier/prettier TODO: fix this eslint error --> Insert `·[`  prettier/prettier
+  <template>
+    <div>
+      {{@option.flag}}
+      +{{@option.callingCode}}
+    </div>
+  </template>;
 
 export default PhoneInput;
