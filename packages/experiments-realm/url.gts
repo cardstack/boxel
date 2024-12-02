@@ -15,12 +15,19 @@ export class UrlField extends StringField {
   static displayName = 'Url';
 
   static edit = class Edit extends Component<typeof UrlField> {
+    get isValidUrl() {
+      if (!this.args.model) {
+        return false;
+      }
+      return isValidUrl(this.args.model);
+    }
     <template>
       <BoxelInput
         type='url'
         value={{@model}}
         @onInput={{@set}}
         @disabled={{not @canEdit}}
+        @state={{if this.isValidUrl 'valid' 'invalid'}}
       />
     </template>
   };
