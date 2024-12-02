@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "contactPhone": {
+        "value": "01355889283",
+        "type": {
+          "index": 2,
+          "label": "Work"
+        }
+      },
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../phone-number",
+        "name": "CardWithContactPhoneNumber"
+      }
+    }
+  }
+}
