@@ -1169,63 +1169,40 @@ module('getModifyPrompt', () => {
     });
 
     test('can include both skill cards and attached cards', () => {
-      const card: SingleCardDocument = {
-        data: {
-          type: 'card',
-          id: 'http://localhost:4201/experiments/Author/1',
-          attributes: {
-            firstName: 'Terry',
-            lastName: 'Pratchett',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../author',
-              name: 'Author',
-            },
-          },
-        },
-      };
-      const history: DiscreteMatrixEvent[] = [
-        {
-          type: 'm.room.message',
-          event_id: '1',
-          origin_server_ts: 1234567890,
-          content: {
-            msgtype: 'org.boxel.message',
-            format: 'org.matrix.custom.html',
-            body: 'Hi',
-            formatted_body: 'Hi',
-            data: {
-              context: {
-                tools: [],
-                submode: undefined,
-              },
-              skillCards: [skillCard1, skillCard2],
-              attachedCards: [card],
-            },
-          },
-          sender: '@user:localhost',
-          room_id: 'room1',
-          unsigned: {
-            age: 1000,
-            transaction_id: '1',
-          },
-          status: EventStatus.SENT,
-        },
-      ];
+      const eventList: DiscreteMatrixEvent[] = JSON.parse(
+        readFileSync(
+          path.join(
+            __dirname,
+            'resources/chats/added-skill-and-attached-card.json',
+          ),
+        ),
+      );
 
-      const { attachedCards, skillCards } = getRelevantCards(
-        history,
+      const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
+
+      const { attachedCards } = getRelevantCards(
+        eventList,
         '@ai-bot:localhost',
       );
       assert.equal(attachedCards.length, 1);
-      assert.equal(skillCards.length, 2);
 
-      const result = getModifyPrompt(history, '@ai-bot:localhost');
       assert.equal(result[0].role, 'system');
-      assert.true(result[0].content?.includes(instructions1));
-      assert.true(result[0].content?.includes(instructions2));
-      assert.true(result[0].content?.includes(JSON.stringify(card.data)));
+      assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+      assert.true(
+        result[0].content?.includes(
+          'If the user wants the data they see edited, AND the patchCard function is available',
+        ),
+      );
+      assert.true(
+        result[0].content?.includes(
+          'Use pirate colloquialism when responding.',
+        ),
+      );
+      assert.true(
+        result[0].content?.includes(
+          'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
+        ),
+      );
     });
 
     test('should update system prompt based on included skill cards', () => {
