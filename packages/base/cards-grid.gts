@@ -143,7 +143,8 @@ class Isolated extends Component<typeof CardsGrid> {
               <:response as |cards|>
                 {{#each cards as |card|}}
                   <li
-                    class='card'
+                    class='card {{if card.isError "instance-error"}}'
+                    data-test-instance-error={{card.isError}}
                     {{@context.cardComponentModifier
                       cardId=card.url
                       format='data'
@@ -283,6 +284,10 @@ class Isolated extends Component<typeof CardsGrid> {
       .operator-mode .buried .cards,
       .operator-mode .buried .add-button {
         display: none;
+      }
+      .instance-error {
+        opacity: 0.25;
+        color: var(--boxel-error-100);
       }
     </style>
   </template>

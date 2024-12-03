@@ -93,13 +93,15 @@ export default class CardQueryResults extends Component<Signature> {
             as |SearchResult|
           >
             {{#each cards as |card i|}}
-              <SearchResult
-                @component={{card.component}}
-                @cardId={{card.url}}
-                @isCompact={{@isCompact}}
-                {{on 'click' (fn @handleCardSelect card.url)}}
-                data-test-search-sheet-search-result={{i}}
-              />
+              {{#unless card.isError}}
+                <SearchResult
+                  @component={{card.component}}
+                  @cardId={{card.url}}
+                  @isCompact={{@isCompact}}
+                  {{on 'click' (fn @handleCardSelect card.url)}}
+                  data-test-search-sheet-search-result={{i}}
+                />
+              {{/unless}}
             {{/each}}
           </ResultsSection>
         {{/if}}

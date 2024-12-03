@@ -17,6 +17,8 @@ import {
   baseRealm,
   encodeWebSafeBase64,
   primitive,
+  type Realm,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -45,6 +47,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
 module('Acceptance | operator mode tests', function (hooks) {
+  let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -278,7 +281,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
-    await setupAcceptanceTestRealm({
+    ({ realm: testRealm } = await setupAcceptanceTestRealm({
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
@@ -335,7 +338,6 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           },
         },
-
         'Person/fadhlan.json': {
           data: {
             attributes: {
@@ -353,6 +355,26 @@ module('Acceptance | operator mode tests', function (hooks) {
               pet: {
                 links: {
                   self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/error.json': {
+          data: {
+            attributes: {
+              firstName: 'Error',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: './missing-link',
                 },
               },
             },
@@ -408,7 +430,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    });
+    }));
   });
 
   test('visiting operator mode', async function (assert) {
@@ -472,6 +494,66 @@ module('Acceptance | operator mode tests', function (hooks) {
       submode: Submodes.Interact,
     });
     assert.strictEqual(getPageTitle(), 'Mango');
+  });
+
+  test('index card shows last known good state for instances that have an error', async function (assert) {
+    await testRealm.write(
+      'Person/fadhlan.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            pet: {
+              links: {
+                self: './missing-link',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error]`,
+      )
+      .exists('the instance with an error is displayed');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error] [data-test-card-title]`,
+      )
+      .containsText(
+        'Fadhlan',
+        'the last known good state of the instance is displayed',
+      );
+
+    await percySnapshot(assert);
+  });
+
+  test('index card shows default error tile for instances that have an error and no last known good state', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,
+      )
+      .exists('the instance with an error is displayed');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error] [data-test-instance-error-name]`,
+      )
+      .containsText('Person/error');
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
