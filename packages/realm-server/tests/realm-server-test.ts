@@ -31,7 +31,7 @@ import {
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
-  encodeToAlphanumeric,
+  encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
@@ -4531,7 +4531,7 @@ module('Realm Server', function (hooks) {
           object: {
             id: 'cs_test_1234567890',
             object: 'checkout.session',
-            client_reference_id: encodeToAlphanumeric(userId),
+            client_reference_id: encodeWebSafeBase64(userId),
             customer: 'cus_123',
             metadata: {},
           },
