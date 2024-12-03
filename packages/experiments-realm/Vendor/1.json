@@ -30,12 +30,16 @@
         }
       ],
       "mailingAddress": {
-        "streetAddress": "50 California St Ste 1500",
+        "addressLine1": "50 California St Ste 1500",
+        "addressLine2": null,
         "city": "San Francisco",
-        "region": "CA",
+        "state": "CA",
         "postalCode": "94111",
-        "poBoxNumber": null,
-        "country": "USA"
+        "country": {
+          "name": "United States of America",
+          "code": "US"
+        },
+        "poBoxNumber": null
       },
       "preferredPaymentMethod": {
         "type": "Crypto Payment",
@@ -78,17 +82,20 @@
             "bic": null
           }
         }
-      ]
+      ],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
     },
     "relationships": {
       "preferredPaymentMethod.cryptoPayment.chain": {
         "links": {
-          "self": "../Chain/1"
+          "self": "http://localhost:4201/experiments/Chain/1"
         }
       },
       "preferredPaymentMethod.cryptoPayment.token": {
         "links": {
-          "self": "../Token/1"
+          "self": "http://localhost:4201/experiments/Token/1"
         }
       },
       "preferredPaymentMethod.wireTransfer.currency": {
@@ -108,17 +115,17 @@
       },
       "alternatePaymentMethod.0.wireTransfer.currency": {
         "links": {
-          "self": "../Currency/1"
+          "self": "http://localhost:4201/experiments/Currency/1"
         }
       },
       "alternatePaymentMethod.1.cryptoPayment.chain": {
         "links": {
-          "self": "../Chain/1"
+          "self": "http://localhost:4201/experiments/Chain/1"
         }
       },
       "alternatePaymentMethod.1.cryptoPayment.token": {
         "links": {
-          "self": "../Token/2"
+          "self": "http://localhost:4201/experiments/Token/2"
         }
       },
       "alternatePaymentMethod.1.wireTransfer.currency": {
@@ -128,12 +135,12 @@
       },
       "alternatePaymentMethod.2.cryptoPayment.chain": {
         "links": {
-          "self": "../Chain/2"
+          "self": "http://localhost:4201/experiments/Chain/2"
         }
       },
       "alternatePaymentMethod.2.cryptoPayment.token": {
         "links": {
-          "self": "../Token/3"
+          "self": "http://localhost:4201/experiments/Token/3"
         }
       },
       "alternatePaymentMethod.2.wireTransfer.currency": {

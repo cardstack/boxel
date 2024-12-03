@@ -7,9 +7,9 @@
       "isCool": false,
       "isHuman": true,
       "address": {
-        "streetAddress": null,
+        "addressLine1": null,
         "city": null,
-        "region": null,
+        "state": null,
         "postalCode": null,
         "poBoxNumber": null,
         "country": null
