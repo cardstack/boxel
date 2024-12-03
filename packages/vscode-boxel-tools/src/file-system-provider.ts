@@ -5,7 +5,6 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { hasExecutableExtension } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 import { RealmInfo } from '@cardstack/runtime-common/realm';
 
@@ -363,10 +362,6 @@ export class RealmFS implements vscode.FileSystemProvider {
         Accept: SupportedMimeType.CardSource,
         Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
       };
-
-      if (hasExecutableExtension(uri.path)) {
-        headers.Accept = SupportedMimeType.CardSource;
-      }
 
       console.log('Headers:', headers);
 
