@@ -24,6 +24,7 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
         @displayName={{@name}}
         @thumbnailURL={{@thumbnailURL}}
         @isReady={{true}}
+        class='avatar-thumbnail'
       />
 
       <div class='avatar-info'>
@@ -43,21 +44,8 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
         min-width: 0;
       }
       .avatar-thumbnail {
-        background-color: var(--boxel-200);
-        width: 60px;
-        height: 60px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
         flex-shrink: 0;
-        background-size: cover;
-        background-position: center;
-        border-radius: 50%;
-      }
-      .avatar-thumbnail .user-icon {
-        color: var(--boxel-500);
-        width: auto;
-        height: auto;
+        --profile-avatar-icon-size: 60px;
       }
       .avatar-info {
         min-width: 0;
