@@ -1629,6 +1629,7 @@ export class Realm {
         useWorkInProgressIndex,
         htmlFormat,
         cardUrls,
+        includeErrors: true,
       },
     );
 

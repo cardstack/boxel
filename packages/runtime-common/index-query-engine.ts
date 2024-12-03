@@ -121,6 +121,7 @@ export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
   htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  includeErrors?: true;
   cardUrls?: string[];
 }
 
@@ -130,7 +131,8 @@ interface WIPOptions {
 
 export interface PrerenderedCard {
   url: string;
-  html: string;
+  html: string | null;
+  isError?: true;
 }
 
 export interface QueryResultsMeta {
@@ -340,10 +342,23 @@ export class IndexQueryEngine {
     }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
-      ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
+
+    if (opts.includeErrors) {
+      conditions.push(
+        any([
+          ['i.type =', param('instance')],
+          every([
+            ['i.type =', param('error')],
+            ['i.url ILIKE', param('%.json')],
+          ]),
+        ]),
+      );
+    } else {
+      conditions.push(['i.type =', param('instance')]);
+    }
 
     if (opts.cardUrls && opts.cardUrls.length > 0) {
       conditions.push([
@@ -452,7 +467,7 @@ export class IndexQueryEngine {
     realmURL: URL,
     { filter, sort, page }: Query,
     loader: Loader,
-    opts: QueryOptions = {},
+    opts: QueryOptions = { includeErrors: true },
   ): Promise<{
     prerenderedCards: PrerenderedCard[];
     scopedCssUrls: string[];
@@ -498,13 +513,13 @@ export class IndexQueryEngine {
       loader,
       opts,
       [
-        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
         ...htmlColumnExpression,
         ') as html, ANY_VALUE(deps) as deps',
       ],
     )) as {
       meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & { html: string })[];
+      results: (Partial<BoxelIndexTable> & { html: string | null })[];
     };
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
@@ -524,6 +539,7 @@ export class IndexQueryEngine {
       return {
         url: card.url!,
         html: card.html,
+        ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });
 

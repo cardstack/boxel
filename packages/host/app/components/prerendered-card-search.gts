@@ -29,6 +29,7 @@ export interface PrerenderedCardData {
   url: string;
   realmUrl: string;
   html: string;
+  isError: boolean;
 }
 
 class PrerenderedCard {
@@ -38,6 +39,9 @@ class PrerenderedCard {
   }
   get url() {
     return this.data.url;
+  }
+  get isError() {
+    return this.data.isError;
   }
   get realmUrl(): string {
     return this.data.realmUrl;
@@ -104,6 +108,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
         url: r.id,
         realmUrl: realmURL,
         html: r.attributes?.html,
+        isError: !!r.attributes?.isError,
       });
     });
   }
