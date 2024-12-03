@@ -16,6 +16,7 @@ export interface User {
   id: string;
   matrixUserId: string;
   stripeCustomerId: string;
+  stripeCustomerEmail: string | null;
 }
 
 export interface Plan {
@@ -134,6 +135,21 @@ export async function updateUserStripeCustomerId(
   }
 }
 
+export async function updateUserStripeCustomerEmail(
+  dbAdapter: DBAdapter,
+  stripeCustomerId: string,
+  stripeCustomerEmail: string,
+) {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    stripe_customer_email: stripeCustomerEmail,
+  });
+  await query(dbAdapter, [
+    ...update('users', nameExpressions, valueExpressions),
+    ` WHERE stripe_customer_id = `,
+    param(stripeCustomerId),
+  ]);
+}
+
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
@@ -171,6 +187,7 @@ export async function getUserByMatrixUserId(
     id: results[0].id,
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
+    stripeCustomerEmail: results[0].stripe_customer_email,
   } as User;
 }
 

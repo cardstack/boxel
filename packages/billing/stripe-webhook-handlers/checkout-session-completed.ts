@@ -6,6 +6,7 @@ import {
   getUserByStripeId,
   insertStripeEvent,
   markStripeEventAsProcessed,
+  updateUserStripeCustomerEmail,
   updateUserStripeCustomerId,
 } from '../billing-queries';
 import { StripeCheckoutSessionCompletedWebhookEvent } from '.';
@@ -29,6 +30,7 @@ export async function handleCheckoutSessionCompleted(
     await insertStripeEvent(dbAdapter, event);
 
     const stripeCustomerId = event.data.object.customer;
+    const stripeCustomerEmail = event.data.object.customer_details?.email;
     const matrixUserName = event.data.object.client_reference_id;
 
     if (matrixUserName) {
@@ -44,6 +46,14 @@ export async function handleCheckoutSessionCompleted(
         dbAdapter,
         matrixUserId,
         stripeCustomerId,
+      );
+    }
+
+    if (stripeCustomerEmail) {
+      await updateUserStripeCustomerEmail(
+        dbAdapter,
+        stripeCustomerId,
+        stripeCustomerEmail,
       );
     }
 
