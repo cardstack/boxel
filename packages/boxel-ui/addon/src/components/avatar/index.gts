@@ -1,15 +1,15 @@
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
 import { deterministicColorFromString } from '../../helpers/deterministic-color-from-string.ts';
-import { htmlSafe } from '@ember/template';
 
 interface Signature {
   Args: {
-    thumbnailURL?: string;
     displayName?: string;
     isReady: boolean;
+    thumbnailURL?: string;
     userId: string;
   };
   Element: HTMLDivElement;

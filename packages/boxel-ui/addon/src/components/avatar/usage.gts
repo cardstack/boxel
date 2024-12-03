@@ -62,7 +62,6 @@ export default class AvatarUsage extends Component {
           />
           <Args.String
             @name='thumbnailURL'
-            @name='thumbnailURL'
             @description='URL of the user thumbnail'
             @value={{this.thumbnailURL}}
             @onInput={{fn (mut this.thumbnailURL)}}
