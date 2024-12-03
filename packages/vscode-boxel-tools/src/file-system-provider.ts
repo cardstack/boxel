@@ -360,7 +360,7 @@ export class RealmFS implements vscode.FileSystemProvider {
 
     try {
       let headers = {
-        Accept: SupportedMimeType.JSONAPI,
+        Accept: SupportedMimeType.CardSource,
         Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
       };
 
