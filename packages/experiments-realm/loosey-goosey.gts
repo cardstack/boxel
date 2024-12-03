@@ -5,11 +5,13 @@ import {
   StringField,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
+import type IconComponent from '@cardstack/boxel-icons/captions';
 
 export interface LooseyGooseyData {
   index: number;
   label: string;
   color?: string;
+  icon?: typeof IconComponent;
 }
 
 export class LooseGooseyField extends FieldDef {

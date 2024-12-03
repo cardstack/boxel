@@ -20,6 +20,94 @@ import { LooseGooseyField, type LooseyGooseyData } from './loosey-goosey';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
+import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
+import ChevronUp from '@cardstack/boxel-icons/chevron-up';
+import ChevronsDown from '@cardstack/boxel-icons/chevrons-down';
+import ChevronDown from '@cardstack/boxel-icons/chevrons-down';
+import CircleEqual from '@cardstack/boxel-icons/circle-equal';
+
+class EditPriority extends Component<typeof BaseTaskPriority> {
+  @tracked label = this.args.model.label;
+
+  get priorities() {
+    return BaseTaskPriority.values;
+  }
+
+  get selectedPriority() {
+    return this.priorities?.find((priority) => {
+      return priority.label === this.label;
+    });
+  }
+
+  @action handlePriorityChange(priority: LooseyGooseyData): void {
+    this.label = priority.label;
+    this.args.model.label = this.selectedPriority?.label;
+    this.args.model.index = this.selectedPriority?.index;
+  }
+
+  <template>
+    <div class='priority-field'>
+      <RadioInput
+        @groupDescription='Select Task Priority'
+        @items={{this.priorities}}
+        @checkedId={{this.selectedPriority.label}}
+        @orientation='horizontal'
+        @spacing='default'
+        @keyName='label'
+        as |item|
+      >
+        <item.component @onChange={{fn this.handlePriorityChange item.data}}>
+          {{item.data.label}}
+        </item.component>
+      </RadioInput>
+    </div>
+  </template>
+}
+
+export class BaseTaskPriority extends LooseGooseyField {
+  // loosey goosey pattern
+  static values = [
+    { index: 0, label: 'Lowest', icon: ChevronsDown },
+    { index: 1, label: 'Low', icon: ChevronDown },
+    {
+      index: 2,
+      label: 'Medium',
+      icon: CircleEqual,
+    },
+    {
+      index: 3,
+      label: 'High',
+      icon: ChevronUp,
+    },
+    {
+      index: 4,
+      label: 'Highest',
+      icon: ChevronsUp,
+    },
+  ];
+
+  static edit = EditPriority;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model.label}}
+    </template>
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    get selectedPriority() {
+      return BaseTaskPriority.values.find((priority) => {
+        return priority.label === this.args.model.label;
+      });
+    }
+
+    get selectedIcon() {
+      return this.selectedPriority?.icon;
+    }
+    <template>
+      <this.selectedIcon width='14px' height='14px' />
+    </template>
+  };
+}
 
 class Edit extends Component<typeof BaseTaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
@@ -121,63 +209,4 @@ function shortenId(id: string): string {
   const shortUuid = id.slice(0, 8);
   const decimal = parseInt(shortUuid, 16);
   return decimal.toString(36).padStart(6, '0');
-}
-class EditPriority extends Component<typeof BaseTaskPriority> {
-  @tracked label = this.args.model.label;
-
-  get priorities() {
-    return BaseTaskPriority.values;
-  }
-
-  get selectedPriority() {
-    return this.priorities?.find((priority) => {
-      return priority.label === this.label;
-    });
-  }
-
-  @action handlePriorityChange(priority: LooseyGooseyData): void {
-    this.label = priority.label;
-    this.args.model.label = this.selectedPriority?.label;
-    this.args.model.index = this.selectedPriority?.index;
-  }
-
-  <template>
-    <div class='priority-field'>
-      <RadioInput
-        @groupDescription='Select Task Priority'
-        @items={{this.priorities}}
-        @checkedId={{this.selectedPriority.label}}
-        @orientation='horizontal'
-        @spacing='default'
-        @keyName='label'
-        as |item|
-      >
-        <item.component @onChange={{fn this.handlePriorityChange item.data}}>
-          {{item.data.label}}
-        </item.component>
-      </RadioInput>
-    </div>
-  </template>
-}
-
-export class BaseTaskPriority extends LooseGooseyField {
-  // loosey goosey pattern
-  static values = [
-    { index: 0, label: 'Low' },
-    {
-      index: 1,
-      label: 'Medium',
-    },
-    {
-      index: 2,
-      label: 'High',
-    },
-  ];
-
-  static edit = EditPriority;
-  static embedded = class Embedded extends Component<typeof BaseTaskPriority> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
 }

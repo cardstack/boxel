@@ -19,7 +19,6 @@ import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { isToday, isThisWeek, addWeeks } from 'date-fns';
-import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import GlimmerComponent from '@glimmer/component';
 import { User } from '../user';
@@ -258,7 +257,7 @@ class Fitted extends Component<typeof Task> {
           </div>
         {{/if}}
         <div class='short-id-container'>
-          <ChevronsUp width='14px' height='14px' />
+          <@fields.priority @format='atom' />
           <span class='short-id'>{{@model.shortId}}</span>
         </div>
       </header>
