@@ -58,10 +58,10 @@ export class Address extends FieldDef {
         this.city,
         this.state,
         this.postalCode,
-        this.country?.code,
+        this.country?.name,
         this.poBoxNumber,
       );
-      return rows.join(' ');
+      return rows.filter((r) => r.length > 0).join(', ');
     },
   });
 
@@ -73,7 +73,7 @@ export class Address extends FieldDef {
         this.args.model.city,
         this.args.model.state,
         this.args.model.postalCode,
-        this.args.model.country?.code,
+        this.args.model.country?.name,
         this.args.model.poBoxNumber,
       );
     }

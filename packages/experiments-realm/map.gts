@@ -46,10 +46,10 @@ export class Map extends CardDef {
   static atom = class Atom extends Component<typeof this> {
     <template>
       <a
-        href='https://www.google.com/maps/place/{{@model.address}}'
+        href='https://www.google.com/maps/place/{{@model.address.fullAddress}}'
         target='_blank'
         rel='noopener noreferrer'
-      >📍 {{@model.address}}</a>
+      >📍 {{@model.address.fullAddress}}</a>
     </template>
   };
 
