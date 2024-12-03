@@ -2,7 +2,7 @@ import { getOwner, setOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
-import { task, timeout } from 'ember-concurrency';
+import { task, timeout, all } from 'ember-concurrency';
 
 import flatMap from 'lodash/flatMap';
 
@@ -123,7 +123,6 @@ export default class CommandService extends Service {
     try {
       this.matrixService.failedCommandState.delete(eventId);
       this.currentlyExecutingCommandEventIds.add(eventId);
-      await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
 
       // lookup command
       let { command: commandToRun } = this.commands.get(command.name) ?? {};
@@ -136,7 +135,10 @@ export default class CommandService extends Service {
           ...payload.attributes,
           ...payload.relationships,
         });
-        res = await commandToRun.execute(typedInput);
+        [res] = await all([
+          await commandToRun.execute(typedInput),
+          await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
+        ]);
       } else if (command.name === 'patchCard') {
         if (!hasPatchData(payload)) {
           throw new Error(
@@ -214,6 +216,7 @@ export default class CommandService extends Service {
           : e instanceof Error
           ? e
           : new Error('Command failed.');
+      await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(eventId, error);
     } finally {
       this.currentlyExecutingCommandEventIds.delete(eventId);
