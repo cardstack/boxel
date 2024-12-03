@@ -4,7 +4,6 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
-import cssVar from '../../helpers/css-var.ts';
 import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
@@ -74,7 +73,7 @@ export interface Signature {
     value: string | number | null | undefined;
     variant?: 'large' | 'default';
   };
-  Element: HTMLInputElement | HTMLTextAreaElement;
+  Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
 
 export default class BoxelInput extends Component<Signature> {
@@ -186,9 +185,6 @@ export default class BoxelInput extends Component<Signature> {
               'search-icon-container'
               has-validation=this.hasValidation
             }}
-            style={{cssVar
-              search-input-icon-color='var(--boxel-input-search-icon-color)'
-            }}
           >
             <IconSearch class='search-icon' width='20' height='20' />
           </div>
@@ -288,11 +284,21 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .search {
+        --search-input-color: var(
+          --boxel-input-search-color,
+          var(--boxel-light)
+        );
+
+        --search-input-background-color: var(
+          --boxel-input-search-background-color,
+          var(--boxel-dark)
+        );
+
         --boxel-form-control-border-color: var(--boxel-dark);
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
+        background-color: var(--search-input-background-color);
+        color: var(--search-input-color);
         padding-top: var(--boxel-sp-xxxs);
         padding-right: var(--boxel-sp-xl);
         padding-bottom: var(--boxel-sp-xxxs);
@@ -305,8 +311,12 @@ export default class BoxelInput extends Component<Signature> {
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl) 0 0;
       }
+
       .search-icon {
-        --icon-color: var(--search-input-icon-color, var(--boxel-highlight));
+        --icon-color: var(
+          --boxel-input-search-icon-color,
+          var(--boxel-highlight)
+        );
       }
 
       .search-icon-container {
@@ -364,7 +374,7 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .boxel-input.search::placeholder {
-        color: var(--boxel-light);
+        color: inherit;
         opacity: 0.6;
       }
     </style>

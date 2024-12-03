@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
+      "name": "Ethan Rodriguez",
       "primaryEmail": null,
       "secondaryEmail": null,
       "phoneMobile": {
@@ -29,7 +29,7 @@
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../CompanyCard/9bef6b44-dde1-46c7-8e18-12f754a4f32c"
         }
       }
     },
