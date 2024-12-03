@@ -24,12 +24,11 @@ export default class ProfileSubscription extends Component<Signature> {
   @service private declare billingService: BillingService;
   @service private declare matrixService: MatrixService;
 
-  @action
-  urlWithClientReferenceId(url: string) {
+  urlWithClientReferenceId = (url: string) => {
     return `${url}?client_reference_id=${encodeWebSafeBase64(
       this.matrixService.userId as string,
     )}`;
-  }
+  };
 
   <template>
     <WithSubscriptionData as |subscriptionData|>
