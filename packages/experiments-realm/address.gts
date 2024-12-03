@@ -36,7 +36,7 @@ export class Address extends FieldDef {
         .filter(Boolean)
         .join(', ');
 
-      if (cityStatePostal && cityStatePostal.length === 3) {
+      if (cityStatePostal) {
         rows[1].push(cityStatePostal);
       }
 
