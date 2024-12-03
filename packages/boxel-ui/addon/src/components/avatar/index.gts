@@ -37,6 +37,7 @@ export default class Avatar extends Component<Signature> {
         }}
         data-test-profile-icon={{@isReady}}
         data-test-profile-icon-userId={{@userId}}
+        role='img'
         aria-label={{if @displayName @displayName @userId}}
         ...attributes
       >
