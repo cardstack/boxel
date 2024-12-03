@@ -342,7 +342,7 @@ class Fitted extends Component<typeof Task> {
       .short-id-container {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-3xs);
+        gap: var(--boxel-sp-xxxs);
         margin-left: auto;
       }
       .short-id {
