@@ -1,13 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
-import UserCircleIcon from '@cardstack/boxel-icons/user-circle';
+import { Avatar } from '@cardstack/boxel-ui/components';
 
 interface AvatarGroupSignature {
   Args: {
     thumbnailURL?: string;
-    name?: string;
+    name: string;
+    userID: string;
   };
-  Blocks: { company: [] };
+  Blocks: { content: [] };
   Element: HTMLElement;
 }
 
@@ -17,26 +18,25 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
   }
 
   <template>
-    <div class='avatar-container'>
-      <div
-        class='avatar-thumbnail'
-        {{! template-lint-disable no-inline-styles }}
-        style={{this.backgroundImageStyle}}
-      >
-        {{#unless @thumbnailURL}}
-          <UserCircleIcon width='20' height='20' class='user-icon' />
-        {{/unless}}
-      </div>
+    <div class='avatar-group'>
+      <Avatar
+        @userID={{@userID}}
+        @displayName={{@name}}
+        @thumbnailURL={{@thumbnailURL}}
+        @isReady={{true}}
+      />
+
       <div class='avatar-info'>
         <h3 class='name'>
           {{if @name @name 'No Name Assigned'}}
         </h3>
-        {{yield to='company'}}
+
+        {{yield to='content'}}
       </div>
     </div>
 
     <style scoped>
-      .avatar-container {
+      .avatar-group {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp);
