@@ -41,6 +41,12 @@ export class UrlField extends StringField {
           Invalid URL
         {{/if}}
       {{/if}}
+      <style scoped>
+        a:hover {
+          text-decoration: underline;
+          color: inherit;
+        }
+      </style>
     </template>
   };
 }
