@@ -208,6 +208,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
       return {
         filter: {
+          on: this.activeFilter.cardRef,
           every: [
             { type: this.activeFilter.cardRef },
             ...(this.searchKey !== ''
