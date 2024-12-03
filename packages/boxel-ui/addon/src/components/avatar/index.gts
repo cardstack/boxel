@@ -28,17 +28,14 @@ export default class Avatar extends Component<Signature> {
   }
 
   <template>
-    {{#let
-      (if @userId (deterministicColorFromString @userId) this.defaultBgColor)
-      as |bgColor|
-    }}
+    {{#let (deterministicColorFromString @userId) as |bgColor|}}
       <div
         class='profile-icon'
         style={{if
           @thumbnailURL
           (setBackgroundImage @thumbnailURL)
           (cssVar
-            profile-avatar-icon-background=bgColor
+            profile-avatar-icon-background={{if bgColor bgColor '#EEEEEE'}}
             profile-avatar-text-color=(getContrastColor bgColor)
           )
         }}
@@ -71,6 +68,9 @@ export default class Avatar extends Component<Signature> {
         line-height: 1;
       }
     </style>
+
+
+
   </template>
 
   get profileInitials() {
