@@ -23,10 +23,6 @@ const setBackgroundImage = (backgroundURL: string | null | undefined) => {
 };
 
 export default class Avatar extends Component<Signature> {
-  get defaultBgColor() {
-    return '#00FFFF';
-  }
-
   <template>
     {{#let (deterministicColorFromString @userId) as |bgColor|}}
       <div
@@ -35,7 +31,7 @@ export default class Avatar extends Component<Signature> {
           @thumbnailURL
           (setBackgroundImage @thumbnailURL)
           (cssVar
-            profile-avatar-icon-background={{if bgColor bgColor '#EEEEEE'}}
+            profile-avatar-icon-background=bgColor
             profile-avatar-text-color=(getContrastColor bgColor)
           )
         }}
@@ -68,9 +64,6 @@ export default class Avatar extends Component<Signature> {
         line-height: 1;
       }
     </style>
-
-
-
   </template>
 
   get profileInitials() {
