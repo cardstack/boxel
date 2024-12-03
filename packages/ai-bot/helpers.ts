@@ -85,13 +85,13 @@ export function getPromptParts(
 }
 
 export function extractCardFragmentsFromEvents(
-  eventList: DiscreteMatrixEvent[],
+  eventList: IRoomEvent[],
 ): Map<string, CardFragmentContent> {
   const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
   for (let event of eventList) {
     if (event.type === 'm.room.message') {
       if (event.content.msgtype === 'org.boxel.cardFragment') {
-        fragments.set(event.event_id, event.content);
+        fragments.set(event.event_id, event.content as CardFragmentContent);
       }
     }
   }
@@ -99,7 +99,7 @@ export function extractCardFragmentsFromEvents(
 }
 
 export function constructHistory(
-  history: IRoomEvent[],
+  eventlist: IRoomEvent[],
   cardFragments: Map<string, CardFragmentContent>,
 ) {
   /**
@@ -113,7 +113,7 @@ export function constructHistory(
    * message.
    */
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of history) {
+  for (let rawEvent of eventlist) {
     if (rawEvent.content.data) {
       try {
         rawEvent.content.data = JSON.parse(rawEvent.content.data);
@@ -124,18 +124,20 @@ export function constructHistory(
       }
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
-    if (
-      event.type !== 'm.room.message' ||
-      event.content.msgtype !== 'org.boxel.message'
-    ) {
+    if (event.type !== 'm.room.message') {
       continue;
     }
     let eventId = event.event_id!;
-    let { attachedCardsEventIds } = event.content.data;
-    if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
-      event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
-        serializedCardFromFragments(id, cardFragments),
-      );
+    if (event.content.msgtype === 'org.boxel.cardFragment') {
+      continue;
+    }
+    if (event.content.msgtype === 'org.boxel.message') {
+      let { attachedCardsEventIds } = event.content.data;
+      if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
+        event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
+          serializedCardFromFragments(id, cardFragments),
+        );
+      }
     }
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content['m.relates_to']!.event_id!;

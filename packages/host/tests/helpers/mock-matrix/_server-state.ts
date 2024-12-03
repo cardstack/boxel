@@ -144,7 +144,7 @@ export class ServerState {
       ?.roomStateEvents.get(eventType)
       ?.get(stateKey ?? '');
     if (event) {
-      return event.event.content;
+      return event.event.content || {};
     } else {
       throw new Error(`room state event ${eventType} does not exist`);
     }

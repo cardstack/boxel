@@ -373,12 +373,8 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const { attachedCards, skillCards } = getRelevantCards(
-      history,
-      '@aibot:localhost',
-    );
+    const { attachedCards } = getRelevantCards(history, '@aibot:localhost');
     assert.equal(attachedCards.length, 0);
-    assert.equal(skillCards.length, 0);
   });
 
   test('Gets uploaded cards if no shared context', () => {
@@ -1156,7 +1152,6 @@ module('getModifyPrompt', () => {
       );
 
       const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
-      console.log(result);
       assert.equal(result.length, 1);
       assert.equal(result[0].role, 'system');
       assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));

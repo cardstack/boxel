@@ -28,6 +28,7 @@ import type {
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import { Skill } from '../components/ai-assistant/skill-menu';
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -41,7 +42,6 @@ import type Room from '../lib/matrix-classes/room';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
-import { Skill } from '../components/ai-assistant/skill-menu';
 
 interface SkillId {
   skillCardId: string;
@@ -155,7 +155,7 @@ export class RoomResource extends Resource<Args> {
       if (!this._skillCardsCache.has(cardId)) {
         let getCardResult = getCard<SkillCard>(new URL(cardId));
         getCardResult.loaded?.then(() => {
-          this._skillCardsCache.set(cardId, getCardResult.card);
+          this._skillCardsCache.set(cardId, getCardResult.card!);
         });
       }
       result.push({
@@ -178,7 +178,7 @@ export class RoomResource extends Resource<Args> {
         }
         return null;
       })
-      .filter(Boolean);
+      .filter(Boolean) as Skill[];
   }
 
   get roomId() {
