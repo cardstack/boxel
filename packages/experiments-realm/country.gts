@@ -91,6 +91,8 @@ class CountryFieldEdit extends Component<typeof CountryField> {
         @options={{this.countries}}
         @selected={{this.country}}
         @onChange={{this.onSelectCountry}}
+        @searchEnabled={{true}}
+        @searchField='name'
         as |country|
       >
         {{#let (this.countryEmoji country.code) as |emoji|}}
