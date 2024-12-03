@@ -60,7 +60,6 @@ export class SearchInput extends Component<Signature> {
       .light-theme :deep(.search) {
         --boxel-input-search-background-color: var(--boxel-light);
         --boxel-input-search-color: var(--boxel-dark);
-        --boxel-input-search-placeholder-color: var(--boxel-dark);
       }
 
       .light-theme :deep(.search-icon) {

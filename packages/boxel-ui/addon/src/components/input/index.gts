@@ -293,10 +293,6 @@ export default class BoxelInput extends Component<Signature> {
           --boxel-input-search-background-color,
           var(--boxel-dark)
         );
-        --search-input-placeholder-color: var(
-          --boxel-input-search-placeholder-color,
-          var(--boxel-light)
-        );
 
         --boxel-form-control-border-color: var(--boxel-dark);
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
@@ -378,7 +374,7 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .boxel-input.search::placeholder {
-        color: var(--search-input-placeholder-color);
+        color: inherit;
         opacity: 0.6;
       }
     </style>
