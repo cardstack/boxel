@@ -111,10 +111,6 @@ export class FittedTask extends Component<typeof TaskBase> {
 
   <template>
     <div class='task-card'>
-      <div class='task-completion-status'>
-        {{!-- <TaskCompletionStatus @model={{@model}} /> --}}
-      </div>
-
       <header>
         {{#if this.visibleTags.length}}
           <div class='card-tags'>
@@ -171,9 +167,6 @@ export class FittedTask extends Component<typeof TaskBase> {
     </div>
 
     <style scoped>
-      .task-completion-status {
-        display: none;
-      }
       .task-card {
         --task-font-weight-500: 500;
         --task-font-weight-600: 600;
@@ -356,13 +349,6 @@ export class FittedTask extends Component<typeof TaskBase> {
         .card-info,
         footer {
           display: none;
-        }
-      }
-
-      /* Extra styles for width > 280px and height 78px */
-      @container (width > 280px) and (height <= 78px) {
-        .task-completion-status {
-          display: inline-flex;
         }
       }
 
@@ -554,51 +540,4 @@ function getDueDateStatus(dueDateString: string | null) {
   }
 
   return null;
-}
-
-interface TaskCompletionStatusSignature {
-  Element: HTMLDivElement;
-  Args: {
-    completionLabel: string;
-    statusLabel?: string;
-  };
-}
-
-export class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusSignature> {
-  get isCompleted() {
-    return this.args.statusLabel === this.args.completionLabel;
-  }
-
-  <template>
-    <div class='completion-status'>
-      <span class='checkmark {{if this.isCompleted @completionLabel}}'>
-        {{#if this.isCompleted}}
-          <CheckMark width='16px' height='16px' />
-        {{/if}}
-      </span>
-    </div>
-
-    <style scoped>
-      .completion-status {
-        display: inline-flex;
-        align-items: center;
-      }
-      .checkmark {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 20px;
-        width: 20px;
-        background-color: white;
-        border: 2px solid var(--boxel-400);
-        border-radius: 4px;
-        transition: all 0.2s ease;
-      }
-      .checkmark.shipped {
-        background-color: var(--boxel-highlight);
-        color: white;
-      }
-    </style>
-  </template>
 }
