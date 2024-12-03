@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Liam O'Connor",
+      "name": "Ava Patel",
       "primaryEmail": null,
       "secondaryEmail": null,
       "phoneMobile": {
@@ -29,14 +29,14 @@
     "relationships": {
       "company": {
         "links": {
-          "self": "../CompanyCard/b9ee2c7c-8e42-4c36-82ee-84f3536bb459"
+          "self": "../CompanyCard/6e830953-2219-4428-a6b2-e2f13bd59576"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/lead",
-        "name": "Lead"
+        "module": "../crm/contact",
+        "name": "Contact"
       }
     }
   }
