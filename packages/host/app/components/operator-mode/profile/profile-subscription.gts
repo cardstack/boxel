@@ -12,8 +12,8 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import { encodeWebSafeBase64 } from '@cardstack/runtime-common';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
-import BillingService from '@cardstack/host/services/billing-service';
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type BillingService from '@cardstack/host/services/billing-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {};
