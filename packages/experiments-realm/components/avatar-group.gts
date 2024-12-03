@@ -74,12 +74,6 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
         font-weight: 600;
         letter-spacing: var(--boxel-lsp-sm);
       }
-      .company-container {
-        background: transparent;
-        width: auto;
-        height: auto;
-        overflow: unset;
-      }
     </style>
   </template>
 }
