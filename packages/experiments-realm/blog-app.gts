@@ -10,6 +10,9 @@ import {
   CardDef,
   Component,
   realmURL,
+  field,
+  contains,
+  StringField,
 } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -26,6 +29,7 @@ import { type ViewOption, CardsGrid } from './components/grid';
 import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
+  BasicFitted,
   BoxelButton,
   FieldContainer,
   Pill,
@@ -236,11 +240,11 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
               @query={{this.query}}
               @realms={{this.realms}}
             >
-              <:adminData as |card|>
+              <:meta as |card|>
                 {{#if this.showAdminData}}
                   <BlogAdminData @cardId={{card.url}} />
                 {{/if}}
-              </:adminData>
+              </:meta>
             </CardsGrid>
           </div>
         {{/if}}
@@ -333,7 +337,12 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         name: summary.id.substring(lastIndex + 1),
       };
       filter.cardRef = cardRef;
-      filter.query = { filter: { type: cardRef } };
+      filter.query = {
+        filter: {
+          on: cardRef,
+          eq: { 'blog.id': this.args.model.id! },
+        },
+      };
     }
   });
 
@@ -370,9 +379,53 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 // Using type CardDef instead of AppCard from catalog because of
 // the many type issues resulting from the lack types from catalog realm
 export class BlogApp extends CardDef {
+  @field website = contains(StringField);
   static displayName = 'Blog App';
   static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
   static isolated = BlogAppTemplate;
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <BasicFitted
+        class='fitted-blog'
+        @thumbnailURL={{@model.thumbnailURL}}
+        @primary={{@model.title}}
+        @secondary={{@model.website}}
+      />
+      <style scoped>
+        .fitted-blog :deep(.card-description) {
+          display: none;
+        }
+
+        @container fitted-card ((2.0 < aspect-ratio) and (400px <= width ) and (height < 115px)) {
+          .fitted-blog {
+            padding: var(--boxel-sp-xxxs);
+            align-items: center;
+          }
+          .fitted-blog :deep(.card-thumbnail) {
+            border: 1px solid var(--boxel-450);
+            border-radius: var(--boxel-border-radius-lg);
+            width: 40px;
+            height: 40px;
+            overflow: hidden;
+          }
+          .fitted-blog :deep(.info-section) {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--boxel-sp-xs);
+          }
+          .fitted-blog :deep(.card-title) {
+            -webkit-line-clamp: 2;
+            font-weight: 600;
+          }
+          .fitted-blog :deep(.card-display-name) {
+            margin: 0;
+            overflow: hidden;
+          }
+        }
+      </style>
+    </template>
+  };
 }

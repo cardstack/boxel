@@ -108,18 +108,30 @@ export async function getPlanByStripeId(
 
 export async function updateUserStripeCustomerId(
   dbAdapter: DBAdapter,
-  userId: string,
+  matrixUserId: string,
   stripeCustomerId: string,
 ) {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    stripe_customer_id: stripeCustomerId,
-  });
+  let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
 
-  await query(dbAdapter, [
-    ...update('users', nameExpressions, valueExpressions),
-    ` WHERE matrix_user_id = `,
-    param(userId),
-  ]);
+  if (!user) {
+    // This means there is no user in our db yet, which is a case for matrix users that signed up before we
+    // introduced the users table and starded inserting users on realm creation.
+    // We can just create a new user in our db with matrix user id and stripe customer id.
+    let { valueExpressions, nameExpressions } = asExpressions({
+      matrix_user_id: matrixUserId,
+      stripe_customer_id: stripeCustomerId,
+    });
+    await query(dbAdapter, insert('users', nameExpressions, valueExpressions));
+  } else {
+    let { valueExpressions, nameExpressions } = asExpressions({
+      stripe_customer_id: stripeCustomerId,
+    });
+    await query(dbAdapter, [
+      ...update('users', nameExpressions, valueExpressions),
+      ` WHERE matrix_user_id = `,
+      param(matrixUserId),
+    ]);
+  }
 }
 
 export async function getUserByStripeId(

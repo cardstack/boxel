@@ -1,19 +1,20 @@
 import Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { trackedFunction } from 'ember-resources/util/function';
 
-import ENV from '@cardstack/host/config/environment';
+import {
+  SupportedMimeType,
+  encodeToAlphanumeric,
+} from '@cardstack/runtime-common';
 
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
-
-const { stripePaymentLink } = ENV;
 
 interface SubscriptionData {
   plan: string | null;
@@ -21,6 +22,12 @@ interface SubscriptionData {
   creditsIncludedInPlanAllowance: number | null;
   extraCreditsAvailableInBalance: number | null;
   stripeCustomerId: string | null;
+}
+
+interface StripeLink {
+  type: string;
+  url: string;
+  creditReloadAmount?: number;
 }
 
 export default class BillingService extends Service {
@@ -43,23 +50,77 @@ export default class BillingService extends Service {
     this._subscriptionData = null;
   }
 
-  encodeToAlphanumeric(matrixUserId: string) {
-    return Buffer.from(matrixUserId)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+  get customerPortalLink() {
+    return this.stripeLinks.value?.customerPortalLink;
   }
+
+  get freePlanPaymentLink() {
+    return this.stripeLinks.value?.freePlanPaymentLink;
+  }
+
+  get extraCreditsPaymentLinks() {
+    return this.stripeLinks.value?.extraCreditsPaymentLinks;
+  }
+
+  get fetchingStripePaymentLinks() {
+    return this.stripeLinks.isLoading;
+  }
+
+  private stripeLinks = trackedFunction(this, async () => {
+    let response = await this.network.fetch(
+      `${this.url.origin}/_stripe-links`,
+      {
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await this.getToken()}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      console.error(
+        `Failed to fetch stripe payment links for realm server ${this.url.origin}: ${response.status}`,
+      );
+      return;
+    }
+
+    let json = (await response.json()) as {
+      data: {
+        type: string;
+        attributes: {
+          url: string;
+          metadata?: { creditReloadAmount: number };
+        };
+      }[];
+    };
+    let links = json.data.map((data) => ({
+      type: data.type,
+      url: data.attributes.url,
+      creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
+    })) as StripeLink[];
+    return {
+      customerPortalLink: links.find(
+        (link) => link.type === 'customer-portal-link',
+      ),
+      freePlanPaymentLink: links.find(
+        (link) => link.type === 'free-plan-payment-link',
+      ),
+      extraCreditsPaymentLinks: links.filter(
+        (link) => link.type === 'extra-credits-payment-link',
+      ),
+    };
+  });
 
   getStripePaymentLink(matrixUserId: string): string {
     // We use the matrix user id (@username:example.com) as the client reference id for stripe
     // so we can identify the user payment in our system when we get the webhook
     // the client reference id must be alphanumeric, so we encode the matrix user id
     // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
-    const clientReferenceId = this.encodeToAlphanumeric(matrixUserId);
-    return `${stripePaymentLink}?client_reference_id=${clientReferenceId}`;
+    const clientReferenceId = encodeToAlphanumeric(matrixUserId);
+    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}`;
   }
 
+  @cached
   get subscriptionData() {
     return this._subscriptionData;
   }
@@ -68,11 +129,11 @@ export default class BillingService extends Service {
     return this.fetchSubscriptionDataTask.isRunning;
   }
 
-  async fetchSubscriptionData() {
+  fetchSubscriptionData() {
     if (this.subscriptionData) {
       return;
     }
-    await this.fetchSubscriptionDataTask.perform();
+    this.fetchSubscriptionDataTask.perform();
   }
 
   private async subscriptionDataRefresher() {
@@ -87,10 +148,11 @@ export default class BillingService extends Service {
         Authorization: `Bearer ${await this.getToken()}`,
       },
     });
-    if (response.status !== 200) {
-      throw new Error(
+    if (!response.ok) {
+      console.error(
         `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
       );
+      return;
     }
     let json = await response.json();
     let plan =

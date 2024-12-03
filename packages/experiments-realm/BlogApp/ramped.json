@@ -2,6 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
+      "website": "ramped.com",
       "title": "Ramped",
       "description": "Urban insights",
       "thumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png"

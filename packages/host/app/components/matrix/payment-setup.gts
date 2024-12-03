@@ -124,6 +124,7 @@ export default class PaymentSetup extends Component<Signature> {
             <BoxelButton
               @as='anchor'
               @kind='primary'
+              @disabled={{this.billingService.fetchingStripePaymentLinks}}
               @href={{this.stripePaymentLink}}
               data-test-setup-payment
               class='setup-button'
