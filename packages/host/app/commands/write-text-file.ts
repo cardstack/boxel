@@ -26,8 +26,15 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     let url = new URL(input.path, input.realm);
     if (!input.overwrite) {
       let existing = await this.network.authedFetch(url);
-      if (existing.status != 404) {
+
+      if (existing.ok || existing.status === 406) {
         throw new Error(`File already exists: ${input.path}`);
+      }
+
+      if (existing.status !== 404) {
+        throw new Error(
+          `Error checking if file exists at ${input.path}: ${existing.statusText} (${existing.status})`,
+        );
       }
     }
     let response = await this.network.authedFetch(url, {
