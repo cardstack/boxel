@@ -2,6 +2,7 @@ import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
 
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
 import stringify from 'safe-stable-stringify';
 
@@ -11,6 +12,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { Submodes } from '../components/submode-switcher';
 import { getCard } from '../resources/card-resource';
+import BillingService from '../services/billing-service';
 import CardService from '../services/card-service';
 import MatrixService from '../services/matrix-service';
 import RealmService from '../services/realm';
@@ -29,6 +31,7 @@ export default class Index extends Route<void> {
   };
 
   @service private declare matrixService: MatrixService;
+  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service private declare router: RouterService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -58,6 +61,12 @@ export default class Index extends Route<void> {
 
     if (!this.matrixService.isLoggedIn) {
       return; // Show login component
+    }
+
+    if (!isTesting()) {
+      // we don't want to fetch subscription data in integration tests
+      // we need to fetch the subscription data right after login
+      await this.billingService.fetchSubscriptionData();
     }
 
     let cardUrl: string | undefined;

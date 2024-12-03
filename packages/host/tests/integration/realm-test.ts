@@ -480,7 +480,7 @@ module('Integration | realm', function (hooks) {
     let result = await queryEngine.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`,
+        `unexpected error when getting card from index: ${result.error.errorDetail.detail}`,
       );
     }
     assert.strictEqual(
@@ -845,7 +845,7 @@ module('Integration | realm', function (hooks) {
     let result = await queryEngine.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`,
+        `unexpected error when getting card from index: ${result.error.errorDetail.detail}`,
       );
     }
     assert.strictEqual(
@@ -2474,7 +2474,7 @@ module('Integration | realm', function (hooks) {
     );
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`,
+        `unexpected error when getting card from index: ${result.error.errorDetail.detail}`,
       );
     }
     assert.strictEqual(
@@ -2526,7 +2526,7 @@ module('Integration | realm', function (hooks) {
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`,
+        `unexpected error when getting card from index: ${result.error.errorDetail.detail}`,
       );
     }
     assert.strictEqual(

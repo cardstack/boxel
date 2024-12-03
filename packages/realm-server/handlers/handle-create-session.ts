@@ -35,7 +35,8 @@ export default function handleCreateSessionRequest({
       ) {
         return new Response(body, init);
       },
-      createJWT: async (user: string) => createJWT(user, secretSeed),
+      createJWT: async (user: string, sessionRoom: string) =>
+        createJWT({ user, sessionRoom }, secretSeed),
     } as Utils,
   );
 

@@ -15,7 +15,9 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
+  setupPayment,
   registerRealmUsers,
+  encodeWebSafeBase64,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
@@ -60,6 +62,16 @@ test.describe('User Registration w/o Token', () => {
     await page.locator('[data-test-register-btn]').click();
     await validateEmail(page, 'user1@example.com');
 
+    await page.bringToFront();
+
+    await expect(page.locator('[data-test-email-validated]')).toContainText(
+      'Success! Your email has been validated',
+    );
+
+    // base 64 encode the matrix user id
+    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
+
+    await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page);
   });
 });

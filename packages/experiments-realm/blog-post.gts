@@ -8,60 +8,57 @@ import {
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { formatDatetime, toISOString } from './blog-app';
+import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { Author } from './author';
-import { htmlSafe } from '@ember/template';
+import { setBackgroundImage } from './components/layout';
+
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
-import FileStack from '@cardstack/boxel-icons/file-stack';
+import BlogIcon from '@cardstack/boxel-icons/notebook';
 
-class FittedTemplate extends Component<typeof BlogPost> {
-  private get authorName() {
-    let author = this.args.model.authorBio;
-    if (author?.firstName || author?.lastName) {
-      let fullName = `${this.args.model.authorBio?.firstName} ${this.args.model.authorBio?.lastName}`;
-      return fullName.trim();
-    }
-    return undefined;
-  }
-
-  private get pubDate() {
-    if (this.args.model.status === 'Published' && this.args.model.publishDate) {
-      return formatDatetime(this.args.model.publishDate, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
-    return undefined;
-  }
-
-  private backgroundURL(backgroundURL: string | null | undefined) {
-    if (!backgroundURL) {
-      return;
-    }
-    return htmlSafe(`background-image: url(${backgroundURL});`);
-  }
-
+class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
-    <article class='fitted-blog-post'>
-      <div class='thumbnail' style={{this.backgroundURL @model.thumbnailURL}} />
+    <article class='embedded-blog-post'>
+      <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
       <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
       <p class='description'>{{@model.description}}</p>
-      <div class='byline'>{{this.authorName}}</div>
-      {{#if this.pubDate}}
-        {{#if @model.publishDate}}
-          <time class='date' timestamp={{toISOString @model.publishDate}}>
-            {{this.pubDate}}
-          </time>
-        {{/if}}
+      <@fields.authorBio
+        class='byline'
+        @format='atom'
+        @displayContainer={{false}}
+      />
+      {{#if @model.datePublishedIsoTimestamp}}
+        <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+          {{@model.formattedDatePublished}}
+        </time>
       {{/if}}
     </article>
     <style scoped>
-      .fitted-blog-post {
+      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+      .embedded-blog-post {
+        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         display: grid;
+        grid-template:
+          'img title title' max-content
+          'img desc desc' max-content
+          'img byline date' 1fr / 40% 1fr max-content;
+        gap: var(--boxel-sp-xs);
+        padding-right: var(--boxel-sp-xl);
         overflow: hidden;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-family: var(
+          --blog-post-heading-font-family,
+          'Playfair Display',
+          serif
+        );
+        font-weight: 700;
       }
       .thumbnail {
         grid-area: img;
@@ -69,6 +66,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
+        margin-right: var(--boxel-sp-lg);
       }
       .title {
         grid-area: title;
@@ -76,9 +74,10 @@ class FittedTemplate extends Component<typeof BlogPost> {
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 3;
         overflow: hidden;
-        margin: 0;
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
+        margin: var(--boxel-sp-lg) 0 0;
+        font-size: var(--boxel-font-size-lg);
+        line-height: calc(30 / 22);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .description {
         grid-area: desc;
@@ -87,12 +86,15 @@ class FittedTemplate extends Component<typeof BlogPost> {
         -webkit-line-clamp: 4;
         overflow: hidden;
         margin: 0;
-        font: var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
+        font-size: var(--boxel-font-size);
+        line-height: calc(22 / 16);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .byline {
         grid-area: byline;
         align-self: end;
+        width: auto;
+        height: auto;
         text-wrap: nowrap;
         text-overflow: ellipsis;
         overflow: hidden;
@@ -100,174 +102,469 @@ class FittedTemplate extends Component<typeof BlogPost> {
       .date {
         grid-area: date;
         align-self: end;
+        justify-self: end;
         text-wrap: nowrap;
         text-overflow: ellipsis;
         overflow: hidden;
       }
       .byline,
       .date {
-        font: 500 var(--boxel-font-xs);
+        margin-bottom: var(--boxel-sp-xs);
+        height: 30px; /* author thumbnail max height */
+        display: inline-flex;
+        align-items: center;
+        gap: 0 var(--boxel-sp-xxxs);
+        font-weight: 500;
+        font-size: var(--boxel-font-size-sm);
+        line-height: calc(18 / 13);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+    </style>
+  </template>
+}
+
+class FittedTemplate extends Component<typeof BlogPost> {
+  <template>
+    <article class='fitted-blog-post'>
+      <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
+      <div class='content'>
+        <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
+        <p class='description'>{{@model.description}}</p>
+        <span class='byline'>{{@model.authorBio.title}}</span>
+        {{#if @model.datePublishedIsoTimestamp}}
+          <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+            {{@model.formattedDatePublished}}
+          </time>
+        {{/if}}
+      </div>
+    </article>
+    <style scoped>
+      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+      .fitted-blog-post {
+        --xs-line-height: calc(14 / 11);
+        font-family: var(--blog-post-font-family, 'Lora', serif);
+        width: 100%;
+        height: 100%;
+        min-width: 100px;
+        min-height: 29px;
+        display: grid;
+        overflow: hidden;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-family: var(
+          --blog-post-heading-font-family,
+          'Playfair Display',
+          serif
+        );
+        font-weight: 700;
+      }
+      .thumbnail {
+        grid-area: img;
+        background-color: var(--boxel-200);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+      }
+      .content {
+        grid-area: content;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .title {
+        grid-area: title;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        margin: 0;
+
+        font-size: var(--boxel-font-size-sm);
         letter-spacing: var(--boxel-lsp-sm);
+        line-height: 1.3;
+      }
+      .description {
+        grid-area: desc;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+        line-height: var(--xs-line-height);
+      }
+      .byline {
+        grid-area: byline;
+        display: inline-block;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .date {
+        grid-area: date;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .byline,
+      .date {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        letter-spacing: var(--boxel-lsp-sm);
+        line-height: var(--xs-line-height);
       }
 
-      @container fitted-card ((450px < width) and (height > 224px)) {
+      @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
         .fitted-blog-post {
           grid-template:
-            'img title title' max-content
-            'img desc desc' max-content
-            'img byline date' 1fr / 40% 1fr 1fr;
-          gap: var(--boxel-sp-xs);
-          padding-right: var(--boxel-sp-xl);
+            'img' 42%
+            'content' 1fr / 1fr;
         }
-        .thumbnail {
-          margin-right: var(--boxel-sp-lg);
-        }
-        .title {
-          margin-top: var(--boxel-sp-lg);
-          font: 700 var(--boxel-font-lg);
-          line-height: 1.4;
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .description {
-          font: var(--boxel-font);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .byline,
-        .date {
-          margin-bottom: var(--boxel-sp-lg);
-          font: 500 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .date {
-          justify-self: end;
-        }
-      }
-
-      @container fitted-card ((349px < width <= 450px) and (height > 224px)) {
-        .fitted-blog-post {
+        .content {
+          display: grid;
           grid-template:
-            'img title title' max-content
-            'img desc desc' max-content
-            'img byline date' 1fr / 45% 1fr;
-          gap: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-          padding-right: var(--boxel-sp-xs);
-        }
-        .title {
-          margin-top: var(--boxel-sp-xs);
-          font: 700 var(--boxel-font);
-        }
-        .description {
-          font: var(--boxel-font-sm);
-        }
-        .byline,
-        .date {
-          margin-bottom: var(--boxel-sp-xs);
-        }
-        .date {
-          justify-self: end;
-        }
-      }
-
-      @container fitted-card ((185px < width <= 349px) and (height > 224px) ) {
-        .fitted-blog-post {
-          grid-template:
-            'img img' 100px
             'title title' max-content
             'desc desc' max-content
-            'byline date' 1fr / 1fr;
-          gap: var(--boxel-sp-xxxs);
-        }
-        .fitted-blog-post > *:not(.thumbnail) {
-          padding: 0 var(--boxel-sp-xs);
-        }
-        .title {
-          font: 700 var(--boxel-font);
-        }
-        .description {
-          -webkit-line-clamp: 3;
-          font: var(--boxel-font-sm);
+            'byline date' 1fr / 1fr max-content;
         }
         .byline,
         .date {
-          margin-bottom: var(--boxel-sp-xs);
+          align-self: end;
         }
         .date {
           justify-self: end;
         }
       }
 
-      @container fitted-card ((width <= 185px) and (height > 224px) ) {
+      /* Aspect ratio < 1.0 (Vertical card) */
+      @container fitted-card (aspect-ratio <= 1.0) and (224px <= height < 226px) {
         .fitted-blog-post {
           grid-template:
             'img' 92px
+            'content' 1fr / 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'byline' max-content
+            'date' 1fr / 1fr;
+        }
+        .description {
+          display: none;
+        }
+        .date {
+          align-self: end;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (180px <= height < 224px) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 92px
+            'content' 1fr / 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'date' 1fr / 1fr;
+        }
+        .title {
+          -webkit-line-clamp: 3;
+        }
+        .description,
+        .byline {
+          display: none;
+        }
+        .date {
+          align-self: end;
+        }
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
+        .title {
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (148px <= height < 180px) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 80px
+            'content' 1fr / 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'date' 1fr / 1fr;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+        }
+        .description,
+        .byline {
+          display: none;
+        }
+        .date {
+          align-self: end;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 68px
+            'content' 1fr / 1fr;
+        }
+        .content {
+          display: block;
+        }
+        .title {
+          -webkit-line-clamp: 3;
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 57px
+            'content' 1fr / 1fr;
+        }
+        .title {
+          -webkit-line-clamp: 3;
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
+        .title {
+          font-size: var(--boxel-font-size);
+          line-height: calc(22 / 16);
+        }
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height)) {
+        .fitted-blog-post {
+          grid-template:
+            'img' 55%
+            'content' 1fr / 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'byline' max-content
+            'desc' max-content
+            'date' 1fr / 1fr;
+        }
+        .description {
+          -webkit-line-clamp: 5;
+          margin-top: var(--boxel-sp-xxxs);
+        }
+        .date {
+          align-self: end;
+        }
+      }
+
+      /* 1.0 < Aspect ratio (Horizontal card) */
+      @container fitted-card ((1.0 < aspect-ratio) and (180px <= height)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / 40% 1fr;
+        }
+        .content {
+          display: grid;
+          grid-template:
             'title' max-content
             'desc' max-content
             'byline' 1fr
             'date' max-content / 1fr;
-          gap: var(--boxel-sp-xxxs);
+          gap: var(--boxel-sp-5xs);
         }
-        .fitted-blog-post > *:not(.thumbnail) {
-          padding: 0 var(--boxel-sp-xs);
+        .title {
+          -webkit-line-clamp: 2;
         }
         .description {
           -webkit-line-clamp: 3;
+          margin-top: var(--boxel-sp-xxxs);
         }
         .byline {
-          align-self: start;
-          text-wrap: pretty;
-        }
-        .date {
-          margin-bottom: var(--boxel-sp-xs);
+          align-self: end;
         }
       }
 
-      /* Selected view: Strip */
-      @container fitted-card ((width = 300px) and (height = 115px) ) {
+      @container fitted-card ((1.0 < aspect-ratio) and (151px <= height < 180px)) {
         .fitted-blog-post {
-          grid-template:
-            'img title' max-content
-            'img byline' 1fr
-            'img date' max-content / 78px 1fr;
-          gap: var(--boxel-sp-xxxs);
+          grid-template: 'img content' 1fr / 34% 1fr;
         }
-        .fitted-blog-post > *:not(.thumbnail) {
-          padding: 0 var(--boxel-sp-xs);
+        .content {
+          display: grid;
+          grid-template:
+            'title' max-content
+            'byline' max-content
+            'date' 1fr / 1fr;
         }
         .title {
-          margin-top: var(--boxel-sp-xs);
+          -webkit-line-clamp: 2;
         }
         .description {
           display: none;
         }
-        .byline {
-          align-self: start;
-        }
         .date {
-          margin-bottom: var(--boxel-sp-xs);
+          align-self: end;
         }
       }
 
-      /* Selected view: Grid */
-      @container fitted-card ((width = 164px) and (height = 224px)) {
+      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height <= 150px)) {
         .fitted-blog-post {
+          grid-template: 'img content' 1fr / 26% 1fr;
+        }
+        .content {
+          display: grid;
           grid-template:
-            'img' 92px
             'title' max-content
             'byline' 1fr
             'date' max-content / 1fr;
-          gap: var(--boxel-sp-xxxs);
+          gap: var(--boxel-sp-5xs);
         }
-        .fitted-blog-post > *:not(.thumbnail) {
-          padding: 0 var(--boxel-sp-xs);
+        .title {
+          -webkit-line-clamp: 2;
         }
         .description {
           display: none;
         }
         .byline {
-          align-self: start;
+          align-self: end;
+          margin-top: var(--boxel-sp-xxxs);
         }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / 35% 1fr;
+        }
+        .title {
+          -webkit-line-clamp: 3;
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
+        }
+        .description,
+        .byline,
         .date {
-          margin-bottom: var(--boxel-sp-xs);
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / max-content 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+        .thumbnail {
+          width: 45px;
+          height: 45px;
+          border-radius: 5px;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 1;
+          text-wrap: nowrap;
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
+        .fitted-blog-post {
+          grid-template: 'img content' 1fr / max-content 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+        .thumbnail {
+          width: 45px;
+          height: 45px;
+          border-radius: 5px;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+        }
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
+        .fitted-blog-post {
+          grid-template: 'content' 1fr / 1fr;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xxs);
+        }
+        .thumbnail,
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
+        .fitted-blog-post {
+          grid-template: 'content' 1fr / 1fr;
+          align-items: center;
+          padding: var(--boxel-sp-xxxs);
+        }
+        .thumbnail,
+        .description,
+        .byline,
+        .date {
+          display: none;
+        }
+        .content {
+          padding: 0;
+        }
+        .title {
+          -webkit-line-clamp: 2;
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--xs-line-height);
         }
       }
     </style>
@@ -281,7 +578,7 @@ class Status extends StringField {
 
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
-  static icon = FileStack;
+  static icon = BlogIcon;
   @field title = contains(StringField);
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
@@ -298,40 +595,165 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <@fields.title /> by <@fields.authorBio />
-    </template>
-  };
+  @field blog = linksTo(BlogAppCard);
+
+  get formattedDatePublished() {
+    if (this.status === 'Published' && this.publishDate) {
+      return formatDatetime(this.publishDate, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+    return undefined;
+  }
+
+  get datePublishedIsoTimestamp() {
+    if (this.status === 'Published' && this.publishDate) {
+      return this.publishDate.toISOString();
+    }
+    return undefined;
+  }
+
+  static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>
         <header>
-          <h1><@fields.title /></h1>
-          <p class='description'><@fields.description /></p>
-          <@fields.authorBio class='byline' />
+          <@fields.blog class='blog' @displayContainer={{false}} />
+          {{#if @model.thumbnailURL}}
+            <figure>
+              <img
+                class='featured-image'
+                src={{@model.thumbnailURL}}
+                alt='remote work'
+              />
+              <figcaption>
+                Success in remote work is achievable with the right approach.
+              </figcaption>
+            </figure>
+          {{/if}}
+          {{#if @model.title}}
+            <h1><@fields.title /></h1>
+          {{/if}}
+          {{#if @model.description}}
+            <p class='description'>
+              <@fields.description />
+            </p>
+          {{/if}}
+          <ul class='info'>
+            {{#if @model.authorBio.title}}
+              <li class='byline'>
+                <@fields.authorBio
+                  class='author'
+                  @format='atom'
+                  @displayContainer={{false}}
+                />
+              </li>
+            {{/if}}
+            {{#if @model.datePublishedIsoTimestamp}}
+              <li class='pub-date'>
+                Published on
+                <time timestamp={{@model.datePublishedIsoTimestamp}}>
+                  {{this.formattedDatePublished}}
+                </time>
+              </li>
+            {{/if}}
+          </ul>
         </header>
         <@fields.body />
       </article>
       <style scoped>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
         article {
-          padding: var(--boxel-sp) var(--boxel-sp-xl);
+          --markdown-font-family: var(--blog-post-font-family, 'Lora', serif);
+          --markdown-heading-font-family: var(
+            --blog-post-heading-font-family,
+            'Playfair Display',
+            serif
+          );
+          height: max-content;
+          min-height: 100%;
+          padding: var(--boxel-sp-sm) var(--boxel-sp-xl) var(--boxel-sp-lg);
+          background-color: #fcf9f2;
+          font-family: var(--blog-post-font-family, 'Lora', serif);
+        }
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+          font-family: var(
+            --blog-post-heading-font-family,
+            'Playfair Display',
+            serif
+          );
         }
         h1 {
-          margin-top: 0;
-          font: 600 var(--boxel-font-xl);
+          font-size: 2.5rem;
+          font-weight: 600;
+          line-height: 1.25;
+          letter-spacing: normal;
+          margin-bottom: var(--boxel-sp-lg);
         }
-        img {
-          max-width: 100%;
+        figure {
+          margin: 0;
+        }
+        figcaption {
+          font-style: italic;
+        }
+        .featured-image {
+          border-radius: var(--boxel-border-radius-xl);
+          overflow: hidden;
+        }
+        .blog {
+          background-color: inherit;
+        }
+        .blog + figure {
+          margin-top: var(--boxel-sp-sm);
         }
         .description {
-          font: var(--boxel-font);
+          font-size: 1.25rem;
+          font-style: italic;
+        }
+        .info {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+        .info > li + li {
+          border-left: 1px solid black;
+          padding-left: var(--boxel-sp-xs);
         }
         .byline {
-          max-width: 300px;
+          display: inline-flex;
+          align-items: center;
+          gap: 0 var(--boxel-sp-xxxs);
+        }
+        .author {
+          display: contents;
         }
       </style>
     </template>
+
+    private get formattedDatePublished() {
+      if (
+        this.args.model.status === 'Published' &&
+        this.args.model.publishDate
+      ) {
+        return formatDatetime(this.args.model.publishDate, {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      }
+      return undefined;
+    }
   };
 }

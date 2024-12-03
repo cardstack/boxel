@@ -145,7 +145,7 @@ function getErrorMessage(error: any): string {
     return `OpenAI error: ${error.name} - ${error.message}`;
   }
   if (typeof error === 'string') {
-    return `Unknown error: ${error}`;
+    return error;
   }
-  return `Unknown error`;
+  return 'Unknown error';
 }

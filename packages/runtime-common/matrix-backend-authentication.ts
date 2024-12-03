@@ -8,7 +8,7 @@ export interface Utils {
     body: BodyInit | null,
     responseInit: ResponseInit | undefined,
   ): Response;
-  createJWT(user: string): Promise<string>;
+  createJWT(user: string, sessionRoom?: string): Promise<string>;
 }
 
 export class MatrixBackendAuthentication {
@@ -212,7 +212,7 @@ export class MatrixBackendAuthentication {
     hash.update(this.secretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === lastChallenge) {
-      let jwt = await this.utils.createJWT(user);
+      let jwt = await this.utils.createJWT(user, roomId);
       return this.utils.createResponse(null, {
         status: 201,
         headers: {

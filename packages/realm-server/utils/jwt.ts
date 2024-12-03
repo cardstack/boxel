@@ -11,10 +11,14 @@ import {
 
 export interface RealmServerTokenClaim {
   user: string;
+  sessionRoom: string;
 }
 
-export function createJWT(userId: string, secretSeed: string): string {
-  return sign({ user: userId } as RealmServerTokenClaim, secretSeed, {
+export function createJWT(
+  claims: RealmServerTokenClaim,
+  secretSeed: string,
+): string {
+  return sign(claims, secretSeed, {
     expiresIn: '7d',
   });
 }

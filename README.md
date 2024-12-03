@@ -134,13 +134,13 @@ psql -h localhost -p 5435 -U postgres
 
 When the realm server starts up it will automatically run DB migrations that live in the `packages/realm-server/migrations` folder. As part of development you may wish to run migrations manually as well as to create a new migration.
 
-To create a new migration, from `packages/realm-server`, execute:
+To create a new migration, from `packages/postgres`, execute:
 
 ```
 pnpm migrate create name-of-migration
 ```
 
-This creates a new migration file in `packages/realm-server/migrations`. You can then edit the newly created migration file with the details of your migration. We use `node-pg-migrate` to handle our migrations. You can find the API at https://salsita.github.io/node-pg-migrate.
+This creates a new migration file in `packages/postgres/migrations`. You can then edit the newly created migration file with the details of your migration. We use `node-pg-migrate` to handle our migrations. You can find the API at https://salsita.github.io/node-pg-migrate.
 
 To run the migration, execute:
 
@@ -154,7 +154,7 @@ To revert the migration, execute:
 pnpm migrate down
 ```
 
-Boxel also uses SQLite in order to run the DB in the browser as part of running browser tests (and eventually we may run the realm server in the browser to provide a local index). We treat the Postgres database schema as the source of truth and derive the SQLite schema from it. Therefore, once you author and apply a migration, you should generate a new schema SQL file for SQLite. To generate a new SQLite schema, from `packages/realm-server`, execute:
+Boxel also uses SQLite in order to run the DB in the browser as part of running browser tests (and eventually we may run the realm server in the browser to provide a local index). We treat the Postgres database schema as the source of truth and derive the SQLite schema from it. Therefore, once you author and apply a migration, you should generate a new schema SQL file for SQLite. To generate a new SQLite schema, from `packages/postgres`, execute:
 
 ```
 pnpm make-schema
@@ -228,6 +228,38 @@ In order to run the boxel-motion demo app:
 1. `cd packages/boxel-motion/test-app`
 2. `pnpm start`
 3. Visit http://localhost:4200 in your browser
+
+## Payment Setup
+
+There is some pre-setup needed to enable free plan on development account:
+
+1. Go to `packages/realm-server` and run stripe script to listen for the webhooks that Stripe sends to the realm server
+
+```
+pnpm stripe listen --forward-to host.docker.internal:4201/_stripe-webhook --api-key sk_test_api_key_from_the_sandbox_account
+```
+
+2. You will get webhook signing secret from stripe cli after Step 1 is done
+
+```
+> Ready! You are using Stripe API Version [x]. Your webhook signing secret is whsec_xxxxx
+```
+
+3. Go to `packages/realm-server` and run the following command to sync the stripe products to the database, make sure you have the stripe api key set. You only need to run this once OR if you want to sync the products again.
+
+```
+STRIPE_API_KEY=... pnpm sync-stripe-products
+```
+
+4. Go to `packages/realm-server`, pass STRIPE_WEBHOOK_SECRET & STRIPE_API_KEY environment value and start the realm server. STRIPE_WEBHOOK_SECRET is the value you got from stripe cli in Step 2.
+
+```
+STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
+```
+
+5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)
+
+You should be able to subscribe successfully after you perform the steps above.
 
 ## Running the Tests
 

@@ -12,11 +12,7 @@ import {
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 
-export type CommandStatus = 'applied' | 'ready';
-
-class CommandStatusField extends StringField {
-  static [primitive]: CommandStatus;
-}
+export type CommandStatus = 'applied' | 'ready' | 'applying';
 
 class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
   <template>
@@ -45,14 +41,6 @@ export class CommandObjectField extends FieldDef {
   static embedded = CommandObjectFieldTemplate;
 }
 
-export class CommandCard extends CardDef {
-  @field toolCallId = contains(StringField);
-  @field name = contains(StringField);
-  @field payload = contains(CommandObjectField); //arguments of toolCall. Its not called arguments due to lint
-  @field eventId = contains(StringField);
-  @field status = contains(CommandStatusField);
-}
-
 export class SaveCardInput extends CardDef {
   @field realm = contains(StringField);
   @field card = linksTo(CardDef);
@@ -73,6 +61,7 @@ export class ShowCardInput extends CardDef {
 
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
+  @field codePath = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {

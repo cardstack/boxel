@@ -15,6 +15,7 @@ import {
   createRealm,
   login,
   registerRealmUsers,
+  setupUserSubscribed,
 } from '../helpers';
 
 test.describe('Create Realm via Dashboard', () => {
@@ -43,10 +44,14 @@ test.describe('Create Realm via Dashboard', () => {
   }) => {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
+
+    await setupUserSubscribed('@user1:localhost', realmServer);
+
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
+
     await createRealm(page, 'new-workspace', '1New Workspace');
     await page.locator('[data-test-workspace="1New Workspace"]').click();
     let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;

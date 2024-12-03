@@ -73,6 +73,10 @@ let fastbootState:
   | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
   | undefined;
 
+export function cleanWhiteSpace(text: string) {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 export function createVirtualNetworkAndLoader() {
   let virtualNetwork = createVirtualNetwork();
   let fetch = fetcher(virtualNetwork.fetch, [

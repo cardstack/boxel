@@ -88,13 +88,11 @@ To build the entire repository and run the application, follow these steps:
 
     - Visit SMTP UI at http://localhost:5001/
     - Validate email
-    - Go back to Host and login
-
-12. Validate email for login
-
-    - Visit SMTP UI at http://localhost:5001/
-    - Validate email
     - Go back to Host http://localhost:4201/ and login
+
+12. Perform "Setup up Secure Payment Method" flow
+
+    - More detailed steps can be found in our [README](README.md) Payment Setup section
 
 13. Run ai bot (Optional):
 
