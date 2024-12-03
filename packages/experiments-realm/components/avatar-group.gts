@@ -15,7 +15,6 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
   get backgroundImageStyle() {
     return htmlSafe(`background-image: url(${this.args.thumbnailURL});`);
   }
-  x;
 
   <template>
     <div class='avatar-container'>
@@ -24,13 +23,13 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
         {{! template-lint-disable no-inline-styles }}
         style={{this.backgroundImageStyle}}
       >
-        {{#unless this.args.thumbnailURL}}
+        {{#unless @thumbnailURL}}
           <UserCircleIcon width='20' height='20' class='user-icon' />
         {{/unless}}
       </div>
       <div class='avatar-info'>
         <h3 class='name'>
-          {{if this.args.name this.args.name 'No Name Assigned'}}
+          {{if @name @name 'No Name Assigned'}}
         </h3>
         {{yield to='company'}}
       </div>
