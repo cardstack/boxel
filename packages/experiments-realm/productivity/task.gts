@@ -8,19 +8,12 @@ import {
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import {
-  BoxelSelect,
   Avatar,
   Pill,
-  RadioInput,
   ProgressBar,
   ProgressRadial,
 } from '@cardstack/boxel-ui/components';
-import { action } from '@ember/object';
-import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
-import TextAreaCard from '../../base/text-area';
 import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
-import TagIcon from '@cardstack/boxel-icons/tag';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
@@ -29,125 +22,9 @@ import { isToday, isThisWeek, addWeeks } from 'date-fns';
 import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import GlimmerComponent from '@glimmer/component';
-import DateRangeField from './date-range-field';
-import { LooseGooseyField, type LooseyGooseyData } from '../loosey-goosey';
-
-class Edit extends Component<typeof TaskStatusField> {
-  @tracked label: string | undefined = this.args.model.label;
-  <template>
-    <BoxelSelect
-      @placeholder={{this.placeholder}}
-      @options={{this.statuses}}
-      @selected={{this.selectedStatus}}
-      @onChange={{this.onSelectStatus}}
-      as |item|
-    >
-      <div> {{item.label}}</div>
-    </BoxelSelect>
-  </template>
-
-  get selectedStatus() {
-    return this.statuses.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  get statuses() {
-    return TaskStatusField.values;
-  }
-
-  @action onSelectStatus(status: LooseyGooseyData): void {
-    this.label = status.label;
-    this.args.model.label = this.selectedStatus?.label;
-    this.args.model.index = this.selectedStatus?.index;
-  }
-
-  get placeholder() {
-    return 'Fill in';
-  }
-}
-
-export class TaskStatusField extends LooseGooseyField {
-  static values = [
-    { index: 0, label: 'Backlog', color: '#B0BEC5' },
-    {
-      index: 1,
-      label: 'Next Sprint',
-      color: '#64B5F6',
-    },
-    {
-      index: 2,
-      label: 'Current Sprint',
-      color: '#00BCD4',
-    },
-    {
-      index: 3,
-      label: 'In Progress',
-      color: '#FFB74D',
-    },
-    {
-      index: 4,
-      label: 'In Review',
-      color: '#9575CD',
-    },
-    {
-      index: 5,
-      label: 'Staged',
-      color: '#26A69A',
-    },
-    {
-      index: 6,
-      label: 'Shipped',
-      color: '#66BB6A',
-    },
-  ];
-
-  static embedded = class Embedded extends Component<typeof TaskStatusField> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
-
-  static edit = Edit;
-}
-
-class EditPriority extends Component<typeof TaskPriorityField> {
-  @tracked label = this.args.model.label;
-
-  get priorities() {
-    return TaskPriorityField.values;
-  }
-
-  get selectedPriority() {
-    return this.priorities?.find((priority) => {
-      return priority.label === this.label;
-    });
-  }
-
-  @action handlePriorityChange(priority: LooseyGooseyData): void {
-    this.label = priority.label;
-    this.args.model.label = this.selectedPriority?.label;
-    this.args.model.index = this.selectedPriority?.index;
-  }
-
-  <template>
-    <div class='priority-field'>
-      <RadioInput
-        @groupDescription='Select Task Priority'
-        @items={{this.priorities}}
-        @checkedId={{this.selectedPriority.label}}
-        @orientation='horizontal'
-        @spacing='default'
-        @keyName='label'
-        as |item|
-      >
-        <item.component @onChange={{fn this.handlePriorityChange item.data}}>
-          {{item.data.label}}
-        </item.component>
-      </RadioInput>
-    </div>
-  </template>
-}
+import { User } from '../user';
+import { TaskBase, BaseTaskStatusField } from '../task';
+import { BaseTaskPriority } from '../task';
 
 interface TaskCompletionStatusSignature {
   Element: HTMLDivElement;
@@ -193,39 +70,6 @@ class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusSignatur
       }
     </style>
   </template>
-}
-
-export class TaskPriorityField extends LooseGooseyField {
-  // loosey goosey pattern
-  static values = [
-    { index: 0, label: 'Low' },
-    {
-      index: 1,
-      label: 'Medium',
-    },
-    {
-      index: 2,
-      label: 'High',
-    },
-  ];
-
-  static edit = EditPriority;
-  static embedded = class Embedded extends Component<typeof TaskPriorityField> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
-}
-
-export class User extends CardDef {
-  static displayName = 'User';
-  @field name = contains(StringField);
-  @field email = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Team) {
-      return this.name;
-    },
-  });
 }
 
 export class Team extends CardDef {
@@ -712,40 +556,6 @@ class Fitted extends Component<typeof Task> {
   </template>
 }
 
-export class Tag extends CardDef {
-  static displayName = 'Tag';
-  static icon = TagIcon;
-  @field name = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Tag) {
-      return this.name;
-    },
-  });
-  @field color = contains(StringField);
-
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{#if @model.name}}
-        <Pill class='tag-pill' @pillBackgroundColor={{@model.color}}>
-          <:default>
-            <span># {{@model.name}}</span>
-          </:default>
-        </Pill>
-      {{/if}}
-
-      <style scoped>
-        .tag-pill {
-          font-size: calc(var(--boxel-font-size-xs) * 0.95);
-          font-weight: 500;
-          padding: 0;
-          --pill-font-color: var(--boxel-400);
-          border: none;
-        }
-      </style>
-    </template>
-  };
-}
-
 class TaskIsolated extends Component<typeof Task> {
   get dueDate() {
     return this.args.model.dateRange?.end;
@@ -1063,9 +873,60 @@ class TaskIsolated extends Component<typeof Task> {
   }
 }
 
-export class Task extends CardDef {
+export class TaskStatusField extends BaseTaskStatusField {
+  static values = [
+    { index: 0, label: 'Not Started', color: '#B0BEC5' },
+    {
+      index: 1,
+      label: 'Next Sprint',
+      color: '#64B5F6',
+    },
+    {
+      index: 2,
+      label: 'Current Sprint',
+      color: '#00BCD4',
+    },
+    {
+      index: 3,
+      label: 'In Progress',
+      color: '#FFB74D',
+    },
+    {
+      index: 4,
+      label: 'In Review',
+      color: '#9575CD',
+    },
+    {
+      index: 5,
+      label: 'Staged',
+      color: '#26A69A',
+    },
+    {
+      index: 6,
+      label: 'Shipped',
+      color: '#66BB6A',
+    },
+  ];
+}
+
+export class Task extends TaskBase {
   static displayName = 'Task';
   static icon = CheckboxIcon;
+  @field priority = contains(BaseTaskPriority);
+  @field project = linksTo(Project);
+  @field team = linksTo(Team);
+  @field children = linksToMany(() => Task);
+  @field status = contains(TaskStatusField);
+
+  @field title = contains(StringField, {
+    computeVia: function (this: Task) {
+      return this.taskName;
+    },
+  });
+
+  //Removing this causes a missing .title error
+  @field assignee = linksTo(() => TeamMember);
+
   @field shortId = contains(StringField, {
     computeVia: function (this: Task) {
       if (this.id) {
@@ -1080,21 +941,6 @@ export class Task extends CardDef {
         return _shortId.toUpperCase();
       }
       return;
-    },
-  });
-  @field taskName = contains(StringField);
-  @field taskDetail = contains(TextAreaCard);
-  @field status = contains(TaskStatusField);
-  @field priority = contains(TaskPriorityField);
-  @field assignee = linksTo(TeamMember);
-  @field project = linksTo(Project);
-  @field team = linksTo(Team);
-  @field children = linksToMany(() => Task);
-  @field tags = linksToMany(() => Tag);
-  @field dateRange = contains(DateRangeField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Task) {
-      return this.taskName;
     },
   });
 
