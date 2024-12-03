@@ -10,6 +10,7 @@ import {
   queryableValue,
 } from './card-api';
 import CodeRefField from './code-ref';
+import BooleanField from './boolean';
 
 export type CommandStatus = 'applied' | 'ready';
 
@@ -63,7 +64,7 @@ class JsonField extends FieldDef {
 
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
-  @field patch = contains(JsonField); //TODO: JSONField ?
+  @field patch = contains(JsonField);
 }
 
 export class ShowCardInput extends CardDef {
@@ -74,14 +75,11 @@ export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
 }
 
-export class CreateModuleInput extends CardDef {
-  @field code = contains(StringField);
+export class WriteTextFileInput extends CardDef {
+  @field content = contains(StringField);
   @field realm = contains(StringField);
-  @field modulePath = contains(StringField);
-}
-
-export class ModuleCard extends CardDef {
-  @field module = contains(CodeRefField);
+  @field path = contains(StringField);
+  @field overwrite = contains(BooleanField);
 }
 
 export class CreateInstanceInput extends CardDef {
