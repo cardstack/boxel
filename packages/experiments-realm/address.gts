@@ -7,6 +7,40 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import { CountryField } from './country';
 
+function getAddressRows(
+  addressLine1: string | undefined,
+  addressLine2: string | undefined,
+  city: string | undefined,
+  state: string | undefined,
+  postalCode: string | undefined,
+  countryCode: string | undefined,
+  poBoxNumber: string | undefined,
+) {
+  const rows: string[][] = [[], [], []];
+
+  if (addressLine1) {
+    rows[0].push(addressLine1);
+  }
+  if (addressLine2) {
+    rows[0].push(addressLine2);
+  }
+
+  const cityStatePostal = [city, state, postalCode].filter(Boolean).join(', ');
+
+  if (cityStatePostal) {
+    rows[1].push(cityStatePostal);
+  }
+
+  if (countryCode) {
+    rows[2].push(countryCode);
+  }
+
+  if (poBoxNumber) {
+    rows[3].push(`PO Box ${poBoxNumber}`);
+  }
+  return rows;
+}
+
 export class Address extends FieldDef {
   static displayName = 'Address';
   @field addressLine1 = contains(StringField);
@@ -16,39 +50,32 @@ export class Address extends FieldDef {
   @field postalCode = contains(StringField);
   @field country = contains(CountryField);
   @field poBoxNumber = contains(StringField);
+  @field fullAddress = contains(StringField, {
+    computeVia: function (this: Address) {
+      let rows = getAddressRows(
+        this.addressLine1,
+        this.addressLine2,
+        this.city,
+        this.state,
+        this.postalCode,
+        this.country?.code,
+        this.poBoxNumber,
+      );
+      return rows.join(' ');
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     get addressRows() {
-      const rows: string[][] = [[], [], []];
-
-      if (this.args.model.addressLine1) {
-        rows[0].push(this.args.model.addressLine1);
-      }
-      if (this.args.model.addressLine2) {
-        rows[0].push(this.args.model.addressLine2);
-      }
-
-      const cityStatePostal = [
+      return getAddressRows(
+        this.args.model.addressLine1,
+        this.args.model.addressLine2,
         this.args.model.city,
         this.args.model.state,
         this.args.model.postalCode,
-      ]
-        .filter(Boolean)
-        .join(', ');
-
-      if (cityStatePostal) {
-        rows[1].push(cityStatePostal);
-      }
-
-      if (this.args.model.country?.code) {
-        rows[2].push(this.args.model.country.code);
-      }
-
-      if (this.args.model.poBoxNumber) {
-        rows[3].push(`PO Box ${this.args.model.poBoxNumber}`);
-      }
-
-      return rows;
+        this.args.model.country?.code,
+        this.args.model.poBoxNumber,
+      );
     }
 
     <template>
