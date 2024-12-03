@@ -66,6 +66,33 @@ export abstract class Command<
     protected readonly configuration?: CommandConfiguration | undefined, // we'd like this to be required *if* CommandConfiguration is defined, and allow the user to skip it when CommandConfiguration is undefined
   ) {}
 
+  /*
+   await SaveCardCommand.runSingle({
+        commandContext,
+        realm: this.currentRealm.href,
+        card: myAppCard,
+      });
+      await ShowCardCommand.runSingle({
+        commandContext,
+        cardToShow: myAppCard,
+      });
+  */
+  static async runSingle<T extends Command<any, any, any>>(
+    this: new (context: CommandContext) => T,
+    args: { commandContext: CommandContext } & (T extends Command<
+      infer I,
+      any,
+      any
+    >
+      ? Partial<Omit<I, 'constructor'>>
+      : never),
+  ): Promise<T extends Command<any, infer R, any> ? R : never> {
+    let command = new this(args.commandContext);
+    let InputType = await command.getInputType();
+    let input = new InputType(args);
+    return await command.execute(input);
+  }
+
   async execute(input: CardInputType): Promise<CardResultType> {
     // internal bookkeeping
     // todo: support for this.runTask being defined
@@ -101,10 +128,12 @@ export abstract class Command<
     mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
   ): Promise<CardSchema> {
     let InputType = await this.getInputType();
-    return generateJsonSchemaForCardType(
+    let schema = generateJsonSchemaForCardType(
       InputType as unknown as typeof CardDef, // TODO: can we do better type-wise?
       cardApi,
       mappings,
     );
+    console.log('Generating schema for ', this.name, InputType, schema);
+    return schema;
   }
 }
