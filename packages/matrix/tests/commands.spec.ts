@@ -60,7 +60,7 @@ test.describe('Commands', () => {
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
 
-    expect(boxelMessageData.context.tools.length).toEqual(3);
+    expect(boxelMessageData.context.tools.length).toEqual(2);
     let patchCardTool = boxelMessageData.context.tools.find(
       (t: any) => t.function.name === 'patchCard',
     );
