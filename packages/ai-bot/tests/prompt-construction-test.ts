@@ -9,6 +9,7 @@ import {
   getModifyPrompt,
   getRelevantCards,
   SKILL_INSTRUCTIONS_MESSAGE,
+  getPromptParts,
 } from '../helpers';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
@@ -18,6 +19,8 @@ import type {
 import { EventStatus, IRoomEvent } from 'matrix-js-sdk';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { readFileSync } from 'fs-extra';
+import * as path from 'path';
 
 function oldPatchTool(card: CardDef, properties: any): Tool {
   return {
@@ -1148,45 +1151,25 @@ module('getModifyPrompt', () => {
     };
 
     test('should include instructions in system prompt for skill cards', () => {
-      const history: DiscreteMatrixEvent[] = [
-        {
-          type: 'm.room.message',
-          event_id: '1',
-          origin_server_ts: 1234567890,
-          content: {
-            msgtype: 'org.boxel.message',
-            format: 'org.matrix.custom.html',
-            body: 'Hi',
-            formatted_body: 'Hi',
-            data: {
-              context: {
-                tools: [],
-                submode: undefined,
-              },
-              skillCards: [skillCard1, skillCard2],
-            },
-          },
-          sender: '@user:localhost',
-          room_id: 'room1',
-          unsigned: {
-            age: 1000,
-            transaction_id: '1',
-          },
-          status: EventStatus.SENT,
-        },
-      ];
+      const eventList: DiscreteMatrixEvent[] = JSON.parse(
+        readFileSync(path.join(__dirname, 'resources/chats/added-skill.json')),
+      );
 
-      const result = getModifyPrompt(history, '@ai-bot:localhost');
-
-      assert.equal(result.length, 2);
+      const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
+      console.log(result);
+      assert.equal(result.length, 1);
       assert.equal(result[0].role, 'system');
       assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-      assert.true(result[0].content?.includes(instructions1));
-      assert.true(result[0].content?.includes(instructions2));
-      assert.equal(result[1].role, 'user');
-      assert.equal(
-        result[1].content,
-        'User message: Hi\n          Context: the user has no open cards.',
+      assert.false(result[0].content?.includes('['));
+      assert.true(
+        result[0].content?.includes(
+          'If the user wants the data they see edited, AND the patchCard function is available',
+        ),
+      );
+      assert.true(
+        result[0].content?.includes(
+          'Given a prompt, fill in the product requirements document.',
+        ),
       );
     });
 
