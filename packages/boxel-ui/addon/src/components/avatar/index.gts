@@ -24,7 +24,7 @@ const setBackgroundImage = (backgroundURL: string | null | undefined) => {
 
 export default class Avatar extends Component<Signature> {
   get defaultBgColor() {
-    return '#eeeeee';
+    return '#00FFFF';
   }
 
   <template>
