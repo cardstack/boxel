@@ -364,7 +364,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
 
   reset = () => {
     this.args.model.moduleURL = undefined;
-    //this.args.model.appInstances = undefined;
   };
 }
 
@@ -376,7 +375,6 @@ export class ProductRequirementDocument extends CardDef {
   @field thumbnail = contains(Base64ImageField);
   @field overview = contains(MarkdownField);
   @field schema = contains(MarkdownField);
-  //@field appInstances = linksToMany(AppCard);
   @field moduleURL = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: ProductRequirementDocument) {
