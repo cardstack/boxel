@@ -39,7 +39,8 @@ async function loginWithEmail(
 }
 
 async function login(username: string, password: string, matrixUrl: string) {
-  let usernameIsEmailAddress = username.includes('@');
+  let usernameIsMatrixId = username.startsWith('@');
+  let usernameIsEmailAddress = username.includes('@') && !usernameIsMatrixId;
 
   let login;
 
