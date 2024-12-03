@@ -537,6 +537,10 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
 
     await percySnapshot(assert);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+
+    assert.dom(`[data-test-card-error]`).exists();
+    assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
   });
 
   test('index card shows default error tile for instances that have an error and no last known good state', async function (assert) {

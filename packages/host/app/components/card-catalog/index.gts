@@ -21,6 +21,7 @@ import type { RealmInfo, CodeRef } from '@cardstack/runtime-common';
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import type RealmService from '@cardstack/host/services/realm';
+
 import { type PrerenderedCard } from '../prerendered-card-search';
 
 import { removeFileExtension } from '../search-sheet/utils';

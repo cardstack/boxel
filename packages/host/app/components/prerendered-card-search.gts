@@ -1,7 +1,9 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -15,8 +17,6 @@ import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/card-document';
-
-import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { type Format } from 'https://cardstack.com/base/card-api';
 
