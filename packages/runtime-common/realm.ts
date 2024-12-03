@@ -1405,6 +1405,9 @@ export class Realm {
             status: maybeError.error.errorDetail.status,
             title: maybeError.error.errorDetail.title,
             message: maybeError.error.errorDetail.detail,
+            // note that this is actually available as part of the response
+            // header too--it's just easier for clients when it is here
+            realm: this.url,
             meta: {
               lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
               scopedCssUrls: maybeError.error.scopedCssUrls,

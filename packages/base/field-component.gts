@@ -327,11 +327,6 @@ export function getBoxComponent(
         TODO: regarding the atom format styling below, we probably want to refactor to move
         any styles that effect the inside of the card boundary into the CardDef's atom template
       */
-      .field-component-card.atom-format {
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-
       .field-component-card.atom-format.display-container-true {
         padding: 4px var(--boxel-sp-sm);
         background-color: var(--boxel-light);
