@@ -9,7 +9,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import {
   SupportedMimeType,
-  encodeToAlphanumeric,
+  encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 
 import NetworkService from './network';
@@ -93,11 +93,13 @@ export default class BillingService extends Service {
         };
       }[];
     };
+
     let links = json.data.map((data) => ({
       type: data.type,
       url: data.attributes.url,
       creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
     })) as StripeLink[];
+
     return {
       customerPortalLink: links.find(
         (link) => link.type === 'customer-portal-link',
@@ -116,7 +118,7 @@ export default class BillingService extends Service {
     // so we can identify the user payment in our system when we get the webhook
     // the client reference id must be alphanumeric, so we encode the matrix user id
     // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
-    const clientReferenceId = encodeToAlphanumeric(matrixUserId);
+    const clientReferenceId = encodeWebSafeBase64(matrixUserId);
     return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}`;
   }
 

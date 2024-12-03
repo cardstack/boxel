@@ -8,8 +8,11 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
+import { encodeWebSafeBase64 } from '@cardstack/runtime-common';
+
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
-import BillingService from '@cardstack/host/services/billing-service';
+import type BillingService from '@cardstack/host/services/billing-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {};
@@ -17,6 +20,15 @@ interface Signature {
 }
 
 export default class ProfileSubscription extends Component<Signature> {
+  @service private declare billingService: BillingService;
+  @service private declare matrixService: MatrixService;
+
+  urlWithClientReferenceId = (url: string) => {
+    return `${url}?client_reference_id=${encodeWebSafeBase64(
+      this.matrixService.userId as string,
+    )}`;
+  };
+
   <template>
     <WithSubscriptionData as |subscriptionData|>
       <FieldContainer
@@ -71,7 +83,7 @@ export default class ProfileSubscription extends Component<Signature> {
                       @as='anchor'
                       @kind='secondary-light'
                       @size='extra-small'
-                      @href={{paymentLink.url}}
+                      @href={{this.urlWithClientReferenceId paymentLink.url}}
                       target='_blank'
                       data-test-pay-button={{index}}
                     >Pay</BoxelButton>
@@ -83,6 +95,7 @@ export default class ProfileSubscription extends Component<Signature> {
         </div>
       </FieldContainer>
     </WithSubscriptionData>
+
     <style scoped>
       .profile-field :deep(.invalid) {
         box-shadow: none;
@@ -157,6 +170,4 @@ export default class ProfileSubscription extends Component<Signature> {
       }
     </style>
   </template>
-
-  @service private declare billingService: BillingService;
 }
