@@ -13,6 +13,8 @@ import Avatar from './index.gts';
 export default class AvatarUsage extends Component {
   @tracked userId = 'user123';
   @tracked displayName = 'John Doe';
+  @tracked thumbnailURL =
+    'https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1';
   @tracked isReady = true;
 
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
@@ -39,6 +41,7 @@ export default class AvatarUsage extends Component {
           <Avatar
             @userId={{this.userId}}
             @displayName={{this.displayName}}
+            @thumbnailURL={{this.thumbnailURL}}
             @isReady={{this.isReady}}
           />
         </:example>
@@ -56,6 +59,13 @@ export default class AvatarUsage extends Component {
             @defaultValue='userId'
             @value={{this.displayName}}
             @onInput={{fn (mut this.displayName)}}
+          />
+          <Args.String
+            @name='thumbnailURL'
+            @name='thumbnailURL'
+            @description='URL of the user thumbnail'
+            @value={{this.thumbnailURL}}
+            @onInput={{fn (mut this.thumbnailURL)}}
           />
           <Args.Bool
             @name='isReady'
