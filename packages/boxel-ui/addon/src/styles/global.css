@@ -58,8 +58,8 @@
   }
 
   a:hover {
-    color: var(--boxel-highlight);
     cursor: pointer;
+    text-decoration: underline;
   }
 
   a:focus {
