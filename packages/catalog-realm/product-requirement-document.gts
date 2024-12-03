@@ -15,7 +15,6 @@ import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier'; // TODO: why is this a type error???
 import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
 import { AppCard } from './app-card';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 
@@ -52,7 +51,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             >
               Reset
             </Button>
-          {{else if @context.actions.runCommand}}
+            {{!-- {{else if @context.actions.runCommand}}
             <Button
               {{on 'click' this.generateApp}}
               class='generate-button'
@@ -65,7 +64,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                 <span class='generate-button-logo' />
               {{/unless}}
               Generate App Now
-            </Button>
+            </Button> --}}
           {{/if}}
         </div>
         {{#if this.errorMessage}}
@@ -96,21 +95,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             <summary><span>App</span></summary>
             <div class='details-content'>
               <@fields.appInstances />
-              {{#if @context.actions.createCard}}
-                <Button
-                  {{on 'click' this.createInstance}}
-                  class='generate-button new-instance-button'
-                  @kind='primary-dark'
-                  @disabled={{this._createInstance.isRunning}}
-                  @loading={{this._createInstance.isRunning}}
-                  data-test-create-instance
-                >
-                  {{#unless this._createInstance.isRunning}}
-                    <span class='generate-button-logo' />
-                  {{/unless}}
-                  Create New Instance
-                </Button>
-              {{/if}}
             </div>
           </details>
         {{/if}}
@@ -246,97 +230,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   get currentRealm() {
     return this.args.model[realmURL];
   }
-
-  generateApp = () => {
-    this._generateCode.perform();
-  };
-  createInstance = () => {
-    this._createInstance.perform();
-  };
-
-  private _generateCode = restartableTask(async () => {
-    this.errorMessage = '';
-    try {
-      if (!this.args.context?.actions?.runCommand) {
-        throw new Error('Context action "runCommand" is not available');
-      }
-      let skillCardUrl = new URL('./SkillCard/app-generator', import.meta.url)
-        .href;
-
-      await this.args.context.actions.runCommand(
-        this.args.model as CardDef,
-        skillCardUrl,
-        'Generate code',
-      );
-    } catch (e) {
-      console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
-    }
-  });
-
-  private _createInstance = restartableTask(async () => {
-    this.errorMessage = '';
-    try {
-      if (!this.currentRealm) {
-        throw new Error('Realm URL is not available');
-      }
-      if (!this.args.context?.actions?.createCard) {
-        throw new Error('Context action "createCard" is not available');
-      }
-      if (!this.args.model.moduleURL) {
-        throw new Error('Module URL is not available');
-      }
-      let { moduleURL } = this.args.model;
-      let loader = (import.meta as any).loader;
-      let module = await loader.import(moduleURL);
-      let appCard = Object.entries(module).find(
-        ([_, declaration]) =>
-          declaration &&
-          typeof declaration === 'function' &&
-          'isCardDef' in declaration &&
-          AppCard.isPrototypeOf(declaration),
-      );
-      if (!appCard) {
-        throw new Error('Could not find app card in module');
-      }
-      let moduleRef = {
-        module: moduleURL,
-        name: appCard[0],
-      };
-
-      let card = await this.args.context?.actions?.createCard?.(
-        moduleRef,
-        undefined,
-        {
-          realmURL: this.currentRealm,
-          doc: {
-            data: {
-              attributes: {
-                title: this.args.model.appTitle,
-                moduleId: moduleURL,
-              },
-              meta: {
-                adoptsFrom: moduleRef,
-                realmURL: this.currentRealm.href,
-              },
-            },
-          },
-          cardModeAfterCreation: 'isolated',
-        },
-      );
-      if (!card) {
-        throw new Error('Could not create card');
-      }
-      let { appInstances } = this.args.model;
-      let apps = [...(appInstances ?? []), card] as AppCard[];
-      this.args.model.appInstances = apps;
-    } catch (e) {
-      console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
-    }
-  });
 
   viewModule = () => {
     this.errorMessage = '';

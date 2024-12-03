@@ -17,7 +17,7 @@ import {
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -48,9 +48,10 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import RoomState, {
+import Room, {
+  SkillsConfig,
   TempEvent,
-} from '@cardstack/host/lib/matrix-classes/room-state';
+} from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -67,7 +68,6 @@ import type {
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import { Skill } from '../components/ai-assistant/skill-menu';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -91,6 +91,7 @@ const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
+const SKILLS_STATE_EVENT_TYPE = 'org.boxel.room.skills';
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -113,7 +114,7 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private roomStateMap: TrackedMap<string, RoomState> = new TrackedMap();
+  private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -121,9 +122,11 @@ export default class MatrixService extends Service {
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
+  flushRoomState: Promise<void> | undefined;
   private roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] =
     [];
   private timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
+  private roomStateQueue: MatrixSDK.RoomState[] = [];
   #ready: Promise<void>;
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
@@ -131,7 +134,7 @@ export default class MatrixService extends Service {
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
   private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
-  private defaultSkills: Skill[] = [];
+  private defaultSkills: SkillCard[] = [];
 
   constructor(owner: Owner) {
     super(owner);
@@ -172,6 +175,7 @@ export default class MatrixService extends Service {
       [this.matrixSDK.RoomEvent.Timeline, this.onTimeline],
       [this.matrixSDK.RoomEvent.LocalEchoUpdated, this.onUpdateEventStatus],
       [this.matrixSDK.RoomEvent.Receipt, this.onReceipt],
+      [this.matrixSDK.RoomStateEvent.Update, this.onRoomStateUpdate],
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
@@ -453,6 +457,7 @@ export default class MatrixService extends Service {
         this.client.setPowerLevel(roomId, fullId, AI_BOT_POWER_LEVEL, null);
       }
     });
+    this.addSkillCardsToRoom(roomId, await this.loadDefaultSkills());
     return roomId;
   }
 
@@ -565,7 +570,6 @@ export default class MatrixService extends Service {
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
-    skillCards: CardDef[] = [],
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
@@ -602,12 +606,6 @@ export default class MatrixService extends Service {
       this.cardHashes,
       { maybeRelativeURL: null },
     );
-    let attachedSkillEventIds = await this.getCardEventIds(
-      skillCards,
-      roomId,
-      this.skillCardHashes,
-      { includeComputeds: true, maybeRelativeURL: null },
-    );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
@@ -617,7 +615,6 @@ export default class MatrixService extends Service {
       clientGeneratedId,
       data: {
         attachedCardsEventIds,
-        attachedSkillEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
@@ -625,6 +622,37 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
+  }
+
+  public async addSkillCardsToRoom(
+    roomId: string,
+    skillCards: SkillCard[],
+  ): Promise<void> {
+    let attachedSkillEventIds = await this.getCardEventIds(
+      skillCards,
+      roomId,
+      this.skillCardHashes,
+      { includeComputeds: true, maybeRelativeURL: null },
+    );
+    let skillEventIdsStateEvent: Record<string, any> = {};
+    try {
+      skillEventIdsStateEvent = await this.client.getStateEvent(
+        roomId,
+        SKILLS_STATE_EVENT_TYPE,
+        '',
+      );
+    } catch (e) {
+      // this is fine, it just means the state event doesn't exist yet
+    }
+    this.client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
+      enabledEventIds: [
+        ...new Set([
+          ...(skillEventIdsStateEvent.enabledEventIds || []),
+          ...attachedSkillEventIds,
+        ]),
+      ],
+      disabledEventIds: [...(skillEventIdsStateEvent.disabledEventIds || [])],
+    });
   }
 
   public async sendAiAssistantMessage(params: {
@@ -638,6 +666,9 @@ export default class MatrixService extends Service {
     let roomId = params.roomId;
     if (!roomId) {
       roomId = await this.createRoom('AI Assistant', [aiBotUsername]);
+    }
+    if (params.skillCards?.length) {
+      this.addSkillCardsToRoom(roomId, params.skillCards);
     }
 
     let html = markdownToHtml(params.prompt);
@@ -671,12 +702,6 @@ export default class MatrixService extends Service {
       this.cardHashes,
       { maybeRelativeURL: null },
     );
-    let attachedSkillEventIds = await this.getCardEventIds(
-      params.skillCards ?? [],
-      roomId,
-      this.skillCardHashes,
-      { includeComputeds: true, maybeRelativeURL: null },
-    );
 
     let clientGeneratedId = uuidv4();
 
@@ -688,7 +713,6 @@ export default class MatrixService extends Service {
       clientGeneratedId,
       data: {
         attachedCardsEventIds,
-        attachedSkillEventIds,
         context: {
           tools,
         },
@@ -783,19 +807,19 @@ export default class MatrixService extends Service {
     }
   }
 
-  getRoomState(roomId: string) {
-    return this.roomStateMap.get(roomId);
+  getRoomData(roomId: string) {
+    return this.roomDataMap.get(roomId);
   }
 
-  private setRoomState(roomId: string, roomState: RoomState) {
-    this.roomStateMap.set(roomId, roomState);
+  private setRoomData(roomId: string, roomData: Room) {
+    this.roomDataMap.set(roomId, roomData);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,
         getRoom(
           this,
           () => roomId,
-          () => this.getRoomState(roomId)?.events,
+          () => this.getRoomData(roomId)?.events,
         ),
       );
     }
@@ -810,8 +834,7 @@ export default class MatrixService extends Service {
       DefaultSkillCards.map(async (skillCardURL) => {
         let cardResource = getCard(this, () => skillCardURL);
         await cardResource.loaded;
-        let card = cardResource.card as SkillCard;
-        this.defaultSkills.push(new TrackedObject({ card, isActive: true }));
+        this.defaultSkills.push(cardResource.card as SkillCard);
       }),
     );
 
@@ -821,7 +844,7 @@ export default class MatrixService extends Service {
   @cached
   get roomResources() {
     let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-    for (let roomId of this.roomStateMap.keys()) {
+    for (let roomId of this.roomDataMap.keys()) {
       if (!this.roomResourcesCache.get(roomId)) {
         continue;
       }
@@ -831,12 +854,14 @@ export default class MatrixService extends Service {
   }
 
   private resetState() {
-    this.roomStateMap = new TrackedMap();
+    this.roomDataMap = new TrackedMap();
     this.roomMembershipQueue = [];
+    this.roomStateQueue = [];
     this.roomResourcesCache.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
+    this.flushRoomState = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this.cardHashes = new Map();
@@ -891,13 +916,13 @@ export default class MatrixService extends Service {
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let roomState = this.getRoomState(roomId);
-    if (!roomState) {
-      roomState = new RoomState();
-      this.setRoomState(roomId, roomState);
+    let roomData = this.getRoomData(roomId);
+    if (!roomData) {
+      roomData = new Room();
+      this.setRoomData(roomId, roomData);
     }
 
-    roomState.addEvent(event, oldEventId);
+    roomData.addEvent(event, oldEventId);
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
@@ -994,6 +1019,42 @@ export default class MatrixService extends Service {
     }
   };
 
+  private onRoomStateUpdate = (rs: MatrixSDK.RoomState) => {
+    this.roomStateQueue.push(rs);
+    debounce(this, this.drainRoomState, 100);
+  };
+
+  private drainRoomState = async () => {
+    await this.flushRoomState;
+
+    let roomStateUpdatesDrained: () => void;
+    this.flushRoomState = new Promise((res) => (roomStateUpdatesDrained = res));
+
+    let roomStates = [...this.roomStateQueue];
+    this.roomStateQueue = [];
+    const roomStateMap = new Map<string, MatrixSDK.RoomState>();
+    for (const rs of roomStates) {
+      roomStateMap.set(rs.roomId, rs);
+    }
+    roomStates = Array.from(roomStateMap.values());
+    for (let rs of roomStates) {
+      let roomData = this.getRoomData(rs.roomId);
+      if (!roomData) {
+        return;
+      }
+      let name = rs.events.get('m.room.name')?.get('')?.event.content?.name;
+      if (name) {
+        roomData.updateName(name);
+      }
+      let skillsConfig = rs.events.get(SKILLS_STATE_EVENT_TYPE)?.get('')?.event
+        .content;
+      if (skillsConfig) {
+        roomData.updateSkillsConfig(skillsConfig as SkillsConfig);
+      }
+    }
+    roomStateUpdatesDrained!();
+  };
+
   private onTimeline = (e: MatrixEvent) => {
     this.timelineQueue.push({ event: e });
     debounce(this, this.drainTimeline, 100);
@@ -1057,12 +1118,12 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let roomState = await this.getRoomState(roomId);
+    let roomData = await this.getRoomData(roomId);
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur
     if (
-      roomState &&
+      roomData &&
       event.type === 'm.room.message' &&
       event.content?.msgtype === 'org.boxel.message' &&
       event.content.data
@@ -1079,7 +1140,7 @@ export default class MatrixService extends Service {
         for (let attachedCardEventId of data.attachedCardsEventIds) {
           let currentFragmentId: string | undefined = attachedCardEventId;
           do {
-            let fragmentEvent = roomState.events.find(
+            let fragmentEvent = roomData.events.find(
               (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
             );
             let fragmentData: CardFragmentContent['data'];
