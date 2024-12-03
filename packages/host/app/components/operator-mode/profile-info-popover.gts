@@ -145,7 +145,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               @kind='secondary-light'
               @size='small'
               @disabled={{this.billingService.fetchingStripePaymentLinks}}
-              @href={{this.billingService.customerPortalLink.url}}
+              @href={{this.billingService.customerPortalLink}}
               target='_blank'
               data-test-upgrade-plan-button
             >Upgrade Plan</BoxelButton>
