@@ -21,9 +21,9 @@
       },
       "contactMethod": [],
       "mailingAddress": {
-        "streetAddress": "9019 Beacon Dr.",
+        "addressLine1": "9019 Beacon Dr.",
         "city": "Myrtle Beach",
-        "region": "SC",
+        "state": "SC",
         "postalCode": "29577",
         "poBoxNumber": null,
         "country": null
