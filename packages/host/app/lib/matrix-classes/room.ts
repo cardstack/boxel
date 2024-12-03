@@ -19,7 +19,7 @@ export type SkillsConfig = {
 
 export default class Room {
   @tracked private _events: DiscreteMatrixEvent[] = [];
-  @tracked private _name: string;
+  @tracked private _name: string | undefined;
   @tracked private _skillsConfig: SkillsConfig = {
     enabledEventIds: [],
     disabledEventIds: [],
@@ -43,8 +43,8 @@ export default class Room {
     return this._skillsConfig;
   }
 
-  updateSkillsConfig(config: SkillsConfig) {
-    if (!isEqual(this._skillsConfig, config)) {
+  updateSkillsConfig(config: SkillsConfig | undefined) {
+    if (config && !isEqual(this._skillsConfig, config)) {
       this._skillsConfig = config;
     }
   }

@@ -62,7 +62,6 @@ export default class MessageBuilder {
       // These are not guaranteed to exist in the event
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
-      attachedSkillCardIds: null,
       command: null,
       commandResult: null,
       status: this.event.status,

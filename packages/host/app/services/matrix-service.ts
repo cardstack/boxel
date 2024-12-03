@@ -48,7 +48,10 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import Room, { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
+import Room, {
+  SkillsConfig,
+  TempEvent,
+} from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -82,7 +85,6 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { update } from '../../../runtime-common/expression';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -1022,10 +1024,14 @@ export default class MatrixService extends Service {
     for (let [type, stateKeyEventMap] of e.events) {
       switch (type) {
         case 'm.room.name':
-          roomData.updateName(stateKeyEventMap.get('').event.content.name);
+          debugger;
+          roomData.updateName(stateKeyEventMap.get('')?.event.content?.name);
           break;
         case SKILLS_STATE_EVENT_TYPE:
-          roomData.updateSkillsConfig(stateKeyEventMap.get('').event.content);
+          debugger;
+          roomData.updateSkillsConfig(
+            stateKeyEventMap.get('')?.event.content as SkillsConfig,
+          );
           break;
       }
     }

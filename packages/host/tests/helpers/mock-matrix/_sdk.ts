@@ -48,4 +48,13 @@ export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   ClientEvent = {
     AccountData: 'accountData',
   } as ExtendedMatrixSDK['ClientEvent'];
+
+  RoomStateEvent = {
+    Events: 'RoomState.events',
+    Members: 'RoomState.members',
+    NewMember: 'RoomState.newMember',
+    Update: 'RoomState.update',
+    BeaconLiveness: 'RoomState.BeaconLiveness',
+    Marker: 'RoomState.Marker',
+  } as ExtendedMatrixSDK['RoomStateEvent'];
 }

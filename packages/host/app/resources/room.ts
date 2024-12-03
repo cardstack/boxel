@@ -26,6 +26,8 @@ import type {
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
+
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -40,7 +42,6 @@ import type Room from '../lib/matrix-classes/room';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 interface Args {
   named: {
@@ -272,17 +273,6 @@ export class RoomResource extends Resource<Args> {
     let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
       effectiveEventId,
       author,
-      created: new Date(event.origin_server_ts),
-      updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-      message: event.content.body,
-      formattedMessage: event.content.formatted_body,
-      // These are not guaranteed to exist in the event
-      transactionId: event.unsigned?.transaction_id || null,
-      attachedCardIds: null,
-      command: null,
-      commandResult: null,
-      status: event.status,
-      eventId: event.event_id,
       index,
       fragmentCache: this._fragmentCache,
       events: this.events,
