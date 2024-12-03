@@ -52,13 +52,22 @@ export default class BillingService extends Service {
   }
 
   get customerPortalLink() {
-    if (!this.subscriptionData?.stripeCustomerEmail) {
-      return this.stripeLinks.value?.customerPortalLink?.url;
+    if (!this.stripeLinks.value) {
+      return undefined;
     }
-    const encodedEmail = encodeURIComponent(
-      this.subscriptionData.stripeCustomerEmail,
-    );
-    return `${this.stripeLinks.value?.customerPortalLink?.url}?prefilled_email=${encodedEmail}`;
+
+    let customerPortalLink = this.stripeLinks.value?.customerPortalLink?.url;
+    if (!customerPortalLink) {
+      return undefined;
+    }
+
+    let stripeCustomerEmail = this.subscriptionData?.stripeCustomerEmail;
+    if (!stripeCustomerEmail) {
+      return customerPortalLink;
+    }
+
+    const encodedEmail = encodeURIComponent(stripeCustomerEmail);
+    return `${customerPortalLink}?prefilled_email=${encodedEmail}`;
   }
 
   get freePlanPaymentLink() {

@@ -58,13 +58,11 @@ export async function handleCheckoutSessionCompleted(
       stripeCustomerId = user.stripeCustomerId;
     }
 
-    if (stripeCustomerEmail) {
-      await updateUserStripeCustomerEmail(
-        dbAdapter,
-        stripeCustomerId,
-        stripeCustomerEmail,
-      );
-    }
+    await updateUserStripeCustomerEmail(
+      dbAdapter,
+      stripeCustomerId,
+      stripeCustomerEmail,
+    );
 
     let creditReloadAmount =
       'credit_reload_amount' in event.data.object.metadata
