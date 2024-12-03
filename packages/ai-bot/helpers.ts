@@ -163,11 +163,9 @@ function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   cardFragments: Map<string, CardFragmentContent>,
 ): CardResource[] {
-  // iterate eventlist in reverse to find the first event of type "org.boxel.room.skills"
-  // get the event's content and use the enabledEventIds list to generate a list of skill documents using serializedCardFromFragments
   let skillsConfigEvent = eventlist
     .reverse()
-    .find((event) => event.type === 'org.boxel.room.skills');
+    .find((event) => event.type === 'com.cardstack.boxel.room.skills');
   if (!skillsConfigEvent) {
     return [];
   }

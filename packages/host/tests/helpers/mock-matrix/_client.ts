@@ -401,6 +401,7 @@ export class MockClient implements ExtendedClient {
     switch (type) {
       case 'com.cardstack.boxel.realms':
         return this.sdk.ClientEvent.AccountData;
+      case 'com.cardstack.boxel.room.skills':
       case 'm.reaction':
       case 'm.room.create':
       case 'm.room.message':
@@ -429,6 +430,17 @@ export class MockClient implements ExtendedClient {
               } as any);
             }
           }
+          if (typeof event.event.state_key === 'string') {
+            let handlers = this.listeners[this.sdk.RoomStateEvent.Update];
+            if (handlers) {
+              let roomState = this.serverState.getRoomStateUpdatePayload(
+                event.event.room_id!,
+              );
+              for (let handler of handlers) {
+                handler(roomState);
+              }
+            }
+          }
         }
         break;
       case this.sdk.RoomEvent.Receipt:
@@ -452,6 +464,8 @@ export class MockClient implements ExtendedClient {
             }
           }
         }
+        break;
+      case null:
         break;
       default:
         throw assertNever(eventType);

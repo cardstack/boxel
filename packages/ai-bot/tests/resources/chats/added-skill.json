@@ -300,13 +300,11 @@
     "age": 44856816
   },
   {
-    "type": "org.boxel.room.skills",
+    "type": "com.cardstack.boxel.room.skills",
     "room_id": "!vORvGxbYIvLeiYUfNx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledEventIds": [
-        "$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"
-      ],
+      "enabledEventIds": ["$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"],
       "disabledEventIds": []
     },
     "state_key": "",
@@ -338,7 +336,7 @@
     "age": 267004
   },
   {
-    "type": "org.boxel.room.skills",
+    "type": "com.cardstack.boxel.room.skills",
     "room_id": "!vORvGxbYIvLeiYUfNx:localhost",
     "sender": "@user:localhost",
     "content": {
@@ -353,9 +351,7 @@
     "unsigned": {
       "replaces_state": "$tRRG802dS-3HvRzRK_KezeO26Tnalj8mV6H9VQSmg0o",
       "prev_content": {
-        "enabledEventIds": [
-          "$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"
-        ],
+        "enabledEventIds": ["$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"],
         "disabledEventIds": []
       },
       "prev_sender": "@user:localhost",
@@ -366,9 +362,7 @@
     "age": 266662,
     "replaces_state": "$tRRG802dS-3HvRzRK_KezeO26Tnalj8mV6H9VQSmg0o",
     "prev_content": {
-      "enabledEventIds": [
-        "$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"
-      ],
+      "enabledEventIds": ["$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"],
       "disabledEventIds": []
     }
   }

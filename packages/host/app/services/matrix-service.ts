@@ -91,7 +91,7 @@ const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
-const SKILLS_STATE_EVENT_TYPE = 'org.boxel.room.skills';
+const SKILLS_STATE_EVENT_TYPE = 'com.cardstack.boxel.room.skills';
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -647,11 +647,11 @@ export default class MatrixService extends Service {
     this.client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
       enabledEventIds: [
         ...new Set([
-          ...(skillEventIdsStateEvent.enabledEventIds || []),
+          ...(skillEventIdsStateEvent?.enabledEventIds || []),
           ...attachedSkillEventIds,
         ]),
       ],
-      disabledEventIds: [...(skillEventIdsStateEvent.disabledEventIds || [])],
+      disabledEventIds: [...(skillEventIdsStateEvent?.disabledEventIds || [])],
     });
   }
 
@@ -1040,7 +1040,8 @@ export default class MatrixService extends Service {
     for (let rs of roomStates) {
       let roomData = this.getRoomData(rs.roomId);
       if (!roomData) {
-        return;
+        roomData = new Room();
+        this.setRoomData(rs.roomId, roomData);
       }
       let name = rs.events.get('m.room.name')?.get('')?.event.content?.name;
       if (name) {

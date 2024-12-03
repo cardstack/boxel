@@ -1,4 +1,4 @@
-import type * as MatrixSDK from 'matrix-js-sdk';
+import * as MatrixSDK from 'matrix-js-sdk';
 
 type IEvent = MatrixSDK.IEvent;
 
@@ -10,7 +10,7 @@ export class ServerState {
     {
       events: IEvent[];
       receipts: IEvent[];
-      roomState: Record<string, Record<string, any>>;
+      roomStateEvents: Map<string, Map<string, MatrixSDK.MatrixEvent>>;
     }
   > = new Map();
   #listeners: ((event: IEvent) => void)[] = [];
@@ -53,7 +53,11 @@ export class ServerState {
       throw new Error(`room ${roomId} already exists`);
     }
 
-    this.#rooms.set(roomId, { events: [], receipts: [], roomState: {} });
+    this.#rooms.set(roomId, {
+      events: [],
+      receipts: [],
+      roomStateEvents: new Map(),
+    });
 
     this.addRoomEvent(
       sender,
@@ -65,7 +69,7 @@ export class ServerState {
           room_version: '0',
         },
       },
-      { origin_server_ts: timestamp },
+      { origin_server_ts: timestamp, state_key: '' },
     );
 
     this.addRoomEvent(
@@ -75,7 +79,7 @@ export class ServerState {
         type: 'm.room.name',
         content: { name: name ?? roomId },
       },
-      { origin_server_ts: timestamp },
+      { origin_server_ts: timestamp, state_key: '' },
     );
 
     this.addRoomEvent(
@@ -90,7 +94,7 @@ export class ServerState {
           membershipInitiator: sender,
         },
       },
-      { origin_server_ts: timestamp },
+      { origin_server_ts: timestamp, state_key: sender },
     );
 
     this.addRoomEvent(
@@ -110,6 +114,23 @@ export class ServerState {
       },
     );
 
+    this.addRoomEvent(
+      '@aibot:localhost',
+      {
+        room_id: roomId,
+        type: 'm.room.member',
+        content: {
+          displayname: 'aibot',
+          membership: 'join',
+        },
+      },
+      {
+        origin_server_ts: timestamp,
+        // host application expects this for the bot to join the room
+        state_key: '@aibot:localhost',
+      },
+    );
+
     return roomId;
   }
 
@@ -118,7 +139,15 @@ export class ServerState {
     eventType: string,
     stateKey?: string,
   ): Record<string, any> {
-    return this.#rooms.get(roomId)?.roomState[eventType]?.[stateKey ?? ''];
+    let event = this.#rooms
+      .get(roomId)
+      ?.roomStateEvents.get(eventType)
+      ?.get(stateKey ?? '');
+    if (event) {
+      return event.event.content;
+    } else {
+      throw new Error(`room state event ${eventType} does not exist`);
+    }
   }
 
   setRoomState(
@@ -133,20 +162,16 @@ export class ServerState {
     if (!room) {
       throw new Error(`room ${roomId} does not exist`);
     }
-    if (!room.roomState[eventType]) {
-      room.roomState[eventType] = {};
-    }
-    room.roomState[eventType][stateKey ?? ''] = content;
     return this.addRoomEvent(
       sender,
       {
         room_id: roomId,
         type: eventType,
         content,
-        state_key: stateKey,
       },
       {
         origin_server_ts: timestamp,
+        state_key: stateKey ?? '',
       },
     );
   }
@@ -173,7 +198,7 @@ export class ServerState {
       origin_server_ts: overrides?.origin_server_ts ?? this.#now(),
       unsigned: { age: 0 },
       sender,
-      state_key: overrides?.state_key ?? sender,
+      state_key: overrides?.state_key,
     };
     let matrixContent = matrixEvent.content as any;
     if (matrixContent?.data?.replace) {
@@ -187,6 +212,14 @@ export class ServerState {
     setTimeout(() => {
       this.#listeners.forEach((listener) => listener(matrixEvent));
     }, 0);
+    if (typeof overrides?.state_key === 'string') {
+      if (!room.roomStateEvents.has(event.type)) {
+        room.roomStateEvents.set(event.type, new Map());
+      }
+      room.roomStateEvents
+        .get(event.type)!
+        .set(overrides.state_key, new MatrixSDK.MatrixEvent(matrixEvent));
+    }
     return matrixEvent.event_id;
   }
 
@@ -273,6 +306,14 @@ export class ServerState {
       throw new Error(`room ${roomId} does not exist`);
     }
     return [...room.events];
+  }
+
+  getRoomStateUpdatePayload(roomId: string): MatrixSDK.RoomState {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+    return { events: room.roomStateEvents, roomId } as MatrixSDK.RoomState;
   }
 
   eventId(): string {

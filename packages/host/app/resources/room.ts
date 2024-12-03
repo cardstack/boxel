@@ -361,23 +361,22 @@ export class RoomResource extends Resource<Args> {
       return member;
     }
     if (!member) {
-      let member = new RoomMember({ userId, roomId });
-      if (displayName) {
-        member.displayName = displayName;
-      }
-      if (membership) {
-        member.membership = membership;
-      }
-      if (membershipDateTime != null) {
-        member.membershipDateTime = new Date(membershipDateTime);
-      }
-      if (membershipInitiator) {
-        member.membershipInitiator = membershipInitiator;
-      }
-
-      this._memberCache.set(userId, member);
-      return member;
+      member = new RoomMember({ userId, roomId });
     }
+    if (displayName) {
+      member.displayName = displayName;
+    }
+    if (membership) {
+      member.membership = membership;
+    }
+    if (membershipDateTime != null) {
+      member.membershipDateTime = new Date(membershipDateTime);
+    }
+    if (membershipInitiator) {
+      member.membershipInitiator = membershipInitiator;
+    }
+
+    this._memberCache.set(userId, member);
     return member;
   }
 
