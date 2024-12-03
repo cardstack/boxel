@@ -74,7 +74,7 @@ module('Integration | card-editor', function (hooks) {
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
-          result ? result.error.detail : 'not found'
+          result ? result.error.errorDetail.detail : 'not found'
         }`,
       );
     }

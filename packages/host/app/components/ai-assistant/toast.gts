@@ -157,7 +157,7 @@ export default class AiAssistantToast extends Component<Signature> {
 
     let lastMessages: Map<string, Message> = new Map();
     for (let resource of this.matrixService.roomResources.values()) {
-      if (!resource.room) {
+      if (!resource.roomState) {
         continue;
       }
       let finishedMessages = resource.messages.filter(

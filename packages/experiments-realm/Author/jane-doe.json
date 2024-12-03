@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "firstName": "Alex",
-      "lastName": "Johnson",
+      "firstName": "Jane",
+      "lastName": "Doe",
       "photo": {
         "altText": "",
         "size": "actual",

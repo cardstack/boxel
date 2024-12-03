@@ -8,6 +8,7 @@ import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
 import { healthCheck, jwtMiddleware, livenessCheck } from './middleware';
 import Koa from 'koa';
+import handleStripeLinksRequest from './handlers/handle-stripe-links';
 
 export type CreateRoutesArgs = {
   dbAdapter: DBAdapter;
@@ -29,6 +30,7 @@ export type CreateRoutesArgs = {
   }) => Promise<Realm>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
+  sendEvent: (user: string, eventType: string) => Promise<void>;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -49,6 +51,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.secretSeed),
     handleFetchUserRequest(args),
   );
+  router.get('/_stripe-links', handleStripeLinksRequest());
 
   return router.routes();
 }

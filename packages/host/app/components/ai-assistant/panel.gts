@@ -463,7 +463,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   private get aiSessionRooms() {
     let sessions: SessionRoomData[] = [];
     for (let resource of this.roomResources.values()) {
-      if (!resource.room) {
+      if (!resource.roomState) {
         continue;
       }
       if (

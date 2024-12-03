@@ -1,5 +1,4 @@
 import type Owner from '@ember/owner';
-import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -14,7 +13,6 @@ import {
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
-  type IEvent,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
@@ -50,7 +48,9 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+import RoomState, {
+  TempEvent,
+} from '@cardstack/host/lib/matrix-classes/room-state';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -68,7 +68,6 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
-import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -93,11 +92,6 @@ const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
-type TempEvent = Partial<IEvent> & {
-  status: MatrixSDK.EventStatus | null;
-  error?: MatrixSDK.MatrixError;
-};
-
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
@@ -114,11 +108,12 @@ export default class MatrixService extends Service {
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
+  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private rooms: TrackedMap<string, RoomState> = new TrackedMap();
+  private roomStateMap: TrackedMap<string, RoomState> = new TrackedMap();
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -263,12 +258,12 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
+  get isNewUser() {
+    return this._isNewUser;
+  }
+
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let controller = getOwner(this)!.lookup(
-      'controller:index',
-    ) as IndexController;
-    controller.workspaceChooserOpened = true;
     this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
@@ -281,6 +276,7 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
+    this._isNewUser = true;
     this._isInitializingNewUser = false;
   }
 
@@ -787,19 +783,19 @@ export default class MatrixService extends Service {
     }
   }
 
-  getRoom(roomId: string) {
-    return this.rooms.get(roomId);
+  getRoomState(roomId: string) {
+    return this.roomStateMap.get(roomId);
   }
 
-  private setRoom(roomId: string, room: RoomState) {
-    this.rooms.set(roomId, room);
+  private setRoomState(roomId: string, roomState: RoomState) {
+    this.roomStateMap.set(roomId, roomState);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,
         getRoom(
           this,
           () => roomId,
-          () => this.getRoom(roomId)?.events,
+          () => this.getRoomState(roomId)?.events,
         ),
       );
     }
@@ -825,7 +821,7 @@ export default class MatrixService extends Service {
   @cached
   get roomResources() {
     let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-    for (let roomId of this.rooms.keys()) {
+    for (let roomId of this.roomStateMap.keys()) {
       if (!this.roomResourcesCache.get(roomId)) {
         continue;
       }
@@ -835,7 +831,7 @@ export default class MatrixService extends Service {
   }
 
   private resetState() {
-    this.rooms = new TrackedMap();
+    this.roomStateMap = new TrackedMap();
     this.roomMembershipQueue = [];
     this.roomResourcesCache.clear();
     this.timelineQueue = [];
@@ -888,58 +884,20 @@ export default class MatrixService extends Service {
   }
 
   private addRoomEvent(event: TempEvent, oldEventId?: string) {
-    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
-    // If we are receiving an event which contains
-    // a data field, we may need to parse it
-    // because matrix doesn't support all json types
-    // Corresponding encoding is done in
-    // sendEvent in the matrix-service
-    if (event.content?.data) {
-      if (typeof event.content.data === 'string') {
-        event.content.data = JSON.parse(event.content.data);
-      }
-    }
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
-    if (!eventId) {
-      throw new Error(
-        `bug: event ID is undefined for event ${JSON.stringify(
-          event,
-          null,
-          2,
-        )}`,
-      );
-    }
+    let { room_id: roomId } = event;
+
     if (!roomId) {
       throw new Error(
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let room = this.getRoom(roomId);
-    if (!room) {
-      room = new RoomState();
-      this.setRoom(roomId, room);
+    let roomState = this.getRoomState(roomId);
+    if (!roomState) {
+      roomState = new RoomState();
+      this.setRoomState(roomId, roomState);
     }
 
-    // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-    let matchingEvents = room.events.filter(
-      (e) => e.event_id === eventId || e.event_id === oldEventId,
-    );
-    if (matchingEvents.length > 1) {
-      throw new Error(
-        `bug: ${matchingEvents.length} events with the same event_id(s): ${eventId}, ${oldEventId}, expected a maximum of 1`,
-      );
-    }
-    if (matchingEvents.length === 0) {
-      room.events = [
-        ...(room.events ?? []),
-        event as unknown as DiscreteMatrixEvent,
-      ];
-      return;
-    }
-    let eventToReplace = matchingEvents[0];
-    let eventIndex = room.events.indexOf(eventToReplace);
-    room.events[eventIndex] = event as unknown as DiscreteMatrixEvent;
-    room.events = [...room.events];
+    roomState.addEvent(event, oldEventId);
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
@@ -1099,7 +1057,7 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let roomState = await this.getRoom(roomId);
+    let roomState = await this.getRoomState(roomId);
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur
@@ -1165,6 +1123,11 @@ export default class MatrixService extends Service {
           } while (currentFragmentId);
         }
       }
+    } else if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.realm-server-event'
+    ) {
+      await this.realmServer.handleEvent(event);
     }
     await this.addRoomEvent(event, oldEventId);
 

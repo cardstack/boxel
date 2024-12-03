@@ -133,7 +133,7 @@ export class Responder {
     }
   }
 
-  async onError(error: OpenAIError) {
+  async onError(error: OpenAIError | string) {
     Sentry.captureException(error);
     return await sendError(
       this.client,

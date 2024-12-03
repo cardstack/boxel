@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jade"
+    },
+    "relationships": {
+      "friend": {
+        "links": {
+          "self": "./hassan"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./friend.gts",
+        "name": "Friend"
+      }
+    }
+  }
+}

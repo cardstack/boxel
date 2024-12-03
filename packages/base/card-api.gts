@@ -268,6 +268,7 @@ export async function flushLogs() {
 
 export class IdentityContext {
   readonly identities = new Map<string, CardDef>();
+  readonly errors = new Set<string>();
 }
 
 type JSONAPIResource =
