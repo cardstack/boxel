@@ -130,9 +130,6 @@ export default class BillingService extends Service {
   }
 
   fetchSubscriptionData() {
-    if (this.subscriptionData) {
-      return;
-    }
     this.fetchSubscriptionDataTask.perform();
   }
 
