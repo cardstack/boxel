@@ -15,30 +15,17 @@ function getAddressRows(
   postalCode: string | undefined,
   countryCode: string | undefined,
   poBoxNumber: string | undefined,
-) {
-  const rows: string[][] = [[], [], []];
-
-  if (addressLine1) {
-    rows[0].push(addressLine1);
-  }
-  if (addressLine2) {
-    rows[0].push(addressLine2);
-  }
-
-  const cityStatePostal = [city, state, postalCode].filter(Boolean).join(', ');
-
-  if (cityStatePostal) {
-    rows[1].push(cityStatePostal);
-  }
-
-  if (countryCode) {
-    rows[2].push(countryCode);
-  }
-
-  if (poBoxNumber) {
-    rows[3].push(`PO Box ${poBoxNumber}`);
-  }
-  return rows;
+): string[] {
+  return [
+    poBoxNumber ? [`PO Box: ${poBoxNumber}`] : [],
+    addressLine1 ? [addressLine1] : [],
+    addressLine2 ? [addressLine2] : [],
+    [city, state, postalCode].filter(Boolean),
+    countryCode ? [countryCode] : [],
+  ]
+    .filter(Boolean)
+    .filter((r) => r.length > 0)
+    .map((r) => r.join(', '));
 }
 
 export class Address extends FieldDef {
@@ -61,7 +48,7 @@ export class Address extends FieldDef {
         this.country?.name,
         this.poBoxNumber,
       );
-      return rows.filter((r) => r.length > 0).join(', ');
+      return rows.join(', ');
     },
   });
 
@@ -80,11 +67,9 @@ export class Address extends FieldDef {
 
     <template>
       <address>
-        {{#each this.addressRows as |section|}}
+        {{#each this.addressRows as |r|}}
           <div>
-            {{#each section as |line|}}
-              {{line}}
-            {{/each}}
+            {{r}}
           </div>
         {{/each}}
       </address>
