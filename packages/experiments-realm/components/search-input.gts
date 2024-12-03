@@ -40,6 +40,8 @@ export class SearchInput extends Component<Signature> {
   }
 
   <template>
+    {{! TODO: This outer-div is a workaround to override the default search. Should
+    refactor boxel input to have light/dark theme   }}
     <div class='light-theme'>
       <BoxelInput
         @type='search'
@@ -53,7 +55,7 @@ export class SearchInput extends Component<Signature> {
     </div>
     <style scoped>
       /*
-      TODO: This is a workaround to override the default search. Should refactor boxel input to have light/dark theme
+      TODO: This is usage of :deep() is  a workaround to override the default search. Should refactor boxel input to have light/dark theme
       */
       .light-theme :deep(.search) {
         --boxel-input-search-background-color: var(--boxel-light);
