@@ -1108,9 +1108,6 @@ export class Realm {
     requestContext: RequestContext,
   ): Response {
     try {
-      if (content.match(/^\s*$/)) {
-        throw new Error('File is empty');
-      }
       content = transpileJS(content, debugFilename);
     } catch (err: any) {
       // using "Not Acceptable" here because no text/javascript representation

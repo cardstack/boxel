@@ -210,7 +210,7 @@ export class IndexQueryEngine {
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
     } = moduleEntry;
-    if (!executableCode) {
+    if (executableCode === null) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
