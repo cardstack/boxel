@@ -232,8 +232,7 @@ export default class SubmodeLayout extends Component<Signature> {
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel
-          @defaultLengthFraction={{1}}
-          @minLengthPx={{371}}
+          @minSize={{50}}
           @collapsible={{false}}
           class='main-panel'
         >
@@ -305,21 +304,24 @@ export default class SubmodeLayout extends Component<Signature> {
             />
           {{/if}}
         </ResizablePanel>
-        {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+        {{#if
+          (and
+            APP.experimentalAIEnabled
+            (not @hideAiAssistant)
+            this.isAiAssistantVisible
+          )
+        }}
           <ResizablePanel
-            @defaultLengthFraction={{0.3}}
-            @minLengthPx={{371}}
+            @defaultSize={{30}}
+            @minSize={{25}}
             @collapsible={{false}}
-            @isHidden={{not this.isAiAssistantVisible}}
           >
-            {{#if this.isAiAssistantVisible}}
-              <AiAssistantPanel
-                @onClose={{this.toggleChat}}
-                @resizeHandle={{ResizeHandle}}
-                class='ai-assistant-panel
-                  {{if this.workspaceChooserOpened "left-border"}}'
-              />
-            {{/if}}
+            <AiAssistantPanel
+              @onClose={{this.toggleChat}}
+              @resizeHandle={{ResizeHandle}}
+              class='ai-assistant-panel
+                {{if this.workspaceChooserOpened "left-border"}}'
+            />
           </ResizablePanel>
         {{/if}}
       </ResizablePanelGroup>

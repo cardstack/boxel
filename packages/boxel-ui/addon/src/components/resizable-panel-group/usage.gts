@@ -7,27 +7,28 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { not } from '../../helpers.ts';
 import cssVar from '../../helpers/css-var.ts';
 import ResizablePanelGroup from './index.gts';
 
 export default class ResizablePanelUsage extends Component {
-  @tracked horizontalPanel1DefaultWidthFraction = 0.25;
-  @tracked horizontalPanel1MinWidthPx = undefined;
+  @tracked horizontalPanel1DefaultSize = 25;
+  @tracked horizontalPanel1MinSize = undefined;
 
-  @tracked horizontalPanel2DefaultWidthFraction = 0.5;
-  @tracked horizontalPanel2MinWidthPx = undefined;
+  @tracked horizontalPanel2DefaultSize = 50;
+  @tracked horizontalPanel2MinSize = undefined;
 
-  @tracked horizontalPanel3DefaultWidthFraction = 0.25;
-  @tracked horizontalPanel3MinWidthPx = undefined;
+  @tracked horizontalPanel3DefaultSize = 25;
+  @tracked horizontalPanel3MinSize = undefined;
   @tracked horizontalPanel3IsHidden = false;
 
   @tracked verticalReverseCollapse = true;
 
-  @tracked verticalPanel1DefaultHeightFraction = 0.33;
-  @tracked verticalPanel1MinHeightPx = undefined;
+  @tracked verticalPanel1DefaultSize = 33;
+  @tracked verticalPanel1MinSize = undefined;
 
-  @tracked verticalPanel2DefaultHeightFraction = 0.67;
-  @tracked verticalPanel2MinHeightPx = undefined;
+  @tracked verticalPanel2DefaultSize = 67;
+  @tracked verticalPanel2MinSize = undefined;
 
   cssClassName = 'boxel-panel';
   @cssVariable declare boxelPanelResizeHandleHeight: CSSVariableInfo;
@@ -49,69 +50,70 @@ export default class ResizablePanelUsage extends Component {
           as |ResizablePanel ResizeHandle|
         >
           <ResizablePanel
-            @defaultLengthFraction={{this.horizontalPanel1DefaultWidthFraction}}
-            @minLengthPx={{this.horizontalPanel1MinWidthPx}}
+            @defaultSize={{this.horizontalPanel1DefaultSize}}
+            @minSize={{this.horizontalPanel1MinSize}}
           >
             Panel 1
           </ResizablePanel>
           <ResizeHandle />
           <ResizablePanel
-            @defaultLengthFraction={{this.horizontalPanel2DefaultWidthFraction}}
-            @minLengthPx={{this.horizontalPanel2MinWidthPx}}
+            @defaultSize={{this.horizontalPanel2DefaultSize}}
+            @minSize={{this.horizontalPanel2MinSize}}
           >
             Panel 2
           </ResizablePanel>
-          <ResizeHandle />
-          <ResizablePanel
-            @defaultLengthFraction={{this.horizontalPanel3DefaultWidthFraction}}
-            @minLengthPx={{this.horizontalPanel3MinWidthPx}}
-            @isHidden={{this.horizontalPanel3IsHidden}}
-          >
-            Panel 3
-          </ResizablePanel>
+          {{#if (not this.horizontalPanel3IsHidden)}}
+            <ResizeHandle />
+            <ResizablePanel
+              @defaultSize={{this.horizontalPanel3DefaultSize}}
+              @minSize={{this.horizontalPanel3MinSize}}
+            >
+              Panel 3
+            </ResizablePanel>
+          {{/if}}
         </ResizablePanelGroup>
       </:example>
       <:api as |Args|>
         <Args.Number
           @name='defaultWidthFraction - Panel 1'
           @description="The default width of the panel is determined by this argument, which operates similarly to the 'width' property in CSS."
-          @value={{this.horizontalPanel1DefaultWidthFraction}}
-          @onInput={{fn (mut this.horizontalPanel1DefaultWidthFraction)}}
+          @value={{this.horizontalPanel1DefaultSize}}
+          @onInput={{fn (mut this.horizontalPanel1DefaultSize)}}
           @required={{true}}
         />
-        <Args.String
+        <Args.Number
           @name='minWidthPx - Panel 1'
           @description="The minimum width of the panel is determined by this argument, which operates similarly to the 'min-width' property in CSS. In double-click event, this argumen will be ingored."
-          @value={{this.horizontalPanel1MinWidthPx}}
-          @onInput={{fn (mut this.horizontalPanel1MinWidthPx)}}
+          @value={{this.horizontalPanel1MinSize}}
+          @onInput={{fn (mut this.horizontalPanel1MinSize)}}
           @required={{false}}
         />
-        <Args.String
+        <Args.Number
           @name='defaultWidthFraction - Panel 2'
           @description="The default width of the panel is determined by this argument, which operates similarly to the 'width' property in CSS."
-          @value={{this.horizontalPanel2DefaultWidthFraction}}
-          @onInput={{fn (mut this.horizontalPanel2DefaultWidthFraction)}}
+          @value={{this.horizontalPanel2DefaultSize}}
+          @onInput={{fn (mut this.horizontalPanel2DefaultSize)}}
           @required={{true}}
         />
-        <Args.String
+        <Args.Number
           @name='minWidthPx - Panel 2'
           @description="The minimum width of the panel is determined by this argument, which operates similarly to the 'min-width' property in CSS. In double-click event, this argumen will be ingored."
-          @value={{this.horizontalPanel2MinWidthPx}}
-          @onInput={{fn (mut this.horizontalPanel2MinWidthPx)}}
+          @value={{this.horizontalPanel2MinSize}}
+          @onInput={{fn (mut this.horizontalPanel2MinSize)}}
           @required={{false}}
         />
-        <Args.String
+        <Args.Number
           @name='defaultWidthFraction - Panel 3'
           @description="The default width of the panel is determined by this argument, which operates similarly to the 'width' property in CSS."
-          @value={{this.horizontalPanel3DefaultWidthFraction}}
-          @onInput={{fn (mut this.horizontalPanel3DefaultWidthFraction)}}
+          @value={{this.horizontalPanel3DefaultSize}}
+          @onInput={{fn (mut this.horizontalPanel3DefaultSize)}}
           @required={{true}}
         />
-        <Args.String
+        <Args.Number
           @name='minWidthPx - Panel 3'
           @description="The minimum width of the panel is determined by this argument, which operates similarly to the 'min-width' property in CSS. In double-click event, this argumen will be ingored."
-          @value={{this.horizontalPanel3MinWidthPx}}
-          @onInput={{fn (mut this.horizontalPanel3MinWidthPx)}}
+          @value={{this.horizontalPanel3MinSize}}
+          @onInput={{fn (mut this.horizontalPanel3MinSize)}}
           @required={{false}}
         />
         <Args.Bool
@@ -164,15 +166,15 @@ export default class ResizablePanelUsage extends Component {
             as |ResizablePanel ResizeHandle|
           >
             <ResizablePanel
-              @defaultLengthFraction={{this.verticalPanel1DefaultHeightFraction}}
-              @minLengthPx={{this.verticalPanel1MinHeightPx}}
+              @defaultSize={{this.verticalPanel1DefaultSize}}
+              @minSize={{this.verticalPanel1MinSize}}
             >
               Panel 1
             </ResizablePanel>
             <ResizeHandle />
             <ResizablePanel
-              @defaultLengthFraction={{this.verticalPanel2DefaultHeightFraction}}
-              @minLengthPx={{this.verticalPanel2MinHeightPx}}
+              @defaultSize={{this.verticalPanel2DefaultSize}}
+              @minSize={{this.verticalPanel2MinSize}}
             >
               Panel 2
             </ResizablePanel>
@@ -190,29 +192,29 @@ export default class ResizablePanelUsage extends Component {
         <Args.Number
           @name='defaultHeightFraction - Panel 1'
           @description="The default height of the panel is determined by this argument, which operates similarly to the 'height' property in CSS."
-          @value={{this.verticalPanel1DefaultHeightFraction}}
-          @onInput={{fn (mut this.verticalPanel1DefaultHeightFraction)}}
+          @value={{this.verticalPanel1DefaultSize}}
+          @onInput={{fn (mut this.verticalPanel1DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
           @name='minHeightPx - Panel 1'
           @description="The minimum height of the panel is determined by this argument, which operates similarly to the 'min-height' property in CSS. In double-click event, this argumen will be ingored."
-          @value={{this.verticalPanel1MinHeightPx}}
-          @onInput={{fn (mut this.verticalPanel1MinHeightPx)}}
+          @value={{this.verticalPanel1MinSize}}
+          @onInput={{fn (mut this.verticalPanel1MinSize)}}
           @required={{false}}
         />
         <Args.Number
           @name='defaultHeightFraction - Panel 2'
           @description="The default height of the panel is determined by this argument, which operates similarly to the 'height' property in CSS."
-          @value={{this.verticalPanel2DefaultHeightFraction}}
-          @onInput={{fn (mut this.verticalPanel2DefaultHeightFraction)}}
+          @value={{this.verticalPanel2DefaultSize}}
+          @onInput={{fn (mut this.verticalPanel2DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
           @name='minHeightPx - Panel 2'
           @description="The minimum height of the panel is determined by this argument, which operates similarly to the 'min-height' property in CSS. In double-click event, this argumen will be ingored."
-          @value={{this.verticalPanel2MinHeightPx}}
-          @onInput={{fn (mut this.verticalPanel2MinHeightPx)}}
+          @value={{this.verticalPanel2MinSize}}
+          @onInput={{fn (mut this.verticalPanel2MinSize)}}
           @required={{false}}
         />
       </:api>
