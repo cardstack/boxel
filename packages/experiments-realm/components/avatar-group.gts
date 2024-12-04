@@ -5,7 +5,7 @@ import { Avatar } from '@cardstack/boxel-ui/components';
 interface AvatarGroupSignature {
   Args: {
     thumbnailURL?: string;
-    name: string;
+    name?: string;
     userID: string;
   };
   Blocks: { content: [] };
