@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import TextAreaCard from 'https://cardstack.com/base/text-area';
+import BooleanField from 'https://cardstack.com/base/boolean';
 
 import DateRangeField from './date-range-field';
 import { Tag } from './tag';
@@ -27,7 +28,9 @@ import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 
-class Edit extends Component<typeof BaseTaskStatusField> {
+type LooseyGooseyDataWithCompleted = LooseyGooseyData & { completed: boolean };
+
+export class BaseTaskStatusEdit extends Component<typeof BaseTaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
   <template>
     <BoxelSelect
@@ -47,14 +50,17 @@ class Edit extends Component<typeof BaseTaskStatusField> {
     });
   }
 
+  // This ensures you get values from the class the instance is created
   get statuses() {
-    return BaseTaskStatusField.values;
+    return (this.args.model.constructor as any)
+      .values as LooseyGooseyDataWithCompleted[];
   }
 
   @action onSelectStatus(status: LooseyGooseyData): void {
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;
+    this.args.model.completed = this.selectedStatus?.completed;
   }
 
   get placeholder() {
@@ -63,17 +69,20 @@ class Edit extends Component<typeof BaseTaskStatusField> {
 }
 
 export class BaseTaskStatusField extends LooseGooseyField {
+  @field completed = contains(BooleanField);
   static values = [
-    { index: 0, label: 'Not Started', color: '#B0BEC5' },
+    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
       index: 1,
       label: 'In Progress',
       color: '#64B5F6',
+      completed: false,
     },
     {
       index: 2,
       label: 'Done',
       color: '#00BCD4',
+      completed: true,
     },
   ];
 
@@ -85,7 +94,7 @@ export class BaseTaskStatusField extends LooseGooseyField {
     </template>
   };
 
-  static edit = Edit;
+  static edit = BaseTaskStatusEdit;
 }
 
 export class FittedTask extends Component<typeof TaskBase> {
@@ -109,24 +118,30 @@ export class FittedTask extends Component<typeof TaskBase> {
     return Boolean(this.dueDateStatus);
   }
 
+  get isCompleted() {
+    return this.args.model.status?.completed ?? false;
+  }
+
   <template>
     <div class='task-card'>
-      <div class='task-completion-status'>
-        {{!-- <TaskCompletionStatus @model={{@model}} /> --}}
-      </div>
-
       <header>
-        {{#if this.visibleTags.length}}
-          <div class='card-tags'>
-            {{#each this.visibleTags as |Tag|}}
-              <Tag
-                @format='atom'
-                class='card-tag'
-                @displayContainer={{false}}
-              />
-            {{/each}}
-          </div>
-        {{/if}}
+        <div>
+          <TaskCompletionStatus
+            class='task-completion-status'
+            @completed={{this.isCompleted}}
+          />
+          {{#if this.visibleTags.length}}
+            <div class='card-tags'>
+              {{#each this.visibleTags as |Tag|}}
+                <Tag
+                  @format='atom'
+                  class='card-tag'
+                  @displayContainer={{false}}
+                />
+              {{/each}}
+            </div>
+          {{/if}}
+        </div>
         <div class='short-id-container'>
           <ChevronsUp width='14px' height='14px' />
           <span class='short-id'>{{@model.shortId}}</span>
@@ -172,7 +187,8 @@ export class FittedTask extends Component<typeof TaskBase> {
 
     <style scoped>
       .task-completion-status {
-        display: none;
+        --boxel-circle-size: 14px;
+        --boxel-border-radius: var(--boxel-border-radius-lg);
       }
       .task-card {
         --task-font-weight-500: 500;
@@ -559,27 +575,27 @@ function getDueDateStatus(dueDateString: string | null) {
 interface TaskCompletionStatusSignature {
   Element: HTMLDivElement;
   Args: {
-    completionLabel: string;
-    statusLabel?: string;
+    completed: boolean;
   };
 }
 
 export class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusSignature> {
-  get isCompleted() {
-    return this.args.statusLabel === this.args.completionLabel;
-  }
-
   <template>
-    <div class='completion-status'>
-      <span class='checkmark {{if this.isCompleted @completionLabel}}'>
-        {{#if this.isCompleted}}
-          <CheckMark width='16px' height='16px' />
+    <div class='completion-status' ...attributes>
+      <span class='checkmark {{if @completed "completed"}}'>
+        {{#if @completed}}
+          <CheckMark class='checkmark-icon' />
         {{/if}}
       </span>
     </div>
 
     <style scoped>
       .completion-status {
+        --circle-size: var(--boxel-circle-size, 20px);
+        --border-radius: var(
+          --boxel-border-radius,
+          var(--boxel-border-radius-xs)
+        );
         display: inline-flex;
         align-items: center;
       }
@@ -588,16 +604,21 @@ export class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusS
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 20px;
-        width: 20px;
+        height: var(--circle-size);
+        width: var(--circle-size);
         background-color: white;
         border: 2px solid var(--boxel-400);
-        border-radius: 4px;
+        border-radius: var(--border-radius);
         transition: all 0.2s ease;
       }
-      .checkmark.shipped {
+      .checkmark.completed {
         background-color: var(--boxel-highlight);
         color: white;
+      }
+      .checkmark-icon {
+        --icon-size: calc(var(--circle-size, 20px) * 0.8);
+        width: var(--icon-size);
+        height: var(--icon-size);
       }
     </style>
   </template>
