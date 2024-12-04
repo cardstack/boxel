@@ -14,7 +14,7 @@ export interface ErrorDetails {
 }
 
 export interface SerializedError {
-  detail: string;
+  message: string;
   status: number;
   title?: string;
   source?: ErrorDetails['source'];
@@ -25,7 +25,7 @@ export interface SerializedError {
 }
 
 export class CardError extends Error implements SerializedError {
-  detail: string;
+  message: string;
   status: number;
   title?: string;
   source?: ErrorDetails['source'];
@@ -35,11 +35,11 @@ export class CardError extends Error implements SerializedError {
   deps?: string[];
 
   constructor(
-    detail: string,
+    message: string,
     { status, title, source, responseText }: ErrorDetails = {},
   ) {
-    super(detail);
-    this.detail = detail;
+    super(message);
+    this.message = message;
     this.status = status || 500;
     this.title = title || getReasonPhrase(this.status);
     this.responseText = responseText;
@@ -48,7 +48,7 @@ export class CardError extends Error implements SerializedError {
   toJSON() {
     return {
       title: this.title,
-      detail: this.detail,
+      message: this.message,
       code: this.status,
       source: this.source,
       stack: this.stack,
@@ -59,7 +59,7 @@ export class CardError extends Error implements SerializedError {
     if (!err || typeof err !== 'object' || !isCardError(err)) {
       return err;
     }
-    let result = new CardError(err.detail, {
+    let result = new CardError(err.message, {
       status: err.status,
       title: err.title,
       source: err.source,

@@ -362,7 +362,7 @@ export class CurrentRun {
         type: 'error',
         error: {
           status: 500,
-          detail: `encountered error loading module "${url.href}": ${err.message}`,
+          message: `encountered error loading module "${url.href}": ${err.message}`,
           additionalErrors: null,
           deps,
         },
@@ -591,7 +591,7 @@ export class CurrentRun {
           error:
             uncaughtError instanceof CardError
               ? serializableError(uncaughtError)
-              : { detail: `${uncaughtError.message}` },
+              : { message: `${uncaughtError.message}` },
         };
         error.error.deps = [
           moduleURL,
@@ -607,7 +607,7 @@ export class CurrentRun {
         throw err;
       }
       log.warn(
-        `encountered error indexing card instance ${path}: ${error.error.detail}`,
+        `encountered error indexing card instance ${path}: ${error.error.message}`,
       );
       await this.updateEntry(instanceURL, error);
     }
