@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Tech Innovators Japan",
+      "industry": "Technology",
+      "headquartersAddress": {
+        "addressLine1": "2-1-1 Otemachi",
+        "addressLine2": "Chiyoda-ku",
+        "city": "Tokyo",
+        "state": null,
+        "postalCode": "100-0004",
+        "country": {
+          "name": "Japan",
+          "code": "JP"
+        },
+        "poBoxNumber": null
+      },
+      "PhoneNumberField": 81312345678,
+      "website": "https://techinnovators.jp/",
+      "stockSymbol": "",
+      "description": "",
+      "thumbnailURL": ""
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/company",
+        "name": "Company"
+      }
+    }
+  }
+}
