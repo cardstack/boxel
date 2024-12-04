@@ -286,7 +286,7 @@ class Isolated extends Component<typeof CardsGrid> {
         display: none;
       }
       .instance-error {
-        opacity: 0.25;
+        opacity: 0.33;
         color: var(--boxel-error-100);
       }
     </style>
