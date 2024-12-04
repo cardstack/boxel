@@ -147,9 +147,7 @@ export class FittedTask extends Component<typeof TaskBase> {
           {{/if}}
         </div>
         <div class='priority-and-id-container'>
-          <div class='priority'>
-            <@fields.priority @format='atom' />
-          </div>
+          <@fields.priority class='priority' @format='atom' />
           <span class='short-id'>{{@model.shortId}}</span>
         </div>
       </header>
@@ -367,10 +365,14 @@ export class FittedTask extends Component<typeof TaskBase> {
         header {
           flex-wrap: nowrap;
         }
+        .card-assignee {
+          display: none;
+        }
       }
 
       /*Aspect Ratio 3.9, 226px × 58px*/
-      @container (aspect-ratio > 2.0) and (151px <= width < 227px) and (29px <= height < 59px) {
+      /*Aspect Ratio 2.6, 300px × 115px*/
+      @container (aspect-ratio > 2.0) and (151px <= width < 301px) and (29px <= height < 116px) {
         .task-title {
           font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 1;
@@ -386,6 +388,12 @@ export class FittedTask extends Component<typeof TaskBase> {
         }
         header {
           flex-wrap: nowrap;
+        }
+        .date-info-container .date-status-pill {
+          display: none;
+        }
+        .card-assignee {
+          display: none;
         }
       }
 
@@ -557,7 +565,7 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
-function getDueDateStatus(dueDateString: string | null) {
+export function getDueDateStatus(dueDateString: string | null) {
   if (!dueDateString) return null;
 
   const dueDate = new Date(dueDateString);
