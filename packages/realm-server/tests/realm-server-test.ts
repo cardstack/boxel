@@ -2773,7 +2773,12 @@ module('Realm Server', function (hooks) {
     });
 
     test('subscription is not found', async function (assert) {
-      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
       let response = await request
         .get(`/_user`)
         .set('Accept', 'application/vnd.api+json')
@@ -2792,6 +2797,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
+              stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: null,
@@ -2807,7 +2813,12 @@ module('Realm Server', function (hooks) {
     });
 
     test('user subscibes to a plan and has extra credit', async function (assert) {
-      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
       let plan = await insertPlan(
         dbAdapter,
         'Creator',
@@ -2858,6 +2869,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
+              stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: 2500,
               creditsIncludedInPlanAllowance: 2500,
               extraCreditsAvailableInBalance: 100,
@@ -4050,7 +4062,12 @@ module('Realm Server', function (hooks) {
 
     test('subscribes user back to free plan when the current subscription is expired', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let user = await insertUser(dbAdapter, userId, 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        userId,
+        'cus_123',
+        'user@test.com',
+      );
       let freePlan = await insertPlan(
         dbAdapter,
         'Free plan',
@@ -4271,7 +4288,12 @@ module('Realm Server', function (hooks) {
 
     test('ensures the current subscription expires when free plan subscription fails', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let user = await insertUser(dbAdapter, userId, 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        userId,
+        'cus_123',
+        'user@test.com',
+      );
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       let creatorPlan = await insertPlan(
         dbAdapter,
@@ -4430,6 +4452,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
+              stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: null,
@@ -4446,7 +4469,7 @@ module('Realm Server', function (hooks) {
 
     test('sends billing notification on invoice payment succeeded event', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -4496,7 +4519,7 @@ module('Realm Server', function (hooks) {
 
     test('sends billing notification on checkout session completed event', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
