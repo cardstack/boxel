@@ -12,16 +12,14 @@ import {
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn, concat } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { IconButton, RadioInput, Pill } from '@cardstack/boxel-ui/components';
 import MailIcon from '@cardstack/boxel-icons/mail';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
-import BrandTwitterIcon from '@cardstack/boxel-icons/brand-twitter';
-import BrandLinkedinIcon from '@cardstack/boxel-icons/brand-linkedin';
-import BuildingIcon from '@cardstack/boxel-icons/building';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+import AvatarGroup from '../components/avatar-group';
+import { Company } from './company';
 
 // helper functions that can share across different formats
 const getStatusIcon = (label: string | undefined) => {
@@ -53,117 +51,6 @@ const formatEmail = (email: string) => {
   return email;
 };
 
-const setBackgroundImage = (backgroundURL: string | null | undefined) => {
-  if (!backgroundURL) {
-    return;
-  }
-  return htmlSafe(`background-image: url(${backgroundURL});`);
-};
-
-class ViewCompanyCardTemplate extends Component<typeof CompanyCard> {
-  <template>
-    {{#if @model.name}}
-      <div class='row'>
-        <BuildingIcon class='icon' />
-        <span class='building-name'>{{@model.name}}</span>
-      </div>
-    {{/if}}
-
-    <style scoped>
-      .icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        flex-shrink: 0;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-      .row > span {
-        -webkit-line-clamp: 1;
-        text-wrap: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-      .building-name {
-        font-size: var(--boxel-font-xs);
-        font-weight: 300;
-        text-decoration: underline;
-      }
-    </style>
-  </template>
-}
-
-export class CompanyCard extends CardDef {
-  static displayName = 'Company';
-  @field name = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: CompanyCard) {
-      return this.name;
-    },
-  });
-
-  static embedded = ViewCompanyCardTemplate;
-  static atom = ViewCompanyCardTemplate;
-}
-
-class ViewSocialLinksTemplate extends Component<typeof SocialLinksField> {
-  @action openSocialLink(url: string) {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-
-  <template>
-    <div class='social-links'>
-      {{#if @model.twitterURL}}
-        <IconButton
-          {{on 'click' (fn this.openSocialLink @model.twitterURL)}}
-          @icon={{BrandTwitterIcon}}
-          @width='20'
-          @height='20'
-          class='social-link'
-        />
-      {{/if}}
-      {{#if @model.linkedInURL}}
-        <IconButton
-          {{on 'click' (fn this.openSocialLink @model.linkedInURL)}}
-          @icon={{BrandLinkedinIcon}}
-          @width='20'
-          @height='20'
-          class='social-link'
-        />
-      {{/if}}
-    </div>
-
-    <style scoped>
-      .social-links {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
-      .social-link {
-        --boxel-icon-button-width: var(--boxel-icon-med);
-        --boxel-icon-button-height: var(--boxel-icon-med);
-        border: 1px solid var(--boxel-300);
-      }
-      .social-link:hover {
-        border-color: var(--boxel-400);
-        cursor: pointer;
-      }
-    </style>
-  </template>
-}
-
-export class SocialLinksField extends FieldDef {
-  static displayName = 'socialLinks';
-  @field twitterURL = contains(StringField);
-  @field linkedInURL = contains(StringField);
-
-  static embedded = ViewSocialLinksTemplate;
-  static atom = ViewSocialLinksTemplate;
-}
-
 export interface LooseyGooseyData {
   index: number;
   label: string;
@@ -178,11 +65,11 @@ export class LooseGooseyField extends FieldDef {
   static values: LooseyGooseyData[] = []; //help with the types
 }
 
-class EditContactStatusTemplate extends Component<typeof ContactStatusField> {
+class EditContactStatusTemplate extends Component<typeof StatusField> {
   @tracked label = this.args.model.label;
 
   get statuses() {
-    return ContactStatusField.values;
+    return StatusField.values;
   }
 
   get selectedStatus() {
@@ -214,7 +101,7 @@ class EditContactStatusTemplate extends Component<typeof ContactStatusField> {
   </template>
 }
 
-export class ContactStatusField extends LooseGooseyField {
+export class StatusField extends LooseGooseyField {
   // loosey goosey pattern
   static displayName = 'status';
 
@@ -236,9 +123,7 @@ export class ContactStatusField extends LooseGooseyField {
   ];
 
   static edit = EditContactStatusTemplate;
-  static embedded = class Embedded extends Component<
-    typeof ContactStatusField
-  > {
+  static embedded = class Embedded extends Component<typeof StatusField> {
     <template>
       {{@model.label}}
     </template>
@@ -258,26 +143,175 @@ export class PhoneField extends FieldDef {
   };
 }
 
+class EmbeddedTemplate extends Component<typeof Contact> {
+  <template>
+    <article class='embedded-contact-card'>
+      {{#if @model.id}}
+        <AvatarGroup
+          @userID={{@model.id}}
+          @name={{@model.name}}
+          @thumbnailURL={{@model.thumbnailURL}}
+        >
+          <:content>
+            <@fields.company
+              @format='atom'
+              @displayContainer={{false}}
+              class='company-container'
+            />
+          </:content>
+        </AvatarGroup>
+      {{/if}}
+
+      <div class='contact-info'>
+        {{#if @model.primaryEmail}}
+          <div class='row primary-email'>
+            <MailIcon class='icon gray' />
+            <span>{{formatEmail @model.primaryEmail}}</span>
+          </div>
+        {{/if}}
+
+        {{#if @model.secondaryEmail}}
+          <div class='row secondary-email'>
+            <MailIcon class='icon gray' />
+            <span>{{formatEmail @model.secondaryEmail}}</span>
+          </div>
+        {{/if}}
+
+        {{#if (formatPhone @model.phoneMobile)}}
+          <div class='row primary-phone'>
+            <PhoneIcon class='icon gray' />
+            <span>{{formatPhone @model.phoneMobile}}</span>
+            <Pill class='pill-gray'>
+              mobile
+            </Pill>
+          </div>
+        {{/if}}
+
+        {{#if (formatPhone @model.phoneOffice)}}
+          <div class='row secondary-phone'>
+            <PhoneIcon class='icon gray' />
+            <span>{{formatPhone @model.phoneOffice}}</span>
+            <Pill class='pill-gray'>
+              office
+            </Pill>
+          </div>
+        {{/if}}
+      </div>
+
+      {{#if @model.status.label}}
+        {{#let (getStatusIcon @model.status.label) as |statusIcon|}}
+          <Pill
+            class='status-pill'
+            data-test-selected-type={{@model.status.label}}
+            {{! template-lint-disable no-inline-styles }}
+            style={{htmlSafe
+              (concat 'background-color: ' statusIcon.lightColor ';')
+            }}
+          >
+            <:iconLeft>
+              <IconButton
+                @icon={{statusIcon.icon}}
+                class='status-icon'
+                {{! template-lint-disable no-inline-styles }}
+                style={{htmlSafe
+                  (concat 'background-color: ' statusIcon.darkColor ';')
+                }}
+              />
+            </:iconLeft>
+            <:default>
+              <span class='status-label-text'>
+                {{@model.status.label}}
+              </span>
+            </:default>
+          </Pill>
+        {{/let}}
+      {{/if}}
+    </article>
+
+    <style scoped>
+      .embedded-contact-card {
+        width: 100%;
+        height: 100%;
+        padding: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        background: var(--boxel-light);
+      }
+      .contact-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-sm);
+        color: var(--boxel-dark);
+        margin-top: var(--boxel-sp);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        word-break: break-all;
+        gap: var(--boxel-sp-xxs);
+      }
+      .icon {
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
+        flex-shrink: 0;
+      }
+      .icon.gray {
+        color: var(--boxel-400);
+        color: var(--boxel-400);
+      }
+      .pill-gray {
+        font-weight: 500;
+        font-size: var(--boxel-font-size-sm);
+        word-break: keep-all;
+        --pill-background-color: var(--boxel-200);
+        border: none;
+      }
+      .social-links-container {
+        display: flex;
+        margin-top: var(--boxel-sp);
+      }
+      .status-pill {
+        border-color: transparent;
+        padding: 0;
+        flex: none;
+        overflow: hidden;
+        align-self: flex-start;
+        margin-top: auto;
+      }
+      .status-icon {
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
+        border-radius: 0;
+      }
+      .status-label-text {
+        font-size: var(--boxel-font-xs);
+        font-weight: 600;
+        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxs);
+      }
+    </style>
+  </template>
+}
+
 class FittedTemplate extends Component<typeof Contact> {
   <template>
     <article class='fitted-contact-card'>
-      <div class='avatar-container'>
-        <div
-          class='avatar-thumbnail'
-          {{! template-lint-disable no-inline-styles }}
-          style={{setBackgroundImage @model.thumbnailURL}}
-        />
-        <div class='avatar-info'>
-          <h3 class='name'>
-            {{if @model.name @model.name 'Name not provided'}}
-          </h3>
-          <@fields.company
-            @format='atom'
-            @displayContainer={{false}}
-            class='company-container'
-          />
-        </div>
-      </div>
+      {{#if @model.id}}
+        <AvatarGroup
+          @userID={{@model.id}}
+          @name={{@model.name}}
+          @thumbnailURL={{@model.thumbnailURL}}
+        >
+          <:content>
+            <@fields.company
+              @format='atom'
+              @displayContainer={{false}}
+              class='company-container'
+            />
+          </:content>
+        </AvatarGroup>
+      {{/if}}
 
       <div class='contact-info'>
         {{#if @model.primaryEmail}}
@@ -314,12 +348,6 @@ class FittedTemplate extends Component<typeof Contact> {
           </div>
         {{/if}}
       </div>
-
-      <@fields.socialLinks
-        @format='atom'
-        @displayContainer={{false}}
-        class='social-links-container'
-      />
 
       {{#if @model.status.label}}
         {{#let (getStatusIcon @model.status.label) as |statusIcon|}}
@@ -362,47 +390,6 @@ class FittedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-xs);
       }
-      .avatar-container {
-        grid-area: avatar-container;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        min-width: 0;
-        width: 100%;
-      }
-      .avatar-thumbnail {
-        grid-area: avatar-thumbnail;
-        background-color: var(--boxel-200);
-        width: 60px;
-        height: 60px;
-        overflow: hidden;
-        flex-shrink: 0;
-        background-size: cover;
-        background-position: center;
-        border-radius: 50%;
-      }
-      .name {
-        grid-area: name;
-        -webkit-line-clamp: 1;
-        text-wrap: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-        margin: 0;
-        font-size: 1.1rem;
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-      .avatar-info {
-        grid-area: avatar-info;
-        min-width: 0;
-        width: 100%;
-        overflow: hidden;
-      }
-      .company-container {
-        background: transparent;
-        width: auto;
-        height: auto;
-        overflow: unset;
-      }
       .contact-info {
         grid-area: contact-info;
         font-size: var(--boxel-font-xs);
@@ -417,7 +404,8 @@ class FittedTemplate extends Component<typeof Contact> {
         flex-shrink: 0;
       }
       .icon.gray {
-        color: var(--boxel-300);
+        color: var(--boxel-400);
+        color: var(--boxel-400);
       }
       .pill-gray {
         font-weight: 300;
@@ -685,20 +673,31 @@ class FittedTemplate extends Component<typeof Contact> {
 
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
-  @field name = contains(StringField);
-  @field primaryEmail = contains(StringField);
-  @field secondaryEmail = contains(StringField);
-  @field phoneMobile = contains(PhoneField);
-  @field phoneOffice = contains(PhoneField);
-  @field socialLinks = contains(SocialLinksField);
-  @field company = linksTo(CompanyCard);
-  @field status = contains(ContactStatusField);
+
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  @field company = linksTo(Company); // Links to the Company Card
+  @field department = contains(StringField);
+  @field primaryEmail = contains(StringField); // Stores primary email, format may change after final emailField PR is approved
+  @field secondaryEmail = contains(StringField); // Stores secondary email, format may change after final emailField PR is approved
+  @field phoneMobile = contains(PhoneField); // Stores mobile phone, format may change after final phoneField PR is approved
+  @field phoneOffice = contains(PhoneField); // Stores office phone, format may change after final phoneField PR is approved
+  @field status = contains(StatusField); // Stores status as a status field
+  //@field socialLinks = containsMany(UrlField); // Pending format discussion with Burcu for consistency
+  //@field account = linksTo(Account) // Pending completion of account card
 
   @field title = contains(StringField, {
     computeVia: function (this: Contact) {
-      return this.name;
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
     },
   });
 
+  @field name = contains(StringField, {
+    computeVia: function (this: Contact) {
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
+
+  static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
 }

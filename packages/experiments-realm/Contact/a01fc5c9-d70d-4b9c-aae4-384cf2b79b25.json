@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "David Paul",
+      "lastName": "Jackson",
+      "department": "IT",
+      "primaryEmail": "david@gmail.com",
+      "secondaryEmail": "david@gmail.com",
+      "phoneMobile": {
+        "country": 1,
+        "area": 415,
+        "phoneNumber": 1112222
+      },
+      "phoneOffice": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "status": {
+        "index": 1,
+        "label": "Lead"
+      },
+      "description": null,
+      "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1"
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/contact",
+        "name": "Contact"
+      }
+    }
+  }
+}
