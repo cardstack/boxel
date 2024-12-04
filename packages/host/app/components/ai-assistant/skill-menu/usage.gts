@@ -21,6 +21,7 @@ export default class AiAssistantSkillMenuUsage extends Component {
       ...this.skills,
       new TrackedObject({
         card,
+        skillEventId: 'abc123',
         isActive: true,
       }),
     ];
