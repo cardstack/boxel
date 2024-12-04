@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Cardstack Studio Malaysia",
+      "industry": "Computer Programming",
+      "headquartersAddress": {
+        "addressLine1": "Lot 3A-01A, Level 3A",
+        "addressLine2": " Glo Damansara Shopping Mall",
+        "city": "Kuala Lumpur",
+        "state": null,
+        "postalCode": "60000",
+        "country": {
+          "name": "Malaysia",
+          "code": "MY"
+        },
+        "poBoxNumber": null
+      },
+      "phone": 60102345234,
+      "website": "https://cardstack.com/",
+      "stockSymbol": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/company",
+        "name": "Company"
+      }
+    }
+  }
+}

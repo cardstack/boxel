@@ -620,11 +620,11 @@ export async function setupPayment(
   // mock trigger stripe webhook 'invoice.payment_succeeded'
   await realmServer.executeSQL(
     `INSERT INTO subscriptions (
-      user_id, 
-      plan_id, 
-      started_at, 
+      user_id,
+      plan_id,
+      started_at,
       ended_at,
-      status, 
+      status,
       stripe_subscription_id
     ) VALUES (
       '${userId}',
@@ -643,8 +643,8 @@ export async function setupPayment(
 
   await realmServer.executeSQL(
     `INSERT INTO subscription_cycles (
-      subscription_id, 
-      period_start, 
+      subscription_id,
+      period_start,
       period_end
     ) VALUES (
       '${subscriptionUUID}',
@@ -681,7 +681,7 @@ export async function setupUserSubscribed(
   username: string,
   realmServer: IsolatedRealmServer,
 ) {
-  const matrixUserId = encodeToAlphanumeric(username);
+  const matrixUserId = encodeWebSafeBase64(username);
   await setupUser(username, realmServer);
   await setupPayment(matrixUserId, realmServer);
 }
@@ -753,7 +753,7 @@ export async function waitUntil<T>(
   throw new Error('Timeout waiting for condition');
 }
 
-export function encodeToAlphanumeric(string: string) {
+export function encodeWebSafeBase64(string: string) {
   return Buffer.from(string)
     .toString('base64')
     .replace(/\+/g, '-')

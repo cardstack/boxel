@@ -5,7 +5,7 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
-import { cn, or } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 
@@ -144,11 +144,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               @as='anchor'
               @kind='secondary-light'
               @size='small'
-              @disabled={{or
-                subscriptionData.isLoading
-                this.billingService.fetchingStripePaymentLinks
-              }}
-              @href={{this.billingService.customerPortalLink.url}}
+              @disabled={{this.billingService.fetchingStripePaymentLinks}}
+              @href={{this.billingService.customerPortalLink}}
               target='_blank'
               data-test-upgrade-plan-button
             >Upgrade Plan</BoxelButton>
@@ -174,7 +171,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
                   'secondary-light'
                 }}
                 @size={{if subscriptionData.isOutOfCredit 'base' 'small'}}
-                @disabled={{subscriptionData.isLoading}}
+                @disabled={{this.billingService.fetchingStripePaymentLinks}}
                 {{on 'click' @toggleProfileSettings}}
               >Buy more credits</BoxelButton>
             </div>

@@ -79,7 +79,10 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
       id: string;
       object: 'checkout.session';
       client_reference_id: string;
-      customer: string;
+      customer: string | null; // string when payment link is for subscribing to the free plan, null when buying extra credits
+      customer_details: {
+        email: string;
+      };
       metadata:
         | {
             credit_reload_amount: string;

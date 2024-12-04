@@ -3009,4 +3009,33 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-boxel-filter-list-button="All Cards"]`)
       .hasClass('selected');
   });
+
+  test('edit card and finish editing should not animate', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    // Check that no animation when clicking edit button
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-edit-button]`,
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .doesNotHaveClass('opening-animation');
+
+    // Check that no animation after finish editing
+    await click('[data-test-edit-button]');
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .doesNotHaveClass('opening-animation');
+  });
 });

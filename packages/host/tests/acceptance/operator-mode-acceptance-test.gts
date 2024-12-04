@@ -13,7 +13,11 @@ import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, primitive } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  encodeWebSafeBase64,
+  primitive,
+} from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
@@ -937,15 +941,30 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-payment-link]').exists({ count: 3 });
       assert
         .dom('[data-test-pay-button="0"]')
-        .hasAttribute('href', 'https://extra-credits-payment-link-1250');
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
       assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
       assert
         .dom('[data-test-pay-button="1"]')
-        .hasAttribute('href', 'https://extra-credits-payment-link-15000');
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
       assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
       assert
         .dom('[data-test-pay-button="2"]')
-        .hasAttribute('href', 'https://extra-credits-payment-link-80000');
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
       assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
 
       // out of credit
