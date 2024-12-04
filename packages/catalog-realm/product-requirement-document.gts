@@ -72,7 +72,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               {{/unless}}
               Generate App Now
             </Button>
-            --}}
           {{/if}}
         </div>
         {{#if this.errorMessage}}
