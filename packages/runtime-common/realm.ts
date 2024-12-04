@@ -1397,14 +1397,14 @@ export class Realm {
       if (maybeError.type === 'error') {
         return systemError({
           requestContext,
-          message: `cannot return card from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.detail}`,
+          message: `cannot return card from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.message}`,
           additionalError: CardError.fromSerializableError(maybeError.error),
           // This is based on https://jsonapi.org/format/#errors
           body: {
             id: url.href,
             status: maybeError.error.errorDetail.status,
             title: maybeError.error.errorDetail.title,
-            message: maybeError.error.errorDetail.detail,
+            message: maybeError.error.errorDetail.message,
             // note that this is actually available as part of the response
             // header too--it's just easier for clients when it is here
             realm: this.url,
