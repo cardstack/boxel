@@ -21,10 +21,14 @@ import { LooseGooseyField, type LooseyGooseyData } from './loosey-goosey';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
+import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
+import ChevronUp from '@cardstack/boxel-icons/chevron-up';
+import ChevronsDown from '@cardstack/boxel-icons/chevrons-down';
+import ChevronDown from '@cardstack/boxel-icons/chevrons-down';
+import CircleEqual from '@cardstack/boxel-icons/circle-equal';
 import { isToday, isThisWeek, addWeeks } from 'date-fns';
 import GlimmerComponent from '@glimmer/component';
 import Calendar from '@cardstack/boxel-icons/calendar';
-import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 
@@ -143,7 +147,7 @@ export class FittedTask extends Component<typeof TaskBase> {
           {{/if}}
         </div>
         <div class='short-id-container'>
-          <ChevronsUp width='14px' height='14px' />
+          <@fields.priority @format='atom' />
           <span class='short-id'>{{@model.shortId}}</span>
         </div>
       </header>
@@ -229,7 +233,7 @@ export class FittedTask extends Component<typeof TaskBase> {
       .short-id-container {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-3xs);
+        gap: var(--boxel-sp-xxxs);
         margin-left: auto;
       }
       .short-id {
@@ -483,14 +487,22 @@ class EditPriority extends Component<typeof BaseTaskPriority> {
 export class BaseTaskPriority extends LooseGooseyField {
   // loosey goosey pattern
   static values = [
-    { index: 0, label: 'Low' },
-    {
-      index: 1,
-      label: 'Medium',
-    },
+    { index: 0, label: 'Lowest', icon: ChevronsDown },
+    { index: 1, label: 'Low', icon: ChevronDown },
     {
       index: 2,
+      label: 'Medium',
+      icon: CircleEqual,
+    },
+    {
+      index: 3,
       label: 'High',
+      icon: ChevronUp,
+    },
+    {
+      index: 4,
+      label: 'Highest',
+      icon: ChevronsUp,
     },
   ];
 
@@ -498,6 +510,21 @@ export class BaseTaskPriority extends LooseGooseyField {
   static embedded = class Embedded extends Component<typeof BaseTaskPriority> {
     <template>
       {{@model.label}}
+    </template>
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    get selectedPriority() {
+      return BaseTaskPriority.values.find((priority) => {
+        return priority.label === this.args.model.label;
+      });
+    }
+
+    get selectedIcon() {
+      return this.selectedPriority?.icon;
+    }
+    <template>
+      <this.selectedIcon width='14px' height='14px' />
     </template>
   };
 }

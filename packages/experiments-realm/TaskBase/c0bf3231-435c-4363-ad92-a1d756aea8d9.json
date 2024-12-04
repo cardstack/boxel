@@ -12,6 +12,10 @@
         "label": "In Progress"
       },
       "taskDetail": null,
+      "priority": {
+        "index": 1,
+        "label": "Low"
+      },
       "description": null,
       "thumbnailURL": null
     },
