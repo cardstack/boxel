@@ -196,12 +196,10 @@ export class FittedTask extends Component<typeof TaskBase> {
         gap: var(--boxel-sp-xxxs);
         flex-shrink: 0;
       }
+
       .task-completion-status {
         --boxel-circle-size: 14px;
         --boxel-border-radius: var(--boxel-border-radius-lg);
-      }
-
-      .task-status-and-tags-container {
       }
 
       .task-card {
