@@ -146,8 +146,10 @@ export class FittedTask extends Component<typeof TaskBase> {
             </div>
           {{/if}}
         </div>
-        <div class='short-id-container'>
-          <@fields.priority @format='atom' />
+        <div class='priority-and-id-container'>
+          <div class='priority'>
+            <@fields.priority @format='atom' />
+          </div>
           <span class='short-id'>{{@model.shortId}}</span>
         </div>
       </header>
@@ -239,7 +241,7 @@ export class FittedTask extends Component<typeof TaskBase> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .short-id-container {
+      .priority-and-id-container {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
@@ -329,101 +331,71 @@ export class FittedTask extends Component<typeof TaskBase> {
         overflow: unset;
         margin-left: auto;
       }
-
-      /* Square/Portrait Container (aspect-ratio <= 1.0) */
-      @container (aspect-ratio <= 1.0) {
-        .task-card {
-          padding: var(--boxel-sp-xs);
-        }
-
-        .date-status-pill {
-          display: none;
-        }
-
-        footer {
-          margin-top: auto;
-        }
-      }
-
-      /* Compact Portrait (height <= 230px) */
-      @container (aspect-ratio <= 1.0) and (height <=230px) {
-        .task-card {
-          gap: var(--boxel-sp-5xs);
-        }
-
-        .task-title {
-          -webkit-line-clamp: 1;
-        }
-
+      /*catch all for dismissing tags*/
+      @container fitted-card  (width <= 226px) {
         .card-tags {
           display: none;
         }
       }
 
-      /* Landscape Container (1.0 < aspect-ratio <= 2.0) */
-      @container (1.0 < aspect-ratio <= 2.0) {
-        .task-card {
-          padding: var(--boxel-sp-sm);
-        }
-      }
-
-      /* Extra styles for very narrow height but medium*/
-      @container (aspect-ratio < 2.0) and (height <= 78px) {
-        .task-title {
-          -webkit-line-clamp: 1;
-        }
-
-        .card-tags,
+      /*Aspect Ratio 0.95, 140px × 148px*/
+      /*Aspect Ratio 0.94, 120px × 128px*/
+      @container fitted-card (aspect-ratio <1.0) and (118px <= height < 129px) {
+        .priority,
         .date-info-container {
           display: none;
         }
+        header {
+          flex-wrap: nowrap;
+        }
       }
 
-      /* Extra styles for width <= 150px and height <= 100px */
-      @container (width <= 150px) and (height <= 100px) {
-        .card-tags,
-        .card-info,
-        footer {
+      /*Aspect Ratio 3.4, 100px × 29px*/
+      /*Aspect Ratio 2.6, 150px × 58px*/
+      @container (aspect-ratio > 2.0) and (100px <= width <151px) and (29px <= height < 59px) {
+        .task-card {
+          padding: var(--boxel-sp-xxxs);
+          flex-direction: row;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
+        }
+        .task-title,
+        .priority,
+        .date-info-container {
           display: none;
         }
-      }
-
-      /* Extra styles for width > 280px and height 78px */
-      @container (width > 280px) and (height <= 78px) {
-        .task-completion-status {
-          display: inline-flex;
+        header {
+          flex-wrap: nowrap;
         }
       }
 
-      @container (aspect-ratio > 2.0) and (height <= 78px) {
+      /*Aspect Ratio 3.9, 226px × 58px*/
+      @container (aspect-ratio > 2.0) and (151px <= width < 227px) and (29px <= height < 59px) {
+        .task-title {
+          font-size: var(--boxel-font-size-sm);
+          -webkit-line-clamp: 1;
+        }
+        .task-card {
+          padding: var(--boxel-sp-xxxs);
+          flex-direction: row;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
+        }
+        .priority {
+          display: none;
+        }
+        header {
+          flex-wrap: nowrap;
+        }
+      }
+
+      /*Aspect Ratio 8.6, 500px × 58px*/
+      @container fitted-card (aspect-ratio > 6.0) {
         .task-card {
           padding: var(--boxel-sp-xs);
           flex-direction: row;
           align-items: center;
           gap: var(--boxel-sp-sm);
-        }
-
-        .card-tags,
-        .date-info-container {
-          display: none;
-        }
-        .task-title {
-          font-size: var(--boxel-font-size-sm);
-          -webkit-line-clamp: 1;
-        }
-      }
-
-      /* Extra styles for small size */
-      @container (width <= 400px) and (height <= 58px) {
-        footer {
-          display: none;
-        }
-      }
-
-      /* Extra styles for super narrow height */
-      @container (aspect-ratio > 6.0) and (height <= 78px) {
-        .task-card {
-          padding: var(--boxel-sp-xs);
         }
 
         .card-tags,
@@ -439,16 +411,9 @@ export class FittedTask extends Component<typeof TaskBase> {
           margin-top: 0;
           margin-left: auto;
         }
-      }
-
-      /* Wide Container (aspect-ratio > 2.0) */
-      @container (aspect-ratio > 2.0) {
-        .task-card {
-          gap: var(--boxel-sp-xxxs);
-        }
-
-        .task-title {
-          -webkit-line-clamp: 1;
+        .task-completion-status {
+          --boxel-circle-size: 18px;
+          --boxel-border-radius: var(--boxel-border-radius-xs);
         }
       }
     </style>
