@@ -229,6 +229,7 @@ export class FittedTask extends Component<typeof TaskBase> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         overflow: hidden;
+        line-height: 1;
       }
       .card-tag {
         width: auto;
