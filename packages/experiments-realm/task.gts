@@ -129,7 +129,7 @@ export class FittedTask extends Component<typeof TaskBase> {
   <template>
     <div class='task-card'>
       <header>
-        <div>
+        <div class='task-status-and-tags-container'>
           <TaskCompletionStatus
             class='task-completion-status'
             @completed={{this.isCompleted}}
@@ -194,6 +194,10 @@ export class FittedTask extends Component<typeof TaskBase> {
         --boxel-circle-size: 14px;
         --boxel-border-radius: var(--boxel-border-radius-lg);
       }
+
+      .task-status-and-tags-container {
+      }
+
       .task-card {
         --task-font-weight-500: 500;
         --task-font-weight-600: 600;
@@ -524,7 +528,18 @@ export class BaseTaskPriority extends LooseGooseyField {
       return this.selectedPriority?.icon;
     }
     <template>
-      <this.selectedIcon width='14px' height='14px' />
+      <div class='icon-container'>
+        <this.selectedIcon width='14px' height='14px' />
+      </div>
+      <style scoped>
+        .icon-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
+        }
+      </style>
     </template>
   };
 }
