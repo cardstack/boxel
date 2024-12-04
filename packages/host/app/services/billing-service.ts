@@ -22,6 +22,7 @@ interface SubscriptionData {
   creditsIncludedInPlanAllowance: number | null;
   extraCreditsAvailableInBalance: number | null;
   stripeCustomerId: string | null;
+  stripeCustomerEmail: string | null;
 }
 
 interface StripeLink {
@@ -51,7 +52,22 @@ export default class BillingService extends Service {
   }
 
   get customerPortalLink() {
-    return this.stripeLinks.value?.customerPortalLink;
+    if (!this.stripeLinks.value) {
+      return undefined;
+    }
+
+    let customerPortalLink = this.stripeLinks.value?.customerPortalLink?.url;
+    if (!customerPortalLink) {
+      return undefined;
+    }
+
+    let stripeCustomerEmail = this.subscriptionData?.stripeCustomerEmail;
+    if (!stripeCustomerEmail) {
+      return customerPortalLink;
+    }
+
+    const encodedEmail = encodeURIComponent(stripeCustomerEmail);
+    return `${customerPortalLink}?prefilled_email=${encodedEmail}`;
   }
 
   get freePlanPaymentLink() {
@@ -164,12 +180,15 @@ export default class BillingService extends Service {
     let extraCreditsAvailableInBalance =
       json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
     let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
+    let stripeCustomerEmail =
+      json.data?.attributes?.stripeCustomerEmail ?? null;
     this._subscriptionData = {
       plan,
       creditsAvailableInPlanAllowance,
       creditsIncludedInPlanAllowance,
       extraCreditsAvailableInBalance,
       stripeCustomerId,
+      stripeCustomerEmail,
     };
   });
 

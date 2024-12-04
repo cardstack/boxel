@@ -7,6 +7,7 @@ import {
   getUserByStripeId,
   insertStripeEvent,
   markStripeEventAsProcessed,
+  updateUserStripeCustomerEmail,
   updateUserStripeCustomerId,
 } from '../billing-queries';
 import { StripeCheckoutSessionCompletedWebhookEvent } from '.';
@@ -31,6 +32,7 @@ export async function handleCheckoutSessionCompleted(
 
     let stripeCustomerId = event.data.object.customer;
     let encodedMatrixId = event.data.object.client_reference_id;
+    let stripeCustomerEmail = event.data.object.customer_details?.email;
     let matrixUserId = decodeWebSafeBase64(encodedMatrixId);
 
     if (!matrixUserId) {
@@ -55,6 +57,12 @@ export async function handleCheckoutSessionCompleted(
 
       stripeCustomerId = user.stripeCustomerId;
     }
+
+    await updateUserStripeCustomerEmail(
+      dbAdapter,
+      stripeCustomerId,
+      stripeCustomerEmail,
+    );
 
     let creditReloadAmount =
       'credit_reload_amount' in event.data.object.metadata
