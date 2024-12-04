@@ -136,7 +136,10 @@ export function serializableError(err: any): any {
     return err;
   }
 
-  let result = Object.assign({}, err, { stack: err.stack });
+  let result = Object.assign({}, err, {
+    stack: err.stack,
+    message: err.message,
+  });
   result.additionalErrors =
     result.additionalErrors?.map((inner) => serializableError(inner)) ?? null;
   return result;
