@@ -46,6 +46,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
+import { fn } from '@ember/helper';
 
 interface Signature {
   Args: {
@@ -101,6 +102,10 @@ export default class Room extends Component<Signature> {
                 class='skills'
                 @skills={{this.skills}}
                 @onChooseCard={{this.attachSkill}}
+                @onUpdateSkillIsActive={{fn
+                  this.matrixService.updateSkillIsActive
+                  @roomId
+                }}
                 data-test-skill-menu
               />
             {{/if}}

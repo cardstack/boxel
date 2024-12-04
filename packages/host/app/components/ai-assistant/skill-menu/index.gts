@@ -1,17 +1,17 @@
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { skillCardRef } from '@cardstack/runtime-common';
 
-import PillMenu from '@cardstack/host/components/pill-menu';
+import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 export type Skill = {
   card: SkillCard;
+  skillEventId: string;
   isActive: boolean;
 };
 
@@ -20,6 +20,7 @@ interface Signature {
   Args: {
     skills: Skill[];
     onChooseCard?: (card: SkillCard) => void;
+    onUpdateSkillIsActive?: (skillEventId: string, isActive: boolean) => void;
   };
 }
 
@@ -33,6 +34,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @isExpandableHeader={{true}}
       @canAttachCard={{true}}
       @onChooseCard={{this.attachSkill}}
+      @onChangeItemIsActive={{this.updateItemIsActive}}
       tabindex='0'
       ...attributes
     >
@@ -106,7 +108,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     return this.args.skills?.filter((skill) => skill.isActive) ?? [];
   }
 
-  @action attachSkill(card: CardDef) {
+  attachSkill = (card: CardDef) => {
     this.args.onChooseCard?.(card as SkillCard);
-  }
+  };
+
+  updateItemIsActive = (item: PillMenuItem, isActive: boolean) => {
+    this.args.onUpdateSkillIsActive?.((item as Skill).skillEventId, isActive);
+  };
 }

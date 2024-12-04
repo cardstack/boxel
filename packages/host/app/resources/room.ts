@@ -45,6 +45,7 @@ import type MatrixService from '../services/matrix-service';
 
 interface SkillId {
   skillCardId: string;
+  skillEventId: string;
   isActive: boolean;
 }
 
@@ -160,6 +161,7 @@ export class RoomResource extends Resource<Args> {
       }
       result.push({
         skillCardId: cardDoc.data.id,
+        skillEventId: eventId,
         isActive: skillsConfig.enabledEventIds.includes(eventId),
       });
     }
@@ -168,11 +170,12 @@ export class RoomResource extends Resource<Args> {
 
   get skills(): Skill[] {
     return this.skillIds
-      .map(({ skillCardId, isActive }) => {
+      .map(({ skillCardId, skillEventId, isActive }) => {
         let card = this._skillCardsCache.get(skillCardId);
         if (card) {
           return {
             card,
+            skillEventId,
             isActive,
           };
         }
