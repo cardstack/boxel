@@ -332,7 +332,7 @@ export class FittedTask extends Component<typeof TaskBase> {
         margin-left: auto;
       }
       /*catch all for dismissing tags*/
-      @container fitted-card  (width <= 226px) {
+      @container fitted-card (width <= 226px) {
         .card-tags {
           display: none;
         }
