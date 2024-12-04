@@ -118,7 +118,7 @@ export class FittedTask extends Component<typeof TaskBase> {
           {{/if}}
         </div>
         <div class='short-id-container'>
-          <ChevronsUp width='14px' height='14px' />
+          <@fields.priority @format='atom' />
           <span class='short-id'>{{@model.shortId}}</span>
         </div>
       </header>
@@ -204,7 +204,7 @@ export class FittedTask extends Component<typeof TaskBase> {
       .short-id-container {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-3xs);
+        gap: var(--boxel-sp-xxxs);
         margin-left: auto;
       }
       .short-id {
