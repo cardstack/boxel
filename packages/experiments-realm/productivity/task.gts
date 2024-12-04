@@ -20,12 +20,7 @@ import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { isToday, isThisWeek, addWeeks } from 'date-fns';
 import { User } from '../user';
-import {
-  TaskBase,
-  BaseTaskStatusField,
-  BaseTaskPriority,
-  FittedTask,
-} from '../task';
+import { TaskBase, BaseTaskStatusField, BaseTaskPriority } from '../task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -492,36 +487,42 @@ class TaskIsolated extends Component<typeof Task> {
 
 export class TaskStatusField extends BaseTaskStatusField {
   static values = [
-    { index: 0, label: 'Not Started', color: '#B0BEC5' },
+    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
       index: 1,
       label: 'Next Sprint',
       color: '#64B5F6',
+      completed: false,
     },
     {
       index: 2,
       label: 'Current Sprint',
       color: '#00BCD4',
+      completed: false,
     },
     {
       index: 3,
       label: 'In Progress',
       color: '#FFB74D',
+      completed: false,
     },
     {
       index: 4,
       label: 'In Review',
       color: '#9575CD',
+      completed: false,
     },
     {
       index: 5,
       label: 'Staged',
       color: '#26A69A',
+      completed: false,
     },
     {
       index: 6,
       label: 'Shipped',
       color: '#66BB6A',
+      completed: true,
     },
   ];
 }
@@ -562,6 +563,4 @@ export class Task extends TaskBase {
   });
 
   static isolated = TaskIsolated;
-
-  static fitted = FittedTask;
 }
