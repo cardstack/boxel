@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import TextAreaCard from 'https://cardstack.com/base/text-area';
+import BooleanField from 'https://cardstack.com/base/boolean';
 
 import DateRangeField from './date-range-field';
 import { Tag } from './tag';
@@ -25,6 +26,396 @@ import ChevronUp from '@cardstack/boxel-icons/chevron-up';
 import ChevronsDown from '@cardstack/boxel-icons/chevrons-down';
 import ChevronDown from '@cardstack/boxel-icons/chevrons-down';
 import CircleEqual from '@cardstack/boxel-icons/circle-equal';
+import { isToday, isThisWeek, addWeeks } from 'date-fns';
+import GlimmerComponent from '@glimmer/component';
+import Calendar from '@cardstack/boxel-icons/calendar';
+import { Pill } from '@cardstack/boxel-ui/components';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
+
+type LooseyGooseyDataWithCompleted = LooseyGooseyData & { completed: boolean };
+
+export class BaseTaskStatusEdit extends Component<typeof BaseTaskStatusField> {
+  @tracked label: string | undefined = this.args.model.label;
+  <template>
+    <BoxelSelect
+      @placeholder={{this.placeholder}}
+      @options={{this.statuses}}
+      @selected={{this.selectedStatus}}
+      @onChange={{this.onSelectStatus}}
+      as |item|
+    >
+      <div> {{item.label}}</div>
+    </BoxelSelect>
+  </template>
+
+  get selectedStatus() {
+    return this.statuses.find((status) => {
+      return status.label === this.label;
+    });
+  }
+
+  // This ensures you get values from the class the instance is created
+  get statuses() {
+    return (this.args.model.constructor as any)
+      .values as LooseyGooseyDataWithCompleted[];
+  }
+
+  @action onSelectStatus(status: LooseyGooseyData): void {
+    this.label = status.label;
+    this.args.model.label = this.selectedStatus?.label;
+    this.args.model.index = this.selectedStatus?.index;
+    this.args.model.completed = this.selectedStatus?.completed;
+  }
+
+  get placeholder() {
+    return 'Fill in';
+  }
+}
+
+export class FittedTask extends Component<typeof TaskBase> {
+  get visibleTags() {
+    return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
+  }
+
+  get dueDate() {
+    return this.args.model.dateRange?.end;
+  }
+
+  get dueDateStatus() {
+    return this.dueDate ? getDueDateStatus(this.dueDate.toString()) : undefined;
+  }
+
+  get hasDueDate() {
+    return Boolean(this.dueDate);
+  }
+
+  get hasDueDateStatus() {
+    return Boolean(this.dueDateStatus);
+  }
+
+  get isCompleted() {
+    return this.args.model.status?.completed ?? false;
+  }
+
+  <template>
+    <div class='task-card'>
+      <header>
+        <div>
+          <TaskCompletionStatus
+            class='task-completion-status'
+            @completed={{this.isCompleted}}
+          />
+          {{#if this.visibleTags.length}}
+            <div class='card-tags'>
+              {{#each this.visibleTags as |Tag|}}
+                <Tag
+                  @format='atom'
+                  class='card-tag'
+                  @displayContainer={{false}}
+                />
+              {{/each}}
+            </div>
+          {{/if}}
+        </div>
+        <div class='short-id-container'>
+          <ChevronsUp width='14px' height='14px' />
+          <span class='short-id'>{{@model.shortId}}</span>
+        </div>
+      </header>
+
+      <div class='card-info'>
+        {{#if @model.taskName}}
+          <h3 class='task-title'>{{@model.taskName}}</h3>
+        {{/if}}
+
+        <div class='date-info-container'>
+          {{#if this.hasDueDate}}
+            <div class='date-status-pill-container'>
+              {{#if this.dueDateStatus}}
+                <Pill
+                  class='date-status-pill'
+                  @pillBackgroundColor={{this.dueDateStatus.color}}
+                >
+                  <:default>{{this.dueDateStatus.label}}</:default>
+                </Pill>
+              {{/if}}
+
+              <div class='calendar-icon-container'>
+                <Calendar width='14px' height='14px' class='calendar-icon' />
+                <@fields.dateRange.end @format='atom' />
+              </div>
+            </div>
+          {{else}}
+            <span class='no-data-found-txt'>No Due Date Assigned</span>
+          {{/if}}
+        </div>
+      </div>
+
+      <footer>
+        <@fields.assignee
+          class='card-assignee'
+          @format='atom'
+          @displayContainer={{false}}
+        />
+      </footer>
+    </div>
+
+    <style scoped>
+      .task-completion-status {
+        --boxel-circle-size: 14px;
+        --boxel-border-radius: var(--boxel-border-radius-lg);
+      }
+      .task-card {
+        --task-font-weight-500: 500;
+        --task-font-weight-600: 600;
+        --tasl-font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
+        width: 100%;
+        height: 100%;
+        padding: var(--boxel-sp-sm);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        overflow: hidden;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        justify-content: space-between;
+      }
+      .card-tags {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
+      }
+      .card-tag {
+        width: auto;
+        height: auto;
+        overflow: unset;
+      }
+      .card-tags > :last-child {
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .short-id-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-3xs);
+        margin-left: auto;
+      }
+      .short-id {
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-600);
+        color: var(--boxel-600);
+        line-height: normal;
+        background-color: var(--boxel-200);
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
+        border-radius: 5px;
+        white-space: nowrap;
+      }
+      .task-title {
+        margin: var(--boxel-sp-xxxs) 0;
+        padding: 0;
+        font-size: var(--boxel-font-size);
+        font-weight: var(--task-font-weight-600);
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .date-info-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        margin-top: var(--boxel-sp-xxxs);
+      }
+      .no-data-found-txt {
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-500);
+        color: var(--boxel-400);
+        white-space: nowrap;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 1px;
+      }
+      .date-status-pill-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .date-status-pill {
+        height: 24px;
+        border: none;
+        border-radius: 5px 0 0 5px;
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-500);
+        position: relative;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
+          var(--boxel-sp-xxs);
+        clip-path: polygon(
+          0 0,
+          calc(100% - 8px) 0,
+          100% 50%,
+          calc(100% - 8px) 100%,
+          0 100%
+        );
+      }
+      .calendar-icon-container {
+        font-size: var(--tasl-font-size-extra-small);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
+      }
+      .calendar-icon {
+        flex-shrink: 0;
+      }
+      footer {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        color: var(--boxel-dark);
+        margin-top: auto;
+      }
+      .card-assignee {
+        width: auto;
+        height: auto;
+        overflow: unset;
+        margin-left: auto;
+      }
+
+      /* Square/Portrait Container (aspect-ratio <= 1.0) */
+      @container (aspect-ratio <= 1.0) {
+        .task-card {
+          padding: var(--boxel-sp-xs);
+        }
+
+        .date-status-pill {
+          display: none;
+        }
+
+        footer {
+          margin-top: auto;
+        }
+      }
+
+      /* Compact Portrait (height <= 230px) */
+      @container (aspect-ratio <= 1.0) and (height <=230px) {
+        .task-card {
+          gap: var(--boxel-sp-5xs);
+        }
+
+        .task-title {
+          -webkit-line-clamp: 1;
+        }
+
+        .card-tags {
+          display: none;
+        }
+      }
+
+      /* Landscape Container (1.0 < aspect-ratio <= 2.0) */
+      @container (1.0 < aspect-ratio <= 2.0) {
+        .task-card {
+          padding: var(--boxel-sp-sm);
+        }
+      }
+
+      /* Extra styles for very narrow height but medium*/
+      @container (aspect-ratio < 2.0) and (height <= 78px) {
+        .task-title {
+          -webkit-line-clamp: 1;
+        }
+
+        .card-tags,
+        .date-info-container {
+          display: none;
+        }
+      }
+
+      /* Extra styles for width <= 150px and height <= 100px */
+      @container (width <= 150px) and (height <= 100px) {
+        .card-tags,
+        .card-info,
+        footer {
+          display: none;
+        }
+      }
+
+      /* Extra styles for width > 280px and height 78px */
+      @container (width > 280px) and (height <= 78px) {
+        .task-completion-status {
+          display: inline-flex;
+        }
+      }
+
+      @container (aspect-ratio > 2.0) and (height <= 78px) {
+        .task-card {
+          padding: var(--boxel-sp-xs);
+          flex-direction: row;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
+        }
+
+        .card-tags,
+        .date-info-container {
+          display: none;
+        }
+        .task-title {
+          font-size: var(--boxel-font-size-sm);
+          -webkit-line-clamp: 1;
+        }
+      }
+
+      /* Extra styles for small size */
+      @container (width <= 400px) and (height <= 58px) {
+        footer {
+          display: none;
+        }
+      }
+
+      /* Extra styles for super narrow height */
+      @container (aspect-ratio > 6.0) and (height <= 78px) {
+        .task-card {
+          padding: var(--boxel-sp-xs);
+        }
+
+        .card-tags,
+        .date-info-container {
+          display: none;
+        }
+
+        .task-title {
+          font-size: var(--boxel-font-size-sm);
+        }
+
+        footer {
+          margin-top: 0;
+          margin-left: auto;
+        }
+      }
+
+      /* Wide Container (aspect-ratio > 2.0) */
+      @container (aspect-ratio > 2.0) {
+        .task-card {
+          gap: var(--boxel-sp-xxxs);
+        }
+
+        .task-title {
+          -webkit-line-clamp: 1;
+        }
+      }
+    </style>
+  </template>
+}
 
 class EditPriority extends Component<typeof BaseTaskPriority> {
   @tracked label = this.args.model.label;
@@ -87,7 +478,7 @@ export class BaseTaskPriority extends LooseGooseyField {
   ];
 
   static edit = EditPriority;
-  static embedded = class Embedded extends Component<typeof this> {
+  static embedded = class Embedded extends Component<typeof BaseTaskPriority> {
     <template>
       {{@model.label}}
     </template>
@@ -107,41 +498,6 @@ export class BaseTaskPriority extends LooseGooseyField {
       <this.selectedIcon width='14px' height='14px' />
     </template>
   };
-}
-
-class Edit extends Component<typeof BaseTaskStatusField> {
-  @tracked label: string | undefined = this.args.model.label;
-  <template>
-    <BoxelSelect
-      @placeholder={{this.placeholder}}
-      @options={{this.statuses}}
-      @selected={{this.selectedStatus}}
-      @onChange={{this.onSelectStatus}}
-      as |item|
-    >
-      <div> {{item.label}}</div>
-    </BoxelSelect>
-  </template>
-
-  get selectedStatus() {
-    return this.statuses.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  get statuses() {
-    return BaseTaskStatusField.values;
-  }
-
-  @action onSelectStatus(status: LooseyGooseyData): void {
-    this.label = status.label;
-    this.args.model.label = this.selectedStatus?.label;
-    this.args.model.index = this.selectedStatus?.index;
-  }
-
-  get placeholder() {
-    return 'Fill in';
-  }
 }
 
 export class BaseTaskStatusField extends LooseGooseyField {
@@ -167,7 +523,7 @@ export class BaseTaskStatusField extends LooseGooseyField {
     </template>
   };
 
-  static edit = Edit;
+  static edit = BaseTaskStatusEdit;
 }
 
 export class TaskBase extends CardDef {
@@ -195,6 +551,8 @@ export class TaskBase extends CardDef {
       return;
     },
   });
+
+  static fitted = FittedTask;
 }
 
 function extractId(href: string): string {
@@ -209,4 +567,83 @@ function shortenId(id: string): string {
   const shortUuid = id.slice(0, 8);
   const decimal = parseInt(shortUuid, 16);
   return decimal.toString(36).padStart(6, '0');
+}
+
+function getDueDateStatus(dueDateString: string | null) {
+  if (!dueDateString) return null;
+
+  const dueDate = new Date(dueDateString);
+  const today = new Date();
+  const nextWeek = addWeeks(today, 1);
+
+  if (isToday(dueDate)) {
+    return {
+      label: 'Due Today',
+      color: '#01de67',
+    };
+  } else if (isThisWeek(dueDate)) {
+    return {
+      label: 'This Week',
+      color: '#ffbc00',
+    };
+  } else if (dueDate > today && dueDate < nextWeek) {
+    return {
+      label: 'Next Week',
+      color: '#4fc8fd',
+    };
+  }
+
+  return null;
+}
+
+interface TaskCompletionStatusSignature {
+  Element: HTMLDivElement;
+  Args: {
+    completed: boolean;
+  };
+}
+
+export class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusSignature> {
+  <template>
+    <div class='completion-status' ...attributes>
+      <span class='checkmark {{if @completed "completed"}}'>
+        {{#if @completed}}
+          <CheckMark class='checkmark-icon' />
+        {{/if}}
+      </span>
+    </div>
+
+    <style scoped>
+      .completion-status {
+        --circle-size: var(--boxel-circle-size, 20px);
+        --border-radius: var(
+          --boxel-border-radius,
+          var(--boxel-border-radius-xs)
+        );
+        display: inline-flex;
+        align-items: center;
+      }
+      .checkmark {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: var(--circle-size);
+        width: var(--circle-size);
+        background-color: white;
+        border: 2px solid var(--boxel-400);
+        border-radius: var(--border-radius);
+        transition: all 0.2s ease;
+      }
+      .checkmark.completed {
+        background-color: var(--boxel-highlight);
+        color: white;
+      }
+      .checkmark-icon {
+        --icon-size: calc(var(--circle-size, 20px) * 0.8);
+        width: var(--icon-size);
+        height: var(--icon-size);
+      }
+    </style>
+  </template>
 }
