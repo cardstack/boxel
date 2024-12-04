@@ -72,6 +72,35 @@ export class BaseTaskStatusEdit extends Component<typeof BaseTaskStatusField> {
   }
 }
 
+export class BaseTaskStatusField extends LooseGooseyField {
+  @field completed = contains(BooleanField);
+  static values = [
+    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
+    {
+      index: 1,
+      label: 'In Progress',
+      color: '#64B5F6',
+      completed: false,
+    },
+    {
+      index: 2,
+      label: 'Done',
+      color: '#00BCD4',
+      completed: true,
+    },
+  ];
+
+  static embedded = class Embedded extends Component<
+    typeof BaseTaskStatusField
+  > {
+    <template>
+      {{@model.label}}
+    </template>
+  };
+
+  static edit = BaseTaskStatusEdit;
+}
+
 export class FittedTask extends Component<typeof TaskBase> {
   get visibleTags() {
     return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
@@ -498,32 +527,6 @@ export class BaseTaskPriority extends LooseGooseyField {
       <this.selectedIcon width='14px' height='14px' />
     </template>
   };
-}
-
-export class BaseTaskStatusField extends LooseGooseyField {
-  static values = [
-    { index: 0, label: 'Not Started', color: '#B0BEC5' },
-    {
-      index: 1,
-      label: 'In Progress',
-      color: '#64B5F6',
-    },
-    {
-      index: 2,
-      label: 'Done',
-      color: '#00BCD4',
-    },
-  ];
-
-  static embedded = class Embedded extends Component<
-    typeof BaseTaskStatusField
-  > {
-    <template>
-      {{@model.label}}
-    </template>
-  };
-
-  static edit = BaseTaskStatusEdit;
 }
 
 export class TaskBase extends CardDef {
