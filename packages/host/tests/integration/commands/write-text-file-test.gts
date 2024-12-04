@@ -86,11 +86,10 @@ module('Integration | commands | write-text-file', function (hooks) {
       content: 'Hello again!',
       realm: testRealmURL,
     });
-    // Should throw an error
     try {
       await writeTextFileCommand.execute(secondContents);
       assert.notOk(true, 'Should have thrown an error');
-    } catch (error: Error) {
+    } catch (error: any) {
       assert.ok(
         error.message.includes('File already exists'),
         'Error message should mention file exists',
