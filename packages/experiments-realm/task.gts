@@ -190,6 +190,12 @@ export class FittedTask extends Component<typeof TaskBase> {
     </div>
 
     <style scoped>
+      .task-status-and-tags-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        flex-shrink: 0;
+      }
       .task-completion-status {
         --boxel-circle-size: 14px;
         --boxel-border-radius: var(--boxel-border-radius-lg);
