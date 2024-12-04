@@ -15,6 +15,11 @@ export interface LooseyGooseyData {
 export class LooseGooseyField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: LooseGooseyField) {
+      return this.label;
+    },
+  });
   static values: LooseyGooseyData[] = []; //help with the types
 
   get color() {
