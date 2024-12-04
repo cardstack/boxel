@@ -100,7 +100,7 @@ export default class Room extends Component<Signature> {
             {{else}}
               <AiAssistantSkillMenu
                 class='skills'
-                @skills={{this.skills}}
+                @skills={{this.sortedSkills}}
                 @onChooseCard={{this.attachSkill}}
                 @onUpdateSkillIsActive={{fn
                   this.matrixService.updateSkillIsActive
@@ -436,6 +436,12 @@ export default class Room extends Component<Signature> {
 
   private get skills(): Skill[] {
     return this.roomResource.skills;
+  }
+
+  private get sortedSkills(): Skill[] {
+    return [...this.skills].sort((a, b) => {
+      return a.card.title.localeCompare(b.card.title);
+    });
   }
 
   private get room() {
