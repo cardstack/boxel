@@ -1,4 +1,9 @@
-import { encodeToAlphanumeric, param, query } from '@cardstack/runtime-common';
+import {
+  decodeWebSafeBase64,
+  encodeWebSafeBase64,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -80,6 +85,19 @@ async function fetchCreditsLedgerByUser(
       }) as LedgerEntry,
   );
 }
+
+module('billing utils', function () {
+  test('encoding client_reference_id to be web safe in payment links', function (assert) {
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@mike_1:cardstack.com')),
+      '@mike_1:cardstack.com',
+    );
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@hans.müller:matrix.de')),
+      '@hans.müller:matrix.de',
+    );
+  });
+});
 
 module('billing', function (hooks) {
   let dbAdapter: PgAdapter;
@@ -741,7 +759,7 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 customer: 'cus_123',
                 metadata: {},
               },
@@ -787,7 +805,7 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 customer: 'cus_123',
                 metadata: {},
               },
@@ -843,7 +861,8 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                customer: 'cus_123',
+                customer: null,
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 metadata: {
                   credit_reload_amount: '25000',
                 },

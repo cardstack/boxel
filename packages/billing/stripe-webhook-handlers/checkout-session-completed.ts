@@ -1,8 +1,9 @@
-import { type DBAdapter } from '@cardstack/runtime-common';
+import { decodeWebSafeBase64, type DBAdapter } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
+  getUserByMatrixUserId,
   getUserByStripeId,
   insertStripeEvent,
   markStripeEventAsProcessed,
@@ -28,23 +29,31 @@ export async function handleCheckoutSessionCompleted(
   await txManager.withTransaction(async () => {
     await insertStripeEvent(dbAdapter, event);
 
-    const stripeCustomerId = event.data.object.customer;
-    const matrixUserName = event.data.object.client_reference_id;
+    let stripeCustomerId = event.data.object.customer;
+    let encodedMatrixId = event.data.object.client_reference_id;
+    let matrixUserId = decodeWebSafeBase64(encodedMatrixId);
 
-    if (matrixUserName) {
-      // The matrix user id was encoded to be alphanumeric by replacing + with - and / with _
-      // Now we need to reverse that encoding to get back the original base64 string
-      const base64MatrixUserId = matrixUserName
-        .replace(/-/g, '+')
-        .replace(/_/g, '/');
-      const matrixUserId = Buffer.from(base64MatrixUserId, 'base64').toString(
-        'utf8',
+    if (!matrixUserId) {
+      throw new Error(
+        'No matrix user id found in checkout session completed event - this should be populated using client_reference_id query param in the payment link',
       );
+    }
+
+    // Stripe customer id will be present when user is subscribing to the free plan, but not when they are adding extra credits
+    if (stripeCustomerId) {
       await updateUserStripeCustomerId(
         dbAdapter,
         matrixUserId,
         stripeCustomerId,
       );
+    } else {
+      let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
+
+      if (!user) {
+        throw new Error(`User not found for matrix user id: ${matrixUserId}`);
+      }
+
+      stripeCustomerId = user.stripeCustomerId;
     }
 
     let creditReloadAmount =
