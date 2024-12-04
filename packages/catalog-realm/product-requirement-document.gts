@@ -8,7 +8,6 @@ import {
   StringField,
   Component,
   realmURL,
-  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { Button } from '@cardstack/boxel-ui/components';
 import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
@@ -17,6 +16,14 @@ import { on } from '@ember/modifier'; // TODO: why is this a type error???
 import { tracked } from '@glimmer/tracking';
 import { AppCard } from './app-card';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
+
+import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+
+import GenerateCodeCommand from './AiAppGenerator/generate-code-command';
+import { GenerateCodeInput } from './AiAppGenerator/generate-code-command';
+import { restartableTask } from 'ember-concurrency';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
   <template>
@@ -51,7 +58,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             >
               Reset
             </Button>
-            {{!-- {{else if @context.actions.runCommand}}
+          {{else}}
             <Button
               {{on 'click' this.generateApp}}
               class='generate-button'
@@ -64,7 +71,8 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                 <span class='generate-button-logo' />
               {{/unless}}
               Generate App Now
-            </Button> --}}
+            </Button>
+            --}}
           {{/if}}
         </div>
         {{#if this.errorMessage}}
@@ -91,20 +99,26 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           </details>
         {{/if}}
         {{#if @model.moduleURL}}
-          <details open={{bool @model.appInstances}}>
+          <details>
             <summary><span>App</span></summary>
             <div class='details-content'>
-              <@fields.appInstances />
+              <Button
+                {{on 'click' this.createInstance}}
+                class='generate-button new-instance-button'
+                @kind='primary-dark'
+                @disabled={{this._createInstance.isRunning}}
+                @loading={{this._createInstance.isRunning}}
+                data-test-create-instance
+              >
+                {{#unless this._createInstance.isRunning}}
+                  <span class='generate-button-logo' />
+                {{/unless}}
+                Create New Instance
+              </Button>
             </div>
           </details>
         {{/if}}
 
-        <details open={{bool @model.prompt}}>
-          <summary><span>Prompt</span></summary>
-          <div class='details-content'>
-            <@fields.prompt />
-          </div>
-        </details>
         <details open={{bool @model.overview}}>
           <summary><span>Overview</span></summary>
           <div class='details-content'>
@@ -115,12 +129,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           <summary><span>Schema</span></summary>
           <div class='details-content'>
             <@fields.schema />
-          </div>
-        </details>
-        <details open={{bool @model.layoutAndNavigation}}>
-          <summary><span>Layout & Navigation</span></summary>
-          <div class='details-content'>
-            <@fields.layoutAndNavigation />
           </div>
         </details>
       </div>
@@ -231,6 +239,113 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     return this.args.model[realmURL];
   }
 
+  generateApp = () => {
+    this._generateCode.perform();
+  };
+  createInstance = () => {
+    this._createInstance.perform();
+  };
+
+  private _generateCode = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    this.errorMessage = '';
+    try {
+      let generateCodeCommand = new GenerateCodeCommand(commandContext);
+      let generateCodeInput = new GenerateCodeInput({
+        productRequirements: this.args.model,
+      });
+
+      let { code, appName } =
+        await generateCodeCommand.execute(generateCodeInput);
+
+      // Generate a unique name for the module using timestamp
+      let timestamp = Date.now();
+      let moduleName = `generated-apps/${timestamp}/${appName}`;
+      let filePath = `${moduleName}.gts`;
+      let moduleId = new URL(moduleName, this.currentRealm).href;
+      let writeFileCommand = new WriteTextFileCommand(commandContext);
+      let writeFileInput = new (await writeFileCommand.getInputType())({
+        path: filePath,
+        content: code,
+        realm: this.currentRealm,
+      });
+
+      await writeFileCommand.execute(writeFileInput);
+      this.args.model.moduleURL = moduleId;
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
+    }
+  });
+
+  private _createInstance = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    this.errorMessage = '';
+    try {
+      if (!this.currentRealm) {
+        throw new Error('Realm URL is not available');
+      }
+      if (!this.args.context?.actions?.createCard) {
+        throw new Error('Context action "createCard" is not available');
+      }
+      if (!this.args.model.moduleURL) {
+        throw new Error('Module URL is not available');
+      }
+      let { moduleURL } = this.args.model;
+      // get the app card def from the module
+      let loader = (import.meta as any).loader;
+      let module = await loader.import(moduleURL);
+      let MyAppCard = Object.values(module).find(
+        (declaration) =>
+          declaration &&
+          typeof declaration === 'function' &&
+          'isCardDef' in declaration &&
+          AppCard.isPrototypeOf(declaration),
+      ) as typeof AppCard;
+      if (!MyAppCard) {
+        throw new Error('App definition not found');
+      }
+
+      let myAppCard = new MyAppCard({
+        moduleId: moduleURL,
+      });
+
+      let saveCardCommand = new SaveCardCommand(commandContext);
+      let SaveCardInputType = await saveCardCommand.getInputType();
+
+      let saveCardInput = new SaveCardInputType({
+        realm: this.currentRealm,
+        card: myAppCard,
+      });
+      await saveCardCommand.execute(saveCardInput);
+
+      // show the app card
+
+      let showCardCommand = new ShowCardCommand(commandContext);
+      let ShowCardInput = await showCardCommand.getInputType();
+
+      let showAppCardInput = new ShowCardInput({
+        cardToShow: myAppCard,
+      });
+      await showCardCommand.execute(showAppCardInput);
+
+      if (!myAppCard) {
+        throw new Error('Could not create card');
+      }
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
+    }
+  });
+
   viewModule = () => {
     this.errorMessage = '';
     if (!this.args.model.moduleURL) {
@@ -250,7 +365,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
 
   reset = () => {
     this.args.model.moduleURL = undefined;
-    this.args.model.appInstances = undefined;
   };
 }
 
@@ -260,12 +374,9 @@ export class ProductRequirementDocument extends CardDef {
   @field appTitle = contains(StringField);
   @field shortDescription = contains(TextAreaField);
   @field thumbnail = contains(Base64ImageField);
-  @field prompt = contains(TextAreaField);
   @field overview = contains(MarkdownField);
   @field schema = contains(MarkdownField);
-  @field layoutAndNavigation = contains(MarkdownField);
   @field moduleURL = contains(StringField);
-  @field appInstances = linksToMany(AppCard);
   @field title = contains(StringField, {
     computeVia: function (this: ProductRequirementDocument) {
       return this.appTitle ?? 'Untitled App';
