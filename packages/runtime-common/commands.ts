@@ -87,6 +87,9 @@ export abstract class Command<
       throw error;
     } finally {
       this.nextCompletionDeferred = new Deferred<CardResultType>();
+      this.nextCompletionDeferred.promise.catch(() => {
+        // ensure this is not considered an unhandled rejection by QUnit
+      });
     }
   }
 
