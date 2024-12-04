@@ -58,7 +58,7 @@ export class Company extends CardDef {
   @field name = contains(StringField);
   @field industry = contains(StringField);
   @field headquartersAddress = contains(Address);
-  @field PhoneNumberField = contains(NumberField);
+  @field phone = contains(NumberField);
   @field website = contains(UrlField);
   @field stockSymbol = contains(StringField);
 
