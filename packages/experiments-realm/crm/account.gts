@@ -1,10 +1,14 @@
-import { CardDef, linksTo } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  linksTo,
+  contains,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import { field, linksToMany } from 'https://cardstack.com/base/card-api';
+import { Address as AddressField } from '../address';
 import { Company } from './company';
 import { Contact } from './contact';
-import { Deal } from './deal';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/captions';
@@ -124,12 +128,14 @@ class IsolatedTemplate extends Component<typeof Account> {
 }
 
 export class Account extends CardDef {
-  static displayName = 'Account';
+  static displayName = 'CRM Account';
 
   @field company = linksTo(Company);
   @field primaryContact = linksTo(Contact);
   @field contacts = linksToMany(Contact);
-  @field deals = linksToMany(Deal);
+  @field shippingAddress = contains(AddressField);
+  @field billingAddress = contains(AddressField);
+  @field website = contains(AddressField);
 
   static isolated = IsolatedTemplate;
 }
