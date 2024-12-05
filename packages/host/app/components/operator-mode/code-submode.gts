@@ -175,7 +175,7 @@ export default class CodeSubmode extends Component<Signature> {
       : null;
     let sum = (obj: Record<string, number>) =>
       Object.values(obj).reduce(
-        (sum, value) => sum + Number(value.toFixed(0)),
+        (sum, value) => sum + (value ? Number(value.toFixed(0)) : 0),
         0,
       );
 
