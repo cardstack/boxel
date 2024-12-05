@@ -2,9 +2,9 @@ import GlimmerComponent from '@glimmer/component';
 
 interface ContentCardArgs {
   Blocks: {
-    title: [];
-    icon: [];
     content: [];
+    icon: [];
+    title: [];
   };
   Element: HTMLElement;
 }

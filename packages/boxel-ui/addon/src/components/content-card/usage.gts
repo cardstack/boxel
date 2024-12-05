@@ -1,8 +1,9 @@
+import ArcheryArrow from '@cardstack/boxel-icons/archery-arrow';
+import PhotoIcon from '@cardstack/boxel-icons/photo';
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
 import ContentCard from './index.gts';
-import PhotoIcon from '@cardstack/boxel-icons/photo';
-import ArcheryArrow from '@cardstack/boxel-icons/archery-arrow';
 
 interface Signature {
   Element: HTMLElement;
