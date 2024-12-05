@@ -33,7 +33,6 @@ import {
   humanReadable,
   maybeURL,
   maybeRelativeURL,
-  trackCard,
   type Meta,
   type CardFields,
   type Relationship,
@@ -266,8 +265,9 @@ export async function flushLogs() {
   await logger.flush();
 }
 
-export class IdentityContext {
-  readonly identities = new Map<string, CardDef>();
+export interface IdentityContext {
+  get(url: string): CardDef | undefined;
+  set(url: string, instance: CardDef): void;
 }
 
 type JSONAPIResource =
@@ -945,7 +945,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
-    let cachedInstance = identityContext.identities.get(
+    let cachedInstance = identityContext.get(
       new URL(value.links.self, relativeTo).href,
     );
     if (cachedInstance) {
@@ -972,11 +972,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       identityContext,
     );
     deserialized[isSavedInstance] = true;
-    deserialized = trackCard(
-      myLoader(),
-      deserialized,
-      deserialized[realmURL]!,
-    ) as BaseInstanceType<CardT>;
     return deserialized;
   }
 
@@ -1012,9 +1007,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
-      identityContexts.get(instance as BaseDef) ?? new IdentityContext();
+      identityContexts.get(instance as BaseDef) ?? new Map();
     // taking advantage of the identityMap regardless of whether loadFields is set
-    let fieldValue = identityContext.identities.get(e.reference as string);
+    let fieldValue = identityContext.get(e.reference as string);
 
     if (fieldValue !== undefined) {
       deserialized.set(this.name, fieldValue);
@@ -1294,7 +1289,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links.self == null) {
           return null;
         }
-        let cachedInstance = identityContext.identities.get(
+        let cachedInstance = identityContext.get(
           new URL(value.links.self, relativeTo).href,
         );
         if (cachedInstance) {
@@ -1329,11 +1324,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
           identityContext,
         );
         deserialized[isSavedInstance] = true;
-        deserialized = trackCard(
-          myLoader(),
-          deserialized,
-          deserialized[realmURL]!,
-        ) as BaseInstanceType<FieldT>;
         return deserialized;
       });
 
@@ -1414,12 +1404,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
-    let identityContext =
-      identityContexts.get(instance) ?? new IdentityContext();
+    let identityContext = identityContexts.get(instance) ?? new Map();
 
     for (let ref of e.reference) {
       // taking advantage of the identityMap regardless of whether loadFields is set
-      let value = identityContext.identities.get(ref);
+      let value = identityContext.get(ref);
       if (value !== undefined) {
         fieldValues.push(value);
       }
@@ -2371,7 +2360,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   relativeTo: URL | undefined,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = opts?.identityContext ?? new IdentityContext();
+  let identityContext = opts?.identityContext ?? new Map();
   let {
     meta: { adoptsFrom },
   } = resource;
@@ -2394,7 +2383,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
 // Crawls all fields for cards and populates the identityContext
 function buildIdentityContext(
   instance: CardDef | FieldDef,
-  identityContext: IdentityContext = new IdentityContext(),
+  identityContext: IdentityContext = new Map(),
   visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
 ) {
   if (instance == null || visited.has(instance)) {
@@ -2413,7 +2402,7 @@ function buildIdentityContext(
           continue;
         }
         if (isCard(item)) {
-          identityContext.identities.set(item.id, item);
+          identityContext.set(item.id, item);
         }
         if (isCardOrField(item)) {
           buildIdentityContext(item, identityContext, visited);
@@ -2421,7 +2410,7 @@ function buildIdentityContext(
       }
     } else {
       if (isCard(value) && value.id) {
-        identityContext.identities.set(value.id, value);
+        identityContext.set(value.id, value);
       }
       if (isCardOrField(value)) {
         buildIdentityContext(value, identityContext, visited);
@@ -2462,7 +2451,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
-  identityContext: IdentityContext = new IdentityContext(),
+  identityContext: IdentityContext = new Map(),
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
@@ -2483,7 +2472,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   }
   let instance: BaseInstanceType<T> | undefined;
   if (resource.id != null) {
-    instance = identityContext.identities.get(resource.id) as
+    instance = identityContext.get(resource.id) as
       | BaseInstanceType<T>
       | undefined;
   }
@@ -2508,7 +2497,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   identityContext: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
   if (resource.id != null) {
-    identityContext.identities.set(resource.id, instance as CardDef); // the instance must be a composite card since we are updating it from a resource
+    identityContext.set(resource.id, instance as CardDef); // the instance must be a composite card since we are updating it from a resource
   }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;

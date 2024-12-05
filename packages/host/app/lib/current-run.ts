@@ -308,11 +308,7 @@ export class CurrentRun {
       await this.indexModule(url, fileRef);
     } else {
       if (!identityContext) {
-        let api = await this.loaderService.loader.import<typeof CardAPI>(
-          `${baseRealm.url}card-api`,
-        );
-        let { IdentityContext } = api;
-        identityContext = new IdentityContext();
+        identityContext = new Map();
       }
 
       if (url.href.endsWith('.json')) {

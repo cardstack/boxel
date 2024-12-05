@@ -17,7 +17,7 @@ import type { Loader, Query } from '@cardstack/runtime-common';
 import Auth from '@cardstack/host/components/matrix/auth';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 import {
   getSearchResults,
@@ -74,12 +74,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
       ...(opts?.loader ? { loader: () => opts.loader! } : {}),
     });
-  }
-
-  // public API
-  @action
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
-    return trackCard(owner, card, realmURL);
   }
 
   private saveSource = task(async (url: URL, content: string) => {
