@@ -259,7 +259,6 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       }
       .icon.gray {
         color: var(--boxel-400);
-        color: var(--boxel-400);
       }
       .pill-gray {
         font-weight: 500;
@@ -267,10 +266,6 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         word-break: keep-all;
         --pill-background-color: var(--boxel-200);
         border: none;
-      }
-      .social-links-container {
-        display: flex;
-        margin-top: var(--boxel-sp);
       }
       .status-pill {
         border-color: transparent;
@@ -391,7 +386,6 @@ class FittedTemplate extends Component<typeof Contact> {
         padding: var(--boxel-sp-xs);
       }
       .contact-info {
-        grid-area: contact-info;
         font-size: var(--boxel-font-xs);
         align-self: normal;
       }
@@ -405,7 +399,6 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .icon.gray {
         color: var(--boxel-400);
-        color: var(--boxel-400);
       }
       .pill-gray {
         font-weight: 300;
@@ -414,11 +407,7 @@ class FittedTemplate extends Component<typeof Contact> {
         --pill-background-color: var(--boxel-200);
         border: none;
       }
-      .social-links-container {
-        grid-area: social-links-container;
-      }
       .status-pill {
-        grid-area: status-pill;
         border-color: transparent;
         padding: 0;
         flex: none;
@@ -444,28 +433,14 @@ class FittedTemplate extends Component<typeof Contact> {
 
       /* Square layout (aspect-ratio = 1.0) or portrait layout with height < 226px */
       @container fitted-card ((aspect-ratio = 1.0) or ((aspect-ratio < 1.0) and (height < 226px))) {
-        .fitted-contact-card,
-        .avatar-container {
+        .fitted-contact-card {
           flex-direction: column;
           justify-content: center;
           align-items: center;
           padding: var(--boxel-sp-xs);
         }
 
-        .avatar-info {
-          text-align: center;
-        }
-
-        .avatar-info :global(.row) {
-          justify-content: center;
-        }
-
-        .name {
-          font-size: var(--boxel-font-sm);
-        }
-
         .contact-info,
-        .social-links-container,
         .status-pill,
         .primary-email,
         .secondary-email,
@@ -476,27 +451,17 @@ class FittedTemplate extends Component<typeof Contact> {
       }
 
       @container fitted-card (aspect-ratio <= 1.0) and (226px < height) {
-        .fitted-contact-card,
-        .avatar-container {
+        .fitted-contact-card {
           flex-direction: column;
           justify-content: center;
           align-items: center;
           padding: var(--boxel-sp-xs);
         }
 
-        .avatar-info {
-          text-align: center;
-        }
-
-        .avatar-info .row {
-          justify-content: center;
-        }
-
         .status-pill {
           align-self: flex-end;
         }
 
-        .social-links-container,
         .primary-email,
         .secondary-email,
         .secondary-phone,
@@ -513,12 +478,6 @@ class FittedTemplate extends Component<typeof Contact> {
           padding: var(--boxel-sp-xxs);
         }
 
-        .avatar-thumbnail {
-          width: 50px;
-          height: 50px;
-        }
-
-        .social-links-container,
         .primary-email,
         .secondary-email,
         .secondary-phone,
@@ -535,16 +494,6 @@ class FittedTemplate extends Component<typeof Contact> {
           padding: var(--boxel-sp-xxs);
         }
 
-        .avatar-thumbnail {
-          width: 45px;
-          height: 45px;
-        }
-
-        .name {
-          font-size: var(--boxel-font-sm);
-        }
-
-        .social-links-container,
         .primary-email,
         .secondary-email,
         .secondary-phone,
@@ -562,12 +511,6 @@ class FittedTemplate extends Component<typeof Contact> {
           padding: var(--boxel-sp-sm);
         }
 
-        .avatar-thumbnail {
-          width: 40px;
-          height: 40px;
-        }
-
-        .social-links-container,
         .primary-email,
         .secondary-email,
         .secondary-phone,
@@ -577,7 +520,6 @@ class FittedTemplate extends Component<typeof Contact> {
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (115px <= height < 180px)) {
-        .social-links-container,
         .status-pill {
           display: none;
         }
@@ -596,24 +538,7 @@ class FittedTemplate extends Component<typeof Contact> {
           padding: var(--boxel-sp-sm);
         }
 
-        .avatar-container {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-          flex: 1;
-        }
-
-        .avatar-thumbnail {
-          width: 40px;
-          height: 40px;
-        }
-
-        .name {
-          font-size: var(--boxel-font-sm);
-        }
-
         .contact-info,
-        .social-links-container,
         .status-pill {
           display: none;
         }
@@ -628,17 +553,7 @@ class FittedTemplate extends Component<typeof Contact> {
           padding: var(--boxel-sp-xxxs);
         }
 
-        .avatar-thumbnail {
-          width: 32px;
-          height: 32px;
-        }
-
-        .name {
-          font-size: var(--boxel-font-xs);
-        }
-
         .contact-info,
-        .social-links-container,
         .status-pill,
         .company-container {
           display: none;
@@ -659,9 +574,7 @@ class FittedTemplate extends Component<typeof Contact> {
           font-size: var(--boxel-font-xs);
         }
 
-        .avatar-thumbnail,
         .contact-info,
-        .social-links-container,
         .status-pill,
         .company-container {
           display: none;
