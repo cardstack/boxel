@@ -45,13 +45,13 @@ import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
-import {
-  CardDef,
-  type IdentityContext as IdentityContextType,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { type RenderCard } from '../services/render-service';
+import {
+  type RenderCard,
+  IdentityContextWithErrors,
+} from '../services/render-service';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -274,7 +274,7 @@ export class CurrentRun {
 
   private async visitFile(
     url: URL,
-    identityContext?: IdentityContextType,
+    identityContext?: IdentityContextWithErrors,
   ): Promise<void> {
     if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
       return;
@@ -308,11 +308,7 @@ export class CurrentRun {
       await this.indexModule(url, fileRef);
     } else {
       if (!identityContext) {
-        let api = await this.loaderService.loader.import<typeof CardAPI>(
-          `${baseRealm.url}card-api`,
-        );
-        let { IdentityContext } = api;
-        identityContext = new IdentityContext();
+        identityContext = new IdentityContextWithErrors();
       }
 
       if (url.href.endsWith('.json')) {
@@ -406,7 +402,7 @@ export class CurrentRun {
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
-    identityContext: IdentityContextType;
+    identityContext: IdentityContextWithErrors;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
@@ -618,7 +614,7 @@ export class CurrentRun {
     card: CardDef,
     types: CardType[],
     format: 'embedded' | 'fitted',
-    identityContext: IdentityContextType,
+    identityContext: IdentityContextWithErrors,
   ): Promise<{ [refURL: string]: string }> {
     let result: { [refURL: string]: string } = {};
     for (let { codeRef: componentCodeRef, refURL } of types) {

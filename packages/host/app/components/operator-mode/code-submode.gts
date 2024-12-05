@@ -445,7 +445,7 @@ export default class CodeSubmode extends Component<Signature> {
   private saveCard = restartableTask(async (card: CardDef) => {
     // these saves can happen so fast that we'll make sure to wait at
     // least 500ms for human consumption
-    await all([this.cardService.saveModel(this, card), timeout(500)]);
+    await all([this.cardService.saveModel(card), timeout(500)]);
   });
 
   private get isSaving() {

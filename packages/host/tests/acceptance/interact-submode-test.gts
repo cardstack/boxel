@@ -1587,6 +1587,47 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist();
     });
+
+    test('card that has already been opened before will reflect its latest state after being mutated through a relationship', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-update-and-save-pet]');
+
+      await triggerEvent(
+        `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-pet]`,
+        'mouseenter',
+      );
+
+      await click(
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+      );
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
+        )
+        .hasValue('Updated Pet');
+    });
   });
 
   module('index changes', function () {
