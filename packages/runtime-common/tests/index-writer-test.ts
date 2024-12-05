@@ -563,7 +563,7 @@ const tests = Object.freeze({
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'error',
       error: {
-        detail: 'test error',
+        message: 'test error',
         status: 500,
         additionalErrors: [],
       },
@@ -585,7 +585,7 @@ const tests = Object.freeze({
         pristine_doc: resource,
         source,
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -627,7 +627,7 @@ const tests = Object.freeze({
       await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
         type: 'error',
         error: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -649,7 +649,7 @@ const tests = Object.freeze({
           pristine_doc: null,
           source: null,
           error_doc: {
-            detail: 'test error',
+            message: 'test error',
             status: 500,
             additionalErrors: [],
           },
@@ -678,7 +678,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         type: 'error',
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -691,7 +691,7 @@ const tests = Object.freeze({
       assert.deepEqual(entry, {
         type: 'error',
         error: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -1123,7 +1123,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         type: 'error',
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -1136,7 +1136,7 @@ const tests = Object.freeze({
       assert.deepEqual(result, {
         type: 'error',
         error: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },

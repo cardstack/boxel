@@ -2197,7 +2197,7 @@ module('Realm Server', function (hooks) {
           assert.strictEqual(response.status, 400, 'HTTP 200 status');
 
           assert.ok(
-            response.body.errors[0].detail.includes(
+            response.body.errors[0].message.includes(
               "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
             ),
           );

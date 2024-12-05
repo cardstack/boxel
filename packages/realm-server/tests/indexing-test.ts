@@ -337,7 +337,7 @@ module('indexing', function (hooks) {
       );
       if (entry?.type === 'error') {
         assert.strictEqual(
-          entry.error.errorDetail.detail,
+          entry.error.errorDetail.message,
           'Encountered error rendering HTML for card: intentional error',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom`]);
@@ -351,7 +351,7 @@ module('indexing', function (hooks) {
       );
       if (entry?.type === 'error') {
         assert.strictEqual(
-          entry.error.errorDetail.detail,
+          entry.error.errorDetail.message,
           'Encountered error rendering HTML for card: Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
@@ -395,7 +395,7 @@ module('indexing', function (hooks) {
       } else {
         assert.ok(
           false,
-          `expected search entry to be a document but was: ${entry?.error.errorDetail.detail}`,
+          `expected search entry to be a document but was: ${entry?.error.errorDetail.message}`,
         );
       }
     }
@@ -407,7 +407,7 @@ module('indexing', function (hooks) {
     );
     if (entry?.type === 'error') {
       assert.strictEqual(
-        entry.error.errorDetail.detail,
+        entry.error.errorDetail.message,
         'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed for http://localhost:9000/this-is-a-link-to-nowhere',
       );
       assert.deepEqual(entry.error.errorDetail.deps, [
@@ -683,7 +683,7 @@ module('indexing', function (hooks) {
         {
           isCardError: true,
           additionalErrors: null,
-          detail: 'http://test-realm/post not found',
+          message: 'http://test-realm/post not found',
           status: 404,
           title: 'Not Found',
           deps: ['http://test-realm/post'],
