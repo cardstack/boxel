@@ -794,6 +794,61 @@ export function setupRealmServerEndpoints(
         );
       },
     },
+    {
+      route: '_stripe-links',
+      getResponse: async function (_req: Request) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                type: 'customer-portal-link',
+                id: '1',
+                attributes: {
+                  url: 'https://customer-portal-link',
+                },
+              },
+              {
+                type: 'free-plan-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3myQ',
+                attributes: {
+                  url: 'https://free-plan-payment-link',
+                },
+              },
+              {
+                type: 'extra-credits-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3my!',
+                attributes: {
+                  url: 'https://extra-credits-payment-link-1250',
+                  metadata: {
+                    creditReloadAmount: 1250,
+                  },
+                },
+              },
+              {
+                type: 'extra-credits-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3myP',
+                attributes: {
+                  url: 'https://extra-credits-payment-link-15000',
+                  metadata: {
+                    creditReloadAmount: 15000,
+                  },
+                },
+              },
+              {
+                type: 'extra-credits-payment-link',
+                id: 'plink_1QP4pEPUHhctoJxaEp1D3my!',
+                attributes: {
+                  url: 'https://extra-credits-payment-link-80000',
+                  metadata: {
+                    creditReloadAmount: 80000,
+                  },
+                },
+              },
+            ],
+          }),
+        );
+      },
+    },
   ];
 
   let handleRealmServerRequest = async (req: Request) => {

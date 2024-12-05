@@ -73,7 +73,7 @@ export interface Signature {
     value: string | number | null | undefined;
     variant?: 'large' | 'default';
   };
-  Element: HTMLInputElement | HTMLTextAreaElement;
+  Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
 
 export default class BoxelInput extends Component<Signature> {
@@ -284,17 +284,25 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .search {
+        --search-input-color: var(
+          --boxel-input-search-color,
+          var(--boxel-light)
+        );
+
+        --search-input-background-color: var(
+          --boxel-input-search-background-color,
+          var(--boxel-dark)
+        );
+
         --boxel-form-control-border-color: var(--boxel-dark);
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
+        background-color: var(--search-input-background-color);
+        color: var(--search-input-color);
         padding-top: var(--boxel-sp-xxxs);
         padding-right: var(--boxel-sp-xl);
         padding-bottom: var(--boxel-sp-xxxs);
-      }
-
-      .search.has-validation {
+        /* to account for the icon being on the left */
         padding-right: unset;
         padding-left: var(--boxel-sp-xxl); /* leave room for icon */
       }
@@ -304,19 +312,20 @@ export default class BoxelInput extends Component<Signature> {
           var(--boxel-border-radius-xl) 0 0;
       }
 
-      .search-icon-container {
-        --icon-color: var(--boxel-highlight);
+      .search-icon {
+        --icon-color: var(
+          --boxel-input-search-icon-color,
+          var(--boxel-highlight)
+        );
+      }
 
-        grid-area: post-icon;
+      .search-icon-container {
+        grid-area: pre-icon;
 
         display: flex;
         height: 100%;
         align-items: center;
         justify-content: center;
-      }
-
-      .search-icon-container.has-validation {
-        grid-area: pre-icon;
       }
 
       .validation-icon-container {
@@ -365,7 +374,7 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .boxel-input.search::placeholder {
-        color: var(--boxel-light);
+        color: inherit;
         opacity: 0.6;
       }
     </style>

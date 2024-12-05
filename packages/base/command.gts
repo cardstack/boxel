@@ -10,12 +10,9 @@ import {
   queryableValue,
 } from './card-api';
 import CodeRefField from './code-ref';
+import BooleanField from './boolean';
 
-export type CommandStatus = 'applied' | 'ready';
-
-class CommandStatusField extends StringField {
-  static [primitive]: CommandStatus;
-}
+export type CommandStatus = 'applied' | 'ready' | 'applying';
 
 class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
   <template>
@@ -44,14 +41,6 @@ export class CommandObjectField extends FieldDef {
   static embedded = CommandObjectFieldTemplate;
 }
 
-export class CommandCard extends CardDef {
-  @field toolCallId = contains(StringField);
-  @field name = contains(StringField);
-  @field payload = contains(CommandObjectField); //arguments of toolCall. Its not called arguments due to lint
-  @field eventId = contains(StringField);
-  @field status = contains(CommandStatusField);
-}
-
 export class SaveCardInput extends CardDef {
   @field realm = contains(StringField);
   @field card = linksTo(CardDef);
@@ -63,7 +52,7 @@ class JsonField extends FieldDef {
 
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
-  @field patch = contains(JsonField); //TODO: JSONField ?
+  @field patch = contains(JsonField);
 }
 
 export class ShowCardInput extends CardDef {
@@ -72,16 +61,14 @@ export class ShowCardInput extends CardDef {
 
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
+  @field codePath = contains(StringField);
 }
 
-export class CreateModuleInput extends CardDef {
-  @field code = contains(StringField);
+export class WriteTextFileInput extends CardDef {
+  @field content = contains(StringField);
   @field realm = contains(StringField);
-  @field modulePath = contains(StringField);
-}
-
-export class ModuleCard extends CardDef {
-  @field module = contains(CodeRefField);
+  @field path = contains(StringField);
+  @field overwrite = contains(BooleanField);
 }
 
 export class CreateInstanceInput extends CardDef {

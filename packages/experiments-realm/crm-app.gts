@@ -5,6 +5,7 @@ import {
   type SortOption,
   sortByCardTitleAsc,
 } from './components/sort';
+import { SearchInput } from './components/search-input';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -18,7 +19,6 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   TabbedHeader,
-  BoxelInput,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
@@ -96,6 +96,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked activeTabId: string = this.args.model.tabs[0].tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
+  @tracked private searchKey = '';
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -153,6 +154,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   //Tabs
   @action setActiveTab(id: string) {
     this.activeTabId = id;
+    this.searchKey = '';
     this.setActiveFilter();
     console.log(id);
   }
@@ -217,12 +219,44 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
       return {
         filter: {
-          type: this.activeFilter.cardRef,
+          on: this.activeFilter.cardRef,
+          every: [
+            { type: this.activeFilter.cardRef },
+            ...(this.searchKey !== ''
+              ? [
+                  {
+                    any: [
+                      {
+                        on: this.activeFilter.cardRef,
+                        contains: {
+                          name: this.searchKey,
+                        },
+                      },
+                      {
+                        on: this.activeFilter.cardRef,
+                        contains: {
+                          'company.name': this.searchKey,
+                        },
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ],
         },
         sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
       } as Query;
     }
     return;
+  }
+
+  get searchPlaceholder() {
+    return `Search ${this.activeFilter.displayName}`;
+  }
+
+  @action
+  private setSearchKey(searchKey: string) {
+    this.searchKey = searchKey;
   }
 
   @action private onChangeView(id: ViewOption) {
@@ -292,7 +326,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           </BoxelButton>
         {{/if}}
         <div class='search-bar content-header-row-2'>
-          <BoxelInput @type='search' />
+          <SearchInput
+            @placeholder={{this.searchPlaceholder}}
+            @value={{this.searchKey}}
+            @setSearchKey={{this.setSearchKey}}
+          />
         </div>
         <ViewSelector
           class='view-menu content-header-row-2'

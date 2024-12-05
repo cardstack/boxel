@@ -2,10 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Richard Mille",
-      "position": "Operation Manager",
-      "primaryEmail": "richardmille@g.com",
-      "secondaryEmail": "richardmille@gmail.com",
+      "name": "Olivia Chen",
+      "primaryEmail": null,
+      "secondaryEmail": null,
       "phoneMobile": {
         "country": null,
         "area": null,
@@ -30,7 +29,7 @@
     "relationships": {
       "company": {
         "links": {
-          "self": "../Company/05326db9-ea5c-4f20-b516-ac3f2282e973"
+          "self": "../CompanyCard/b9ee2c7c-8e42-4c36-82ee-84f3536bb459"
         }
       }
     },

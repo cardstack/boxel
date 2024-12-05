@@ -17,7 +17,6 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
-  assertPaymentSetup,
   assertLoggedOut,
   logout,
   login,
@@ -26,7 +25,7 @@ import {
   enterWorkspace,
   showAllCards,
   setupUser,
-  encodeToAlphanumeric,
+  encodeWebSafeBase64,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -109,10 +108,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
 
-    // base 64 encode the matrix user id
-    const matrixUserId = encodeToAlphanumeric('@user1:localhost');
+    await page.bringToFront();
 
-    await assertPaymentSetup(page, matrixUserId);
+    await expect(page.locator('[data-test-email-validated]')).toContainText(
+      'Success! Your email has been validated',
+    );
+
+    // base 64 encode the matrix user id
+    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
     await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
@@ -202,9 +205,8 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator('[data-test-setup-payment-message]'),
     ).toContainText('Setup your payment method now to enjoy Boxel');
 
-    const user2MatrixUserId = encodeToAlphanumeric('@user2:localhost');
+    const user2MatrixUserId = encodeWebSafeBase64('@user2:localhost');
 
-    await assertPaymentSetup(page, user2MatrixUserId);
     await setupPayment(user2MatrixUserId, realmServer, page);
 
     await assertLoggedIn(page, {

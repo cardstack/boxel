@@ -1,4 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
+import { UrlField } from '../url';
+import { Address } from '../address';
 
 import {
   Component,
@@ -6,17 +9,19 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import { Address } from '../address';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 
-class ViewCompanyCardTemplate extends Component<typeof Company> {
+class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
-    {{#if @model.name}}
-      <div class='row'>
-        <BuildingIcon class='icon' />
+    <div class='row'>
+      <BuildingIcon class='icon' />
+
+      {{#if @model.name}}
         <span class='building-name'>{{@model.name}}</span>
-      </div>
-    {{/if}}
+      {{else}}
+        <span class='no-building'>No Company Assigned</span>
+      {{/if}}
+    </div>
 
     <style scoped>
       .icon {
@@ -40,17 +45,22 @@ class ViewCompanyCardTemplate extends Component<typeof Company> {
         font-weight: 300;
         text-decoration: underline;
       }
+      .no-buidling {
+        font-size: var(--boxel-font-xs);
+        font-weight: 300;
+      }
     </style>
   </template>
 }
 
 export class Company extends CardDef {
   static displayName = 'Company';
-  //Company Data - name etc
   @field name = contains(StringField);
-  @field logoUrl = contains(StringField);
-  @field website = contains(StringField);
-  @field location = contains(Address);
+  @field industry = contains(StringField);
+  @field headquartersAddress = contains(Address);
+  @field phone = contains(NumberField);
+  @field website = contains(UrlField);
+  @field stockSymbol = contains(StringField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Company) {
@@ -58,6 +68,6 @@ export class Company extends CardDef {
     },
   });
 
-  static embedded = ViewCompanyCardTemplate;
-  static atom = ViewCompanyCardTemplate;
+  static embedded = ViewCompanyTemplate;
+  static atom = ViewCompanyTemplate;
 }

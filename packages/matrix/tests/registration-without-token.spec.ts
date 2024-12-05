@@ -15,10 +15,9 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
-  assertPaymentSetup,
   setupPayment,
   registerRealmUsers,
-  encodeToAlphanumeric,
+  encodeWebSafeBase64,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
@@ -70,9 +69,8 @@ test.describe('User Registration w/o Token', () => {
     );
 
     // base 64 encode the matrix user id
-    const matrixUserId = encodeToAlphanumeric('@user1:localhost');
+    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
 
-    await assertPaymentSetup(page, matrixUserId);
     await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page);
   });

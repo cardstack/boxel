@@ -32,7 +32,6 @@ import {
   type ResolvedCodeRef,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
-import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -263,6 +262,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.isCard && this.cardResource.cardError;
   }
 
+  private get isEmptyFile() {
+    return this.readyFile.content.match(/^\s*$/);
+  }
+
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
       if (this.cardResource.cardError) {
@@ -309,57 +312,6 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     return null;
-  }
-
-  private get fileErrorMessages(): string[] {
-    if (this.isCard) {
-      if (this.cardResource.cardError) {
-        try {
-          let error = this.cardResource.cardError.error;
-
-          if (error.responseText) {
-            let parsedError = JSON.parse(error.responseText);
-
-            // handle instance errors
-            if (parsedError.errors.find((e: any) => e.message)) {
-              return parsedError.errors.map((e: any) => e.message);
-            }
-
-            // otherwise handle module errors
-            let allDetails = parsedError.errors
-              .concat(
-                ...parsedError.errors.map(
-                  (e: SerializedError) => e.additionalErrors,
-                ),
-              )
-              .map((e: SerializedError) => e.detail);
-
-            // There’s often a pair of errors where one has an unhelpful prefix like this:
-            // cannot return card from index: Not Found - http://test-realm/test/non-card not found
-            // http://test-realm/test/non-card not found
-
-            let detailsWithoutDuplicateSuffixes = allDetails.reduce(
-              (details: string[], currentDetail: string) => {
-                return [
-                  ...details.filter(
-                    (existingDetail) => !existingDetail.endsWith(currentDetail),
-                  ),
-                  currentDetail,
-                ];
-              },
-              [],
-            );
-
-            return detailsWithoutDuplicateSuffixes;
-          }
-        } catch (e) {
-          console.log('Error extracting card preview errors', e);
-          return [];
-        }
-      }
-    }
-
-    return [];
   }
 
   private get currentOpenFile() {
@@ -854,14 +806,31 @@ export default class CodeSubmode extends Component<Signature> {
 
                         <hr class='preview-error' />
 
-                        {{#each this.fileErrorMessages as |error|}}
-                          <pre
-                            class='preview-error'
-                            data-test-card-preview-error
-                          >{{error}}</pre>
-                        {{/each}}
+                        <pre
+                          class='preview-error'
+                          data-test-card-preview-error
+                        >{{this.cardResource.cardError.message}}</pre>
                       </div>
                     </div>
+                  {{else if this.isEmptyFile}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+                        </:content>
+                      </A.Item>
+                    </Accordion>
                   {{else if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'

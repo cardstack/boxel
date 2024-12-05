@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { getContrastColor } from '../../helpers/contrast-color.ts';
@@ -8,32 +9,49 @@ interface Signature {
   Args: {
     displayName?: string;
     isReady: boolean;
+    thumbnailURL?: string;
     userId: string;
   };
   Element: HTMLDivElement;
 }
+
+const setBackgroundImage = (backgroundURL: string | null | undefined) => {
+  if (!backgroundURL) {
+    return;
+  }
+  return htmlSafe(`background-image: url(${backgroundURL});`);
+};
 
 export default class Avatar extends Component<Signature> {
   <template>
     {{#let (deterministicColorFromString @userId) as |bgColor|}}
       <div
         class='profile-icon'
-        style={{cssVar
-          profile-avatar-icon-background=bgColor
-          profile-avatar-text-color=(getContrastColor bgColor)
+        style={{if
+          @thumbnailURL
+          (setBackgroundImage @thumbnailURL)
+          (cssVar
+            profile-avatar-icon-background=bgColor
+            profile-avatar-text-color=(getContrastColor bgColor)
+          )
         }}
         data-test-profile-icon={{@isReady}}
         data-test-profile-icon-userId={{@userId}}
+        role={{if @thumbnailURL 'img' 'presentation'}}
         aria-label={{if @displayName @displayName @userId}}
         ...attributes
       >
-        {{this.profileInitials}}
+        {{#unless @thumbnailURL}}
+          {{this.profileInitials}}
+        {{/unless}}
       </div>
     {{/let}}
     <style scoped>
       .profile-icon {
         --icon-size: var(--profile-avatar-icon-size, 40px);
         background: var(--profile-avatar-icon-background, var(--boxel-dark));
+        background-position: center;
+        background-size: cover;
         border-radius: 50%;
         border: var(--profile-avatar-icon-border, 2px solid white);
         display: inline-flex;

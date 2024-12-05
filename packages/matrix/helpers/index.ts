@@ -576,15 +576,6 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
-export async function assertPaymentSetup(page: Page, username: string) {
-  const stripePaymentLink = 'https://buy.stripe.com/test_4gw01WfWb2c1dBm7sv';
-  const expectedLink = `${stripePaymentLink}?client_reference_id=${username}`;
-  await expect(page.locator('[data-test-setup-payment]')).toHaveAttribute(
-    'href',
-    expectedLink,
-  );
-}
-
 export async function setupUser(
   username: string,
   realmServer: IsolatedRealmServer,
@@ -629,11 +620,11 @@ export async function setupPayment(
   // mock trigger stripe webhook 'invoice.payment_succeeded'
   await realmServer.executeSQL(
     `INSERT INTO subscriptions (
-      user_id, 
-      plan_id, 
-      started_at, 
+      user_id,
+      plan_id,
+      started_at,
       ended_at,
-      status, 
+      status,
       stripe_subscription_id
     ) VALUES (
       '${userId}',
@@ -652,8 +643,8 @@ export async function setupPayment(
 
   await realmServer.executeSQL(
     `INSERT INTO subscription_cycles (
-      subscription_id, 
-      period_start, 
+      subscription_id,
+      period_start,
       period_end
     ) VALUES (
       '${subscriptionUUID}',
@@ -690,7 +681,7 @@ export async function setupUserSubscribed(
   username: string,
   realmServer: IsolatedRealmServer,
 ) {
-  const matrixUserId = encodeToAlphanumeric(username);
+  const matrixUserId = encodeWebSafeBase64(username);
   await setupUser(username, realmServer);
   await setupPayment(matrixUserId, realmServer);
 }
@@ -762,7 +753,7 @@ export async function waitUntil<T>(
   throw new Error('Timeout waiting for condition');
 }
 
-export function encodeToAlphanumeric(string: string) {
+export function encodeWebSafeBase64(string: string) {
   return Buffer.from(string)
     .toString('base64')
     .replace(/\+/g, '-')

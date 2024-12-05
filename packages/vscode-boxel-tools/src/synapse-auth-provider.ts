@@ -39,17 +39,21 @@ async function loginWithEmail(
 }
 
 async function login(username: string, password: string, matrixUrl: string) {
-  try {
+  let usernameIsMatrixId = username.startsWith('@');
+  let usernameIsEmailAddress = username.includes('@') && !usernameIsMatrixId;
+
+  let login;
+
+  if (usernameIsEmailAddress) {
+    login = await loginWithEmail(username, password, matrixUrl);
+  } else {
     let client = createClient({
       baseUrl: matrixUrl,
     });
-    let login = await client.loginWithPassword(username, password);
-    return login;
-  } catch (error) {
-    console.log('Login with password failed, trying login with email', error);
-    let login = await loginWithEmail(username, password, matrixUrl);
-    return login;
+
+    login = await client.loginWithPassword(username, password);
   }
+  return login;
 }
 
 export class SynapseAuthProvider implements vscode.AuthenticationProvider {
