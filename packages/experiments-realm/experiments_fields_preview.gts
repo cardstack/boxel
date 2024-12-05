@@ -1,5 +1,4 @@
-import { ContactLinkField } from "./fields/contact-link";
-import { SocialMediaLinkField } from './fields/social-media-link';
+import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
 import { UrlField } from './url';
 import {
@@ -21,8 +20,6 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field urls = containsMany(UrlField);
   @field email = contains(EmailField);
   @field emails = containsMany(EmailField);
-  @field socialMediaLink = contains(SocialMediaLinkField);
-  @field socialMediaLinks = containsMany(SocialMediaLinkField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
   static displayName = 'Custom Fields ';
@@ -52,7 +49,7 @@ export class ExperimentsFieldsPreview extends CardDef {
           padding: var(--boxel-sp-xl);
         }
       </style>
-    </template>                                
+    </template>
     getFieldIcon = (key: string) => {
       const field: Field<BaseDefConstructor> | undefined = getField(
         this.args.model.constructor!,
@@ -62,50 +59,4 @@ export class ExperimentsFieldsPreview extends CardDef {
       return fieldInstance?.icon;
     };
   };
-
-  /*
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
-  static fitted = class Fitted extends Component<typeof this> {
-    <template></template>
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  */
 }

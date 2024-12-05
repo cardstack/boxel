@@ -12,32 +12,6 @@
         "alice@email.com",
         "dan@email.com"
       ],
-      "socialMediaLink": {
-        "label": "X",
-        "email": null,
-        "phone": null,
-        "link": "https://x.com/alice-boxel"
-      },
-      "socialMediaLinks": [
-        {
-          "label": "LinkedIn",
-          "email": null,
-          "phone": null,
-          "link": "https://linkedin.com/alice-boxel"
-        },
-        {
-          "label": "Facebook",
-          "email": null,
-          "phone": null,
-          "link": "https://facebook.com/alice-boxel"
-        },
-        {
-          "label": "Other",
-          "email": null,
-          "phone": null,
-          "link": "https://boxel/alice"
-        }
-      ],
       "contactLink": {
         "label": "Email",
         "email": "alice@email.com",
@@ -52,10 +26,16 @@
           "link": null
         },
         {
+          "label": "Phone",
+          "email": null,
+          "phone": "+12129876543",
+          "link": "https://alice-boxel/about"
+        },
+        {
           "label": "Other",
           "email": null,
           "phone": null,
-          "link": "https://alice-boxel/about"
+          "link": "https://boxel/alice"
         }
       ],
       "title": "Custom Field Preview",

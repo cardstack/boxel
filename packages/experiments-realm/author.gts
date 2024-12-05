@@ -8,7 +8,6 @@ import {
   contains,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
-import { CardContentContainer } from '@cardstack/boxel-ui/components';
 
 import SquareUser from '@cardstack/boxel-icons/square-user';
 import Email from '@cardstack/boxel-icons/mail';
@@ -62,13 +61,11 @@ export class Author extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContentContainer>
-        <h3><@fields.title /></h3>
-        <p><@fields.body /></p>
-        <div class='links'>
-          <@fields.contactLinks @format='atom' />
-        </div>
-      </CardContentContainer>
+      <h3><@fields.title /></h3>
+      <p><@fields.body /></p>
+      <div class='links'>
+        <@fields.contactLinks @format='atom' />
+      </div>
       <style scoped>
         .links {
           display: flex;

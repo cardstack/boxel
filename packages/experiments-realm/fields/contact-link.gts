@@ -21,9 +21,8 @@ import Phone from '@cardstack/boxel-icons/phone';
 import { EmailField } from '../email';
 import { UrlField } from '../url';
 
-export type ContactMethod = 'email' | 'tel' | 'social' | 'link';
 export interface ContactLink {
-  type: ContactMethod | string;
+  type: 'email' | 'tel' | 'link' | string;
   label: string;
   icon: typeof IconComponent;
   cta: string;
@@ -46,7 +45,7 @@ const contactValues: ContactLink[] = [
     type: 'link',
     label: 'Other',
     icon: Link,
-    cta: 'Contact',
+    cta: 'Connect',
   },
 ];
 
@@ -63,7 +62,7 @@ export class ContactLinkField extends FieldDef {
         case 'email':
           return `mailto:${this.email}`;
         case 'tel':
-          return `tel:${this.email}`;
+          return `tel:${this.phone}`;
         default:
           return this.link;
       }
@@ -104,6 +103,11 @@ export class ContactLinkField extends FieldDef {
           <@fields.link />
         </FieldContainer>
       {{/if}}
+      <style scoped>
+        label + label {
+          margin-top: var(--boxel-sp-xs);
+        }
+      </style>
     </template>
 
     options = this.args.model.currentValues;
@@ -124,17 +128,21 @@ export class ContactLinkField extends FieldDef {
           <@model.value.icon height='20' width='20' />
         </Pill>
       {{/if}}
+      <style scoped>
+        a:hover {
+          border-color: var(--boxel-dark);
+        }
+        a:focus:focus-visible {
+          outline-color: var(--boxel-highlight);
+          outline-offset: -1px;
+        }
+      </style>
     </template>
   };
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{#if @model.url}}
-        <Pill
-          class='contact-links'
-          @tag='a'
-          href={{@model.url}}
-          target='_blank'
-        >
+        <Pill @tag='a' href={{@model.url}} target='_blank'>
           <:iconLeft>
             <@model.value.icon height='20' width='20' />
           </:iconLeft>
@@ -144,8 +152,15 @@ export class ContactLinkField extends FieldDef {
         </Pill>
       {{/if}}
       <style scoped>
-        .contact-links {
+        a {
           --pill-gap: var(--boxel-sp-xxxs);
+        }
+        a:hover {
+          border-color: var(--boxel-dark);
+        }
+        a:focus:focus-visible {
+          outline-color: var(--boxel-highlight);
+          outline-offset: -1px;
         }
       </style>
     </template>
