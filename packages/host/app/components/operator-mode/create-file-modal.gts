@@ -704,7 +704,7 @@ export class ${className} extends ${exportName} {
       this.currentRequest.sourceInstance,
       this.selectedRealmURL,
     );
-    let saved = await this.cardService.saveModel(this, duplicate);
+    let saved = await this.cardService.saveModel(duplicate);
     if (!saved) {
       throw new Error(`unable to save duplicated card instance`);
     }
@@ -758,7 +758,7 @@ export class ${className} extends ${exportName} {
           `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
         );
       }
-      await this.cardService.saveModel(this, card);
+      await this.cardService.saveModel(card);
       this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
     } catch (e: any) {
       console.log('Error saving', e);

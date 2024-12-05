@@ -198,8 +198,7 @@ export default class CardService extends Service {
   }
 
   // we return undefined if the card changed locally while the save was in-flight
-  async saveModel<T extends object>(
-    owner: T,
+  async saveModel(
     card: CardDef,
     defaultRealmHref?: string,
   ): Promise<CardDef | undefined> {
@@ -329,7 +328,7 @@ export default class CardService extends Service {
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    return await this.saveModel(this, updatedCard);
+    return await this.saveModel(updatedCard);
   }
 
   private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {

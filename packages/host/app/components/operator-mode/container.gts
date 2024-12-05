@@ -95,7 +95,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // at the same time
   private saveCard = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(this, card);
+      return await this.cardService.saveModel(card);
     });
   });
 
