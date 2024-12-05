@@ -50,11 +50,10 @@ export class EmailField extends StringField {
   };
 }
 
-//TODO: Remove after URL field is implemented
 export class CardWithEmail extends CardDef {
   static displayName = 'Card with Email';
   @field email = contains(EmailField);
-  static isolated = class Isolated extends Component<typeof CardWithURL> {
+  static isolated = class Isolated extends Component<typeof this> {
     <template>
       <@fields.email @format='atom' />
     </template>
