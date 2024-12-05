@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Social Media Link Field",
+      "isField": true,
+      "ref": {
+        "module": "../../fields/social-media-link",
+        "name": "SocialMediaLinkField"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

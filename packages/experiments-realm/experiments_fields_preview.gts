@@ -1,53 +1,68 @@
-import { UrlField } from "./url";
-import { CardDef, field, contains, containsMany } from 'https://cardstack.com/base/card-api';
+import { ContactLinkField } from "./fields/contact-link";
+import { SocialMediaLinkField } from './fields/social-media-link';
+import { EmailField } from './email';
+import { UrlField } from './url';
+import {
+  CardDef,
+  field,
+  contains,
+  containsMany,
+  type BaseDefConstructor,
+  type Field,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { getField } from '@cardstack/runtime-common';
+import { startCase } from 'lodash';
+
 export class ExperimentsFieldsPreview extends CardDef {
   @field url = contains(UrlField);
-  @field links = containsMany(UrlField);
-  static displayName = "Experiments Fields Preview";
-
-
+  @field urls = containsMany(UrlField);
+  @field email = contains(EmailField);
+  @field emails = containsMany(EmailField);
+  @field socialMediaLink = contains(SocialMediaLinkField);
+  @field socialMediaLinks = containsMany(SocialMediaLinkField);
+  @field contactLink = contains(ContactLinkField);
+  @field contactLinks = containsMany(ContactLinkField);
+  static displayName = 'Custom Fields ';
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <ul>
-        <li>
-          URL field:
-          <ul>
-            <li>
-              Atom:
-              <@fields.url target='_blank' @format='atom' />
-            </li>
-            <li>
-              Embedded:
-              <@fields.url @format='embedded' />
-            </li>
-            <li>
-              Edit:
-              <@fields.url @format='edit' />
-            </li>
-          </ul>
-        </li>
-        <li>
-          URL (linksToMany):
-          <ul>
-            <li>
-              Atom:
-              <@fields.links @format='atom' />
-            </li>
-            <li>
-              Embedded:
-              <@fields.links @format='embedded' />
-            </li>
-            <li>
-              Edit:
-              <@fields.links @format='edit' />
-            </li>
-          </ul>
-        </li>
-      </ul>
-    </template>
-  }
-  
+      <section class='fields'>
+        {{#each-in @fields as |key Field|}}
+          {{#unless (eq key 'id')}}
+            <FieldContainer
+              @label={{startCase key}}
+              @icon={{this.getFieldIcon key}}
+            >
+              <FieldContainer @vertical={{true}} @label='Atom'>
+                <Field @format='atom' />
+              </FieldContainer>
+              <FieldContainer @vertical={{true}} @label='Embedded'>
+                <Field @format='embedded' />
+              </FieldContainer>
+            </FieldContainer>
+          {{/unless}}
+        {{/each-in}}
+      </section>
+      <style scoped>
+        .fields {
+          display: grid;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-xl);
+        }
+      </style>
+    </template>                                
+    getFieldIcon = (key: string) => {
+      const field: Field<BaseDefConstructor> | undefined = getField(
+        this.args.model.constructor!,
+        key,
+      );
+      let fieldInstance = field?.card;
+      return fieldInstance?.icon;
+    };
+  };
+
   /*
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
@@ -64,5 +79,33 @@ export class ExperimentsFieldsPreview extends CardDef {
   static fitted = class Fitted extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   */
 }

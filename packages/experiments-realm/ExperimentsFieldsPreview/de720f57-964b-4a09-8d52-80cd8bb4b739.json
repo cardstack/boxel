@@ -3,9 +3,66 @@
     "type": "card",
     "attributes": {
       "url": "https://youtube.com",
-      "links": [
-        "https://youtube.com",
-        "https://realms-staging.stack.cards/experiments/Author/alice-enwunder"
+      "urls": [
+        "https://boxel/alice",
+        "https://boxel/dan"
+      ],
+      "email": "alice@email.com",
+      "emails": [
+        "alice@email.com",
+        "dan@email.com"
+      ],
+      "socialMediaLink": {
+        "label": "X",
+        "username": "alice-boxel",
+        "url": null
+      },
+      "socialMediaLinks": [
+        {
+          "label": "LinkedIn",
+          "username": "alice-boxel",
+          "url": null
+        },
+        {
+          "label": "Facebook",
+          "username": "alice-boxel",
+          "url": null
+        },
+        {
+          "label": "Other",
+          "username": null,
+          "url": "https://youtube.com/alice-boxel"
+        }
+      ],
+      "contactLink": {
+        "email": "alice@email.com",
+        "phone": null,
+        "label": "Email",
+        "username": null,
+        "url": ""
+      },
+      "contactLinks": [
+        {
+          "email": "alice@email.com",
+          "phone": null,
+          "label": "Email",
+          "username": null,
+          "url": null
+        },
+        {
+          "email": null,
+          "phone": "2129991111",
+          "label": "Phone",
+          "username": "alice",
+          "url": null
+        },
+        {
+          "email": null,
+          "phone": "2121111111",
+          "label": "Phone",
+          "username": null,
+          "url": null
+        }
       ],
       "title": null,
       "description": null,
