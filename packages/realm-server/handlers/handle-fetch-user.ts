@@ -119,6 +119,7 @@ export default function handleFetchUserRequest({
         }),
         sumUpCreditsLedger(dbAdapter, {
           creditType: ['extra_credit', 'extra_credit_used'],
+          userId: user.id,
         }),
       ]);
     }

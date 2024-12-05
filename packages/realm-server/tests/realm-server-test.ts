@@ -2819,6 +2819,13 @@ module('Realm Server', function (hooks) {
         'cus_123',
         'user@test.com',
       );
+      let someOtherUser = await insertUser(
+        dbAdapter,
+        'some-other-user@test',
+        'cus_1234',
+        'other@test.com',
+      ); // For the purposes of testing that we don't return the wrong user's subscription's data
+
       let plan = await insertPlan(
         dbAdapter,
         'Creator',
@@ -2826,6 +2833,7 @@ module('Realm Server', function (hooks) {
         2500,
         'prod_creator',
       );
+
       let subscription = await insertSubscription(dbAdapter, {
         user_id: user.id,
         plan_id: plan.id,
@@ -2833,23 +2841,51 @@ module('Realm Server', function (hooks) {
         status: 'active',
         stripe_subscription_id: 'sub_1234567890',
       });
+
       let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
         subscriptionId: subscription.id,
         periodStart: 1,
         periodEnd: 2,
       });
+
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,
         creditAmount: 100,
         creditType: 'extra_credit',
         subscriptionCycleId: subscriptionCycle.id,
       });
+
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,
         creditAmount: 2500,
         creditType: 'plan_allowance',
         subscriptionCycleId: subscriptionCycle.id,
       });
+
+      // Set up other user's subscription
+      let otherUserSubscription = await insertSubscription(dbAdapter, {
+        user_id: someOtherUser.id,
+        plan_id: plan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567891',
+      });
+
+      let otherUserSubscriptionCycle = await insertSubscriptionCycle(
+        dbAdapter,
+        {
+          subscriptionId: otherUserSubscription.id,
+          periodStart: 1,
+          periodEnd: 2,
+        },
+      );
+
+      await addToCreditsLedger(dbAdapter, {
+        userId: someOtherUser.id,
+        creditAmount: 100,
+        creditType: 'extra_credit',
+        subscriptionCycleId: otherUserSubscriptionCycle.id,
+      }); // this is to test that this extra credit amount does not influence the original user's credit calculation
 
       let response = await request
         .get(`/_user`)

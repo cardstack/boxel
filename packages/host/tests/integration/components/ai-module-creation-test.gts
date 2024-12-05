@@ -153,13 +153,14 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
     const prdCardId = `${testRealmURL}PRD/1`;
     await renderAiAssistantPanel(prdCardId);
+
     const stackCard = `[data-test-stack-card="${prdCardId}"]`;
 
     assert.dom(stackCard).exists();
     await click('[data-test-generate-app]');
     await click('[data-test-past-sessions-button]');
     let newRoomButton = findAll('[data-test-enter-room]').filter((el) =>
-      el.textContent?.includes('New AI chat'),
+      el.textContent?.includes('AI Assistant'),
     )[0];
 
     assert.ok(newRoomButton, 'new room button exists');
@@ -169,11 +170,14 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     await click(`[data-test-enter-room="${roomId}"]`);
 
     assert
-      .dom(`[data-test-room-name="New AI chat"] [data-test-message-idx="0"]`)
+      .dom(`[data-test-room-name="AI Assistant"] [data-test-message-idx="0"]`)
       .containsText('Generate code');
     let events = getRoomEvents(roomId);
     let lastEvContent = events[events.length - 1].content as CardMessageContent;
-    assert.strictEqual(lastEvContent.body, 'Generate code');
+    assert.strictEqual(
+      lastEvContent.body,
+      'Generate code for the application given the product requirements, you do not need to strictly follow the schema if it does not seem appropriate for the application.',
+    );
     assert.strictEqual(lastEvContent.data.attachedSkillEventIds?.length, 1);
     let skillEventId = lastEvContent.data.attachedSkillEventIds?.[0];
     let skillEventData = JSON.parse(
@@ -184,7 +188,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     );
     assert.strictEqual(
       skillEventData.data.id,
-      `http://localhost:4201/catalog/SkillCard/app-generator`,
+      'CodeGeneratorHelper',
       'skill card is attached',
     );
     assert.ok(

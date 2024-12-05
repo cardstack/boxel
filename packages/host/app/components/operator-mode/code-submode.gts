@@ -262,6 +262,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.isCard && this.cardResource.cardError;
   }
 
+  private get isEmptyFile() {
+    return this.readyFile.content.match(/^\s*$/);
+  }
+
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
       if (this.cardResource.cardError) {
@@ -808,6 +812,25 @@ export default class CodeSubmode extends Component<Signature> {
                         >{{this.cardResource.cardError.message}}</pre>
                       </div>
                     </div>
+                  {{else if this.isEmptyFile}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+                        </:content>
+                      </A.Item>
+                    </Accordion>
                   {{else if this.fileIncompatibilityMessage}}
                     <div
                       class='file-incompatible-message'
