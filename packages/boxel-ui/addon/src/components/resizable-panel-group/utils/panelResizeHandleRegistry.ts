@@ -1,4 +1,3 @@
-// Forked from NPM react-resizable-panels
 import {
   EXCEEDED_HORIZONTAL_MAX,
   EXCEEDED_HORIZONTAL_MIN,

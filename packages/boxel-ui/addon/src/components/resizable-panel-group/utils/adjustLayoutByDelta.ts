@@ -50,6 +50,7 @@ export function adjustLayoutByDelta({
     let maxAvailableDelta = 0;
 
     // DEBUG.push("pre calc...");
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const prevSize = initialLayout[index];
       if (prevSize == null) {

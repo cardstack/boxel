@@ -16,10 +16,10 @@ import type {
 } from './utils/types.ts';
 
 type RegisterResizeHandleResult = {
+  doubleClickHandler: ResizeHandler;
   resizeHandler: ResizeHandler;
   startDragging: ResizeHandler;
   stopDragging: ResizeHandler;
-  doubleClickHandler: ResizeHandler;
 };
 
 interface Signature {
