@@ -118,7 +118,9 @@ test.describe('Room creation', () => {
     expect(user2Room).not.toEqual(newRoom);
   });
 
-  test('it can rename a room', async ({ page }) => {
+  // skipping flaky test:
+  // https://linear.app/cardstack/issue/CS-7637/flaky-test-room-creationspects1217-%E2%80%BA-room-creation-%E2%80%BA-it-can-rename-a
+  test.skip('it can rename a room', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
 
     let room1 = await getRoomId(page);
