@@ -101,17 +101,17 @@ export default class ContentCardUsage extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      @container (min-width: 768px) {
+      @container content-container (min-width: 768px) {
         .content-grid {
           grid-template-columns: repeat(4, 1fr);
         }
       }
-      @container (min-width: 480px) and (max-width: 767px) {
+      @container content-container (min-width: 480px) and (max-width: 767px) {
         .content-grid {
           grid-template-columns: repeat(2, 1fr);
         }
       }
-      @container (max-width: 479px) {
+      @container content-container (max-width: 479px) {
         .content-grid {
           grid-template-columns: 1fr;
         }
