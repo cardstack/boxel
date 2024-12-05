@@ -1,7 +1,6 @@
 import '../setup-logger'; // This should be first
 import { aiBotUsername } from '@cardstack/runtime-common';
-import { createClient, IRoomEvent } from 'matrix-js-sdk';
-import { constructHistory } from '../helpers';
+import { createClient } from 'matrix-js-sdk';
 import { writeFileSync } from 'fs';
 
 console.log(aiBotUsername);
