@@ -645,6 +645,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <CardErrorDetail
             @error={{this.cardError}}
             @title={{this.cardErrorSummary}}
+            @viewInCodeMode={{true}}
           />
         {{else}}
           {{#let (this.realm.info this.card.id) as |realmInfo|}}
@@ -842,6 +843,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         align-items: center;
       }
       .card-error {
+        flex: 2;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;
