@@ -16,6 +16,7 @@ export interface User {
   id: string;
   matrixUserId: string;
   stripeCustomerId: string;
+  stripeCustomerEmail: string | null;
 }
 
 export interface Plan {
@@ -108,17 +109,44 @@ export async function getPlanByStripeId(
 
 export async function updateUserStripeCustomerId(
   dbAdapter: DBAdapter,
-  userId: string,
+  matrixUserId: string,
   stripeCustomerId: string,
 ) {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    stripe_customer_id: stripeCustomerId,
-  });
+  let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
 
+  if (!user) {
+    // This means there is no user in our db yet, which is a case for matrix users that signed up before we
+    // introduced the users table and starded inserting users on realm creation.
+    // We can just create a new user in our db with matrix user id and stripe customer id.
+    let { valueExpressions, nameExpressions } = asExpressions({
+      matrix_user_id: matrixUserId,
+      stripe_customer_id: stripeCustomerId,
+    });
+    await query(dbAdapter, insert('users', nameExpressions, valueExpressions));
+  } else {
+    let { valueExpressions, nameExpressions } = asExpressions({
+      stripe_customer_id: stripeCustomerId,
+    });
+    await query(dbAdapter, [
+      ...update('users', nameExpressions, valueExpressions),
+      ` WHERE matrix_user_id = `,
+      param(matrixUserId),
+    ]);
+  }
+}
+
+export async function updateUserStripeCustomerEmail(
+  dbAdapter: DBAdapter,
+  stripeCustomerId: string,
+  stripeCustomerEmail: string,
+) {
+  let { valueExpressions, nameExpressions } = asExpressions({
+    stripe_customer_email: stripeCustomerEmail,
+  });
   await query(dbAdapter, [
     ...update('users', nameExpressions, valueExpressions),
-    ` WHERE matrix_user_id = `,
-    param(userId),
+    ` WHERE stripe_customer_id = `,
+    param(stripeCustomerId),
   ]);
 }
 
@@ -159,6 +187,7 @@ export async function getUserByMatrixUserId(
     id: results[0].id,
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
+    stripeCustomerEmail: results[0].stripe_customer_email,
   } as User;
 }
 
@@ -471,4 +500,68 @@ export async function expireRemainingPlanAllowanceInSubscriptionCycle(
     creditType: 'plan_allowance_expired',
     subscriptionCycleId,
   });
+}
+
+export async function spendCredits(
+  dbAdapter: DBAdapter,
+  userId: string,
+  creditsToSpend: number,
+) {
+  let subscription = await getCurrentActiveSubscription(dbAdapter, userId);
+  if (!subscription) {
+    throw new Error('active subscription not found');
+  }
+  let subscriptionCycle = await getMostRecentSubscriptionCycle(
+    dbAdapter,
+    subscription.id,
+  );
+  if (!subscriptionCycle) {
+    throw new Error('subscription cycle not found');
+  }
+  let availablePlanAllowanceCredits = await sumUpCreditsLedger(dbAdapter, {
+    creditType: [
+      'plan_allowance',
+      'plan_allowance_used',
+      'plan_allowance_expired',
+    ],
+    userId,
+  });
+
+  if (availablePlanAllowanceCredits >= creditsToSpend) {
+    await addToCreditsLedger(dbAdapter, {
+      userId,
+      creditAmount: -creditsToSpend,
+      creditType: 'plan_allowance_used',
+      subscriptionCycleId: subscriptionCycle.id,
+    });
+  } else {
+    // If user does not have enough plan allowance credits to cover the spend, try to also use extra credits
+    let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+      creditType: ['extra_credit', 'extra_credit_used'],
+      userId,
+    });
+    let planAllowanceToSpend = availablePlanAllowanceCredits; // Spend all plan allowance credits first
+    let extraCreditsToSpend = creditsToSpend - planAllowanceToSpend;
+    if (extraCreditsToSpend > availableExtraCredits) {
+      extraCreditsToSpend = availableExtraCredits;
+    }
+
+    if (planAllowanceToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -planAllowanceToSpend,
+        creditType: 'plan_allowance_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+    }
+
+    if (extraCreditsToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -extraCreditsToSpend,
+        creditType: 'extra_credit_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+    }
+  }
 }

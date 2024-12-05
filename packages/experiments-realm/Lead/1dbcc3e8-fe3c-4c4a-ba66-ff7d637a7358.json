@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Ethan Rodriguez",
+      "primaryEmail": null,
+      "secondaryEmail": null,
+      "phoneMobile": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "phoneOffice": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "socialLinks": {
+        "twitterURL": null,
+        "linkedInURL": null
+      },
+      "status": {
+        "index": null,
+        "label": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../CompanyCard/9bef6b44-dde1-46c7-8e18-12f754a4f32c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/lead",
+        "name": "Lead"
+      }
+    }
+  }
+}

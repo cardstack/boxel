@@ -90,7 +90,30 @@ interface IndexedError {
   error: SerializedError;
 }
 
-export type IndexedInstanceOrError = IndexedInstance | IndexedError;
+interface InstanceError
+  extends Partial<
+    Omit<
+      IndexedInstance,
+      | 'type'
+      | 'realmVersion'
+      | 'realmURL'
+      | 'instance'
+      | 'source'
+      | 'lastModified'
+      | 'resourceCreatedAt'
+    >
+  > {
+  type: 'error';
+  error: SerializedError;
+  realmVersion: number;
+  realmURL: string;
+  instance: CardResource | null;
+  source: string | null;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+}
+
+export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
 
 type GetEntryOptions = WIPOptions;
@@ -98,6 +121,7 @@ export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
   htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  includeErrors?: true;
   cardUrls?: string[];
 }
 
@@ -107,7 +131,8 @@ interface WIPOptions {
 
 export interface PrerenderedCard {
   url: string;
-  html: string;
+  html: string | null;
+  isError?: true;
 }
 
 export interface QueryResultsMeta {
@@ -187,7 +212,7 @@ export class IndexQueryEngine {
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
     } = moduleEntry;
-    if (!executableCode) {
+    if (executableCode === null) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
@@ -208,7 +233,7 @@ export class IndexQueryEngine {
   async getInstance(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<IndexedInstanceOrError | undefined> {
+  ): Promise<InstanceOrError | undefined> {
     let result = (await this.query([
       `SELECT i.*, embedded_html, fitted_html`,
       `FROM boxel_index as i
@@ -235,11 +260,6 @@ export class IndexQueryEngine {
     if (maybeResult.is_deleted) {
       return undefined;
     }
-
-    if (maybeResult.error_doc) {
-      return { type: 'error', error: maybeResult.error_doc };
-    }
-    let instanceEntry = assertIndexEntrySource(maybeResult);
     let {
       url: canonicalURL,
       pristine_doc: instance,
@@ -256,16 +276,8 @@ export class IndexQueryEngine {
       source,
       types,
       deps,
-    } = instanceEntry;
-    if (!instance) {
-      throw new Error(
-        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
-          opts,
-        )} has neither an error_doc nor a pristine_doc`,
-      );
-    }
-    return {
-      type: 'instance',
+    } = maybeResult;
+    let baseResult = {
       canonicalURL,
       realmURL,
       instance,
@@ -278,9 +290,30 @@ export class IndexQueryEngine {
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
       source,
       deps,
-      lastModified: parseInt(lastModified),
-      resourceCreatedAt: parseInt(resourceCreatedAt),
+      lastModified: lastModified != null ? parseInt(lastModified) : null,
+      resourceCreatedAt:
+        resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
       realmVersion,
+    };
+
+    if (maybeResult.error_doc) {
+      return { ...baseResult, type: 'error', error: maybeResult.error_doc };
+    }
+    let instanceEntry = assertIndexEntrySource(maybeResult);
+    if (!instance) {
+      throw new Error(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor a pristine_doc`,
+      );
+    }
+    return {
+      ...baseResult,
+      type: 'instance',
+      instance,
+      source: instanceEntry.source,
+      lastModified: parseInt(instanceEntry.last_modified),
+      resourceCreatedAt: parseInt(instanceEntry.resource_created_at),
     };
   }
 
@@ -309,10 +342,23 @@ export class IndexQueryEngine {
     }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
-      ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
+
+    if (opts.includeErrors) {
+      conditions.push(
+        any([
+          ['i.type =', param('instance')],
+          every([
+            ['i.type =', param('error')],
+            ['i.url ILIKE', param('%.json')],
+          ]),
+        ]),
+      );
+    } else {
+      conditions.push(['i.type =', param('instance')]);
+    }
 
     if (opts.cardUrls && opts.cardUrls.length > 0) {
       conditions.push([
@@ -421,7 +467,7 @@ export class IndexQueryEngine {
     realmURL: URL,
     { filter, sort, page }: Query,
     loader: Loader,
-    opts: QueryOptions = {},
+    opts: QueryOptions = { includeErrors: true },
   ): Promise<{
     prerenderedCards: PrerenderedCard[];
     scopedCssUrls: string[];
@@ -467,13 +513,13 @@ export class IndexQueryEngine {
       loader,
       opts,
       [
-        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
         ...htmlColumnExpression,
         ') as html, ANY_VALUE(deps) as deps',
       ],
     )) as {
       meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & { html: string })[];
+      results: (Partial<BoxelIndexTable> & { html: string | null })[];
     };
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
@@ -493,6 +539,7 @@ export class IndexQueryEngine {
       return {
         url: card.url!,
         html: card.html,
+        ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });
 

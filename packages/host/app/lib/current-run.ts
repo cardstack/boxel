@@ -358,7 +358,7 @@ export class CurrentRun {
         type: 'error',
         error: {
           status: 500,
-          detail: `encountered error loading module "${url.href}": ${err.message}`,
+          message: `encountered error loading module "${url.href}": ${err.message}`,
           additionalErrors: null,
           deps,
         },
@@ -533,6 +533,23 @@ export class CurrentRun {
       }
     } catch (err: any) {
       uncaughtError = err;
+
+      // even when there is an error, do our best to try loading card type
+      // directly, this will help better populate the index card with error
+      // instances when there is no last known good state
+      if (!typesMaybeError) {
+        try {
+          let cardType = (await loadCard(resource.meta.adoptsFrom, {
+            loader: this.loaderService.loader,
+            relativeTo: instanceURL,
+          })) as typeof CardDef;
+          typesMaybeError = await this.getTypes(cardType);
+          searchData = searchData ?? {};
+          searchData._cardType = getDisplayName(cardType);
+        } catch (cardTypeErr: any) {
+          // the enclosing exception above should have captured this error already
+        }
+      }
     }
 
     if (searchData && doc && typesMaybeError?.type === 'types') {
@@ -558,13 +575,19 @@ export class CurrentRun {
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: ErrorEntry;
+      identityContext.errors.add(instanceURL.href);
       if (uncaughtError) {
         error = {
           type: 'error',
+          searchData,
+          types:
+            typesMaybeError?.type != 'error'
+              ? typesMaybeError?.types.map(({ refURL }) => refURL)
+              : undefined,
           error:
             uncaughtError instanceof CardError
               ? serializableError(uncaughtError)
-              : { detail: `${uncaughtError.message}` },
+              : { message: `${uncaughtError.message}` },
         };
         error.error.deps = [
           moduleURL,
@@ -580,7 +603,7 @@ export class CurrentRun {
         throw err;
       }
       log.warn(
-        `encountered error indexing card instance ${path}: ${error.error.detail}`,
+        `encountered error indexing card instance ${path}: ${error.error.message}`,
       );
       await this.updateEntry(instanceURL, error);
     }

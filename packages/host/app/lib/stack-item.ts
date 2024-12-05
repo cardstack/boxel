@@ -14,6 +14,7 @@ interface Args {
   request?: Deferred<CardDef | undefined>;
   stackIndex: number;
   card?: CardDef;
+  url?: URL;
   cardResource?: CardResource;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
@@ -35,13 +36,14 @@ export class StackItem {
       request,
       stackIndex,
       card,
+      url,
       cardResource,
       isLinkedCard,
       owner,
     } = args;
-    if (!card && !cardResource) {
+    if (!card && !cardResource && !url) {
       throw new Error(
-        `Cannot create a StackItem without a 'card' or a 'cardResource'`,
+        `Cannot create a StackItem without a 'card' or a 'cardResource' or a 'url'`,
       );
     }
     if (cardResource) {
@@ -49,6 +51,8 @@ export class StackItem {
     } else if (card?.id) {
       // if the card is not actually new--load a resource instead
       this.cardResource = getCard(owner, () => card!.id);
+    } else if (url) {
+      this.cardResource = getCard(owner, () => url!.href);
     } else if (card) {
       this.newCard = card;
       this.newCardApiPromise = apiFor(this.card).then(
@@ -93,7 +97,7 @@ export class StackItem {
   }
 
   get cardError() {
-    return this.cardResource?.cardError?.error;
+    return this.cardResource?.cardError;
   }
 
   get isWideFormat() {

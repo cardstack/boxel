@@ -563,7 +563,7 @@ const tests = Object.freeze({
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'error',
       error: {
-        detail: 'test error',
+        message: 'test error',
         status: 500,
         additionalErrors: [],
       },
@@ -585,7 +585,7 @@ const tests = Object.freeze({
         pristine_doc: resource,
         source,
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -627,7 +627,7 @@ const tests = Object.freeze({
       await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
         type: 'error',
         error: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -649,7 +649,7 @@ const tests = Object.freeze({
           pristine_doc: null,
           source: null,
           error_doc: {
-            detail: 'test error',
+            message: 'test error',
             status: 500,
             additionalErrors: [],
           },
@@ -670,8 +670,6 @@ const tests = Object.freeze({
       );
     },
 
-  // TODO we need to serialize pre-rendered HTML into error doc and ensure we
-  // include scoped css
   'can get an error doc': async (assert, { indexQueryEngine, adapter }) => {
     await setupIndex(adapter, [
       {
@@ -680,7 +678,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         type: 'error',
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -688,13 +686,30 @@ const tests = Object.freeze({
     ]);
     let entry = await indexQueryEngine.getInstance(new URL(`${testRealmURL}1`));
     if (entry?.type === 'error') {
+      assert.ok(entry.lastModified, 'lastModified exists');
+      entry.lastModified = null;
       assert.deepEqual(entry, {
         type: 'error',
         error: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
+        canonicalURL: `${testRealmURL}1.json`,
+        realmVersion: 1,
+        realmURL: testRealmURL,
+        instance: null,
+        source: null,
+        lastModified: null,
+        resourceCreatedAt: null,
+        isolatedHtml: null,
+        embeddedHtml: null,
+        fittedHtml: null,
+        atomHtml: null,
+        searchDoc: null,
+        types: null,
+        indexedAt: null,
+        deps: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be a card document`);
@@ -1108,7 +1123,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         type: 'error',
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -1121,7 +1136,7 @@ const tests = Object.freeze({
       assert.deepEqual(result, {
         type: 'error',
         error: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },

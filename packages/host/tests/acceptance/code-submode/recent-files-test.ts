@@ -20,6 +20,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -179,15 +180,19 @@ const friendCardSource = `
   }
 `;
 
+let matrixRoomId: string;
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({

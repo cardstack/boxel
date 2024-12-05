@@ -77,6 +77,8 @@ export interface InstanceEntry {
 export interface ErrorEntry {
   type: 'error';
   error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
 }
 
 interface ModuleEntry {
@@ -181,6 +183,9 @@ export class Batch {
             ),
           }
         : {
+            types: entry.types,
+            search_doc: entry.searchData,
+            // favor the last known good types over the types derived from the error state
             ...((await this.getProductionVersion(url)) ?? {}),
             type: 'error',
             error_doc: entry.error,

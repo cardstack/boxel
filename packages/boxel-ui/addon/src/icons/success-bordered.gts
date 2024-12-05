@@ -10,14 +10,14 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     height='20'
     viewBox='0 0 20 20'
     ...attributes
-  ><g fill='#37eb77' stroke='rgba(0,0,0,0.1)'><circle
+  ><g fill='var(--icon-fill, #37eb77)' stroke='rgba(0,0,0,0.1)'><circle
         cx='10'
         cy='10'
         r='10'
         stroke='none'
       /><circle cx='10' cy='10' r='9.5' fill='none' /></g><path
       fill='none'
-      stroke='#000'
+      stroke='var(--icon-color, #000)'
       stroke-linecap='round'
       stroke-linejoin='round'
       stroke-width='2'

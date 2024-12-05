@@ -4,10 +4,10 @@ import { getCard } from '@cardstack/runtime-common';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { CommandCard } from 'https://cardstack.com/base/command';
 import type { CommandResult } from 'https://cardstack.com/base/command-result';
 
 import { RoomMember } from './member';
+import MessageCommand from './message-command';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -39,7 +39,7 @@ interface RoomMessageOptional {
   index?: number;
   errorMessage?: string;
   clientGeneratedId?: string | null;
-  command?: CommandCard | null;
+  command?: MessageCommand | null;
   commandResult?: CommandResult | null;
 }
 
@@ -51,7 +51,7 @@ export class Message implements RoomMessageInterface {
   isStreamingFinished?: boolean;
   errorMessage?: string;
   clientGeneratedId?: string;
-  command?: CommandCard | null;
+  command?: MessageCommand | null;
   commandResult?: CommandResult | null;
 
   author: RoomMember;

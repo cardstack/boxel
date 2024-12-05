@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../productivity/task",
+        "module": "../tag",
         "name": "Tag"
       }
     }

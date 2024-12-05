@@ -583,6 +583,15 @@ module('Unit | query', function (hooks) {
     });
   });
 
+  test('can get prerendered cards in an error state from the indexer', async function (assert) {
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      dbAdapter,
+      loader,
+      testCards,
+    });
+  });
+
   test('can sort using a general field that is not an attribute of a card', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,

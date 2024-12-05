@@ -20,6 +20,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -186,16 +187,20 @@ const realmInfo = {
   iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
 };
 
+let matrixRoomId: string;
 module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  let { setRealmPermissions } = setupMockMatrix(hooks, {
+  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL],
   });
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};

@@ -19,15 +19,67 @@
 
     <style scoped>
       #host-loading {
-        display: grid;
+        background-color: #686283;
+        display: flex;
+        align-items: center;
         justify-items: center;
-        padding: var(--boxel-sp-xl);
+        height: 100vh;
+      }
+
+      .loading-container {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .loading-indicator svg {
+        width: 20px;
+        height: 20px;
+          animation: spin 6s linear infinite;
+        }
+      }
+
+      .loading-text {
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
       }
     </style>
   </head>
   <body>
     <div id='host-loading'>
-      Loading…
+      <div class='loading-container'>
+        <div class='loading-indicator'>
+          <svg
+            xmlns='http://www.w3.org/2000/svg'
+            width='15.5'
+            height='15.5'
+            viewBox='0 0 15.5 15.5'
+          >
+            <g
+              fill='none'
+            stroke='#00FFBA'
+            stroke-linecap='round'
+            stroke-linejoin='round'
+            stroke-width='1.5'
+          >
+            <path
+                d='M7.75.75v2.8M7.75 11.95v2.8M2.801 2.801l1.981 1.981M10.718 10.718l1.981 1.981M.75 7.75h2.8M11.95 7.75h2.8M2.801 12.699l1.981-1.981M10.718 4.782l1.981-1.981'
+              />
+            </g>
+          </svg>
+        </div>
+        <div class='loading-text'>Loading…</div>
+      </div>
     </div>
 
     <!-- in case embercli's hooks insn't run,

@@ -4,25 +4,74 @@ import {
   Component,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
+import { CountryField } from './country';
+
+function getAddressRows(
+  addressLine1: string | undefined,
+  addressLine2: string | undefined,
+  city: string | undefined,
+  state: string | undefined,
+  postalCode: string | undefined,
+  countryCode: string | undefined,
+  poBoxNumber: string | undefined,
+): string[] {
+  return [
+    poBoxNumber ? [`PO Box: ${poBoxNumber}`] : [],
+    addressLine1 ? [addressLine1] : [],
+    addressLine2 ? [addressLine2] : [],
+    [city, state, postalCode].filter(Boolean),
+    countryCode ? [countryCode] : [],
+  ]
+    .filter(Boolean)
+    .filter((r) => r.length > 0)
+    .map((r) => r.join(', '));
+}
 
 export class Address extends FieldDef {
   static displayName = 'Address';
-  @field streetAddress = contains(StringCard); // required
-  @field city = contains(StringCard); // required
-  @field region = contains(StringCard);
-  @field postalCode = contains(StringCard);
-  @field poBoxNumber = contains(StringCard);
-  @field country = contains(StringCard); // required // dropdown
+  @field addressLine1 = contains(StringField);
+  @field addressLine2 = contains(StringField);
+  @field city = contains(StringField);
+  @field state = contains(StringField);
+  @field postalCode = contains(StringField);
+  @field country = contains(CountryField);
+  @field poBoxNumber = contains(StringField);
+  @field fullAddress = contains(StringField, {
+    computeVia: function (this: Address) {
+      let rows = getAddressRows(
+        this.addressLine1,
+        this.addressLine2,
+        this.city,
+        this.state,
+        this.postalCode,
+        this.country?.name,
+        this.poBoxNumber,
+      );
+      return rows.join(', ');
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
+    get addressRows() {
+      return getAddressRows(
+        this.args.model.addressLine1,
+        this.args.model.addressLine2,
+        this.args.model.city,
+        this.args.model.state,
+        this.args.model.postalCode,
+        this.args.model.country?.name,
+        this.args.model.poBoxNumber,
+      );
+    }
+
     <template>
       <address>
-        <div><@fields.streetAddress /></div>
-        <@fields.city />
-        <@fields.region />
-        <@fields.postalCode /><@fields.poBoxNumber />
-        <@fields.country />
+        {{#each this.addressRows as |r|}}
+          <div>
+            {{r}}
+          </div>
+        {{/each}}
       </address>
     </template>
   };

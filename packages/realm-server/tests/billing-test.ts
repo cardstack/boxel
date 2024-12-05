@@ -1,4 +1,9 @@
-import { param, query } from '@cardstack/runtime-common';
+import {
+  decodeWebSafeBase64,
+  encodeWebSafeBase64,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -18,6 +23,9 @@ import {
   addToCreditsLedger,
   insertSubscription,
   User,
+  spendCredits,
+  Plan,
+  Subscription,
 } from '@cardstack/billing/billing-queries';
 
 import {
@@ -78,6 +86,19 @@ async function fetchCreditsLedgerByUser(
   );
 }
 
+module('billing utils', function () {
+  test('encoding client_reference_id to be web safe in payment links', function (assert) {
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@mike_1:cardstack.com')),
+      '@mike_1:cardstack.com',
+    );
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@hans.müller:matrix.de')),
+      '@hans.müller:matrix.de',
+    );
+  });
+});
+
 module('billing', function (hooks) {
   let dbAdapter: PgAdapter;
 
@@ -93,7 +114,12 @@ module('billing', function (hooks) {
   module('invoice payment succeeded', function () {
     module('new subscription without any previous subscription', function () {
       test('creates a new subscription and adds plan allowance in credits', async function (assert) {
-        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
         let plan = await insertPlan(
           dbAdapter,
           'Free plan',
@@ -199,7 +225,12 @@ module('billing', function (hooks) {
 
     module('subscription update', function () {
       test('updates the subscription and prorates credits', async function (assert) {
-        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
         let freePlan = await insertPlan(
           dbAdapter,
           'Free plan',
@@ -556,7 +587,12 @@ module('billing', function (hooks) {
 
     module('subscription cycle', function () {
       test('renews the subscription', async function (assert) {
-        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
         let plan = await insertPlan(
           dbAdapter,
           'Creator',
@@ -668,7 +704,12 @@ module('billing', function (hooks) {
 
   module('subscription deleted', function () {
     test('handles subscription cancellation', async function (assert) {
-      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
       let plan = await insertPlan(
         dbAdapter,
         'Creator',
@@ -723,77 +764,304 @@ module('billing', function (hooks) {
     });
   });
 
-  module('checkout session completed', function (hooks) {
+  module('checkout session completed', function () {
     let user: User;
+    let matrixUserId = '@pepe:cardstack.com';
+
+    module(
+      'without entry in users table before webhook arrival (legacy users registered prior to users table introduction)',
+      function () {
+        test('updates user stripe customer id on checkout session completed', async function (assert) {
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
+                customer: 'cus_123',
+                metadata: {},
+              },
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
+
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
+
+          let stripeEvents = await fetchStripeEvents(dbAdapter);
+          assert.strictEqual(stripeEvents.length, 1);
+          assert.strictEqual(
+            stripeEvents[0].stripe_event_id,
+            stripeCheckoutSessionCompletedEvent.id,
+          );
+
+          const updatedUser = await fetchUserByStripeCustomerId(
+            dbAdapter,
+            'cus_123',
+          );
+          assert.strictEqual(updatedUser.length, 1);
+          assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+          assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+        });
+      },
+    );
+
+    module(
+      'with entry in users table before webhook arrival',
+      function (hooks) {
+        hooks.beforeEach(async function () {
+          user = await insertUser(
+            dbAdapter,
+            matrixUserId,
+            'cus_123',
+            'user@test.com',
+          );
+        });
+
+        test('updates user stripe customer id on checkout session completed', async function (assert) {
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
+                customer: 'cus_123',
+                metadata: {},
+              },
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
+
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
+
+          let stripeEvents = await fetchStripeEvents(dbAdapter);
+          assert.strictEqual(stripeEvents.length, 1);
+          assert.strictEqual(
+            stripeEvents[0].stripe_event_id,
+            stripeCheckoutSessionCompletedEvent.id,
+          );
+
+          const updatedUser = await fetchUserByStripeCustomerId(
+            dbAdapter,
+            'cus_123',
+          );
+          assert.strictEqual(updatedUser.length, 1);
+          assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+          assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+        });
+
+        test('add extra credits to user ledger when checkout session completed', async function (assert) {
+          let creatorPlan = await insertPlan(
+            dbAdapter,
+            'Creator',
+            12,
+            2500,
+            'prod_creator',
+          );
+          let subscription = await insertSubscription(dbAdapter, {
+            user_id: user.id,
+            plan_id: creatorPlan.id,
+            started_at: 1,
+            status: 'active',
+            stripe_subscription_id: 'sub_1234567890',
+          });
+          await insertSubscriptionCycle(dbAdapter, {
+            subscriptionId: subscription.id,
+            periodStart: 1,
+            periodEnd: 2,
+          });
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                customer: null,
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
+                metadata: {
+                  credit_reload_amount: '25000',
+                },
+              },
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
+
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
+
+          let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: 'extra_credit',
+          });
+          assert.strictEqual(availableExtraCredits, 25000);
+        });
+      },
+    );
+  });
+
+  module('AI usage tracking', function (hooks) {
+    let user: User;
+    let creatorPlan: Plan;
+    let subscription: Subscription;
+    let subscriptionCycle: SubscriptionCycle;
 
     hooks.beforeEach(async function () {
-      user = await insertUser(dbAdapter, 'testuser', 'cus_123');
-    });
-
-    test('update user stripe customer id when checkout session completed', async function (assert) {
-      let stripeCheckoutSessionCompletedEvent = {
-        id: 'evt_1234567890',
-        object: 'event',
-        data: {
-          object: {
-            id: 'cs_test_1234567890',
-            object: 'checkout.session',
-            client_reference_id: 'testuser',
-            customer: 'cus_123',
-            metadata: {},
-          },
-        },
-        type: 'checkout.session.completed',
-      } as StripeCheckoutSessionCompletedWebhookEvent;
-
-      await handleCheckoutSessionCompleted(
+      user = await insertUser(
         dbAdapter,
-        stripeCheckoutSessionCompletedEvent,
-      );
-
-      let stripeEvents = await fetchStripeEvents(dbAdapter);
-      assert.strictEqual(stripeEvents.length, 1);
-      assert.strictEqual(
-        stripeEvents[0].stripe_event_id,
-        stripeCheckoutSessionCompletedEvent.id,
-      );
-
-      const updatedUser = await fetchUserByStripeCustomerId(
-        dbAdapter,
+        'testuser',
         'cus_123',
+        'user@test.com',
       );
-      assert.strictEqual(updatedUser.length, 1);
-      assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
-      assert.strictEqual(updatedUser[0].matrix_user_id, 'testuser');
+      creatorPlan = await insertPlan(
+        dbAdapter,
+        'Creator',
+        12,
+        2500,
+        'prod_creator',
+      );
+      subscription = await insertSubscription(dbAdapter, {
+        user_id: user.id,
+        plan_id: creatorPlan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567890',
+      });
+      subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+        subscriptionId: subscription.id,
+        periodStart: 1,
+        periodEnd: 2,
+      });
     });
 
-    test('add extra credits to user ledger when checkout session completed', async function (assert) {
-      let stripeCheckoutSessionCompletedEvent = {
-        id: 'evt_1234567890',
-        object: 'event',
-        data: {
-          object: {
-            id: 'cs_test_1234567890',
-            object: 'checkout.session',
-            customer: 'cus_123',
-            metadata: {
-              credit_reload_amount: '25000',
-            },
-          },
-        },
-        type: 'checkout.session.completed',
-      } as StripeCheckoutSessionCompletedWebhookEvent;
+    test('spends ai credits correctly when no extra credits are available', async function (assert) {
+      // User receives 2500 credits for the creator plan and spends 2490 credits
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: creatorPlan.creditsIncluded,
+        creditType: 'plan_allowance',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
 
-      await handleCheckoutSessionCompleted(
-        dbAdapter,
-        stripeCheckoutSessionCompletedEvent,
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: -2490,
+        creditType: 'plan_allowance_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        10,
       );
 
-      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+      await spendCredits(dbAdapter, user.id, 2);
+
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        8,
+      );
+
+      await spendCredits(dbAdapter, user.id, 5);
+
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        3,
+      );
+
+      // Make sure that we can't spend more credits than the user has - in this case user has 3 credits left and we try to spend 5
+      await spendCredits(dbAdapter, user.id, 5);
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        0,
+      );
+    });
+
+    test('spends ai credits correctly when extra credits are available', async function (assert) {
+      // User receives 2500 credits for the creator plan and spends 2490 credits
+      await addToCreditsLedger(dbAdapter, {
         userId: user.id,
-        creditType: 'extra_credit',
+        creditAmount: creatorPlan.creditsIncluded,
+        creditType: 'plan_allowance',
+        subscriptionCycleId: subscriptionCycle.id,
       });
-      assert.strictEqual(availableExtraCredits, 25000);
+
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: -2490,
+        creditType: 'plan_allowance_used',
+        subscriptionCycleId: subscriptionCycle.id,
+      });
+
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        10,
+      );
+
+      // Add 5 extra credits
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 5,
+        creditType: 'extra_credit',
+        subscriptionCycleId: null,
+      });
+
+      // User has 15 credits in total: 10 credits from the plan allowance and 5 extra credits
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        15,
+      );
+
+      // This should spend 10 credits from the plan allowance and 2 from the extra credits
+      await spendCredits(dbAdapter, user.id, 12);
+
+      // Plan allowance is now 0, 3 credits left from the extra credits
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+        }),
+        3,
+      );
+
+      // Make sure the available credits come from the extra credits and not the plan allowance
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditType: ['plan_allowance', 'plan_allowance_used'],
+        }),
+        0,
+      );
+
+      assert.strictEqual(
+        await sumUpCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditType: ['extra_credit', 'extra_credit_used'],
+        }),
+        3,
+      );
     });
   });
 });
