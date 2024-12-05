@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": null
+        }
+      },
+      "primaryContact": {
+        "links": {
+          "self": null
+        }
+      },
+      "contacts": {
+        "links": {
+          "self": null
+        }
+      },
+      "deals": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/account",
+        "name": "Account"
+      }
+    }
+  }
+}
