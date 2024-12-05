@@ -45,7 +45,7 @@ class ViewCompanyTemplate extends Component<typeof Company> {
         font-weight: 300;
         text-decoration: underline;
       }
-      .no-buidling {
+      .no-building {
         font-size: var(--boxel-font-xs);
         font-weight: 300;
       }
