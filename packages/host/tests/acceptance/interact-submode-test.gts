@@ -1617,14 +1617,22 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-pet]`,
         'mouseenter',
       );
+      console.log(
+        'waiting here',
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+      );
+
       await click(
         `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
       );
+      console.log(4);
+
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
         )
         .hasValue('Updated Pet');
+      console.log(5);
     });
 
     test<TestContextWithSSE>('tintinthong: card receives sse event but ignores the update', async function (assert) {
