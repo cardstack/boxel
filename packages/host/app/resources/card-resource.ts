@@ -260,6 +260,12 @@ export class CardResource extends Resource<Args> {
     if (typeof url === 'string') {
       url = new URL(url);
     }
+    // createFromSerialized would also do this de-duplication, but we want to
+    // also avoid the fetchJSON when we already have the stable card.
+    let existingCard = identityContext?.get(url.href);
+    if (existingCard) {
+      return existingCard;
+    }
     this.cardError = undefined;
     try {
       let json = await this.cardService.fetchJSON(url);
