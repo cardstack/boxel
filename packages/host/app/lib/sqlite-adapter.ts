@@ -220,6 +220,7 @@ export default class SQLiteAdapter implements DBAdapter {
         }
         return `ON CONFLICT (${pkColumns})`;
       })
+      .replace(/\(case jsonb_typeof(\([^)]*\)).+ end\)/, '$1')
       .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
       .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
       .replace(/ILIKE/g, 'LIKE') // sqlite LIKE is case insensitive
