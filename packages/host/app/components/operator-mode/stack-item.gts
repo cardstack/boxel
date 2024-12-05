@@ -347,7 +347,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     return this.cardError.status === 404 &&
       // a missing link error looks a lot like a missing card error
-      this.cardError.message.includes('missing')
+      this.cardError.message?.includes('missing')
       ? `Link Not Found`
       : this.cardError.title;
   }

@@ -218,7 +218,7 @@ export default class InteractSubmode extends Component<Signature> {
         return newCard;
       },
       viewCard: async (
-        card: CardDef,
+        cardOrURL: CardDef | URL,
         format: Format = 'isolated',
         opts?: { openCardInRightMostStack?: boolean },
       ): Promise<void> => {
@@ -227,7 +227,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let newItem = new StackItem({
           owner: here,
-          card,
+          ...(cardOrURL instanceof URL
+            ? { url: cardOrURL }
+            : { card: cardOrURL }),
           format,
           stackIndex,
         });

@@ -80,7 +80,7 @@ const tests = Object.freeze({
         pristine_doc: undefined,
         types: [],
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
@@ -2634,13 +2634,13 @@ const tests = Object.freeze({
         ],
 
         embedded_html: {
-          [`${testRealmURL}person/1`]:
+          [`${testRealmURL}person/Person`]:
             '<div>Jimmy (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}person/1`]:
+          [`${testRealmURL}person/Person`]:
             '<div>Jimmy (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef fitted template)</div>',
@@ -2824,6 +2824,181 @@ const tests = Object.freeze({
 
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
+  },
+
+  'can get prerendered cards in an error state from the indexer': async (
+    assert,
+    { indexQueryEngine, dbAdapter, loader },
+  ) => {
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: [
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
+        embedded_html: {
+          [`${testRealmURL}person/Person`]:
+            '<div>Van Gogh (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Van Gogh (CardDef embedded template)</div>',
+        },
+        fitted_html: {
+          [`${testRealmURL}person/Person`]:
+            '<div>Van Gogh (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Van Gogh (CardDef fitted template)</div>',
+        },
+        atom_html: 'Van Gogh',
+        search_doc: { name: 'Van Gogh' },
+      },
+      {
+        url: `${testRealmURL}jimmy.json`,
+        file_alias: `${testRealmURL}jimmy`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: [
+          `${testRealmURL}fancy-person/FancyPerson`,
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
+
+        embedded_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Jimmy (FancyPerson embedded template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Jimmy (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Jimmy (CardDef embedded template)</div>',
+        },
+        fitted_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Jimmy (FancyPerson fitted template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Jimmy (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Jimmy (CardDef fitted template)</div>',
+        },
+        atom_html: 'Jimmy',
+        search_doc: { name: 'Jimmy' },
+      },
+      {
+        url: `${testRealmURL}donald.json`,
+        file_alias: `${testRealmURL}donald`,
+        type: 'error',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: [
+          `${testRealmURL}fancy-person/FancyPerson`,
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
+        embedded_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Donald (FancyPerson embedded template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Donald (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Donald (CardDef embedded template)</div>',
+        },
+        fitted_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Donald (FancyPerson fitted template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Donald (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Donald (CardDef fitted template)</div>',
+        },
+        atom_html: 'Donald',
+        search_doc: { name: 'Donald' },
+      },
+      {
+        url: `${testRealmURL}fancy-person.gts`,
+        type: 'module',
+        file_alias: `${testRealmURL}fancy-person`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: cardSrc,
+        deps: [`${testRealmURL}person`, 'https://cardstack.com/base/card-api'],
+      },
+      {
+        url: `${testRealmURL}person.gts`,
+        type: 'module',
+        file_alias: `${testRealmURL}person`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: cardSrc,
+        deps: ['https://cardstack.com/base/card-api'],
+      },
+      {
+        url: `https://cardstack.com/base/card-api`,
+        type: 'module',
+        file_alias: `${testRealmURL}card-api`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '',
+        deps: [],
+      },
+    ]);
+
+    let { prerenderedCards } = await indexQueryEngine.searchPrerendered(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}fancy-person`,
+            name: 'FancyPerson',
+          },
+          not: {
+            eq: {
+              name: 'Richard',
+            },
+          },
+        },
+      },
+      loader,
+      {
+        htmlFormat: 'embedded',
+        includeErrors: true,
+      },
+    );
+
+    assert.strictEqual(
+      prerenderedCards.length,
+      2,
+      'the actual returned total results are correct',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/donald.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].html,
+      '<div>Donald (FancyPerson embedded template)</div>',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].isError,
+      true,
+      'card is in error state',
+    );
+    assert.strictEqual(
+      prerenderedCards[1].url,
+      'http://test-realm/test/jimmy.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[1].html,
+      '<div>Jimmy (FancyPerson embedded template)</div>',
+    );
+    assert.notOk(prerenderedCards[1].isError, 'card is not in an error state');
   },
 } as SharedTests<{
   indexQueryEngine: IndexQueryEngine;

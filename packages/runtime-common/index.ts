@@ -340,7 +340,7 @@ export interface Actions {
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (
-    card: CardDef,
+    cardOrURL: CardDef | URL,
     format?: Format,
     opts?: {
       openCardInRightMostStack?: boolean;

@@ -20,8 +20,8 @@
         "linkedInURL": null
       },
       "status": {
-        "index": null,
-        "label": null
+        "index": 1,
+        "label": "Lead"
       },
       "description": null,
       "thumbnailURL": null
