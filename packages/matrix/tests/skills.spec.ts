@@ -11,7 +11,6 @@ import {
   reloadAndOpenAiAssistant,
   isInRoom,
   registerRealmUsers,
-  getRoomEvents,
   setupUserSubscribed,
   clearLocalStorage,
 } from '../helpers';

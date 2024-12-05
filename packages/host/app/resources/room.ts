@@ -154,10 +154,11 @@ export class RoomResource extends Resource<Args> {
       }
       let cardId = cardDoc.data.id;
       if (!this._skillCardsCache.has(cardId)) {
-        let getCardResult = getCard<SkillCard>(new URL(cardId));
-        getCardResult.loaded?.then(() => {
-          this._skillCardsCache.set(cardId, getCardResult.card!);
-        });
+        this.cardService
+          .createFromSerialized(cardDoc.data, cardDoc)
+          .then((skillsCard) => {
+            this._skillCardsCache.set(cardId, skillsCard as SkillCard);
+          });
       }
       result.push({
         skillCardId: cardDoc.data.id,
