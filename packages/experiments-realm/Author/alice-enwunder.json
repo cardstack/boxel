@@ -12,6 +12,26 @@
         "base64": null
       },
       "body": "",
+      "contactLinks": [
+        {
+          "label": "X",
+          "email": null,
+          "phone": null,
+          "link": "https://x.com/alice-boxel"
+        },
+        {
+          "label": "LinkedIn",
+          "email": null,
+          "phone": null,
+          "link": "https://linkedin.com/alice-boxel"
+        },
+        {
+          "label": "Email",
+          "email": "alice@email.com",
+          "phone": null,
+          "link": "alice@email.com"
+        }
+      ],
       "thumbnailURL": "https://images.unsplash.com/photo-1561569912-9f202ecac634?q=80&w=3135&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     "meta": {

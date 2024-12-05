@@ -14,57 +14,51 @@
       ],
       "socialMediaLink": {
         "label": "X",
-        "username": "alice-boxel",
-        "url": null
+        "email": null,
+        "phone": null,
+        "link": "https://x.com/alice-boxel"
       },
       "socialMediaLinks": [
         {
           "label": "LinkedIn",
-          "username": "alice-boxel",
-          "url": null
+          "email": null,
+          "phone": null,
+          "link": "https://linkedin.com/alice-boxel"
         },
         {
           "label": "Facebook",
-          "username": "alice-boxel",
-          "url": null
+          "email": null,
+          "phone": null,
+          "link": "https://facebook.com/alice-boxel"
         },
         {
           "label": "Other",
-          "username": null,
-          "url": "https://youtube.com/alice-boxel"
+          "email": null,
+          "phone": null,
+          "link": "https://boxel/alice"
         }
       ],
       "contactLink": {
+        "label": "Email",
         "email": "alice@email.com",
         "phone": null,
-        "label": "Email",
-        "username": null,
-        "url": ""
+        "link": null
       },
       "contactLinks": [
         {
+          "label": "Email",
           "email": "alice@email.com",
           "phone": null,
-          "label": "Email",
-          "username": null,
-          "url": null
+          "link": null
         },
         {
+          "label": "Other",
           "email": null,
-          "phone": "2129991111",
-          "label": "Phone",
-          "username": "alice",
-          "url": null
-        },
-        {
-          "email": null,
-          "phone": "2121111111",
-          "label": "Phone",
-          "username": null,
-          "url": null
+          "phone": null,
+          "link": "https://alice-boxel/about"
         }
       ],
-      "title": null,
+      "title": "Custom Field Preview",
       "description": null,
       "thumbnailURL": null
     },
