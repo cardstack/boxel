@@ -539,18 +539,17 @@ export default class OperatorModeOverlays extends Component<Signature> {
       format = canWrite ? format : 'isolated';
 
       let card: CardDef | undefined;
-      if (typeof cardDefOrId === 'string') {
-        card = await this.cardService.getCard(cardId);
-      } else {
-        card = cardDefOrId;
-      }
-
-      if (!card) {
+      try {
+        if (typeof cardDefOrId === 'string') {
+          card = await this.cardService.getCard(cardId);
+        } else {
+          card = cardDefOrId;
+        }
+      } catch (e) {
         console.error(`can't load card: ${cardId}`);
-        return;
       }
 
-      await this.args.publicAPI.viewCard(card, format, {
+      await this.args.publicAPI.viewCard(card ?? new URL(cardId), format, {
         fieldType,
         fieldName,
       });

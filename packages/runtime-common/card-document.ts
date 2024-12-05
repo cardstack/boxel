@@ -274,6 +274,7 @@ export interface PrerenderedCardResource {
   type: 'prerendered-card';
   attributes: {
     html: string;
+    isError?: true;
   };
   relationships: {
     'prerendered-card-css': {
@@ -334,6 +335,7 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     id: card.url,
     attributes: {
       html: card.html,
+      ...(card.isError ? { isError: true as const } : {}),
     },
   }));
 
