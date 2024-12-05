@@ -1588,7 +1588,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .doesNotExist();
     });
 
-    test('tintinthong: card that has already been opened before will not reflect its latest state even after a mutation', async function (assert) {
+    test('card that has already been opened before will reflect its latest state after being mutated through a relationship', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1617,71 +1617,16 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-pet]`,
         'mouseenter',
       );
-      console.log(
-        'waiting here',
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
-      );
 
       await click(
         `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
       );
-      console.log(4);
 
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
         )
         .hasValue('Updated Pet');
-      console.log(5);
-    });
-
-    test<TestContextWithSSE>('tintinthong: card receives sse event but ignores the update', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealm2URL}Person/hassan`,
-              format: 'isolated',
-            },
-          ],
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: 'http://test-realm/test/',
-            updatedFile: 'http://test-realm/test/Pet/mango.json',
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: ['http://test-realm/test/Pet/mango'],
-            realmURL: 'http://test-realm/test/',
-            // clientRequestId: '526cfeaf-bf9e-4806-bfb4-ab8eabb58f14',
-          },
-        },
-      ];
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await click('[data-test-update-and-save-pet]');
-        },
-      });
-      assert
-        .dom(`[data-test-operator-mode-stack="1"] h2`)
-        .containsText('Updated Pet');
     });
   });
 
