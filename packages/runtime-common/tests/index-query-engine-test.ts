@@ -80,7 +80,7 @@ const tests = Object.freeze({
         pristine_doc: undefined,
         types: [],
         error_doc: {
-          detail: 'test error',
+          message: 'test error',
           status: 500,
           additionalErrors: [],
         },
