@@ -658,14 +658,14 @@ export default class MatrixService extends Service {
     skillEventId: string,
     isActive: boolean,
   ) => {
-    let roomData = this.roomDataMap.get(roomId);
-    if (!roomData) {
-      throw new Error(`bug: no room data found for room ${roomId}`);
-    }
-    let currentSkillsConfig = roomData.skillsConfig;
+    let currentSkillsConfig = await this.client.getStateEvent(
+      roomId,
+      SKILLS_STATE_EVENT_TYPE,
+      '',
+    );
     let newSkillsConfig = {
-      enabledEventIds: [...currentSkillsConfig.enabledEventIds],
-      disabledEventIds: [...currentSkillsConfig.disabledEventIds],
+      enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
+      disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
     };
     if (isActive) {
       newSkillsConfig.enabledEventIds.push(skillEventId);
@@ -677,7 +677,7 @@ export default class MatrixService extends Service {
         (id) => id !== skillEventId,
       );
     }
-    this.client.sendStateEvent(
+    await this.client.sendStateEvent(
       roomId,
       SKILLS_STATE_EVENT_TYPE,
       newSkillsConfig,

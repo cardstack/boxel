@@ -47,6 +47,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
+import perform from 'ember-concurrency/helpers/perform';
 
 interface Signature {
   Args: {
@@ -102,10 +103,7 @@ export default class Room extends Component<Signature> {
                 class='skills'
                 @skills={{this.sortedSkills}}
                 @onChooseCard={{this.attachSkill}}
-                @onUpdateSkillIsActive={{fn
-                  this.matrixService.updateSkillIsActive
-                  @roomId
-                }}
+                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
                 data-test-skill-menu
               />
             {{/if}}
@@ -588,6 +586,17 @@ export default class Room extends Component<Signature> {
   private get autoAttachedCards() {
     return this.autoAttachmentResource.cards;
   }
+
+  // using enqueue task on this ensures that updates don't step on each other
+  private updateSkillIsActiveTask = enqueueTask(
+    async (skillEventId: string, isActive: boolean) => {
+      await this.matrixService.updateSkillIsActive(
+        this.args.roomId,
+        skillEventId,
+        isActive,
+      );
+    },
+  );
 
   private get canSend() {
     return (

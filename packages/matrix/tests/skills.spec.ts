@@ -251,7 +251,7 @@ test.describe('Skills', () => {
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    expect(page.locator('.skills-length')).toContainText('3');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText('3');
     await page.locator('[data-test-skill-menu]').hover();
     await page.locator('[data-test-pill-menu-header-button]').click();
     await page
@@ -264,6 +264,9 @@ test.describe('Skills', () => {
       .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
       .click(); // toggle off skill 2
     await expect(
+      page.locator(`[data-test-card-pill-toggle="${defaultSkillCard}-off"]`),
+    ).toHaveCount(1);
+    await expect(
       page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
     ).toHaveCount(1);
     await expect(
@@ -274,7 +277,7 @@ test.describe('Skills', () => {
       { from: 'user1', message: 'Message 1' },
       { from: 'user1', message: 'Message 2' },
     ]);
-    expect(page.locator('.skills-length')).toContainText('0');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText('0');
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {

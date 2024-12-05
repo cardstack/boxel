@@ -42,7 +42,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <span class='header-icon' />
       </:headerIcon>
       <:headerDetail>
-        {{this.activeSkills.length}}
+        <span data-test-active-skills-count>{{this.activeSkills.length}}</span>
         <span class='skills-length'>of
           {{@skills.length}}
           {{if (eq @skills.length 1) 'Skill' 'Skills'}}
