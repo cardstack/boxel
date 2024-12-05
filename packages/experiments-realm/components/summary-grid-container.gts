@@ -11,7 +11,7 @@ export default class SummaryGridContainer extends GlimmerComponent<SummaryGridCo
   <template>
     <div class='summary-container'>
       <div class='summary-grid'>
-        {{yield to='default'}}
+        {{yield}}
       </div>
     </div>
 
