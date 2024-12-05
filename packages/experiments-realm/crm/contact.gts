@@ -1,6 +1,5 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
 
 import {
   Component,
