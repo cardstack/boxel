@@ -148,7 +148,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   @action setActiveFilter() {
     this.activeFilter = this.filterMap.get(this.activeTabId)![0];
-    console.log(this.activeFilter);
   }
 
   //Tabs
@@ -156,7 +155,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
-    console.log(id);
   }
   get headerColor() {
     return (
