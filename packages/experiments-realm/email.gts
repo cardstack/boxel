@@ -16,8 +16,11 @@ import { debounce } from 'lodash';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 
+// We use simple regex here to validate common email formats
+// This is definitely NOT a full email validation
+// https://ihateregex.io/expr/email/
 function validateEmail(email: string) {
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailPattern = /^[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+$/;
   return emailPattern.test(email);
 }
 
