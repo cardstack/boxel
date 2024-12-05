@@ -14,28 +14,20 @@
       ],
       "contactLink": {
         "label": "Email",
-        "email": "alice@email.com",
-        "phone": null,
-        "link": null
+        "value": "alice@email.com"
       },
       "contactLinks": [
         {
           "label": "Email",
-          "email": "alice@email.com",
-          "phone": null,
-          "link": null
+          "value": "alice@email.com"
         },
         {
           "label": "Phone",
-          "email": null,
-          "phone": "+12129876543",
-          "link": "https://alice-boxel/about"
+          "value": "+12345678989"
         },
         {
           "label": "Other",
-          "email": null,
-          "phone": null,
-          "link": "https://boxel/alice"
+          "value": "https://boxel/alice"
         }
       ],
       "title": "Custom Field Preview",

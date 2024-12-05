@@ -11,14 +11,12 @@ import {
   FieldContainer,
   Pill,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type IconComponent from '@cardstack/boxel-icons/captions';
 import Email from '@cardstack/boxel-icons/mail';
 import Link from '@cardstack/boxel-icons/link';
 import Phone from '@cardstack/boxel-icons/phone';
 
-import { EmailField } from '../email';
 import { UrlField } from '../url';
 
 export interface ContactLink {
@@ -53,29 +51,27 @@ export class ContactLinkField extends FieldDef {
   static displayName = 'Contact Link';
   static values: ContactLink[] = contactValues;
   @field label = contains(StringField);
-  @field email = contains(EmailField);
-  @field phone = contains(StringField);
-  @field link = contains(UrlField);
+  @field value = contains(StringField);
   @field url = contains(UrlField, {
     computeVia: function (this: ContactLinkField) {
-      switch (this.value?.type) {
+      switch (this.item?.type) {
         case 'email':
-          return `mailto:${this.email}`;
+          return `mailto:${this.value}`;
         case 'tel':
-          return `tel:${this.phone}`;
+          return `tel:${this.value}`;
         default:
-          return this.link;
+          return this.value;
       }
     },
   });
-  get currentValues() {
+  get items() {
     if (this.constructor && 'values' in this.constructor) {
       return this.constructor.values as ContactLink[];
     }
     return ContactLinkField.values;
   }
-  get value() {
-    return this.currentValues?.find((val) => val.label === this.label);
+  get item() {
+    return this.items?.find((val) => val.label === this.label);
   }
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -90,19 +86,9 @@ export class ContactLinkField extends FieldDef {
           <div>{{item.label}}</div>
         </BoxelSelect>
       </FieldContainer>
-      {{#if (eq @model.value.type 'email')}}
-        <FieldContainer @vertical={{true}} @label='Address' @tag='label'>
-          <@fields.email />
-        </FieldContainer>
-      {{else if (eq @model.value.type 'tel')}}
-        <FieldContainer @vertical={{true}} @label='Number' @tag='label'>
-          <@fields.phone />
-        </FieldContainer>
-      {{else}}
-        <FieldContainer @vertical={{true}} @label='Link' @tag='label'>
-          <@fields.link />
-        </FieldContainer>
-      {{/if}}
+      <FieldContainer @vertical={{true}} @label={{this.label}} @tag='label'>
+        <@fields.value />
+      </FieldContainer>
       <style scoped>
         label + label {
           margin-top: var(--boxel-sp-xs);
@@ -110,7 +96,9 @@ export class ContactLinkField extends FieldDef {
       </style>
     </template>
 
-    options = this.args.model.currentValues;
+    options = this.args.model.items;
+
+    onSelect = (option: ContactLink) => (this.args.model.label = option.label);
 
     get selectedOption() {
       return this.options?.find(
@@ -118,14 +106,28 @@ export class ContactLinkField extends FieldDef {
       );
     }
 
-    onSelect = (option: ContactLink) => (this.args.model.label = option.label);
+    get label() {
+      switch (this.selectedOption?.type) {
+        case 'email':
+          return 'Address';
+        case 'tel':
+          return 'Number';
+        default:
+          return 'Link';
+      }
+    }
   };
   static atom = class Atom extends Component<typeof this> {
     <template>
       {{#if @model.url}}
-        <Pill @tag='a' href={{@model.url}} target='_blank'>
+        <Pill
+          @tag='a'
+          href={{@model.url}}
+          target='_blank'
+          rel='noopener noreferrer'
+        >
           <span class='boxel-sr-only'><@fields.label /></span>
-          <@model.value.icon height='20' width='20' />
+          <@model.item.icon height='20' width='20' />
         </Pill>
       {{/if}}
       <style scoped>
@@ -142,12 +144,17 @@ export class ContactLinkField extends FieldDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{#if @model.url}}
-        <Pill @tag='a' href={{@model.url}} target='_blank'>
+        <Pill
+          @tag='a'
+          href={{@model.url}}
+          target='_blank'
+          rel='noopener noreferrer'
+        >
           <:iconLeft>
-            <@model.value.icon height='20' width='20' />
+            <@model.item.icon height='20' width='20' />
           </:iconLeft>
           <:default>
-            {{@model.value.cta}}
+            {{@model.item.cta}}
           </:default>
         </Pill>
       {{/if}}
