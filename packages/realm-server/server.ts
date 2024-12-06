@@ -11,7 +11,6 @@ import {
   type DBAdapter,
   type QueuePublisher,
   type RealmPermissions,
-  upsertUser,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
