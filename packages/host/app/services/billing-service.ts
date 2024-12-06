@@ -129,13 +129,14 @@ export default class BillingService extends Service {
     };
   });
 
-  getStripePaymentLink(matrixUserId: string): string {
+  getStripePaymentLink(matrixUserId: string, matrixUserEmail: string): string {
     // We use the matrix user id (@username:example.com) as the client reference id for stripe
     // so we can identify the user payment in our system when we get the webhook
     // the client reference id must be alphanumeric, so we encode the matrix user id
     // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
     const clientReferenceId = encodeWebSafeBase64(matrixUserId);
-    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}`;
+    const encodedEmail = encodeURIComponent(matrixUserEmail);
+    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}&prefilled_email=${encodedEmail}`;
   }
 
   @cached
