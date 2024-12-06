@@ -2,7 +2,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Command } from '@cardstack/runtime-common';
 import CreateProductRequirementsInstance, {
   CreateProductRequirementsInput,
-} from '../../catalog-realm/AiAppGenerator/create-product-requirements-command';
+} from './create-product-requirements-command';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
 import GenerateCodeCommand from './generate-code-command';
