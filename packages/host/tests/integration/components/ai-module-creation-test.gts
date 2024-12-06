@@ -142,7 +142,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4201/catalog/product-requirement-document`,
+                module: `http://localhost:4201/experiments/product-requirement-document`,
                 name: 'ProductRequirementDocument',
               },
             },
