@@ -3,49 +3,44 @@ import { setupRenderingTest } from 'ember-qunit';
 import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { triggerEvent } from '@ember/test-helpers';
 
 const RESIZE_HANDLE_WIDTH = 15.126;
-const PANEL_INDEX_1_MIN_LENGTH = 50;
+const PANEL_INDEX_1_MIN_SIZE = 15;
 
 class PanelProperties {
-  @tracked lengthPx?: number;
+  @tracked defaultSize?: number;
+  @tracked minSize?: number;
+  @tracked maxSize?: number;
+  @tracked collapsible: boolean;
   @tracked isHidden?: boolean;
-  @tracked defaultLengthFraction?: number;
-  @tracked minLengthPx?: number;
-  collapsible: boolean;
 
   outerContainerStyle?: string;
   showResizeHandle?: boolean;
   constructor(
     panelArgs: {
-      lengthPx?: number;
-      isHidden?: boolean;
-      defaultLengthFraction?: number;
-      minLengthPx?: number;
+      defaultSize?: number;
+      minSize?: number;
+      maxSize?: number;
+      collapsible?: boolean;
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
-      collapsible?: boolean;
+      isHidden?: boolean;
     } = {},
     testArgs: {
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
     } = {},
   ) {
-    let {
-      lengthPx,
-      isHidden = false,
-      defaultLengthFraction,
-      minLengthPx,
-      collapsible,
-    } = panelArgs;
+    let { defaultSize, minSize, maxSize, collapsible, isHidden } = panelArgs;
     let { outerContainerStyle, showResizeHandle } = testArgs;
-    this.lengthPx = lengthPx;
-    this.isHidden = isHidden;
-    this.defaultLengthFraction = defaultLengthFraction;
-    this.minLengthPx = minLengthPx;
+    this.defaultSize = defaultSize;
+    this.minSize = minSize;
+    this.maxSize = maxSize;
     this.collapsible = collapsible ?? true;
+    this.isHidden = isHidden;
 
     this.showResizeHandle = showResizeHandle;
 
@@ -77,6 +72,94 @@ let orientationPropertiesToTest = [
   },
 ];
 
+let moveResizePanelHandle = async function ({
+  panelIndex,
+  orientation,
+  moveDelta, // A negative indicates movement to the left in a horizontal orientation and upward in a vertical orientation."
+  hitAreaMargin = 0,
+}: {
+  panelIndex: number;
+  orientation: string;
+  moveDelta: number;
+  hitAreaMargin?: number;
+}) {
+  let groupEl = document.querySelector('[data-boxel-panel-group]');
+  if (!groupEl) {
+    throw new Error(`panelGroup is not found`);
+  }
+  let resizePanelHandles = document.querySelectorAll(
+    `[data-boxel-panel-resize-handle-id]`,
+  );
+  let resizeHandleId = resizePanelHandles[panelIndex].getAttribute(
+    'data-boxel-panel-resize-handle-id',
+  );
+  if (!resizeHandleId) {
+    throw new Error(`resizePanelHandle with index: ${panelIndex} is not found`);
+  }
+
+  let groupRect = groupEl.getBoundingClientRect();
+  let groupSizeInPixels =
+    orientation === 'horizontal' ? groupRect.width : groupRect.height;
+  let resizeHandleRect =
+    resizePanelHandles[panelIndex].children[0]!.getBoundingClientRect();
+  let moveDeltaInPixels = (groupSizeInPixels * moveDelta) / 100;
+  await triggerEvent(
+    `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
+    'pointerdown',
+    orientation === 'horizontal'
+      ? {
+          clientX: resizeHandleRect.x + hitAreaMargin,
+          clientY: resizeHandleRect.y,
+        }
+      : {
+          clientX: resizeHandleRect.x,
+          clientY: resizeHandleRect.y + hitAreaMargin,
+        },
+  );
+  await triggerEvent(
+    `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
+    'pointermove',
+    orientation === 'horizontal'
+      ? {
+          clientX: resizeHandleRect.x + moveDeltaInPixels + hitAreaMargin,
+          clientY: resizeHandleRect.y,
+        }
+      : {
+          clientX: resizeHandleRect.x,
+          clientY: resizeHandleRect.y + moveDeltaInPixels + hitAreaMargin,
+        },
+  );
+  await triggerEvent(
+    `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
+    'pointerup',
+  );
+  await waitForRerender();
+};
+
+let assertPanels = function ({
+  assert,
+  orientation,
+  panelSizesInPixels,
+}: {
+  assert: Assert;
+  orientation: string;
+  panelSizesInPixels: string[];
+}) {
+  let elements = document.querySelectorAll('[data-test-panel-index]');
+  let computedStyles = Array.from(elements).map((element) =>
+    window.getComputedStyle(element),
+  );
+  assert.deepEqual(computedStyles.length, panelSizesInPixels.length);
+  for (let index = 0; index < panelSizesInPixels.length; index++) {
+    assert.deepEqual(
+      orientation === 'horizontal'
+        ? computedStyles[index].width
+        : computedStyles[index].height,
+      panelSizesInPixels[index],
+    );
+  }
+};
+
 orientationPropertiesToTest.forEach((orientationProperties) => {
   module(
     `Integration | ResizablePanelGroup | ${orientationProperties.orientation}`,
@@ -86,11 +169,10 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController = new RenderController();
         this.renderController.panels = [
           new PanelProperties(
-            { defaultLengthFraction: 0.6 },
+            { defaultSize: 60 },
             {
               showResizeHandle: true,
               outerContainerStyle: `
-                border: 1px solid red;
                 ${orientationProperties.dimension}: 100%;
                 overflow-${orientationProperties.axis}: auto
               `,
@@ -98,12 +180,11 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           ),
           new PanelProperties(
             {
-              defaultLengthFraction: 0.4,
-              minLengthPx: PANEL_INDEX_1_MIN_LENGTH,
+              defaultSize: 40,
+              minSize: PANEL_INDEX_1_MIN_SIZE,
             },
             {
               outerContainerStyle: `
-                border: 1px solid red;
                 ${orientationProperties.dimension}: 100%
               `,
             },
@@ -132,30 +213,31 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
               as |ResizablePanel ResizeHandle|
             >
               {{#each renderController.panels as |panel index|}}
-                <ResizablePanel
-                  @defaultLengthFraction={{panel.defaultLengthFraction}}
-                  @lengthPx={{panel.lengthPx}}
-                  @minLengthPx={{panel.minLengthPx}}
-                  @isHidden={{panel.isHidden}}
-                  @collapsible={{panel.collapsible}}
-                >
-                  <div
-                    class='panel'
-                    style={{htmlSafe
-                      (if
-                        panel.outerContainerStyle panel.outerContainerStyle ''
-                      )
-                    }}
-                    data-test-panel-index={{index}}
+                {{#if (not panel.isHidden)}}
+                  <ResizablePanel
+                    @defaultSize={{panel.defaultSize}}
+                    @minSize={{panel.minSize}}
+                    @maxSize={{panel.maxSize}}
+                    @collapsible={{panel.collapsible}}
                   >
-                    <div>
-                      Panel
-                      {{index}}
+                    <div
+                      class='panel'
+                      style={{htmlSafe
+                        (if
+                          panel.outerContainerStyle panel.outerContainerStyle ''
+                        )
+                      }}
+                      data-test-panel-index={{index}}
+                    >
+                      <div>
+                        Panel
+                        {{index}}
+                      </div>
                     </div>
-                  </div>
-                </ResizablePanel>
-                {{#if panel.showResizeHandle}}
-                  <ResizeHandle />
+                  </ResizablePanel>
+                  {{#if panel.showResizeHandle}}
+                    <ResizeHandle />
+                  {{/if}}
                 {{/if}}
               {{/each}}
             </ResizablePanelGroup>
@@ -164,474 +246,321 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
       }
 
-      test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (default)`, async function (assert) {
+      test<MyTestContext>(`it can lay out panels with a defined defaultSize and ${orientationProperties.orientation} orientation`, async function (assert) {
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${300 + RESIZE_HANDLE_WIDTH}px;
+          ${orientationProperties.dimension}: ${containerSize}px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
 
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          300 * 0.6,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          300 * 0.4,
-          1,
-        );
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 20,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['210px', '90px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['300px', '0px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['210px', '90px'],
+        });
+
+        // Update container size to simulate resizing window case
+        let newContainerSize = 600 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${newContainerSize}px;
+        `;
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['420px', '180px'],
+        });
       });
 
-      test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (length specified)`, async function (assert) {
+      test<MyTestContext>(`it can lay out panels with a defined minSize and ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.panels[0].minSize = 40;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${500 + RESIZE_HANDLE_WIDTH}px;
-          `;
-
-        this.renderController.panels[0].lengthPx = 355;
-        this.renderController.panels[1].lengthPx = 143;
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
 
         await renderResizablePanelGroup(this.renderController);
 
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          355,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          143,
-          1,
-        );
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -20,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 40,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['120px', '180px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['300px', '0px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['120px', '180px'],
+        });
       });
 
-      test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (default)`, async function (assert) {
+      test<MyTestContext>(`it can lay out panels with a defined minSize, not collapsible, and ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.panels[0].minSize = 40;
+        this.renderController.panels[0].collapsible = false;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 105px;
+          ${orientationProperties.dimension}: ${containerSize}px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
 
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          40,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          PANEL_INDEX_1_MIN_LENGTH,
-          1,
-        );
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -20,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['120px', '180px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['300px', '0px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['120px', '180px'],
+        });
       });
 
-      test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (length specified)`, async function (assert) {
+      test<MyTestContext>(`it can lay out panels with a defined maxSize and ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.panels[0].maxSize = 80;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 105px;
+          ${orientationProperties.dimension}: ${containerSize}px;
         `;
-
-        this.renderController.panels[0].lengthPx = 45;
-        this.renderController.panels[1].lengthPx = 45;
 
         await renderResizablePanelGroup(this.renderController);
 
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          40,
-          2,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          PANEL_INDEX_1_MIN_LENGTH,
-          2,
-        );
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['210px', '90px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['240px', '60px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['240px', '60px'],
+        });
       });
 
-      test<MyTestContext>(`it adjusts to its container growing (default)`, async function (assert) {
+      test<MyTestContext>(`it can recalculate the panels with ${orientationProperties.orientation} orientation if a panel is hidden`, async function (assert) {
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
+          ${orientationProperties.dimension}: ${containerSize}px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
 
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${400 + RESIZE_HANDLE_WIDTH}px;
-        `;
-        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
 
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          240,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          160,
-          1,
-        );
-      });
-
-      test<MyTestContext>(`it adjusts to its container growing (length specified)`, async function (assert) {
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
-        `;
-
-        this.renderController.panels[0].lengthPx = 100;
-        this.renderController.panels[1].lengthPx = 100;
-
-        await renderResizablePanelGroup(this.renderController);
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          100,
-          1.5,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          100,
-          1.5,
-        );
-
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${400 + RESIZE_HANDLE_WIDTH}px;
-        `;
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          200,
-          1.5,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          200,
-          1.5,
-        );
-      });
-
-      test<MyTestContext>(`it adjusts to its container shrinking (default)`, async function (assert) {
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${400 + RESIZE_HANDLE_WIDTH}x;
-        `;
-
-        await renderResizablePanelGroup(this.renderController);
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
-        `;
-
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          120,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          80,
-          1,
-        );
-      });
-
-      test<MyTestContext>(`it maintans ratio when its container shrinks`, async function (assert) {
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 417px;
-        `;
-
-        // length ratio panel 1 and panel 2 is 3:2
-        this.renderController.panels[0].lengthPx = 240;
-        this.renderController.panels[1].lengthPx = 160;
-
-        await renderResizablePanelGroup(this.renderController);
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          240,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          160,
-          1,
-        );
-
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 217px;
-        `;
-
-        await waitForRerender();
-        // Maintain the ratio 3:2 when resizing
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          120,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          80,
-          1,
-        );
-      });
-
-      test<MyTestContext>(`it adjusts to its container shrinking and growing`, async function (assert) {
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${600 + RESIZE_HANDLE_WIDTH}px;
-        `;
-
-        this.renderController.panels[0].lengthPx = 400;
-        this.renderController.panels[1].lengthPx = 200;
-
-        await renderResizablePanelGroup(this.renderController);
-
-        this.renderController.panels[0].lengthPx = 50;
-        this.renderController.panels[1].lengthPx = 550;
-
-        await waitForRerender();
-
-        await doubleClick('[data-test-resize-handle]'); // Double-click to hide recent
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          600,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          0,
-          2,
-        );
-
-        // shrink container by ~5
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${300 + RESIZE_HANDLE_WIDTH}px;
-        `;
-
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          300,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          0,
-          2,
-        );
-
-        await doubleClick('[data-test-resize-handle]'); // Double-click to unhide recent
-
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          180,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          120,
-          1,
-        );
-
-        // increase window/container length to original length
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 617px;
-        `;
-
-        await waitForRerender();
-
-        // expected behavior: panel length percentages would remain consistent
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          360,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          240,
-          1,
-        );
-      });
-
-      test<MyTestContext>(`it excludes hidden panels from participating in layout`, async function (assert) {
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
-        `;
-
-        this.renderController.panels = [
-          new PanelProperties(
-            { defaultLengthFraction: 0.6 },
-            {
-              outerContainerStyle: `
-                ${orientationProperties.dimension}: 100%;
-                overflow-${orientationProperties.axis}: auto
-              `,
-            },
-          ),
-          new PanelProperties(
-            {
-              defaultLengthFraction: 0.4,
-              minLengthPx: PANEL_INDEX_1_MIN_LENGTH,
-              isHidden: true,
-            },
-            {
-              outerContainerStyle: `
-                ${orientationProperties.dimension}: 100%
-              `,
-            },
-          ),
-        ];
-
-        await renderResizablePanelGroup(this.renderController);
-
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          215,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          0,
-          0,
-        );
-
-        this.renderController.panels[1].isHidden = false;
-        await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          165,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          PANEL_INDEX_1_MIN_LENGTH,
-          1,
-        );
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['210px', '90px'],
+        });
 
         this.renderController.panels[1].isHidden = true;
         await waitForRerender();
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          215,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          0,
-          0,
-        );
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['300px'],
+        });
       });
 
-      test<MyTestContext>(`it stops expanding/shrinking if cursor is not in the right position`, async function (assert) {
+      test<MyTestContext>(`it stops expanding/shrinking panels with ${orientationProperties.orientation} orientation if cursor is not in the right position`, async function (assert) {
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: ${300 + RESIZE_HANDLE_WIDTH}px;
+          ${orientationProperties.dimension}: ${containerSize}px;
         `;
-        this.renderController.panels[1].minLengthPx = 60;
-        this.renderController.panels[1].collapsible = false;
 
         await renderResizablePanelGroup(this.renderController);
 
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          300 * 0.6,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          300 * 0.4,
-          1,
-        );
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
 
-        let resizeHandleRect = document
-          .querySelector('[data-test-resize-handle]')!
-          .getBoundingClientRect();
-        await triggerEvent('[data-test-resize-handle]', 'mousedown');
-        await triggerEvent(
-          '[data-test-resize-handle]',
-          'mousemove',
-          orientationProperties.orientation === 'horizontal'
-            ? {
-                clientX: resizeHandleRect.x + 60,
-                clientY: 25,
-              }
-            : {
-                clientX: 25,
-                clientY: resizeHandleRect.y + 60,
-              },
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          this.renderController.panels[1].minLengthPx,
-          1,
-        );
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['210px', '90px'],
+        });
 
-        // Mouse move event doesn't give any effects
-        // since the cursor drags past minimum length
-        resizeHandleRect = document
-          .querySelector('[data-test-resize-handle]')!
-          .getBoundingClientRect();
-        await triggerEvent(
-          '[data-test-resize-handle]',
-          'mousemove',
-          orientationProperties.orientation === 'horizontal'
-            ? {
-                clientX: resizeHandleRect.x + 40,
-                clientY: 25,
-              }
-            : {
-                clientX: 25,
-                clientY: resizeHandleRect.y + 40,
-              },
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          this.renderController.panels[1].minLengthPx,
-          1,
-        );
-        await triggerEvent('[data-test-resize-handle]', 'mouseup');
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 10,
+          hitAreaMargin: RESIZE_HANDLE_WIDTH + 25, // Put cursor outside the right hit area
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['210px', '90px'],
+        });
       });
     },
   );
