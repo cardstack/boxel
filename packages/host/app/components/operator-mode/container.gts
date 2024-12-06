@@ -136,6 +136,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.matrixService.userId || '';
   }
 
+  private get matrixUserEmail() {
+    return this.matrixService.userEmail || '';
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -163,6 +167,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{else if (not this.isUserSubscribed)}}
         <PaymentSetup
           @matrixUserId={{this.matrixUserId}}
+          @matrixUserEmail={{this.matrixUserEmail}}
           @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
         />
       {{else if this.isCodeMode}}

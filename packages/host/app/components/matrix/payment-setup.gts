@@ -36,6 +36,7 @@ interface Signature {
   Args: {
     flow: 'register' | 'logged-in';
     matrixUserId: string;
+    matrixUserEmail: string;
   };
 }
 
@@ -47,7 +48,10 @@ export default class PaymentSetup extends Component<Signature> {
   @tracked private profileSummaryOpened = false;
 
   get stripePaymentLink() {
-    return this.billingService.getStripePaymentLink(this.args.matrixUserId);
+    return this.billingService.getStripePaymentLink(
+      this.args.matrixUserId,
+      this.args.matrixUserEmail,
+    );
   }
 
   @action private toggleProfileSettings() {
