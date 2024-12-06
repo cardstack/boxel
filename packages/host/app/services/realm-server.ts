@@ -82,14 +82,8 @@ export default class RealmServerService extends Service {
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
 
-  async ensureLoggedIn() {
-    if (this.auth.type !== 'logged-in') {
-      await this.login();
-    }
-  }
-
   async createUser(matrixUserId: string, registrationToken?: string) {
-    await this.ensureLoggedIn();
+    await this.login();
     let response = await this.network.authedFetch(`${this.url.href}_user`, {
       method: 'POST',
       headers: {
@@ -122,7 +116,7 @@ export default class RealmServerService extends Service {
     iconURL?: string;
     backgroundURL?: string;
   }) {
-    await this.ensureLoggedIn();
+    await this.login();
 
     let response = await this.network.authedFetch(
       `${this.url.href}_create-realm`,
