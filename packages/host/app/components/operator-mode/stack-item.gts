@@ -328,6 +328,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @cached
   get cardError() {
+    if (this.args.item.cardError) {
+      debugger;
+    }
     return this.args.item.cardError;
   }
 
