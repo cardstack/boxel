@@ -78,6 +78,7 @@ export default class CardErrorDetail extends Component<Signature> {
                 <div class='detail-title'>Stack trace:</div>
                 <pre
                   data-test-error-stack
+                  data-test-percy-hide
                 >
 {{@error.meta.stack}}
                 </pre>
