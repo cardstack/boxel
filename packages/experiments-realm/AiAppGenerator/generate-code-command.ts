@@ -2,7 +2,6 @@ import {
   CardDef,
   field,
   linksTo,
-  containsMany,
   contains,
 } from 'https://cardstack.com/base/card-api';
 import { Command } from '@cardstack/runtime-common';
