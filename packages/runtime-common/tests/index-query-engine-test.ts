@@ -2921,6 +2921,33 @@ const tests = Object.freeze({
         search_doc: { name: 'Donald' },
       },
       {
+        url: `${testRealmURL}paper.json`,
+        file_alias: `${testRealmURL}paper`,
+        type: 'error',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: null, // here we are asserting that we can handle a `null` types column
+        embedded_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Paper (FancyPerson embedded template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Paper (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Paper (CardDef embedded template)</div>',
+        },
+        fitted_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Paper (FancyPerson fitted template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Paper (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Paper (CardDef fitted template)</div>',
+        },
+        atom_html: 'Paper',
+        search_doc: { name: 'Paper' },
+      },
+      {
         url: `${testRealmURL}fancy-person.gts`,
         type: 'module',
         file_alias: `${testRealmURL}fancy-person`,

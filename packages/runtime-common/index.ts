@@ -236,7 +236,6 @@ export interface CardSearch {
     loaded: Promise<void> | undefined;
     cardError?: undefined | { id: string; error: Error };
   };
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
 }
 
 export interface CardCatalogQuery extends Query {
@@ -260,20 +259,6 @@ export function getCard<T extends CardDef>(
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.getCard<T>(url, opts);
-}
-
-export function trackCard<T extends object>(
-  owner: T,
-  card: CardDef,
-  realmURL: URL,
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return card;
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.trackCard(owner, card, realmURL);
 }
 
 export interface CardCreator {
