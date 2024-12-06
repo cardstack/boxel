@@ -17,6 +17,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -153,6 +154,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
     const prdCardId = `${testRealmURL}PRD/1`;
     await renderAiAssistantPanel(prdCardId);
+
+    await percySnapshot('ai assistant panel');
 
     const stackCard = `[data-test-stack-card="${prdCardId}"]`;
 
