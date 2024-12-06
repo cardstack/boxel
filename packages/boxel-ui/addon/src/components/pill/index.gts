@@ -10,17 +10,18 @@ export interface PillSignature {
   Args: {
     kind?: BoxelPillKind;
     pillBackgroundColor?: string;
+    tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
     default: [];
     iconLeft?: [];
     iconRight?: [];
   };
-  Element: HTMLButtonElement | HTMLDivElement;
+  Element: HTMLElement;
 }
 
 const Pill: TemplateOnlyComponent<PillSignature> = <template>
-  {{#let (element (if (eq @kind 'button') 'button' 'div')) as |Tag|}}
+  {{#let (element (if (eq @kind 'button') 'button' @tag)) as |Tag|}}
     <Tag
       class={{cn 'pill' button-pill=(eq @kind 'button')}}
       style={{cssVar
