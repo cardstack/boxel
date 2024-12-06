@@ -330,11 +330,6 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    // It's not desirable to have user insertion entangled with realm creation–
-    // In the future we could refactor this to handle user creation in a separate
-    // endpoint
-    await upsertUser(this.dbAdapter, ownerUserId);
-
     writeJSONSync(join(realmPath, '.realm.json'), {
       name,
       ...(iconURL ? { iconURL } : {}),

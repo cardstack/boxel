@@ -345,7 +345,7 @@ export default class RegisterUser extends Component<Signature> {
         type: 'waitForEmailValidation';
         username: string;
         password: string;
-        token?: string;
+        token: string;
         session: string;
         email: string;
         name: string;
@@ -673,6 +673,7 @@ export default class RegisterUser extends Component<Signature> {
       );
     }
     let auth: RegisterResponse;
+
     try {
       auth = await this.matrixService.client.registerRequest({
         username: this.state.username,
@@ -713,12 +714,18 @@ export default class RegisterUser extends Component<Signature> {
 
       throw e;
     }
+
     // If access_token and device_id are present, RegisterResponse matches LoginResponse
     // except for the optional well_known field
-    if (auth.access_token && auth.device_id) {
+    if (
+      this.state.type === 'waitForEmailValidation' &&
+      auth.access_token &&
+      auth.device_id
+    ) {
       await this.matrixService.initializeNewUser(
         auth as LoginResponse,
         this.state.name,
+        this.state.token,
       );
     }
   });
@@ -743,7 +750,14 @@ export default class RegisterUser extends Component<Signature> {
         // it means we are polling the validation.
         if (this.state.type === 'waitForEmailValidation') {
           await timeout(1000);
+        } else {
+          if (this.state.type !== 'sendToken') {
+            throw new Error(
+              `invalid state: cannot go to 'm.login.email.identity' from state ${this.state.type}`,
+            );
+          }
         }
+
         this.state = {
           ...this.state,
           type: 'waitForEmailValidation',
