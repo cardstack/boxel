@@ -14,7 +14,7 @@ class View extends Component<typeof MarkdownField> {
     <style scoped>
       .markdown-content {
         max-width: 100%;
-        font-size: var(--markdown-font-size, 1rem);
+        font-size: var(--markdown-font-size, inherit);
         font-family: var(--markdown-font-family, inherit);
         overflow: hidden;
       }
