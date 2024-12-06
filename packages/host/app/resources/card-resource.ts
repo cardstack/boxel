@@ -22,7 +22,10 @@ import {
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  IdentityContext,
+} from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -62,17 +65,31 @@ interface Args {
   };
 }
 
-const liveCards: WeakMap<
-  Loader,
-  Map<
+class LiveCardIdentityContext implements IdentityContext {
+  #cards = new Map<
     string,
     {
       card: CardDef;
-      realmURL: URL;
       subscribers: Set<object>;
     }
-  >
-> = new WeakMap();
+  >();
+
+  get(url: string): CardDef | undefined {
+    return this.#cards.get(url)?.card;
+  }
+  set(url: string, instance: CardDef): void {
+    this.#cards.set(url, { card: instance, subscribers: new Set() });
+  }
+  delete(url: string): void {
+    this.#cards.delete(url);
+  }
+
+  subscribers(url: string): Set<object> | undefined {
+    return this.#cards.get(url)?.subscribers;
+  }
+}
+
+const liveCards: WeakMap<Loader, LiveCardIdentityContext> = new WeakMap();
 const realmSubscriptions: Map<
   string,
   WeakMap<CardResource, { unsubscribe: () => void }>
@@ -162,19 +179,12 @@ export class CardResource extends Resource<Args> {
   });
 
   private loadLiveModel = restartableTask(async (url: URL) => {
-    let cardsForLoader = liveCards.get(this.loader);
-    if (!cardsForLoader) {
-      cardsForLoader = new Map();
-      liveCards.set(this.loader, cardsForLoader);
+    let identityContext = liveCards.get(this.loader);
+    if (!identityContext) {
+      identityContext = new LiveCardIdentityContext();
+      liveCards.set(this.loader, identityContext);
     }
-    let entry = cardsForLoader.get(url.href);
-    if (entry) {
-      entry.subscribers.add(this);
-      await this.updateCardInstance(entry.card);
-      return;
-    }
-
-    let card = await this.getCard(url);
+    let card = await this.getCard(url, identityContext);
     if (!card) {
       if (this.cardError) {
         console.warn(`cannot load card ${this.cardError.id}`, this.cardError);
@@ -182,15 +192,8 @@ export class CardResource extends Resource<Args> {
       this.clearCardInstance();
       return;
     }
-    let realmURL = await this.cardService.getRealmURL(card);
-    if (!realmURL) {
-      throw new Error(`Could not determine the realm for card "${card.id}"`);
-    }
-    cardsForLoader.set(card.id, {
-      card,
-      realmURL,
-      subscribers: new Set([this]),
-    });
+    let subscribers = identityContext.subscribers(card.id)!;
+    subscribers.add(this);
     await this.updateCardInstance(card);
   });
 
@@ -221,7 +224,7 @@ export class CardResource extends Resource<Args> {
           }
           let invalidations = data.invalidations as string[];
           let card = this.url
-            ? liveCards.get(this.loader)?.get(this.url)?.card
+            ? liveCards.get(this.loader)?.get(this.url)
             : undefined;
 
           if (!card) {
@@ -250,9 +253,18 @@ export class CardResource extends Resource<Args> {
     });
   }
 
-  private async getCard(url: URL): Promise<CardDef | undefined> {
+  private async getCard(
+    url: URL,
+    identityContext?: IdentityContext,
+  ): Promise<CardDef | undefined> {
     if (typeof url === 'string') {
       url = new URL(url);
+    }
+    // createFromSerialized would also do this de-duplication, but we want to
+    // also avoid the fetchJSON when we already have the stable card.
+    let existingCard = identityContext?.get(url.href);
+    if (existingCard) {
+      return existingCard;
     }
     this.cardError = undefined;
     try {
@@ -267,6 +279,9 @@ export class CardResource extends Resource<Args> {
         json.data,
         json,
         new URL(json.data.id),
+        {
+          identityContext,
+        },
       );
       return card;
     } catch (error: any) {
@@ -373,11 +388,11 @@ export class CardResource extends Resource<Args> {
 
   private removeLiveCardEntry(card: CardDef) {
     let loader = loaderFor(card);
-    let liveCardEntry = liveCards.get(loader)?.get(card.id);
-    if (liveCardEntry && liveCardEntry.subscribers.has(this)) {
-      liveCardEntry.subscribers.delete(this);
+    let subscribers = liveCards.get(loader)?.subscribers(card.id);
+    if (subscribers && subscribers.has(this)) {
+      subscribers.delete(this);
     }
-    if (liveCardEntry?.subscribers.size === 0) {
+    if (subscribers && subscribers.size === 0) {
       liveCards.get(loader)!.delete(card.id);
     }
   }
@@ -423,33 +438,4 @@ export function getCard(
       ) as CardService,
     },
   }));
-}
-
-export function trackCard<T extends Object>(
-  owner: T,
-  card: CardDef,
-  realmURL: URL,
-): CardDef {
-  if (!card.id) {
-    throw new Error(`cannot set live card model on an unsaved card`);
-  }
-  let loader = loaderFor(card);
-  let cardsForLoader = liveCards.get(loader);
-  if (!cardsForLoader) {
-    cardsForLoader = new Map();
-    liveCards.set(loader, cardsForLoader);
-  }
-  let alreadyTracked = cardsForLoader.get(card.id);
-  if (alreadyTracked) {
-    return alreadyTracked.card;
-  }
-  if (!realmURL) {
-    throw new Error(`bug: cannot determine realm for card ${card.id}`);
-  }
-  cardsForLoader.set(card.id, {
-    card,
-    realmURL,
-    subscribers: new Set([owner]),
-  });
-  return card;
 }
