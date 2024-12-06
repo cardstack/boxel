@@ -35,8 +35,6 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 interface Signature {
   Args: {
     flow: 'register' | 'logged-in';
-    matrixUserId: string;
-    matrixUserEmail: string;
   };
 }
 
@@ -49,8 +47,8 @@ export default class PaymentSetup extends Component<Signature> {
 
   get stripePaymentLink() {
     return this.billingService.getStripePaymentLink(
-      this.args.matrixUserId,
-      this.args.matrixUserEmail,
+      this.matrixService.userId || '',
+      this.matrixService.profile.email || '',
     );
   }
 
