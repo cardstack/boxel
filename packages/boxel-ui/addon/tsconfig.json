@@ -29,7 +29,7 @@
       "https://cardstack.com/base/*": ["../../base/*"],
       "*": ["./src/types/*"],
       "@cardstack/boxel-ui": ["./src"],
-      "@cardstack/boxel-ui/*": ["./src/*"]
+      "@cardstack/boxel-ui/*": ["./src/*"],
     },
     "typeRoots": ["./src/types"]
   },
