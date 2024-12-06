@@ -208,10 +208,6 @@ export default class MatrixService extends Service {
     return this.userId ? getMatrixUsername(this.userId) : null;
   }
 
-  get userEmail() {
-    return this.profile.email;
-  }
-
   private get cardAPI() {
     if (this.cardAPIModule.error) {
       throw new Error(
