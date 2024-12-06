@@ -17,6 +17,7 @@ export interface User {
   matrixUserId: string;
   stripeCustomerId: string;
   stripeCustomerEmail: string | null;
+  matrixRegistrationToken: string | null;
 }
 
 export interface Plan {
@@ -167,6 +168,7 @@ export async function getUserByStripeId(
     id: results[0].id,
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
+    matrixRegistrationToken: results[0].matrix_registration_token,
   } as User;
 }
 
@@ -188,6 +190,7 @@ export async function getUserByMatrixUserId(
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
     stripeCustomerEmail: results[0].stripe_customer_email,
+    matrixRegistrationToken: results[0].matrix_registration_token,
   } as User;
 }
 

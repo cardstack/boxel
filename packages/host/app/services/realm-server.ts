@@ -82,19 +82,41 @@ export default class RealmServerService extends Service {
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
 
+  async createUser(matrixUserId: string, registrationToken?: string) {
+    await this.login();
+    let response = await this.network.authedFetch(`${this.url.href}_user`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'user',
+          attributes: {
+            matrixUserId,
+            registrationToken: registrationToken ?? null,
+          },
+        },
+      }),
+    });
+    if (!response.ok) {
+      let err = `Could not create user with parameters '${matrixUserId}' and '${registrationToken}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+  }
+
   async createRealm(args: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
   }) {
-    if (!this.client) {
-      throw new Error(`Cannot create realm without matrix client`);
-    }
     await this.login();
-    if (this.auth.type !== 'logged-in') {
-      throw new Error('Could not login to realm server');
-    }
 
     let response = await this.network.authedFetch(
       `${this.url.href}_create-realm`,
