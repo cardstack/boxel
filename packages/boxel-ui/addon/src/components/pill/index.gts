@@ -8,9 +8,9 @@ export type BoxelPillKind = 'button' | 'default';
 
 export interface PillSignature {
   Args: {
-    tag?: keyof HTMLElementTagNameMap;
     kind?: BoxelPillKind;
     pillBackgroundColor?: string;
+    tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
     default: [];
