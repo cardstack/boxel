@@ -88,7 +88,7 @@ export default class RealmServerService extends Service {
     }
   }
 
-  async createUser(matrixUserId: string, registrationToken: string) {
+  async createUser(matrixUserId: string, registrationToken?: string) {
     await this.ensureLoggedIn();
     let response = await this.network.authedFetch(`${this.url.href}_user`, {
       method: 'POST',
@@ -100,7 +100,10 @@ export default class RealmServerService extends Service {
       body: JSON.stringify({
         data: {
           type: 'user',
-          attributes: { matrixUserId, registrationToken },
+          attributes: {
+            matrixUserId,
+            registrationToken: registrationToken ?? null,
+          },
         },
       }),
     });

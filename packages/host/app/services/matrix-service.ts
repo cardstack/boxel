@@ -264,7 +264,7 @@ export default class MatrixService extends Service {
   async initializeNewUser(
     auth: LoginResponse,
     displayName: string,
-    registrationToken: string,
+    registrationToken?: string,
   ) {
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
