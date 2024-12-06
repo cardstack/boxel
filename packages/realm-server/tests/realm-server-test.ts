@@ -81,7 +81,6 @@ import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
-import { fetchUserByMatrixUserId } from '@cardstack/billing/fetch-user-by-matrix-user-id';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
