@@ -22,8 +22,7 @@ import {
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-// @ts-expect-error path resolution issue
-import { AppCard, Tab } from '/catalog/app-card';
+import { AppCard, Tab } from './app-card';
 import {
   Query,
   CardError,
