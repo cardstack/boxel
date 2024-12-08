@@ -2,6 +2,42 @@
   "data": {
     "type": "card",
     "attributes": {
+      "shippingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "website": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
       "title": null,
       "description": null,
       "thumbnailURL": null
@@ -18,11 +54,6 @@
         }
       },
       "contacts": {
-        "links": {
-          "self": null
-        }
-      },
-      "deals": {
         "links": {
           "self": null
         }

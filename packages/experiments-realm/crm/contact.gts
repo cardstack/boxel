@@ -589,15 +589,14 @@ export class Contact extends CardDef {
 
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
-  @field company = linksTo(Company); // Links to the Company Card
+  @field company = linksTo(Company);
   @field department = contains(StringField);
-  @field primaryEmail = contains(StringField); // Stores primary email, format may change after final emailField PR is approved
-  @field secondaryEmail = contains(StringField); // Stores secondary email, format may change after final emailField PR is approved
-  @field phoneMobile = contains(PhoneField); // Stores mobile phone, format may change after final phoneField PR is approved
-  @field phoneOffice = contains(PhoneField); // Stores office phone, format may change after final phoneField PR is approved
-  @field status = contains(StatusField); // Stores status as a status field
-  //@field socialLinks = containsMany(UrlField); // Pending format discussion with Burcu for consistency
-  //@field account = linksTo(Account) // Pending completion of account card
+  @field primaryEmail = contains(StringField);
+  @field secondaryEmail = contains(StringField);
+  @field phoneMobile = contains(PhoneField);
+  @field phoneOffice = contains(PhoneField);
+  @field status = contains(StatusField);
+  //@field socialLinks = containsMany(UrlField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Contact) {

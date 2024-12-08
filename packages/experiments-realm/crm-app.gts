@@ -73,9 +73,9 @@ const DEAL_FILTERS: LayoutFilter[] = [
 ];
 const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
-    displayName: 'Accounts',
+    displayName: 'All Accounts',
     icon: ContactIcon,
-    cardTypeName: 'Accounts',
+    cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
 ];

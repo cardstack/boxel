@@ -29,7 +29,7 @@
     "relationships": {
       "company": {
         "links": {
-          "self": "../CompanyCard/b9ee2c7c-8e42-4c36-82ee-84f3536bb459"
+          "self": null
         }
       }
     },
