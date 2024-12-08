@@ -14,7 +14,6 @@ import {
   type RoomMember,
   type EmittedEvents,
   type ISendEventResponse,
-  type MatrixError,
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
