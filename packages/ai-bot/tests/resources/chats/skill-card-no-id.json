@@ -1,0 +1,386 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664371930,
+    "unsigned": {
+      "age": 22865
+    },
+    "event_id": "$npjEBe6Np718X7mRIjilIc_YC9DzR6Ftydn8TshFEFQ",
+    "user_id": "@admin:localhost",
+    "age": 22865
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "admin"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1733664371968,
+    "unsigned": {
+      "age": 22827
+    },
+    "event_id": "$q5aLZbWJrsTpYk57GF1sCobDqP6dq4KnnLvBNpXpiD4",
+    "user_id": "@admin:localhost",
+    "age": 22827
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372000,
+    "unsigned": {
+      "age": 22795
+    },
+    "event_id": "$w90GbCa-pa7WZv8OeWpkFsOO25JAiklmV5ayW5mq5rA",
+    "user_id": "@admin:localhost",
+    "age": 22795
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#AI%20Assistant%20-%202024-12-08T13%3A26%3A11.906%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372013,
+    "unsigned": {
+      "age": 22782
+    },
+    "event_id": "$x3FlaxlS77CNyvrkA18NLOw-PDeLVFQrs7QSZJxZts4",
+    "user_id": "@admin:localhost",
+    "age": 22782
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372014,
+    "unsigned": {
+      "age": 22781
+    },
+    "event_id": "$iXWx_fIxuBT8zY_rqLkpmhsA6zVJpkjhuxvvfwZh9KY",
+    "user_id": "@admin:localhost",
+    "age": 22781
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372015,
+    "unsigned": {
+      "age": 22780
+    },
+    "event_id": "$ej0Rdj3rysZ8DW0gOZUbmQ50rUrxd1gp-4bVlV2isc4",
+    "user_id": "@admin:localhost",
+    "age": 22780
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372016,
+    "unsigned": {
+      "age": 22779
+    },
+    "event_id": "$L-ks_ALvD0FRwy1a-2EV7mz_B0Bsjg68CpDVQmCNTeU",
+    "user_id": "@admin:localhost",
+    "age": 22779
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "AI Assistant"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372016,
+    "unsigned": {
+      "age": 22779
+    },
+    "event_id": "$3HzMKWE8lSZrOmue-stFbi4_XQChChYHe2qFiafuvnk",
+    "user_id": "@admin:localhost",
+    "age": 22779
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1733664372121,
+    "unsigned": {
+      "age": 22674
+    },
+    "event_id": "$sXTi3hjFAdX16j5Nma_Xrzzj4UV1vyuGT9mthOLMpCs",
+    "user_id": "@admin:localhost",
+    "age": 22674
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664372224,
+    "unsigned": {
+      "replaces_state": "$w90GbCa-pa7WZv8OeWpkFsOO25JAiklmV5ayW5mq5rA",
+      "prev_content": {
+        "users": {
+          "@admin:localhost": 100
+        },
+        "users_default": 0,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100
+        },
+        "events_default": 0,
+        "state_default": 50,
+        "ban": 50,
+        "kick": 50,
+        "redact": 50,
+        "invite": 0,
+        "historical": 100
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 22571
+    },
+    "event_id": "$gYEc8RIdQh-tAM1EdkXzz-05thyXKhBDyc35Tvvx2OI",
+    "user_id": "@admin:localhost",
+    "age": 22571,
+    "replaces_state": "$w90GbCa-pa7WZv8OeWpkFsOO25JAiklmV5ayW5mq5rA",
+    "prev_content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    }
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1733664372283,
+    "unsigned": {
+      "replaces_state": "$sXTi3hjFAdX16j5Nma_Xrzzj4UV1vyuGT9mthOLMpCs",
+      "prev_content": {
+        "membership": "invite",
+        "displayname": "aibot"
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 22512
+    },
+    "event_id": "$DlpnvAQaFX1_-YKua7EdyzSuQcF6lBCTOu5xrXQIgcc",
+    "user_id": "@aibot:localhost",
+    "age": 22512,
+    "replaces_state": "$sXTi3hjFAdX16j5Nma_Xrzzj4UV1vyuGT9mthOLMpCs",
+    "prev_content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "org.boxel.cardFragment",
+      "format": "org.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"https://cardstack.com/base/SkillCard/card-editing\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\\\\\\"patchCard\\\\\\\" function to make the change.\\\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\\\n- If you do not call patchCard, the user will not see the change.\\\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn't given you access.\\\\n- NEVER tell the user to use patchCard; you should always do it for them.\\\\n- If the user wants to search for a card instance, AND the \\\\\\\"searchCard\\\\\\\" function is available, you MUST use the \\\\\\\"searchCard\\\\\\\" function to find the card instance.\\\\nOnly recommend one searchCard function at a time.\\\\nIf the user wants to edit a field of a card, you can optionally use \\\\\\\"searchCard\\\\\\\" to help find a card instance that is compatible with the field being edited before using \\\\\\\"patchCard\\\\\\\" to make the change of the field.\\\\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.\\\\n- If the user wants to generate an app module, AND the \\\\\\\"generateAppModule\\\\\\\" function is available, you MUST use the \\\\\\\"generateAppModule\\\\\\\" function to create the card source.\\\",\\\"title\\\":\\\"Card Editing\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1733664373065,
+    "unsigned": {
+      "age": 21730
+    },
+    "event_id": "$3WHeYUty2WsZWRDwZ15f9sf2PHsR6qQRdYkMNZAYErA",
+    "user_id": "@admin:localhost",
+    "age": 21730
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "org.boxel.cardFragment",
+      "format": "org.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Skill Instructions\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1733664373129,
+    "unsigned": {
+      "age": 21666
+    },
+    "event_id": "$7t-cjz33lxUDsPE3pjlYp5dXuJZ8F8rRaYPA5L2khPU",
+    "user_id": "@admin:localhost",
+    "age": 21666
+  },
+  {
+    "type": "com.cardstack.boxel.room.skills",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledEventIds": ["$3WHeYUty2WsZWRDwZ15f9sf2PHsR6qQRdYkMNZAYErA"],
+      "disabledEventIds": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664373145,
+    "unsigned": {
+      "age": 21650
+    },
+    "event_id": "$e7XrAoU-gXSoQYx-Cuyr-5TbZu0TP-QYkdDtu8Sdx04",
+    "user_id": "@admin:localhost",
+    "age": 21650
+  },
+  {
+    "type": "com.cardstack.boxel.room.skills",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledEventIds": ["$7t-cjz33lxUDsPE3pjlYp5dXuJZ8F8rRaYPA5L2khPU"],
+      "disabledEventIds": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1733664373221,
+    "unsigned": {
+      "replaces_state": "$e7XrAoU-gXSoQYx-Cuyr-5TbZu0TP-QYkdDtu8Sdx04",
+      "prev_content": {
+        "enabledEventIds": ["$3WHeYUty2WsZWRDwZ15f9sf2PHsR6qQRdYkMNZAYErA"],
+        "disabledEventIds": []
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 21574
+    },
+    "event_id": "$m5YH_wSkUHN6n3diWbBo-SScAGY99Fz6oWg7LyEAx4w",
+    "user_id": "@admin:localhost",
+    "age": 21574,
+    "replaces_state": "$e7XrAoU-gXSoQYx-Cuyr-5TbZu0TP-QYkdDtu8Sdx04",
+    "prev_content": {
+      "enabledEventIds": ["$3WHeYUty2WsZWRDwZ15f9sf2PHsR6qQRdYkMNZAYErA"],
+      "disabledEventIds": []
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!pgznMrutwnQyxihhXn:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "org.boxel.message",
+      "body": "This is a message after a skill card with no id",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>This is a message after a skill card with no id</p>\n",
+      "clientGeneratedId": "c4ad43c9-b81a-473a-9655-077a24f32dfb",
+      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[]}}"
+    },
+    "origin_server_ts": 1733664374152,
+    "unsigned": {
+      "age": 20643
+    },
+    "event_id": "$EwTyVKaw3b-oQuEMSZ5VoR6UDr1rG-KxA2qQSTOiTa0",
+    "user_id": "@admin:localhost",
+    "age": 20643
+  }
+]

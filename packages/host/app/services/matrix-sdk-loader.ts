@@ -42,6 +42,10 @@ export class ExtendedMatrixSDK {
     return this.#sdk.RoomEvent;
   }
 
+  get RoomStateEvent() {
+    return this.#sdk.RoomStateEvent;
+  }
+
   get ClientEvent() {
     return this.#sdk.ClientEvent;
   }
@@ -69,6 +73,7 @@ export type ExtendedClient = Pick<
   | 'getJoinedRooms'
   | 'getProfileInfo'
   | 'getRoom'
+  | 'getStateEvent'
   | 'getThreePids'
   | 'getUserId'
   | 'invite'
@@ -86,6 +91,7 @@ export type ExtendedClient = Pick<
   | 'scrollback'
   | 'sendEvent'
   | 'sendReadReceipt'
+  | 'sendStateEvent'
   | 'setAccountData'
   | 'setDisplayName'
   | 'setPassword'

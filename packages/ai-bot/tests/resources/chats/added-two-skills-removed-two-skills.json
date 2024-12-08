@@ -1,0 +1,699 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385902,
+    "unsigned": {
+      "age": 164252800
+    },
+    "event_id": "$T7hhwZDbkSz6H3svEjabI9gv1Q2XUBfw4LqgwDVS4RQ",
+    "user_id": "@admin:localhost",
+    "age": 164252800
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "admin"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1733323385933,
+    "unsigned": {
+      "age": 164252769
+    },
+    "event_id": "$fykBVs0TmLVADKA2L4UitrNBZpLTblh34l4AYdg3D9U",
+    "user_id": "@admin:localhost",
+    "age": 164252769
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385957,
+    "unsigned": {
+      "age": 164252745
+    },
+    "event_id": "$I73imbH2mYCo8kMb_zp95m7QNL0kk9pJJoR07SVuJS0",
+    "user_id": "@admin:localhost",
+    "age": 164252745
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#New%20AI%20Assistant%20Chat%20-%202024-12-04T14%3A43%3A05.893%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385970,
+    "unsigned": {
+      "age": 164252732
+    },
+    "event_id": "$NlIug4fIRj3tI2aD3IxDRzvdNYnqTD1GBvmVZBfIoi4",
+    "user_id": "@admin:localhost",
+    "age": 164252732
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385972,
+    "unsigned": {
+      "age": 164252730
+    },
+    "event_id": "$2yYjHrtOL-jJDSAJ1SHJoGkyqBfIzXOsom-JzedeL2c",
+    "user_id": "@admin:localhost",
+    "age": 164252730
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385972,
+    "unsigned": {
+      "age": 164252730
+    },
+    "event_id": "$U_AWSSAcLSqBCKGtgx63A5l1Z8WOuZiiTYxFIj4XHBc",
+    "user_id": "@admin:localhost",
+    "age": 164252730
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385973,
+    "unsigned": {
+      "age": 164252729
+    },
+    "event_id": "$lssYVDwkymss6GB7S-XUYQS9ms8PCekojKOP5mzOQCU",
+    "user_id": "@admin:localhost",
+    "age": 164252729
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "New AI Assistant Chat"
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323385974,
+    "unsigned": {
+      "age": 164252728
+    },
+    "event_id": "$HpQXZkK7KSn6JTtZE0Je_q1EcYtJk9NaZkybGIYihFg",
+    "user_id": "@admin:localhost",
+    "age": 164252728
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1733323386081,
+    "unsigned": {
+      "age": 164252621
+    },
+    "event_id": "$31EcGJhQaPggaO1_vpoByr38vw4qlwbqx8XaWdUT3AM",
+    "user_id": "@admin:localhost",
+    "age": 164252621
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1733323386174,
+    "unsigned": {
+      "replaces_state": "$I73imbH2mYCo8kMb_zp95m7QNL0kk9pJJoR07SVuJS0",
+      "prev_content": {
+        "users": {
+          "@admin:localhost": 100
+        },
+        "users_default": 0,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100
+        },
+        "events_default": 0,
+        "state_default": 50,
+        "ban": 50,
+        "kick": 50,
+        "redact": 50,
+        "invite": 0,
+        "historical": 100
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 164252528
+    },
+    "event_id": "$VZBjjB2wtMtWroq5F6KHMnkFaJhtrmceGoFy_lH0A-M",
+    "user_id": "@admin:localhost",
+    "age": 164252528,
+    "replaces_state": "$I73imbH2mYCo8kMb_zp95m7QNL0kk9pJJoR07SVuJS0",
+    "prev_content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    }
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1733323386207,
+    "unsigned": {
+      "replaces_state": "$31EcGJhQaPggaO1_vpoByr38vw4qlwbqx8XaWdUT3AM",
+      "prev_content": {
+        "membership": "invite",
+        "displayname": "aibot"
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 164252495
+    },
+    "event_id": "$u7la4aPzc7sbsTVVlYCrbkL2ym-IzYlWK2DT0ogzbo0",
+    "user_id": "@aibot:localhost",
+    "age": 164252495,
+    "replaces_state": "$31EcGJhQaPggaO1_vpoByr38vw4qlwbqx8XaWdUT3AM",
+    "prev_content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "org.boxel.cardFragment",
+      "format": "org.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/personal/SkillCard/31a074dd-4a48-46cd-bc5e-41267d4ddc43\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_1\\\",\\\"title\\\":\\\"skill 1\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1733487578939,
+    "unsigned": {
+      "age": 59763
+    },
+    "event_id": "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
+    "user_id": "@admin:localhost",
+    "age": 59763
+  },
+  {
+    "type": "com.cardstack.boxel.room.skills",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"
+      ],
+      "disabledEventIds": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1733487579032,
+    "unsigned": {
+      "age": 59670
+    },
+    "event_id": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
+    "user_id": "@admin:localhost",
+    "age": 59670
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "org.boxel.cardFragment",
+      "format": "org.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/personal/SkillCard/4ecb2f52-bb72-4df2-86de-f6162a628933\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_2\\\",\\\"title\\\":\\\"skill 2\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1733487583793,
+    "unsigned": {
+      "age": 54909
+    },
+    "event_id": "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80",
+    "user_id": "@admin:localhost",
+    "age": 54909
+  },
+  {
+    "type": "com.cardstack.boxel.room.skills",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
+        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      ],
+      "disabledEventIds": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1733487583858,
+    "unsigned": {
+      "replaces_state": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
+      "prev_content": {
+        "enabledEventIds": [
+          "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"
+        ],
+        "disabledEventIds": []
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 54844
+    },
+    "event_id": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
+    "user_id": "@admin:localhost",
+    "age": 54844,
+    "replaces_state": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
+    "prev_content": {
+      "enabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"
+      ],
+      "disabledEventIds": []
+    }
+  },
+  {
+    "type": "com.cardstack.boxel.room.skills",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledEventIds": [
+        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      ],
+      "disabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"
+      ]
+    },
+    "state_key": "",
+    "origin_server_ts": 1733487586192,
+    "unsigned": {
+      "replaces_state": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
+      "prev_content": {
+        "enabledEventIds": [
+          "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
+          "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+        ],
+        "disabledEventIds": []
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 52510
+    },
+    "event_id": "$QwniAlC_XvLP_GV6HD1-5QHpzwjw4n5Cj4GyDO1JGtQ",
+    "user_id": "@admin:localhost",
+    "age": 52510,
+    "replaces_state": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
+    "prev_content": {
+      "enabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
+        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      ],
+      "disabledEventIds": []
+    }
+  },
+  {
+    "type": "com.cardstack.boxel.room.skills",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledEventIds": [],
+      "disabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
+        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      ]
+    },
+    "state_key": "",
+    "origin_server_ts": 1733487588655,
+    "unsigned": {
+      "replaces_state": "$QwniAlC_XvLP_GV6HD1-5QHpzwjw4n5Cj4GyDO1JGtQ",
+      "prev_content": {
+        "enabledEventIds": [
+          "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+        ],
+        "disabledEventIds": [
+          "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"
+        ]
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 50047
+    },
+    "event_id": "$Cv41Fm0KGnYqzxkd6VMeI_kuv7EbY6Kf7Q8hvW0tlKw",
+    "user_id": "@admin:localhost",
+    "age": 50047,
+    "replaces_state": "$QwniAlC_XvLP_GV6HD1-5QHpzwjw4n5Cj4GyDO1JGtQ",
+    "prev_content": {
+      "enabledEventIds": [
+        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      ],
+      "disabledEventIds": [
+        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"
+      ]
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "org.boxel.message",
+      "body": "test",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>test</p>\n",
+      "clientGeneratedId": "0974e81d-05d0-4ad9-b683-80f7a02c388d",
+      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"openCardIds\":[],\"tools\":[],\"submode\":\"interact\"}}"
+    },
+    "origin_server_ts": 1733487597236,
+    "unsigned": {
+      "age": 41466
+    },
+    "event_id": "$uSkh2kOUFDeNPDRBSAsIl3s-X58Gl2tZq2gqDddpx2E",
+    "user_id": "@admin:localhost",
+    "age": 41466
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Thinking...",
+      "msgtype": "m.text",
+      "formatted_body": "Thinking...",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Thinking...",
+        "msgtype": "m.text",
+        "formatted_body": "Thinking...",
+        "format": "org.matrix.custom.html"
+      }
+    },
+    "origin_server_ts": 1733487597331,
+    "unsigned": {
+      "age": 41371
+    },
+    "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk",
+    "user_id": "@aibot:localhost",
+    "age": 41371
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello",
+      "msgtype": "m.text",
+      "formatted_body": "Hello",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello",
+        "msgtype": "m.text",
+        "formatted_body": "Hello",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487601077,
+    "unsigned": {
+      "age": 37625
+    },
+    "event_id": "$w4qaOxRPIgfs4fTuKf72iV7Vqz3AHcEYyM-lOk2GGjo",
+    "user_id": "@aibot:localhost",
+    "age": 37625
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello! It seems you have no cards open at the moment. If you need help with creating",
+      "msgtype": "m.text",
+      "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello! It seems you have no cards open at the moment. If you need help with creating",
+        "msgtype": "m.text",
+        "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487601338,
+    "unsigned": {
+      "age": 37364
+    },
+    "event_id": "$y-LnxbumhtzQt2BHvoluqNGTF_fbSUfj7wPAd7iiLd8",
+    "user_id": "@aibot:localhost",
+    "age": 37364
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card,",
+      "msgtype": "m.text",
+      "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card,",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card,",
+        "msgtype": "m.text",
+        "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card,",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487602127,
+    "unsigned": {
+      "age": 36575
+    },
+    "event_id": "$_AWZ-WZEwbyBn70LKXnjt_0WnfYhkAuBa8fUGA7_hkk",
+    "user_id": "@aibot:localhost",
+    "age": 36575
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel",
+      "msgtype": "m.text",
+      "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel",
+        "msgtype": "m.text",
+        "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487602159,
+    "unsigned": {
+      "age": 36543
+    },
+    "event_id": "$MRJIXhS5cdFQxH3eFm9W53eU9J5YIwV1PDNdQB3B7V0",
+    "user_id": "@aibot:localhost",
+    "age": 36543
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+      "msgtype": "m.text",
+      "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+        "msgtype": "m.text",
+        "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487603138,
+    "unsigned": {
+      "age": 35564
+    },
+    "event_id": "$qSAOQt_ijFtE9lx1rhL5kVc8GBp5Zz5Cc9lamI_2oCU",
+    "user_id": "@aibot:localhost",
+    "age": 35564
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+      "msgtype": "m.text",
+      "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+        "msgtype": "m.text",
+        "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487604140,
+    "unsigned": {
+      "age": 34562
+    },
+    "event_id": "$0L3b5hZTHuCBfDoUhMJxeNSQas-pOY5ySvavRuJsdtk",
+    "user_id": "@aibot:localhost",
+    "age": 34562
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+      "msgtype": "m.text",
+      "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+        "msgtype": "m.text",
+        "formatted_body": "Hello! It seems you have no cards open at the moment. If you need help with creating or searching for a card, feel free to ask!",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": true,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$80hhU_6zkZ7hDsu90rP01JGD00DBHwobDYwM1mfd-rk"
+      }
+    },
+    "origin_server_ts": 1733487605139,
+    "unsigned": {
+      "age": 33563
+    },
+    "event_id": "$LnEHjcxq8qdKUHUkj5lVOLDFswympGiag4eSf6E148I",
+    "user_id": "@aibot:localhost",
+    "age": 33563
+  }
+]

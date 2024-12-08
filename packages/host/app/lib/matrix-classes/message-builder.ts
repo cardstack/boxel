@@ -4,8 +4,6 @@ import { getOwner, setOwner } from '@ember/owner';
 
 import { inject as service } from '@ember/service';
 
-import { TrackedMap } from 'tracked-built-ins';
-
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -13,7 +11,6 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type { CommandStatus } from 'https://cardstack.com/base/command';
 
 import type {
-  CardFragmentContent,
   CardMessageContent,
   CardMessageEvent,
   CommandEvent,
@@ -43,7 +40,7 @@ export default class MessageBuilder {
       effectiveEventId: string;
       author: RoomMember;
       index: number;
-      fragmentCache: TrackedMap<string, CardFragmentContent>;
+      serializedCardFromFragments: (eventId: string) => LooseSingleCardDocument;
       events: DiscreteMatrixEvent[];
     },
   ) {
@@ -62,7 +59,6 @@ export default class MessageBuilder {
       // These are not guaranteed to exist in the event
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
-      attachedSkillCardIds: null,
       command: null,
       commandResult: null,
       status: this.event.status,
@@ -80,7 +76,7 @@ export default class MessageBuilder {
     // Safely skip over cases that don't have attached cards or a data type
     let cardDocs = content.data?.attachedCardsEventIds
       ? content.data.attachedCardsEventIds.map((eventId) =>
-          this.serializedCardFromFragments(eventId),
+          this.builderContext.serializedCardFromFragments(eventId),
         )
       : [];
     let attachedCardIds: string[] = [];
@@ -183,34 +179,5 @@ export default class MessageBuilder {
       ? await this.commandService.createCommandResult(r)
       : undefined;
     return commandResult;
-  }
-
-  private serializedCardFromFragments(
-    eventId: string,
-  ): LooseSingleCardDocument {
-    let fragments: CardFragmentContent[] = [];
-    let currentFragment: string | undefined = eventId;
-    do {
-      let fragment = this.builderContext.fragmentCache.get(currentFragment);
-      if (!fragment) {
-        throw new Error(
-          `No card fragment found in cache for event id ${eventId}`,
-        );
-      }
-      fragments.push(fragment);
-      currentFragment = fragment.data.nextFragment;
-    } while (currentFragment);
-
-    fragments.sort((a, b) => (a.data.index = b.data.index));
-    if (fragments.length !== fragments[0].data.totalParts) {
-      throw new Error(
-        `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
-      );
-    }
-
-    let cardDoc = JSON.parse(
-      fragments.map((f) => f.data.cardFragment).join(''),
-    ) as LooseSingleCardDocument;
-    return cardDoc;
   }
 }

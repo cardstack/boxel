@@ -41,11 +41,14 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   setupRenderingTest(hooks);
 
-  let { getRoomEvents, simulateRemoteMessage } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
-    autostart: true,
-  });
+  let { getRoomEvents, simulateRemoteMessage, getRoomState } = setupMockMatrix(
+    hooks,
+    {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    },
+  );
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
@@ -178,8 +181,13 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       lastEvContent.body,
       'Generate code for the application given the product requirements, you do not need to strictly follow the schema if it does not seem appropriate for the application.',
     );
-    assert.strictEqual(lastEvContent.data.attachedSkillEventIds?.length, 1);
-    let skillEventId = lastEvContent.data.attachedSkillEventIds?.[0];
+    assert.strictEqual(
+      getRoomState(roomId, 'com.cardstack.boxel.room.skills').enabledEventIds
+        .length,
+      2,
+    );
+    let skillEventId = getRoomState(roomId, 'com.cardstack.boxel.room.skills')
+      .enabledEventIds[1];
     let skillEventData = JSON.parse(
       (
         events.find((e) => e.event_id === skillEventId)

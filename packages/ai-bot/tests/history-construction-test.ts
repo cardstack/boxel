@@ -1,5 +1,9 @@
 import { module, test, assert } from 'qunit';
-import { constructHistory, HistoryConstructionError } from '../helpers';
+import {
+  constructHistory,
+  extractCardFragmentsFromEvents,
+  HistoryConstructionError,
+} from '../helpers';
 import { type IRoomEvent } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -7,7 +11,7 @@ module('constructHistory', () => {
   test('should return an empty array when the input array is empty', () => {
     const history: DiscreteMatrixEvent[] = [];
 
-    const result = constructHistory(history);
+    const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, []);
   });
@@ -58,13 +62,13 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history);
+    const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, []);
   });
 
   test('should return an array with a single message event when the input array contains only one message event', () => {
-    const history: DiscreteMatrixEvent[] = [
+    const eventlist: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -84,9 +88,9 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history);
+    const result = constructHistory(eventlist, new Map());
 
-    assert.deepEqual(result, history);
+    assert.deepEqual(result, eventlist);
   });
 
   test('should return an array with all message events when the input array contains multiple message events', () => {
@@ -144,7 +148,7 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history);
+    const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, history);
   });
@@ -204,7 +208,7 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history);
+    const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, history);
   });
@@ -308,7 +312,7 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history);
+    const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, [
       {
@@ -373,7 +377,7 @@ module('constructHistory', () => {
     // we can't use the DiscreteMatrixEvent type here because we need to start
     // from the wire-format which serializes the data.content to a string for
     // safe transport over the wire
-    const history: IRoomEvent[] = [
+    const eventlist: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -467,7 +471,8 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history);
+    let cardFragments = extractCardFragmentsFromEvents(eventlist);
+    const result = constructHistory(eventlist, cardFragments);
     assert.deepEqual(result, [
       {
         type: 'm.room.message',
@@ -559,7 +564,7 @@ module('constructHistory', () => {
     ];
 
     try {
-      constructHistory(history);
+      constructHistory(history, new Map());
       assert.ok(false, 'Expected an error');
     } catch (e) {
       assert.ok(e instanceof HistoryConstructionError);

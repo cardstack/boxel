@@ -77,6 +77,10 @@ export default class PillMenuUsage extends Component {
     this.items = [...this.items, new TrackedObject({ card, isActive: true })];
   }
 
+  @action onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
+    item.isActive = isActive;
+  }
+
   <template>
     <FreestyleUsage @name='PillMenu'>
       <:description>
@@ -91,6 +95,7 @@ export default class PillMenuUsage extends Component {
           @headerAction={{this.headerAction}}
           @canAttachCard={{this.canAttachCard}}
           @onChooseCard={{this.onChooseCard}}
+          @onChangeItemIsActive={{this.onChangeItemIsActive}}
         >
           <:headerIcon>
             <img

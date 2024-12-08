@@ -249,15 +249,17 @@ test.describe('Room messages', () => {
         message.content?.msgtype === 'org.boxel.cardFragment',
     );
     expect(cardFragments.length).toStrictEqual(4);
-    let lastFragment = messages.findIndex((m) => m === cardFragments[2]);
-    let boxelMessage = messages[lastFragment + 2];
+    let lastFragmentIndex = messages.findIndex(
+      (m) => m === cardFragments[cardFragments.length - 1],
+    );
+    let boxelMessage = messages[lastFragmentIndex + 1];
     let boxelMessageData = JSON.parse(boxelMessage.content.data);
     // the card fragment events need to come before the boxel message event they
     // are used in, and the boxel message should point to the first fragment
     expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
       // card fragments are posted in reverse order so we can fashion the
-      // nextFragment property, so the item at index #2 is the first fragment
-      cardFragments[2].event_id,
+      // nextFragment property, so the item at the end is the first fragment
+      cardFragments[cardFragments.length - 1].event_id,
     ]);
   });
 
@@ -293,7 +295,7 @@ test.describe('Room messages', () => {
     ]);
 
     let messages = await getRoomEvents();
-    let message = messages[messages.length - 3];
+    let message = messages[messages.length - 2];
     let messageData = JSON.parse(message.content.data);
     let serializeCard = JSON.parse(messageData.cardFragment);
 

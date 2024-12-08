@@ -23,10 +23,8 @@ import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
-  aiBotUsername,
   Deferred,
   codeRefWithAbsoluteURL,
-  getCard,
   moduleFrom,
   RealmPaths,
   type Actions,
@@ -306,13 +304,6 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      runCommand: (
-        card: CardDef,
-        skillCardId: string,
-        message?: string,
-      ): void => {
-        here.runCommand.perform(card, skillCardId, message ?? 'Run command');
-      },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
@@ -359,35 +350,6 @@ export default class InteractSubmode extends Component<Signature> {
       request?.fulfill(updatedCard);
     }
   });
-
-  private runCommand = restartableTask(
-    async (card: CardDef, skillCardId: string, message: string) => {
-      let resource = getCard(new URL(skillCardId));
-      await resource.loaded;
-      let commandCard = resource.card;
-      if (!commandCard) {
-        throw new Error(`Could not find card "${skillCardId}"`);
-      }
-      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
-        aiBotUsername,
-      ]);
-      const context = {
-        submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.operatorModeStateService
-          .topMostStackItems()
-          .map((item) => item.card.id),
-      };
-
-      await this.matrixService.sendMessage(
-        newRoomId,
-        message,
-        [card],
-        [commandCard],
-        undefined,
-        context,
-      );
-    },
-  );
 
   @action private onCancelDelete() {
     this.itemToDelete = undefined;
