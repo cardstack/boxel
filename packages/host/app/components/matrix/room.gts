@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -8,6 +7,7 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 
 import max from 'lodash/max';
 
@@ -47,7 +47,6 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
-import perform from 'ember-concurrency/helpers/perform';
 
 interface Signature {
   Args: {
