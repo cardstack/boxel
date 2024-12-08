@@ -5,7 +5,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-import { field, linksToMany } from 'https://cardstack.com/base/card-api';
+import {
+  field,
+  linksToMany,
+  StringField,
+} from 'https://cardstack.com/base/card-api';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
 import { Contact } from './contact';
@@ -13,6 +17,88 @@ import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/captions';
 import AccountHeader from '../components/account-header';
+import { WebsiteField } from '../website';
+import MapPinIcon from '@cardstack/boxel-icons/map-pin';
+import { Avatar, Pill } from '@cardstack/boxel-ui/components';
+
+// Perhaps, can be address?
+export class LocationField extends AddressField {
+  static icon = MapPinIcon;
+  static displayName = 'Location';
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.country.name}}
+        <div class='row'>
+          <MapPinIcon class='icon' />
+          <span>{{@model.city}}, {{@model.country.code}}</span>
+        </div>
+      {{/if}}
+      <style scoped>
+        .row {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+        }
+        .icon {
+          width: var(--boxel-icon-sm);
+          height: var(--boxel-icon-sm);
+          flex-shrink: 0;
+        }
+      </style>
+    </template>
+  };
+}
+
+interface ContactRowArgs {
+  Args: {
+    userID: string;
+    name: string;
+    thumbnailURL: string;
+    isPrimary: boolean;
+  };
+  Blocks: {};
+  Element: HTMLElement;
+}
+
+class ContactRow extends GlimmerComponent<ContactRowArgs> {
+  <template>
+    <div class='row'>
+      <Avatar
+        @userID={{@userID}}
+        @displayName={{@name}}
+        @thumbnailURL={{@thumbnailURL}}
+        @isReady={{true}}
+        class='avatar'
+      />
+      <span class='name'>{{@name}}</span>
+      {{#if @isPrimary}}
+        <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+          Primary
+        </Pill>
+      {{/if}}
+    </div>
+    <style scoped>
+      .avatar {
+        --profile-avatar-icon-size: 30px;
+        flex-shrink: 0;
+      }
+      .row {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .name {
+        text-decoration: underline;
+      }
+      .primary-tag {
+        --pill-font-weight: 400;
+        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-6xs);
+        --pill-font: 400 var(--boxel-font-sm);
+        --pill-border: none;
+      }
+    </style>
+  </template>
+}
 
 class IsolatedTemplate extends Component<typeof Account> {
   //Mock Data:
@@ -47,8 +133,10 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <p class='description'>Description</p>
-              <p class='description'>Description</p>
+              <div class='description'>
+                <@fields.website @format='atom' />
+                <@fields.address @format='atom' />
+              </div>
             </:content>
           </SummaryCard>
 
@@ -60,8 +148,26 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <p class='description'>Description</p>
-              <p class='description'>Description</p>
+              <div class='description'>
+                {{#if @model.primaryContact}}
+                  <ContactRow
+                    @userID={{@model.primaryContact.id}}
+                    @name={{@model.primaryContact.name}}
+                    @thumbnailURL={{@model.primaryContact.thumbnailURL}}
+                    @isPrimary={{true}}
+                  />
+                {{/if}}
+                {{#each @model.contacts as |contact|}}
+                  {{#if contact}}
+                    <ContactRow
+                      @userID={{contact.id}}
+                      @name={{contact.name}}
+                      @thumbnailURL={{contact.thumbnailURL}}
+                      @isPrimary={{false}}
+                    />
+                  {{/if}}
+                {{/each}}
+              </div>
             </:content>
           </SummaryCard>
 
@@ -122,6 +228,8 @@ class IsolatedTemplate extends Component<typeof Account> {
         margin: 0;
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+        display: flex;
+        flex-direction: column;
       }
     </style>
   </template>
@@ -133,9 +241,16 @@ export class Account extends CardDef {
   @field company = linksTo(Company);
   @field primaryContact = linksTo(Contact);
   @field contacts = linksToMany(Contact);
+  @field address = contains(LocationField);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
-  @field website = contains(AddressField);
+  @field website = contains(WebsiteField);
+
+  @field title = contains(StringField, {
+    computeVia: function (this: Account) {
+      return this.company?.name;
+    },
+  });
 
   static isolated = IsolatedTemplate;
 }
