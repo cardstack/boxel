@@ -146,7 +146,10 @@ export class ServerState {
     if (event) {
       return event.event.content || {};
     } else {
-      throw new Error(`room state event ${eventType} does not exist`);
+      throw new MatrixSDK.MatrixError({
+        errcode: 'M_NOT_FOUND',
+        error: `room state event ${eventType} does not exist for state key ${stateKey}`,
+      });
     }
   }
 
