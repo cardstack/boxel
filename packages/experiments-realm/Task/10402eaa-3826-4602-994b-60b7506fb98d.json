@@ -2,29 +2,25 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Pill Picker Example",
-      "taskDetail": "Use multi-select but for pills",
-      "status": {
-        "index": 1,
-        "label": "Next Sprint"
-      },
       "priority": {
         "index": 1,
         "label": "Medium"
       },
-      "dateRange": {
-        "start": "2024-11-14",
-        "end": "2024-12-15"
+      "status": {
+        "completed": false,
+        "index": 1,
+        "label": "Next Sprint"
       },
+      "taskName": "Pill Picker Example",
+      "dateRange": {
+        "start": "2024-12-08",
+        "end": "2024-12-10"
+      },
+      "taskDetail": "Use multi-select but for pills",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": null
-        }
-      },
       "project": {
         "links": {
           "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
@@ -36,6 +32,11 @@
         }
       },
       "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
         "links": {
           "self": null
         }
