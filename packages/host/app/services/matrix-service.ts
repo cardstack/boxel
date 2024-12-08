@@ -14,6 +14,7 @@ import {
   type RoomMember,
   type EmittedEvents,
   type ISendEventResponse,
+  type MatrixError,
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
@@ -639,8 +640,12 @@ export default class MatrixService extends Service {
         SKILLS_STATE_EVENT_TYPE,
         '',
       );
-    } catch (e) {
-      // this is fine, it just means the state event doesn't exist yet
+    } catch (e: unknown) {
+      if (e instanceof Error && 'errcode' in e && e.errcode === 'M_NOT_FOUND') {
+        // this is fine, it just means the state event doesn't exist yet
+      } else {
+        throw e;
+      }
     }
     this.client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
       enabledEventIds: [
