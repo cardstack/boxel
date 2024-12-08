@@ -337,7 +337,7 @@ test.describe('Skills', () => {
     );
     await attachSkill(page, skillCard3, true);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 2 Skill Active',
+      '2 of 2 Skills Active',
     );
 
     await logout(page);
