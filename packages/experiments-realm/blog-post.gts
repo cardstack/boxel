@@ -557,7 +557,7 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
-  @field blog = linksTo(BlogAppCard);
+  @field blog = linksTo(BlogAppCard, { isUsed: true });
 
   get formattedDatePublished() {
     if (this.status === 'Published' && this.publishDate) {
