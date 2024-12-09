@@ -101,11 +101,15 @@ class LiveCardIdentityContext implements IdentityContext {
   }
 }
 
-const liveCardIdentityContext = new LiveCardIdentityContext();
+let liveCardIdentityContext = new LiveCardIdentityContext();
 const realmSubscriptions: Map<
   string,
   WeakMap<CardResource, { unsubscribe: () => void }>
 > = new Map();
+
+export function testOnlyResetLiveCardIdentityContext() {
+  liveCardIdentityContext = new LiveCardIdentityContext();
+}
 
 export class CardResource extends Resource<Args> {
   url: string | undefined;
@@ -181,6 +185,7 @@ export class CardResource extends Resource<Args> {
 
   private loadLiveModel = restartableTask(async (url: URL) => {
     let cardOrError = await this.getCard(url, liveCardIdentityContext);
+    await this.updateCardInstance(cardOrError);
     if (isCardInstance(cardOrError)) {
       let subscribers = liveCardIdentityContext.subscribers(cardOrError.id)!;
       subscribers.add(this);
@@ -188,7 +193,6 @@ export class CardResource extends Resource<Args> {
       console.warn(`cannot load card ${cardOrError.id}`, cardOrError);
       this.subscribeToRealm(url.href);
     }
-    await this.updateCardInstance(cardOrError);
   });
 
   private subscribeToRealm(cardOrId: CardDef | string) {
@@ -306,6 +310,7 @@ export class CardResource extends Resource<Args> {
   private reload = task(async (card: CardDef) => {
     try {
       await this.cardService.reloadCard(card);
+      this.setCardOrError(card);
     } catch (err: any) {
       if (err.status !== 404) {
         liveCardIdentityContext.update(card.id, undefined);
