@@ -14691,7 +14691,7 @@ packages:
       globby: 11.1.0
       ora: 5.4.1
       slash: 3.0.0
-      tmp: 0.2.3
+      tmp: 0.2.1
       workerpool: 6.5.1
     transitivePeerDependencies:
       - supports-color
@@ -14711,7 +14711,7 @@ packages:
       globby: 11.1.0
       ora: 5.4.1
       slash: 3.0.0
-      tmp: 0.2.3
+      tmp: 0.2.1
       workerpool: 6.5.1
     transitivePeerDependencies:
       - supports-color
