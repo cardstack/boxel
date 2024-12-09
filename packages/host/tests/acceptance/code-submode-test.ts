@@ -823,11 +823,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}not-found-adoption-instance.json`,
       });
 
-      await waitFor('[data-test-card-preview-error]');
+      await waitFor('[data-test-card-error]');
 
+      await click('[data-test-error-detail-toggle] button');
       assert
-        .dom('[data-test-card-preview-error]')
-        .exists({ count: 1 })
+        .dom('[data-test-error-detail]')
         .includesText(`${testRealmURL}non-card not found`);
 
       await visitOperatorMode({
@@ -835,10 +835,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}broken-adoption-instance.json`,
       });
 
-      await waitFor('[data-test-card-preview-error]');
+      await waitFor('[data-test-card-error]');
 
+      await click('[data-test-error-detail-toggle] button');
       assert
-        .dom('[data-test-card-preview-error]')
+        .dom('[data-test-error-detail]')
         .includesText(
           'Encountered error rendering HTML for card: formatName is not defined',
         );
