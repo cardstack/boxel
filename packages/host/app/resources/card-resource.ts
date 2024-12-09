@@ -35,7 +35,7 @@ import type RealmService from '../services/realm';
 
 interface CardErrors {
   errors: {
-    id: string;
+    id?: string; // 404 errors won't necessarily have an id
     status: number;
     title: string;
     message: string;
@@ -340,7 +340,9 @@ export class CardResource extends Resource<Args> {
     if (this.onCardInstanceChange) {
       this.onCardInstanceChange(this._card, instance);
     }
-    this.subscribeToRealm(maybeCard.id);
+    if (maybeCard.id) {
+      this.subscribeToRealm(maybeCard.id);
+    }
     this.setCardOrError(maybeCard);
   }
 
