@@ -84,7 +84,7 @@ export default class RealmServerService extends Service {
 
   async createUser(matrixUserId: string, registrationToken?: string) {
     await this.login();
-    let response = await this.network.authedFetch(`${this.url.href}_user`, {
+    let response = await this.network.fetch(`${this.url.href}_user`, {
       method: 'POST',
       headers: {
         Accept: SupportedMimeType.JSONAPI,
@@ -118,20 +118,17 @@ export default class RealmServerService extends Service {
   }) {
     await this.login();
 
-    let response = await this.network.authedFetch(
-      `${this.url.href}_create-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: SupportedMimeType.JSONAPI,
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify({
-          data: { type: 'realm', attributes: args },
-        }),
+    let response = await this.network.fetch(`${this.url.href}_create-realm`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
       },
-    );
+      body: JSON.stringify({
+        data: { type: 'realm', attributes: args },
+      }),
+    });
     if (!response.ok) {
       let err = `Could not create realm with endpoint '${args.endpoint}': ${
         response.status
@@ -203,7 +200,7 @@ export default class RealmServerService extends Service {
     if (this.catalogRealmURLs.length > 0) {
       return;
     }
-    let response = await this.network.authedFetch(
+    let response = await this.network.fetch(
       `${this.url.origin}/_catalog-realms`,
     );
     if (response.status !== 200) {
