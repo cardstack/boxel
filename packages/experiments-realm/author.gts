@@ -7,6 +7,7 @@ import {
   field,
   contains,
   containsMany,
+  linksTo,
   StringField,
 } from 'https://cardstack.com/base/card-api';
 
@@ -17,6 +18,7 @@ import XIcon from '@cardstack/boxel-icons/brand-x';
 
 import { setBackgroundImage } from './components/layout';
 import { ContactLinkField } from './fields/contact-link';
+import { BlogApp } from './blog-app';
 import { EmailField } from './email';
 
 class AuthorContactLink extends ContactLinkField {
@@ -43,13 +45,14 @@ class AuthorContactLink extends ContactLinkField {
 }
 
 export class Author extends CardDef {
-  static displayName = 'Author Bio';
+  static displayName = 'Author';
   static icon = SquareUser;
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Author) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      let fullName = [this.firstName, this.lastName].filter(Boolean).join(' ');
+      return fullName.length ? fullName : `Untitled Author`;
     },
     description: 'Full name of author',
   });
@@ -66,27 +69,38 @@ export class Author extends CardDef {
   @field contactLinks = containsMany(AuthorContactLink);
   @field email = contains(EmailField);
   @field featuredImage = contains(FeaturedImageField);
+  @field blog = linksTo(BlogApp);
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article class='author-bio'>
         <header>
-          <h1 class='title'><@fields.title /></h1>
+          <h1 class='title'>
+            <@fields.title />
+          </h1>
           <p class='description'><@fields.description /></p>
-          <blockquote class='quote'>
-            <p><@fields.quote /></p>
-          </blockquote>
-          <@fields.featuredImage class='featured-image' />
+          {{#if @model.featuredImage.imageUrl}}
+            <@fields.featuredImage class='featured-image' />
+          {{else if @model.thumbnailURL.length}}
+            <div
+              class='thumbnail-image'
+              style={{setBackgroundImage @model.thumbnailURL}}
+            />
+          {{/if}}
           <div class='links'>
             <@fields.contactLinks @format='atom' />
           </div>
         </header>
-        <div class='summary'>
-          <@fields.bio />
-        </div>
-        <section class='extended-bio'>
-          <@fields.extendedBio />
-        </section>
+        {{#if @model.bio}}
+          <div class='summary'>
+            <@fields.bio />
+          </div>
+        {{/if}}
+        {{#if @model.extendedBio}}
+          <section class='extended-bio'>
+            <@fields.extendedBio />
+          </section>
+        {{/if}}
       </article>
       <style scoped>
         .author-bio {
@@ -142,7 +156,7 @@ export class Author extends CardDef {
           font-size: 1.625em;
           line-height: 1.25;
           letter-spacing: normal;
-          margin-top: var(--boxel-sp-xl);
+          margin-top: 1em;
           margin-bottom: 0;
         }
         .description {
@@ -157,10 +171,17 @@ export class Author extends CardDef {
           border-radius: 50%;
           border: 1px solid var(--boxel-400);
         }
+        .thumbnail-image {
+          width: 300px;
+          height: 300px;
+          background-position: center;
+          background-size: cover;
+          background-repeat: no-repeat;
+          border-radius: 50%;
+          border: 1px solid var(--boxel-400);
+        }
         blockquote {
-          margin-right: auto;
-          margin-left: auto;
-          margin-bottom: auto;
+          margin: auto;
           padding: 0;
           border-left: 1px solid black;
         }
