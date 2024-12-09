@@ -1,7 +1,8 @@
+import '../setup-logger'; // This should be first
 import { aiBotUsername } from '@cardstack/runtime-common';
-import { createClient, IRoomEvent } from 'matrix-js-sdk';
-import { constructHistory } from '../helpers';
+import { createClient } from 'matrix-js-sdk';
 import { writeFileSync } from 'fs';
+
 console.log(aiBotUsername);
 (async () => {
   const room = process.argv[2];
@@ -57,13 +58,12 @@ console.log(aiBotUsername);
   let eventList = initial!.messages?.chunk || [];
 
   console.log('Total event list', eventList.length);
-  let history: IRoomEvent[] = constructHistory(eventList);
   writeFileSync(
     `tests/resources/chats/${roomId}.json`,
-    JSON.stringify(history, null, 2),
+    JSON.stringify(eventList, null, 2),
   );
   console.log(
-    `Wrote ${history.length} events to tests/resources/chats/${roomId}.json`,
+    `Wrote ${eventList.length} events to tests/resources/chats/${roomId}.json`,
   );
   client.stopClient();
 })().catch((e) => {

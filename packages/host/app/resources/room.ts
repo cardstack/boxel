@@ -5,7 +5,9 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
+
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type {
   CardFragmentContent,
@@ -21,8 +23,9 @@ import type {
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import { Skill } from '../components/ai-assistant/skill-menu';
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -31,12 +34,17 @@ import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
-import type { Skill } from '../components/ai-assistant/skill-menu';
-import type RoomState from '../lib/matrix-classes/room-state';
+import type Room from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+
+interface SkillId {
+  skillCardId: string;
+  skillEventId: string;
+  isActive: boolean;
+}
 
 interface Args {
   named: {
@@ -49,13 +57,14 @@ export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
   private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
+  private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
-  @tracked roomState: RoomState | undefined;
+  @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
@@ -81,15 +90,16 @@ export class RoomResource extends Resource<Args> {
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
     this._nameEventsCache = new TrackedMap();
+    this._skillCardsCache = new TrackedMap();
     this._createEvent = undefined;
   }
 
   private load = restartableTask(async (roomId: string) => {
     try {
-      this.roomState = roomId
-        ? await this.matrixService.getRoomState(roomId)
+      this.matrixRoom = roomId
+        ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.roomState) {
+      if (this.matrixRoom) {
         await this.loadFromEvents(roomId);
       }
     } catch (e) {
@@ -116,11 +126,60 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get events() {
-    return this.roomState?.events ?? [];
+    return this.matrixRoom?.events ?? [];
+  }
+
+  get skillIds(): SkillId[] {
+    let skillsConfig = this.matrixRoom?.skillsConfig;
+    if (!skillsConfig) {
+      return [];
+    }
+    let result: SkillId[] = [];
+    for (let eventId of [
+      ...skillsConfig.enabledEventIds,
+      ...skillsConfig.disabledEventIds,
+    ]) {
+      let cardDoc;
+      try {
+        cardDoc = this.serializedCardFromFragments(eventId);
+      } catch {
+        // the skill card fragments might not be loaded yet
+        continue;
+      }
+      if (!cardDoc.data.id) {
+        continue;
+      }
+      let cardId = cardDoc.data.id;
+      if (!this._skillCardsCache.has(cardId)) {
+        this.cardService
+          .createFromSerialized(cardDoc.data, cardDoc)
+          .then((skillsCard) => {
+            this._skillCardsCache.set(cardId, skillsCard as SkillCard);
+          });
+      }
+      result.push({
+        skillCardId: cardDoc.data.id,
+        skillEventId: eventId,
+        isActive: skillsConfig.enabledEventIds.includes(eventId),
+      });
+    }
+    return result;
   }
 
   get skills(): Skill[] {
-    return this.roomState?.skills ?? [];
+    return this.skillIds
+      .map(({ skillCardId, skillEventId, isActive }) => {
+        let card = this._skillCardsCache.get(skillCardId);
+        if (card) {
+          return {
+            card,
+            skillEventId,
+            isActive,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean) as Skill[];
   }
 
   get roomId() {
@@ -137,13 +196,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   get name() {
-    let events = Array.from(this._nameEventsCache.values()).sort(
-      (a, b) => a.origin_server_ts - b.origin_server_ts,
-    ) as RoomNameEvent[];
-    if (events.length > 0) {
-      return events.pop()!.content.name;
-    }
-    return;
+    return this.matrixRoom?.name;
   }
 
   get lastActiveTimestamp() {
@@ -252,7 +305,7 @@ export class RoomResource extends Resource<Args> {
       effectiveEventId,
       author,
       index,
-      fragmentCache: this._fragmentCache,
+      serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
     });
 
@@ -309,35 +362,51 @@ export class RoomResource extends Resource<Args> {
       return member;
     }
     if (!member) {
-      let member = new RoomMember({ userId, roomId });
-      if (displayName) {
-        member.displayName = displayName;
-      }
-      if (membership) {
-        member.membership = membership;
-      }
-      if (membershipDateTime != null) {
-        member.membershipDateTime = new Date(membershipDateTime);
-      }
-      if (membershipInitiator) {
-        member.membershipInitiator = membershipInitiator;
-      }
-
-      this._memberCache.set(userId, member);
-      return member;
+      member = new RoomMember({ userId, roomId });
     }
+    if (displayName) {
+      member.displayName = displayName;
+    }
+    if (membership) {
+      member.membership = membership;
+    }
+    if (membershipDateTime != null) {
+      member.membershipDateTime = new Date(membershipDateTime);
+    }
+    if (membershipInitiator) {
+      member.membershipInitiator = membershipInitiator;
+    }
+
+    this._memberCache.set(userId, member);
     return member;
   }
 
-  addSkill(card: SkillCard) {
-    if (!this.roomState) {
-      return;
+  private serializedCardFromFragments = (eventId: string) => {
+    let fragments: CardFragmentContent[] = [];
+    let currentFragment: string | undefined = eventId;
+    do {
+      let fragment = this._fragmentCache.get(currentFragment);
+      if (!fragment) {
+        throw new Error(
+          `No card fragment found in cache for event id ${eventId}`,
+        );
+      }
+      fragments.push(fragment);
+      currentFragment = fragment.data.nextFragment;
+    } while (currentFragment);
+
+    fragments.sort((a, b) => (a.data.index = b.data.index));
+    if (fragments.length !== fragments[0].data.totalParts) {
+      throw new Error(
+        `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
+      );
     }
-    this.roomState.skills = [
-      ...this.roomState.skills,
-      new TrackedObject({ card, isActive: true }),
-    ];
-  }
+
+    let cardDoc = JSON.parse(
+      fragments.map((f) => f.data.cardFragment).join(''),
+    ) as LooseSingleCardDocument;
+    return cardDoc;
+  };
 }
 
 export function getRoom(

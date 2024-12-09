@@ -14,7 +14,6 @@ import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier'; // TODO: why is this a type error???
 import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
 import { AppCard } from './app-card';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 
@@ -24,6 +23,7 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import GenerateCodeCommand from './AiAppGenerator/generate-code-command';
 import { GenerateCodeInput } from './AiAppGenerator/generate-code-command';
+import { restartableTask } from 'ember-concurrency';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
   <template>
