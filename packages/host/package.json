@@ -24,7 +24,7 @@
     "start": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/experiments/ STRIPE_BILLING_ENABLED=true ember serve",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
-    "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
+    "test-with-percy": "node --version && percy exec --parallel -- pnpm test:wait-for-servers",
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
     "ember-test-pre-built": "ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name",
     "wait": "sleep 10000000"
