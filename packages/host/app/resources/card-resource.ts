@@ -102,13 +102,14 @@ class LiveCardIdentityContext implements IdentityContext {
 }
 
 let liveCardIdentityContext = new LiveCardIdentityContext();
-const realmSubscriptions: Map<
+let realmSubscriptions: Map<
   string,
   WeakMap<CardResource, { unsubscribe: () => void }>
 > = new Map();
 
-export function testOnlyResetLiveCardIdentityContext() {
+export function testOnlyResetCardResourceModuleState() {
   liveCardIdentityContext = new LiveCardIdentityContext();
+  realmSubscriptions = new Map();
 }
 
 export class CardResource extends Resource<Args> {

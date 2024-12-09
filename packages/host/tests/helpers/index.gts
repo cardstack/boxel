@@ -40,7 +40,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import { testOnlyResetLiveCardIdentityContext } from '@cardstack/host/resources/card-resource';
+import { testOnlyResetCardResourceModuleState } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
@@ -295,7 +295,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSSE>(function () {
     this.subscribers = [];
     let self = this;
-    testOnlyResetLiveCardIdentityContext();
+    testOnlyResetCardResourceModuleState();
 
     class MockMessageService extends Service {
       register() {
