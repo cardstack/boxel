@@ -11,36 +11,23 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { fn, concat } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { IconButton, RadioInput, Pill } from '@cardstack/boxel-ui/components';
+import { fn } from '@ember/helper';
+import { RadioInput, Pill } from '@cardstack/boxel-ui/components';
 import MailIcon from '@cardstack/boxel-icons/mail';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import AvatarGroup from '../components/avatar-group';
 import { Company } from './company';
-import ContactIcon from '@cardstack/boxel-icons/user-square';
-import { EntityDisplay } from '../components/entity-display';
+import { Avatar } from '@cardstack/boxel-ui/components';
+import { StatusPill } from '../components/status-pill';
+import type IconComponent from '@cardstack/boxel-icons/captions';
+import ContactIcon from '@cardstack/boxel-icons/contact';
 
-// helper functions that can share across different formats
-const getStatusIcon = (label: string | undefined) => {
-  switch (label) {
-    case 'Customer':
-      return {
-        icon: HeartHandshakeIcon,
-        lightColor: '#8bff98',
-        darkColor: '#01d818',
-      };
-    case 'Lead':
-      return {
-        icon: TargetArrowIcon,
-        lightColor: '#80d3ff',
-        darkColor: '#02a7ff',
-      };
-    default:
-      return null;
-  }
+const getStatusData = (
+  label: string | undefined,
+): LooseyGooseyData | undefined => {
+  return StatusField.values.find((status) => status.label === label);
 };
 
 const formatPhone = (phone: any) => {
@@ -56,7 +43,7 @@ const formatEmail = (email: string) => {
 export interface LooseyGooseyData {
   index: number;
   label: string;
-  icon: any;
+  icon: typeof IconComponent;
   lightColor: string;
   darkColor: string;
 }
@@ -199,31 +186,13 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       </div>
 
       {{#if @model.status.label}}
-        {{#let (getStatusIcon @model.status.label) as |statusIcon|}}
-          <Pill
-            class='status-pill'
-            data-test-selected-type={{@model.status.label}}
-            {{! template-lint-disable no-inline-styles }}
-            style={{htmlSafe
-              (concat 'background-color: ' statusIcon.lightColor ';')
-            }}
-          >
-            <:iconLeft>
-              <IconButton
-                @icon={{statusIcon.icon}}
-                class='status-icon'
-                {{! template-lint-disable no-inline-styles }}
-                style={{htmlSafe
-                  (concat 'background-color: ' statusIcon.darkColor ';')
-                }}
-              />
-            </:iconLeft>
-            <:default>
-              <span class='status-label-text'>
-                {{@model.status.label}}
-              </span>
-            </:default>
-          </Pill>
+        {{#let (getStatusData @model.status.label) as |statusData|}}
+          <StatusPill
+            @label={{@model.status.label}}
+            @icon={{statusData.icon}}
+            @iconDarkColor={{statusData.darkColor}}
+            @iconLightColor={{statusData.lightColor}}
+          />
         {{/let}}
       {{/if}}
     </article>
@@ -266,24 +235,6 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         word-break: keep-all;
         --pill-background-color: var(--boxel-200);
         border: none;
-      }
-      .status-pill {
-        border-color: transparent;
-        padding: 0;
-        flex: none;
-        overflow: hidden;
-        align-self: flex-start;
-        margin-top: auto;
-      }
-      .status-icon {
-        --boxel-icon-button-width: var(--boxel-icon-med);
-        --boxel-icon-button-height: var(--boxel-icon-med);
-        border-radius: 0;
-      }
-      .status-label-text {
-        font-size: var(--boxel-font-xs);
-        font-weight: 600;
-        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxs);
       }
     </style>
   </template>
@@ -343,31 +294,13 @@ class FittedTemplate extends Component<typeof Contact> {
       </div>
 
       {{#if @model.status.label}}
-        {{#let (getStatusIcon @model.status.label) as |statusIcon|}}
-          <Pill
-            class='status-pill'
-            data-test-selected-type={{@model.status.label}}
-            {{! template-lint-disable no-inline-styles }}
-            style={{htmlSafe
-              (concat 'background-color: ' statusIcon.lightColor ';')
-            }}
-          >
-            <:iconLeft>
-              <IconButton
-                @icon={{statusIcon.icon}}
-                class='status-icon'
-                {{! template-lint-disable no-inline-styles }}
-                style={{htmlSafe
-                  (concat 'background-color: ' statusIcon.darkColor ';')
-                }}
-              />
-            </:iconLeft>
-            <:default>
-              <span class='status-label-text'>
-                {{@model.status.label}}
-              </span>
-            </:default>
-          </Pill>
+        {{#let (getStatusData @model.status.label) as |statusData|}}
+          <StatusPill
+            @label={{@model.status.label}}
+            @icon={{statusData.icon}}
+            @iconDarkColor={{statusData.darkColor}}
+            @iconLightColor={{statusData.lightColor}}
+          />
         {{/let}}
       {{/if}}
     </article>
@@ -411,16 +344,6 @@ class FittedTemplate extends Component<typeof Contact> {
         flex: none;
         overflow: hidden;
         margin-top: auto;
-      }
-      .status-icon {
-        --boxel-icon-button-width: 25px;
-        --boxel-icon-button-height: 25px;
-      }
-      .status-label-text {
-        display: block;
-        font-size: 10px;
-        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxs);
-        font-weight: 600;
       }
       .row {
         display: flex;
@@ -583,21 +506,47 @@ class FittedTemplate extends Component<typeof Contact> {
 }
 
 class AtomTemplate extends Component<typeof Contact> {
-  get label() {
-    return this.args.model.name && this.args.model.position
-      ? `${this.args.model.name} • ${this.args.model.position}`
-      : this.args.model.name ?? '';
-  }
   <template>
-    <EntityDisplay @name={{this.label}}>
-      <:thumbnail>
-        <@model.constructor.icon />
-      </:thumbnail>
-    </EntityDisplay>
+    <div class='contact'>
+      {{#if @model.id}}
+        <Avatar
+          @userID={{@model.id}}
+          @displayName={{@model.name}}
+          @thumbnailURL={{@model.thumbnailURL}}
+          @isReady={{true}}
+          class='avatar'
+        />
+      {{/if}}
+      <span class='name'>{{@model.name}}</span>
+      {{#if @model.status.label}}
+        {{#let (getStatusData @model.status.label) as |statusData|}}
+          <StatusPill
+            class='status-pill'
+            @label={{@model.status.label}}
+            @icon={{statusData.icon}}
+            @iconDarkColor={{statusData.darkColor}}
+            @iconLightColor={{statusData.lightColor}}
+          />
+        {{/let}}
+      {{/if}}
+    </div>
     <style scoped>
-      .author-icon {
-        width: 20px;
-        height: 20px;
+      .contact {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        min-width: 0; /* Helps with text overflow */
+      }
+      .avatar {
+        --profile-avatar-icon-size: 30px;
+        flex-shrink: 0;
+      }
+      .name {
+        text-decoration: underline;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     </style>
   </template>
@@ -621,7 +570,7 @@ export class Contact extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Contact) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      return this.name;
     },
   });
 
