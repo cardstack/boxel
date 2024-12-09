@@ -24,9 +24,18 @@ export default class ProfileSubscription extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   urlWithClientReferenceId = (url: string) => {
-    return `${url}?client_reference_id=${encodeWebSafeBase64(
+    const clientReferenceId = encodeWebSafeBase64(
       this.matrixService.userId as string,
-    )}`;
+    );
+    let newUrl = `${url}?client_reference_id=${clientReferenceId}`;
+
+    const stripeCustomerEmail =
+      this.billingService.subscriptionData?.stripeCustomerEmail;
+    if (stripeCustomerEmail) {
+      newUrl += `&prefilled_email=${encodeURIComponent(stripeCustomerEmail)}`;
+    }
+
+    return newUrl;
   };
 
   <template>
@@ -49,7 +58,7 @@ export default class ProfileSubscription extends Component<Signature> {
             @kind='secondary-light'
             @size='extra-small'
             @disabled={{this.billingService.fetchingStripePaymentLinks}}
-            @href={{this.billingService.customerPortalLink.url}}
+            @href={{this.billingService.customerPortalLink}}
             target='_blank'
             data-test-manage-plan-button
           >Manage Plan</BoxelButton>

@@ -32,12 +32,19 @@ export default class CreateProductRequirementsInstance extends Command<
 
   get skillCard() {
     return new SkillCard({
-      id: 'SkillCard1',
+      id: 'prd-helper-skill',
       name: 'PRD Helper',
       description:
         'This skill card can be used to help with creating product requirements',
-      instructions:
-        'Given a prompt, fill in the product requirements document. Update the appTitle. Update the prompt to be grammatically accurate. Description should be 1 or 2 short sentences. In overview, provide 1 or 2 paragraph summary. In schema, make a list of the schema for the app. In Layout & Navigation, provide brief information for the layout and navigation of the app. NEVER offer to update the card, you MUST call patchCard in your response.',
+      instructions: `Given a prompt, fill in the product requirements document.
+        Update the appTitle.
+        Update the prompt to be grammatically accurate.
+        Description should be 1 or 2 short sentences.
+        In overview, provide 1 or 2 paragraph summary of the most important ways this app will meet the needs of the target audience. The capabilites of the platform allow creating types that can be linked to other types, and creating fields. 
+        
+        For the schema, consider the types required. Write out the schema as a mermaid class diagram.
+        
+        NEVER offer to update the card, you MUST call patchCard in your response.`,
     });
   }
 
@@ -48,10 +55,8 @@ export default class CreateProductRequirementsInstance extends Command<
   protected async run(
     input: CreateProductRequirementsInput,
   ): Promise<CreateProductRequirementsResult> {
-    console.log('Input into the run', input);
     // Create new card
     let prdCard = new ProductRequirementDocument();
-    console.log('prdCard', prdCard);
 
     let saveCardCommand = new SaveCardCommand(this.commandContext);
     let SaveCardInputType = await saveCardCommand.getInputType();
@@ -61,21 +66,10 @@ export default class CreateProductRequirementsInstance extends Command<
         card: prdCard,
       }),
     );
-    console.log('prdCard after save', prdCard);
-
     // Get patch command, this takes the card and returns a command that can be used to patch the card
     let patchPRDCommand = new PatchCardCommand(this.commandContext, {
       cardType: ProductRequirementDocument,
     });
-
-    // This should return a session ID so that we can potentially send followup messages
-    // This should delegate to a matrix service method. Besides actually sending the message,
-    // with attached cards, skill cards, and commands, it should also be responsible for assigning
-    // ids to the commands which are used to give the tools unique names (e.g. patchCard_ABC)
-    // service should maintain a mapping of commandIds to command instances in order to map an apply
-    // back to the correct command instance
-    // Auto execute commands are commands that should be executed automatically if they are returned
-    // as tool calls from the AI.
 
     let { roomId } = await this.commandContext.sendAiAssistantMessage({
       show: false, // maybe? open the side panel
@@ -85,18 +79,14 @@ export default class CreateProductRequirementsInstance extends Command<
       commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking whic
     });
 
-    console.log('roomId', roomId);
-
     // Wait for the PRD command to have been applied
     await patchPRDCommand.waitForNextCompletion();
     // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
     // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
 
-    console.log('prdCard after patch', prdCard);
-
     let reloadCommand = new ReloadCardCommand(this.commandContext);
     await reloadCommand.execute(prdCard);
-    console.log('prdCard after reload', prdCard);
+
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;
     result.roomId = roomId;

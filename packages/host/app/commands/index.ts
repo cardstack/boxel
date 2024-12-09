@@ -5,7 +5,7 @@ import * as ReloadCardCommandModule from './reload-card';
 import * as SaveCardCommandModule from './save-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SwitchSubmodeCommandModule from './switch-submode';
-
+import * as WriteTextFileCommandModule from './write-text-file';
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card',
@@ -26,5 +26,9 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/switch-submode',
     SwitchSubmodeCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/write-text-file',
+    WriteTextFileCommandModule,
   );
 }

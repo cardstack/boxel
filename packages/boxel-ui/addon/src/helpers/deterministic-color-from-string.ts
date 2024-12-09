@@ -9,7 +9,7 @@ import {
 // Selects a random color from a set of colors based on the input string
 export function deterministicColorFromString(str: string): string {
   if (!str) {
-    return 'transparent';
+    return '#EEEEEE';
   }
 
   // Generate hash value between 0-1

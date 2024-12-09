@@ -213,14 +213,14 @@ export default class InteractSubmode extends Component<Signature> {
         // looks like perhaps there is a race condition (or something else) when a
         // new linked card is created, and when it is added to the stack and closed
         // - the parent card is not updated with the new linked card
-        await here.cardService.saveModel(here, newCard);
+        await here.cardService.saveModel(newCard);
 
         await newItem.ready();
         here.addToStack(newItem);
         return newCard;
       },
       viewCard: async (
-        card: CardDef,
+        cardOrURL: CardDef | URL,
         format: Format = 'isolated',
         opts?: { openCardInRightMostStack?: boolean },
       ): Promise<void> => {
@@ -229,7 +229,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let newItem = new StackItem({
           owner: here,
-          card,
+          ...(cardOrURL instanceof URL
+            ? { url: cardOrURL }
+            : { card: cardOrURL }),
           format,
           stackIndex,
         });
