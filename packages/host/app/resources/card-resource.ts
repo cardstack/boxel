@@ -107,7 +107,7 @@ let realmSubscriptions: Map<
   WeakMap<CardResource, { unsubscribe: () => void }>
 > = new Map();
 
-export function testOnlyResetCardResourceModuleState() {
+export function testOnlyResetLiveCardState() {
   liveCardIdentityContext = new LiveCardIdentityContext();
   realmSubscriptions = new Map();
 }
