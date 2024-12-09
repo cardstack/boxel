@@ -11,6 +11,9 @@ permissions:
   id-token: write
   pull-requests: write
 
+env:
+  VOLTA_FEATURE_PNPM: 1
+
 jobs:
   lint:
     name: Lint
