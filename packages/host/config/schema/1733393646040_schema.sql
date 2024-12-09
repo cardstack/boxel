@@ -23,7 +23,7 @@
    fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
-   PRIMARY KEY ( url, realm_version, realm_url, type ) 
+   PRIMARY KEY ( url, realm_version, realm_url ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_meta (
