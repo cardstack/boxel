@@ -85,12 +85,22 @@ class LiveCardIdentityContext implements IdentityContext {
   delete(url: string): void {
     this.#cards.delete(url);
   }
-  update(url: string, instance: CardDef | undefined) {
+  update(
+    url: string,
+    instance: CardDef | undefined,
+    subscribers?: Set<object>,
+  ) {
     let entry = this.#cards.get(url);
     if (!entry) {
-      this.#cards.set(url, { card: instance, subscribers: new Set() });
+      entry = { card: instance, subscribers: new Set() };
+      this.#cards.set(url, entry);
     } else {
       entry.card = instance;
+    }
+    if (subscribers) {
+      for (let subscriber of subscribers) {
+        entry.subscribers.add(subscriber);
+      }
     }
   }
   hasError(url: string) {
@@ -261,10 +271,20 @@ export class CardResource extends Resource<Args> {
               if (invalidations.find((i) => hasExecutableExtension(i))) {
                 // the invalidation included code changes too. in this case we
                 // need to flush the loader so that we can pick up any updated
-                // code before re-running the card
+                // code before re-running the card as well as clear out the
+                // identity context as the card has a new implementation
                 this.resetLoader();
+                let subscribers = liveCardIdentityContext.subscribers(card.id);
+                liveCardIdentityContext.delete(card.id);
+                this.loadStaticModel.perform(new URL(card.id));
+                liveCardIdentityContext.update(
+                  card.id,
+                  this._card,
+                  subscribers,
+                );
+              } else {
+                this.reload.perform(card);
               }
-              this.reload.perform(card);
             }
           }
         },
