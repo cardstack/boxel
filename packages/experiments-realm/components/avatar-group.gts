@@ -45,7 +45,7 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
       }
       .avatar-thumbnail {
         flex-shrink: 0;
-        --profile-avatar-icon-size: var(--boxel-avatar-group-icon-size, 60px);
+        --profile-avatar-icon-size: 60px;
       }
       .avatar-info {
         min-width: 0;

@@ -26,14 +26,15 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
     <Pill
       class='status-pill'
       data-test-selected-type={{@label}}
-      {{! template-lint-disable no-inline-styles }}
       style={{htmlSafe (concat 'background-color: ' @iconLightColor ';')}}
     >
       <:iconLeft>
-        <this.icon
+        <div
           class='status-icon'
           style={{htmlSafe (concat 'background-color: ' @iconDarkColor ';')}}
-        />
+        >
+          <this.icon />
+        </div>
       </:iconLeft>
       <:default>
         <span class='status-label-text'>
@@ -44,6 +45,15 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
     <style scoped>
       .status-icon {
         border-radius: 0;
+        width: 25px;
+        height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .status-icon > svg {
+        width: 16px;
+        height: 16px;
       }
       .status-pill {
         padding: 0;

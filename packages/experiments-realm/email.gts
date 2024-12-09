@@ -15,6 +15,7 @@ import MailIcon from '@cardstack/boxel-icons/mail';
 import { debounce } from 'lodash';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { EntityDisplay } from './components/entity-display';
 
 // We use simple regex here to validate common email formats
 // This is definitely NOT a full email validation
@@ -67,17 +68,14 @@ export class EmailField extends StringField {
   static atom = class Atom extends Component<typeof EmailField> {
     <template>
       {{#if @model}}
-        <div class='row'>
-          <MailIcon class='icon' />
-          <span>{{@model}}</span>
-        </div>
+        <EntityDisplay @name={{@model}} @underline={{false}}>
+          <:thumbnail>
+            <MailIcon class='icon' />
+          </:thumbnail>
+        </EntityDisplay>
       {{/if}}
+
       <style scoped>
-        .row {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
         .icon {
           width: var(--boxel-icon-sm);
           height: var(--boxel-icon-sm);

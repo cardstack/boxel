@@ -1,5 +1,6 @@
 import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
+import { PhoneField } from './phone';
 import { UrlField } from './url';
 import { LocationField } from './crm/account';
 import { WebsiteField } from './website';
@@ -24,6 +25,7 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field website = contains(WebsiteField);
   @field email = contains(EmailField);
   @field emails = containsMany(EmailField);
+  @field phone = contains(PhoneField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
   static displayName = 'Custom Fields ';

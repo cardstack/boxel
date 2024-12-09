@@ -1,7 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 interface EntityDisplayArgs {
   Args: {
-    name: string;
+    name?: string | null;
+    underline?: boolean;
   };
   Blocks: {
     thumbnail: [];
@@ -14,10 +15,13 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
   <template>
     <div class='row'>
       {{yield to='thumbnail'}}
-      <span class='name'>
-        {{@name}}
-      </span>
-      {{yield to='tag'}}
+
+      <div class='name-tag'>
+        <span class='name {{if @underline "underline"}}'>
+          {{@name}}
+        </span>
+        {{yield to='tag'}}
+      </div>
     </div>
     <style scoped>
       .row {
@@ -25,7 +29,13 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
-      .name {
+      .name-tag {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .name.underline {
         text-decoration: underline;
       }
     </style>
