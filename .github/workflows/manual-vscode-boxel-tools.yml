@@ -12,6 +12,10 @@ on:
       environment:
         required: true
         type: string
+  # FIXME remove
+  pull_request:
+    paths:
+      - "packages/vscode-boxel-tools/**"
 
 jobs:
   check-version:
@@ -105,8 +109,9 @@ jobs:
       #   env:
       #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
       - name: Publish to Open VSX
+        # FIXME: remove environment hack
         run: |
-          if [ "${{ inputs.environment }}" = "production" ]; then
+          if [ "never" = "production" ]; then
             pnpm vscode:publish-open-vsx
           else
             pnpm vscode:publish-open-vsx:prerelease
