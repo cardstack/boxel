@@ -85,7 +85,7 @@ const FILTERS: LayoutFilter[] = [
   {
     displayName: 'Author Bios',
     icon: AuthorIcon,
-    cardTypeName: 'Author Bio',
+    cardTypeName: 'Author',
     createNewButtonText: 'Author',
   },
   {
