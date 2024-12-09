@@ -20,6 +20,7 @@ import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import { Avatar, Pill } from '@cardstack/boxel-ui/components';
+import { EntityDisplay } from '../components/entity-display';
 
 // Perhaps, can be address?
 export class LocationField extends AddressField {
@@ -62,33 +63,28 @@ interface ContactRowArgs {
 
 class ContactRow extends GlimmerComponent<ContactRowArgs> {
   <template>
-    <div class='row'>
-      <Avatar
-        @userID={{@userID}}
-        @displayName={{@name}}
-        @thumbnailURL={{@thumbnailURL}}
-        @isReady={{true}}
-        class='avatar'
-      />
-      <span class='name'>{{@name}}</span>
-      {{#if @isPrimary}}
-        <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-          Primary
-        </Pill>
-      {{/if}}
-    </div>
+    <EntityDisplay @name={{@name}}>
+      <:thumbnail>
+        <Avatar
+          @userID={{@userID}}
+          @displayName={{@name}}
+          @thumbnailURL={{@thumbnailURL}}
+          @isReady={{true}}
+          class='avatar'
+        />
+      </:thumbnail>
+      <:tag>
+        {{#if this.args.isPrimary}}
+          <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+            Primary
+          </Pill>
+        {{/if}}
+      </:tag>
+    </EntityDisplay>
     <style scoped>
       .avatar {
         --profile-avatar-icon-size: 30px;
         flex-shrink: 0;
-      }
-      .row {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .name {
-        text-decoration: underline;
       }
       .primary-tag {
         --pill-font-weight: 400;
@@ -110,6 +106,17 @@ class IsolatedTemplate extends Component<typeof Account> {
     return 'TechNova Solutions';
   }
 
+  get hasCompanyInfo() {
+    return this.args.model.website || this.args.model.address?.country?.name;
+  }
+
+  get hasContacts() {
+    return (
+      this.args.model.primaryContact?.name ||
+      (this.args.model.contacts?.length ?? 0) > 0 //contacts is a proxy array
+    );
+  }
+
   <template>
     <AccountPageLayout>
       <:header>
@@ -118,7 +125,13 @@ class IsolatedTemplate extends Component<typeof Account> {
             <h1 class='account-name'>{{this.companyName}}</h1>
           </:name>
           <:content>
-            <p class='description'>Description</p>
+            <div class='description'>
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+                class='primary-contact'
+              />
+            </div>
           </:content>
         </AccountHeader>
       </:header>
@@ -133,10 +146,14 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                <@fields.website @format='atom' />
-                <@fields.address @format='atom' />
-              </div>
+              {{#if this.hasCompanyInfo}}
+                <div class='description'>
+                  <@fields.website @format='atom' />
+                  <@fields.address @format='atom' />
+                </div>
+              {{else}}
+                Missing Company Info
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -149,24 +166,28 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:icon>
             <:content>
               <div class='description'>
-                {{#if @model.primaryContact}}
-                  <ContactRow
-                    @userID={{@model.primaryContact.id}}
-                    @name={{@model.primaryContact.name}}
-                    @thumbnailURL={{@model.primaryContact.thumbnailURL}}
-                    @isPrimary={{true}}
-                  />
-                {{/if}}
-                {{#each @model.contacts as |contact|}}
-                  {{#if contact}}
+                {{#if this.hasContacts}}
+                  {{#if @model.primaryContact}}
                     <ContactRow
-                      @userID={{contact.id}}
-                      @name={{contact.name}}
-                      @thumbnailURL={{contact.thumbnailURL}}
-                      @isPrimary={{false}}
+                      @userID={{@model.primaryContact.id}}
+                      @name={{@model.primaryContact.name}}
+                      @thumbnailURL={{@model.primaryContact.thumbnailURL}}
+                      @isPrimary={{true}}
                     />
                   {{/if}}
-                {{/each}}
+                  {{#each @model.contacts as |contact|}}
+                    {{#if contact}}
+                      <ContactRow
+                        @userID={{contact.id}}
+                        @name={{contact.name}}
+                        @thumbnailURL={{contact.thumbnailURL}}
+                        @isPrimary={{false}}
+                      />
+                    {{/if}}
+                  {{/each}}
+                {{else}}
+                  Missing Contacts
+                {{/if}}
               </div>
             </:content>
           </SummaryCard>
@@ -224,12 +245,17 @@ class IsolatedTemplate extends Component<typeof Account> {
         font: 600 var(--boxel-font-lg);
         margin: 0;
       }
+      .primary-contact {
+        width: fit-content;
+        display: inline-block;
+      }
       .description {
         margin: 0;
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         display: flex;
         flex-direction: column;
+        gap: var(--boxel-sp-xs);
       }
     </style>
   </template>

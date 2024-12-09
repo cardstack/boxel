@@ -20,6 +20,8 @@ import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import AvatarGroup from '../components/avatar-group';
 import { Company } from './company';
+import ContactIcon from '@cardstack/boxel-icons/user-square';
+import { EntityDisplay } from '../components/entity-display';
 
 // helper functions that can share across different formats
 const getStatusIcon = (label: string | undefined) => {
@@ -148,7 +150,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
     <article class='embedded-contact-card'>
       {{#if @model.id}}
         <AvatarGroup
-          @userID={{@model.id}}
+          @userId={{@model.id}}
           @name={{@model.name}}
           @thumbnailURL={{@model.thumbnailURL}}
         >
@@ -292,21 +294,19 @@ class EmbeddedTemplate extends Component<typeof Contact> {
 class FittedTemplate extends Component<typeof Contact> {
   <template>
     <article class='fitted-contact-card'>
-      {{#if @model.id}}
-        <AvatarGroup
-          @userID={{@model.id}}
-          @name={{@model.name}}
-          @thumbnailURL={{@model.thumbnailURL}}
-        >
-          <:content>
-            <@fields.company
-              @format='atom'
-              @displayContainer={{false}}
-              class='company-container'
-            />
-          </:content>
-        </AvatarGroup>
-      {{/if}}
+      <AvatarGroup
+        @userId={{@model.id}}
+        @name={{@model.name}}
+        @thumbnailURL={{@model.thumbnailURL}}
+      >
+        <:content>
+          <@fields.company
+            @format='atom'
+            @displayContainer={{false}}
+            class='company-container'
+          />
+        </:content>
+      </AvatarGroup>
 
       <div class='contact-info'>
         {{#if @model.primaryEmail}}
@@ -584,11 +584,34 @@ class FittedTemplate extends Component<typeof Contact> {
   </template>
 }
 
+class AtomTemplate extends Component<typeof Contact> {
+  get label() {
+    return this.args.model.name && this.args.model.position
+      ? `${this.args.model.name} • ${this.args.model.position}`
+      : this.args.model.name ?? '';
+  }
+  <template>
+    <EntityDisplay @name={{this.label}}>
+      <:thumbnail>
+        <@model.constructor.icon />
+      </:thumbnail>
+    </EntityDisplay>
+    <style scoped>
+      .author-icon {
+        width: 20px;
+        height: 20px;
+      }
+    </style>
+  </template>
+}
+
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
+  static icon = ContactIcon;
 
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
+  @field position = contains(StringField);
   @field company = linksTo(Company);
   @field department = contains(StringField);
   @field primaryEmail = contains(StringField);
@@ -612,4 +635,5 @@ export class Contact extends CardDef {
 
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
+  static atom = AtomTemplate;
 }
