@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
+      - run: echo $VOLTA_FEATURE_PNPM
       - name: Lint AI Bot
         if: always()
         run: pnpm run lint
