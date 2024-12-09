@@ -12,10 +12,6 @@ on:
       environment:
         required: true
         type: string
-  # FIXME remove
-  pull_request:
-    paths:
-      - "packages/vscode-boxel-tools/**"
 
 jobs:
   check-version:
@@ -91,7 +87,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: volta-cli/action@v4
       - uses: ./.github/actions/init
       - name: Build boxel-ui
         run: pnpm build
@@ -99,26 +94,19 @@ jobs:
       - name: Package
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
-      - name: Node version FIXME
-        run: node --version
-        working-directory: packages/vscode-boxel-tools
-      - name: Node version via pnpm FIXME
-        run: pnpm exec node --version
-        working-directory: packages/vscode-boxel-tools
-      # - name: Publish to Visual Studio Marketplace
-      #   run: |
-      #     if [ "${{ inputs.environment }}" = "production" ]; then
-      #       pnpm vscode:publish
-      #     else
-      #       pnpm vscode:publish:prerelease
-      #     fi
-      #   working-directory: packages/vscode-boxel-tools
-      #   env:
-      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      - name: Publish to Open VSX
-        # FIXME: remove environment hack
+      - name: Publish to Visual Studio Marketplace
         run: |
-          if [ "never" = "production" ]; then
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            pnpm vscode:publish
+          else
+            pnpm vscode:publish:prerelease
+          fi
+        working-directory: packages/vscode-boxel-tools
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish to Open VSX
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
             npx ovsx publish --no-dependencies --pat $OVSX_TOKEN
           else
             npx ovsx publish --no-dependencies --pre-release --pat $OVSX_TOKEN
