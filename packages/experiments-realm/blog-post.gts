@@ -33,9 +33,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       {{/if}}
     </article>
     <style scoped>
-      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
       .embedded-blog-post {
-        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         display: grid;
@@ -47,19 +45,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         padding-right: var(--boxel-sp-xl);
         overflow: hidden;
       }
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6 {
-        font-family: var(
-          --blog-post-heading-font-family,
-          'Playfair Display',
-          serif
-        );
-        font-weight: 700;
-      }
       .thumbnail {
         grid-area: img;
         background-color: var(--boxel-200);
@@ -70,10 +55,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
       .title {
         grid-area: title;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        overflow: hidden;
         margin: var(--boxel-sp-lg) 0 0;
         font-size: var(--boxel-font-size-lg);
         line-height: calc(30 / 22);
@@ -81,10 +62,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
       .description {
         grid-area: desc;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 4;
-        overflow: hidden;
         margin: 0;
         font-size: var(--boxel-font-size);
         line-height: calc(22 / 16);
@@ -139,29 +116,14 @@ class FittedTemplate extends Component<typeof BlogPost> {
       </div>
     </article>
     <style scoped>
-      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
       .fitted-blog-post {
         --xs-line-height: calc(14 / 11);
-        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         min-width: 100px;
         min-height: 29px;
         display: grid;
         overflow: hidden;
-      }
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6 {
-        font-family: var(
-          --blog-post-heading-font-family,
-          'Playfair Display',
-          serif
-        );
-        font-weight: 700;
       }
       .thumbnail {
         grid-area: img;
