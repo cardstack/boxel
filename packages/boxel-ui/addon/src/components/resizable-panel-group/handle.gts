@@ -7,7 +7,7 @@ import { modifier } from 'ember-modifier';
 import {
   type ResizeHandlerAction,
   registerResizeHandle,
-} from './utils/panelResizeHandleRegistry.ts';
+} from './utils/panel-resize-handle-registry.ts';
 import type {
   Orientation,
   ResizeEvent,

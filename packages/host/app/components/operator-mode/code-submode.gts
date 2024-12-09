@@ -108,11 +108,11 @@ const defaultPanelWidths: PanelWidths = {
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
-const ApproximateRecentPanelDefaultFraction =
+const ApproximateRecentPanelDefaultPercentage =
   ((43 + 40 * 3.5) / (document.documentElement.clientHeight - 140)) * 100; // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
-  filePanel: 100 - ApproximateRecentPanelDefaultFraction,
-  recentPanel: ApproximateRecentPanelDefaultFraction,
+  filePanel: 100 - ApproximateRecentPanelDefaultPercentage,
+  recentPanel: ApproximateRecentPanelDefaultPercentage,
 };
 
 const waiter = buildWaiter('code-submode:waiter');

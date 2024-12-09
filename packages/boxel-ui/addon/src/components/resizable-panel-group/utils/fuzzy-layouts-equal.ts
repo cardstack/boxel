@@ -1,4 +1,4 @@
-import { fuzzyNumbersEqual } from './fuzzyNumbers.ts';
+import { fuzzyNumbersEqual } from './fuzzy-numbers.ts';
 
 export function fuzzyLayoutsEqual(
   actual: number[],

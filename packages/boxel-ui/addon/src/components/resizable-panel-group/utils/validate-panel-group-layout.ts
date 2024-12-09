@@ -1,5 +1,5 @@
-import { fuzzyNumbersEqual } from './fuzzyNumbers.ts';
-import { resizePanel } from './resizePanel.ts';
+import { fuzzyNumbersEqual } from './fuzzy-numbers.ts';
+import { resizePanel } from './resize-panel.ts';
 import type { ResizablePanelConstraints } from './types.ts';
 
 export function validatePanelGroupLayout({

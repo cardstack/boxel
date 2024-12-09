@@ -4,7 +4,7 @@ import {
   EXCEEDED_VERTICAL_MAX,
   EXCEEDED_VERTICAL_MIN,
 } from './const.ts';
-import { getResizeEventCoordinates } from './getResizeEventCoordinates.ts';
+import { getResizeEventCoordinates } from './get-resize-event-coordinates.ts';
 import type { Orientation, ResizeEvent } from './types.ts';
 
 export type ResizeHandlerAction = 'down' | 'move' | 'up' | 'dblclick';

@@ -1,4 +1,4 @@
-import { getResizeHandleElementIndex } from './dom/getResizeHandleElementIndex.ts';
+import { getResizeHandleElementIndex } from './dom/get-resize-handle-element-index.ts';
 
 export function determinePivotIndices(
   groupId: string,

@@ -1,6 +1,6 @@
 import { assert } from './assert.ts';
 import { PRECISION } from './const.ts';
-import { fuzzyCompareNumbers } from './fuzzyNumbers.ts';
+import { fuzzyCompareNumbers } from './fuzzy-numbers.ts';
 import type { ResizablePanelConstraints } from './types.ts';
 
 export function resizePanel({

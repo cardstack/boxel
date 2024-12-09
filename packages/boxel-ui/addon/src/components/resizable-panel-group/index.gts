@@ -16,19 +16,19 @@ import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { modifier } from 'ember-modifier';
 
-import { adjustLayoutByDelta } from './utils/adjustLayoutByDelta.ts';
-import { calculateDeltaPercentage } from './utils/calculateDeltaPercentage.ts';
-import { calculateUnsafeDefaultLayout } from './utils/calculateUnsafeDefaultLayout.ts';
-import { compareLayouts } from './utils/compareLayouts.ts';
+import { adjustLayoutByDelta } from './utils/adjust-layout-by-delta.ts';
+import { calculateDeltaPercentage } from './utils/calculate-delta-percentage.ts';
+import { calculateUnsafeDefaultLayout } from './utils/calculate-unsafe-default-layout.ts';
+import { compareLayouts } from './utils/compare-layouts.ts';
 import { PRECISION } from './utils/const.ts';
-import { determinePivotIndices } from './utils/determinePivotIndices.ts';
-import { getResizeEventCursorPosition } from './utils/getResizeEventCursorPosition.ts';
+import { determinePivotIndices } from './utils/determine-pivot-indices.ts';
+import { getResizeEventCursorPosition } from './utils/get-resize-event-cursor-position.ts';
 import {
   type DragState,
   type Orientation,
   type ResizeEvent,
 } from './utils/types.ts';
-import { validatePanelGroupLayout } from './utils/validatePanelGroupLayout.ts';
+import { validatePanelGroupLayout } from './utils/validate-panel-group-layout.ts';
 
 let waiter = buildWaiter('resizable-panel-group');
 

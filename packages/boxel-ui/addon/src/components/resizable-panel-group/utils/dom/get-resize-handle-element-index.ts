@@ -1,4 +1,4 @@
-import { getResizeHandleElementsForGroup } from './getResizeHandleElementsForGroup.ts';
+import { getResizeHandleElementsForGroup } from './get-resize-handle-elements-for-group.ts';
 
 export function getResizeHandleElementIndex(
   groupId: string,

@@ -1,6 +1,6 @@
-import { getPanelGroupElement } from './dom/getPanelGroupElement.ts';
-import { getResizeHandleElement } from './dom/getResizeHandleElement.ts';
-import { getResizeEventCursorPosition } from './getResizeEventCursorPosition.ts';
+import { getPanelGroupElement } from './dom/get-panel-group-element.ts';
+import { getResizeHandleElement } from './dom/get-resize-handle-element.ts';
+import { getResizeEventCursorPosition } from './get-resize-event-cursor-position.ts';
 import type { DragState, Orientation, ResizeEvent } from './types.ts';
 
 export function calculateDeltaPercentage(
