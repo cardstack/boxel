@@ -209,7 +209,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await expect(
       page.locator('[data-test-setup-payment-message]'),
-    ).toContainText('Setup your payment method now to enjoy Boxel');
+    ).toContainText('Set up your payment method now to enjoy Boxel');
 
     const user2MatrixUserId = encodeWebSafeBase64('@user2:localhost');
 

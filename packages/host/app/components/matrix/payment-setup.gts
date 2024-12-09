@@ -85,7 +85,7 @@ export default class PaymentSetup extends Component<Signature> {
           {{else}}
             <div class='success-banner' data-test-setup-payment-message>
               <InfoCircleIcon class='info-icon' />
-              Setup your payment method now to enjoy Boxel
+              Set up your payment method now to enjoy Boxel
             </div>
           {{/if}}
 
