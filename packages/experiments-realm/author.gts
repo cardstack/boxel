@@ -56,9 +56,7 @@ export class Author extends CardDef {
     },
     description: 'Full name of author',
   });
-  @field bio = contains(MarkdownField, {
-    description: 'Default author bio for embedded and isolated views.',
-  });
+  @field bio = contains(TextAreaField);
   @field extendedBio = contains(MarkdownField, {
     description: 'Full bio for isolated view',
   });
@@ -216,17 +214,64 @@ export class Author extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <article>
+      <article class='author-embedded'>
+        <div
+          class='thumbnail-image'
+          style={{setBackgroundImage @model.thumbnailURL}}
+        />
         <header>
           <h3><@fields.title /></h3>
-          <h4><@fields.description /></h4>
+          <p class='desc'><@fields.description /></p>
         </header>
-        <p><@fields.bio /></p>
+        {{#if @model.bio}}
+          <p class='bio'><@fields.bio /></p>
+        {{/if}}
         <div class='author-bio-links'>
           <@fields.contactLinks @format='embedded' />
         </div>
       </article>
       <style scoped>
+        .author-embedded {
+          height: 100%;
+          display: grid;
+          grid-template-columns: max-content 1fr;
+          gap: var(--boxel-sp) var(--boxel-sp-lg);
+          padding: var(--boxel-sp);
+        }
+        h3,
+        p {
+          margin: 0;
+        }
+        header {
+          align-self: center;
+        }
+        h3 {
+          font: 600 var(--boxel-font);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
+        .desc {
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
+        .thumbnail-image {
+          width: 60px;
+          height: 60px;
+          background-position: center;
+          background-size: cover;
+          background-repeat: no-repeat;
+          border-radius: 50%;
+          border: 1px solid var(--boxel-400);
+        }
+        .bio {
+          display: -webkit-box;
+          -webkit-line-clamp: 5;
+          -webkit-box-orient: vertical;
+          text-overflow: ellipsis;
+          font: var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
+        .author-bio-links {
+        }
         .author-bio-links > :deep(.embedded-format) {
           display: flex;
           flex-wrap: wrap;
