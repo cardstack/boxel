@@ -148,21 +148,19 @@ export class PhoneField extends FieldDef {
 class EmbeddedTemplate extends Component<typeof Contact> {
   <template>
     <article class='embedded-contact-card'>
-      {{#if @model.id}}
-        <AvatarGroup
-          @userId={{@model.id}}
-          @name={{@model.name}}
-          @thumbnailURL={{@model.thumbnailURL}}
-        >
-          <:content>
-            <@fields.company
-              @format='atom'
-              @displayContainer={{false}}
-              class='company-container'
-            />
-          </:content>
-        </AvatarGroup>
-      {{/if}}
+      <AvatarGroup
+        @userId={{@model.id}}
+        @name={{@model.name}}
+        @thumbnailURL={{@model.thumbnailURL}}
+      >
+        <:content>
+          <@fields.company
+            @format='atom'
+            @displayContainer={{false}}
+            class='company-container'
+          />
+        </:content>
+      </AvatarGroup>
 
       <div class='contact-info'>
         {{#if @model.primaryEmail}}
