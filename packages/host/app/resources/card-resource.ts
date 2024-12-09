@@ -209,7 +209,10 @@ export class CardResource extends Resource<Args> {
       realmURL = card[this.api.realmURL];
     }
     if (!realmURL) {
-      throw new Error(`could not determine realm for card ${id}`);
+      console.warn(
+        `could not determine realm for card ${id} when trying to subscribe to realm`,
+      );
+      return;
     }
     let realmSubscribers = realmSubscriptions.get(realmURL.href);
     if (!realmSubscribers) {
