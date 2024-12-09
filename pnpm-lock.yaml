@@ -2199,6 +2199,9 @@ importers:
       eslint:
         specifier: ^8.26.0
         version: 8.57.0
+      ovsx:
+        specifier: ^0.10.1
+        version: 0.10.1
       typescript:
         specifier: ~5.1.6
         version: 5.1.6
@@ -8151,6 +8154,41 @@ packages:
 
   /@vscode/vsce@3.1.1:
     resolution: {integrity: sha512-N62Ca9ElRPLUUzf7l9CeEBlLrYzFPRQq7huKk4pVW+LjIOSXfFIPudixn5QvZcz+yXDOh15IopI3K2o3y9666Q==}
+    engines: {node: '>= 20'}
+    hasBin: true
+    dependencies:
+      '@azure/identity': 4.4.1
+      '@vscode/vsce-sign': 2.0.4
+      azure-devops-node-api: 12.5.0
+      chalk: 2.4.2
+      cheerio: 1.0.0
+      cockatiel: 3.2.1
+      commander: 6.2.1
+      form-data: 4.0.0
+      glob: 11.0.0
+      hosted-git-info: 4.1.0
+      jsonc-parser: 3.3.1
+      leven: 3.1.0
+      markdown-it: 14.1.0
+      mime: 1.6.0
+      minimatch: 3.1.2
+      parse-semver: 1.1.1
+      read: 1.0.7
+      semver: 7.6.2
+      tmp: 0.2.3
+      typed-rest-client: 1.8.11
+      url-join: 4.0.1
+      xml2js: 0.5.0
+      yauzl: 2.10.0
+      yazl: 2.5.1
+    optionalDependencies:
+      keytar: 7.9.0
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /@vscode/vsce@3.2.1:
+    resolution: {integrity: sha512-AY9vBjwExakK1c0cI/3NN2Ey0EgiKLBye/fxl/ue+o4q6RZ7N+xzd1jAD6eI6eBeMVANi617+V2rxIAkDPco2Q==}
     engines: {node: '>= 20'}
     hasBin: true
     dependencies:
@@ -14691,7 +14729,7 @@ packages:
       globby: 11.1.0
       ora: 5.4.1
       slash: 3.0.0
-      tmp: 0.2.1
+      tmp: 0.2.3
       workerpool: 6.5.1
     transitivePeerDependencies:
       - supports-color
@@ -14711,7 +14749,7 @@ packages:
       globby: 11.1.0
       ora: 5.4.1
       slash: 3.0.0
-      tmp: 0.2.1
+      tmp: 0.2.3
       workerpool: 6.5.1
     transitivePeerDependencies:
       - supports-color
@@ -20888,6 +20926,24 @@ packages:
   /outdent@0.8.0:
     resolution: {integrity: sha512-KiOAIsdpUTcAXuykya5fnVVT+/5uS0Q1mrkRHcF89tpieSmY33O/tmc54CqwA+bfhbtEfZUNLHaPUiB9X3jt1A==}
 
+  /ovsx@0.10.1:
+    resolution: {integrity: sha512-8i7+MJMMeq73m1zPEIClSFe17SNuuzU5br7G77ZIfOC24elB4pGQs0N1qRd+gnnbyhL5Qu96G21nFOVOBa2OBg==}
+    engines: {node: '>= 20'}
+    hasBin: true
+    dependencies:
+      '@vscode/vsce': 3.2.1
+      commander: 6.2.1
+      follow-redirects: 1.15.3(debug@4.3.2)
+      is-ci: 2.0.0
+      leven: 3.1.0
+      semver: 7.6.2
+      tmp: 0.2.3
+      yauzl: 3.2.0
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+    dev: true
+
   /p-cancelable@0.4.1:
     resolution: {integrity: sha512-HNa1A8LvB1kie7cERyy21VNeHb2CWJJYqyyC2o3klWFfMGlFmWv2Z7sFgZH8ZiaYL95ydToKTFVXgMV/Os0bBQ==}
     engines: {node: '>=4'}
@@ -25838,6 +25894,14 @@ packages:
     dependencies:
       buffer-crc32: 0.2.13
       fd-slicer: 1.1.0
+    dev: true
+
+  /yauzl@3.2.0:
+    resolution: {integrity: sha512-Ow9nuGZE+qp1u4JIPvg+uCiUr7xGQWdff7JQSk5VGYTAZMDe2q8lxJ10ygv10qmSj031Ty/6FNJpLO4o1Sgc+w==}
+    engines: {node: '>=12'}
+    dependencies:
+      buffer-crc32: 0.2.13
+      pend: 1.2.0
     dev: true
 
   /yazl@2.5.1:

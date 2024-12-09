@@ -102,6 +102,8 @@
     "vscode:package": "pnpm vsce package --no-dependencies",
     "vscode:publish": "pnpm vsce publish --no-dependencies",
     "vscode:publish:prerelease": "pnpm vsce publish --no-dependencies --pre-release",
+    "vscode:publish-open-vsx": "pnpm ovsx publish --no-dependencies --pat $OVSX_TOKEN",
+    "vscode:publish-open-vsx:prerelease": "pnpm ovsx publish --no-dependencies --pre-release --pat $OVSX_TOKEN",
     "compile": "node esbuild.mjs --production",
     "compile:development": "node esbuild.mjs",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
@@ -129,6 +131,7 @@
     "concurrently": "^8.0.1",
     "esbuild": "^0.24.0",
     "eslint": "^8.26.0",
+    "ovsx": "^0.10.1",
     "typescript": "~5.1.6"
   }
 }

@@ -94,13 +94,23 @@ jobs:
       - name: Package
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
-      - name: Publish
+      # - name: Publish to Visual Studio Marketplace
+      #   run: |
+      #     if [ "${{ inputs.environment }}" = "production" ]; then
+      #       pnpm vscode:publish
+      #     else
+      #       pnpm vscode:publish:prerelease
+      #     fi
+      #   working-directory: packages/vscode-boxel-tools
+      #   env:
+      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish to Open VSX
         run: |
           if [ "${{ inputs.environment }}" = "production" ]; then
-            pnpm vscode:publish
+            pnpm vscode:publish-open-vsx
           else
-            pnpm vscode:publish:prerelease
+            pnpm vscode:publish-open-vsx:prerelease
           fi
         working-directory: packages/vscode-boxel-tools
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
