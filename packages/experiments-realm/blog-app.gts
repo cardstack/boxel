@@ -19,6 +19,8 @@ import {
   CardError,
   getCard,
   SupportedMimeType,
+  type LooseSingleCardDocument,
+  relativeURL,
 } from '@cardstack/runtime-common';
 import {
   type SortOption,
@@ -337,10 +339,26 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         name: summary.id.substring(lastIndex + 1),
       };
       filter.cardRef = cardRef;
+
+      let realmUrl = this.args.model[realmURL];
+      if (!this.args.model.id || !realmUrl?.href) {
+        throw new Error(`Missing card id or realm url`);
+      }
+      let relativeTo = relativeURL(
+        new URL(this.args.model.id),
+        new URL(`${cardRef.module}/${cardRef.name}`),
+        realmUrl,
+      );
+      if (!relativeTo) {
+        throw new Error(`Missing relative url`);
+      }
       filter.query = {
         filter: {
           on: cardRef,
-          eq: { 'blog.id': this.args.model.id! },
+          any: [
+            { eq: { 'blog.id': this.args.model.id } },
+            { eq: { 'blog.id': relativeTo } },
+          ],
         },
       };
     }
@@ -369,8 +387,24 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       return;
     }
     let currentRealm = this.realms[0];
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        relationships: {
+          blog: {
+            links: {
+              self: this.args.model.id!,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: ref,
+        },
+      },
+    };
     await this.args.context?.actions?.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
+      doc,
     });
   });
 }
