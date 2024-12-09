@@ -3,13 +3,14 @@ import { Pill } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
 import IconComponent from '@cardstack/boxel-icons/captions';
+import QuestionMark from '@cardstack/boxel-icons/question-mark';
 
 interface StatusPillSignature {
   Args: {
     label: string;
     iconDarkColor: string | undefined;
     iconLightColor: string | undefined;
-    icon: typeof IconComponent;
+    icon?: typeof IconComponent;
   };
   Element: HTMLDivElement;
 }
@@ -17,6 +18,10 @@ interface StatusPillSignature {
 //This component is needed bcos of the additional styling of the pill component
 //It makes 2 sections, 1 for the icon and 1 for the text
 export class StatusPill extends GlimmerComponent<StatusPillSignature> {
+  get icon() {
+    return this.args.icon ?? QuestionMark;
+  }
+
   <template>
     <Pill
       class='status-pill'
@@ -25,7 +30,7 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
       style={{htmlSafe (concat 'background-color: ' @iconLightColor ';')}}
     >
       <:iconLeft>
-        <@icon
+        <this.icon
           class='status-icon'
           style={{htmlSafe (concat 'background-color: ' @iconDarkColor ';')}}
         />
@@ -38,8 +43,8 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
     </Pill>
     <style scoped>
       .status-icon {
-        --boxel-icon-button-width: var(--boxel-icon-med);
-        --boxel-icon-button-height: var(--boxel-icon-med);
+        width: var(--boxel-icon-med);
+        height: var(--boxel-icon-med);
         border-radius: 0;
       }
       .status-pill {
