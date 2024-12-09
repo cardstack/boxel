@@ -43,8 +43,6 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
     </Pill>
     <style scoped>
       .status-icon {
-        width: var(--boxel-icon-med);
-        height: var(--boxel-icon-med);
         border-radius: 0;
       }
       .status-pill {
