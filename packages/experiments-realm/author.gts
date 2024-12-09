@@ -15,6 +15,7 @@ import SquareUser from '@cardstack/boxel-icons/square-user';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
+import UserIcon from '@cardstack/boxel-icons/user';
 
 import { setBackgroundImage } from './components/layout';
 import { ContactLinkField } from './fields/contact-link';
@@ -56,7 +57,9 @@ export class Author extends CardDef {
     },
     description: 'Full name of author',
   });
-  @field bio = contains(TextAreaField);
+  @field bio = contains(TextAreaField, {
+    description: 'Default author bio for embedded and isolated views.',
+  });
   @field extendedBio = contains(MarkdownField, {
     description: 'Full bio for isolated view',
   });
@@ -73,26 +76,22 @@ export class Author extends CardDef {
     <template>
       <article class='author-bio'>
         <header>
-          <h1 class='title'>
-            <@fields.title />
-          </h1>
+          <h1 class='title'><@fields.title /></h1>
           <p class='description'><@fields.description /></p>
+          {{#if @model.quote}}
+            <blockquote class='quote'>
+              <p><@fields.quote /></p>
+            </blockquote>
+          {{/if}}
           {{#if @model.featuredImage.imageUrl}}
             <@fields.featuredImage class='featured-image' />
-          {{else if @model.thumbnailURL.length}}
-            <div
-              class='thumbnail-image'
-              style={{setBackgroundImage @model.thumbnailURL}}
-            />
           {{/if}}
           <div class='links'>
             <@fields.contactLinks @format='atom' />
           </div>
         </header>
         {{#if @model.bio}}
-          <div class='summary'>
-            <@fields.bio />
-          </div>
+          <p class='summary'><@fields.bio /></p>
         {{/if}}
         {{#if @model.extendedBio}}
           <section class='extended-bio'>
@@ -101,29 +100,28 @@ export class Author extends CardDef {
         {{/if}}
       </article>
       <style scoped>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
         .author-bio {
+          --markdown-font-family: 'Lora', serif;
+          --markdown-heading-font-family: 'Playfair Display', serif;
           --font-small: 0.8125em;
           width: 80%;
           margin-right: auto;
           margin-left: auto;
           padding: 3em 1em;
           font-size: 1rem;
+          font-family: 'Lora', serif;
+        }
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+          font-family: 'Playfair Display', serif;
         }
         .author-bio > * + * {
-          margin-top: 2em;
-        }
-        .links {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xxxs);
-        }
-        .links {
-          display: flex;
-          gap: var(--boxel-sp-xxxs);
-          flex-wrap: wrap;
-        }
-        .links :deep(div) {
-          display: contents;
+          margin-top: var(--boxel-sp-xl);
         }
         header {
           display: grid;
@@ -162,6 +160,15 @@ export class Author extends CardDef {
           font-size: var(--font-small);
           font-weight: 500;
         }
+        .links {
+          display: flex;
+          gap: var(--boxel-sp-xxxs);
+          flex-wrap: wrap;
+          margin-top: var(--boxel-sp-xs);
+        }
+        .links :deep(div) {
+          display: contents;
+        }
         .links :deep(.pill) {
           border: none;
         }
@@ -169,44 +176,23 @@ export class Author extends CardDef {
           border-radius: 50%;
           border: 1px solid var(--boxel-400);
         }
-        .thumbnail-image {
-          width: 300px;
-          height: 300px;
-          background-position: center;
-          background-size: cover;
-          background-repeat: no-repeat;
-          border-radius: 50%;
-          border: 1px solid var(--boxel-400);
-        }
         blockquote {
-          margin: auto;
+          margin: 1em auto;
           padding: 0;
-          border-left: 1px solid black;
         }
         blockquote p {
           font-size: 0.88em;
           font-style: italic;
-          margin-inline-start: var(--boxel-sp-xl);
+          margin-inline-start: 0;
           margin-inline-end: var(--boxel-sp-xl);
+          padding-left: var(--boxel-sp-xl);
+          border-left: 1px solid black;
         }
         .summary {
-          background-color: #efefef;
+          padding: var(--boxel-sp-xl) var(--boxel-sp-xxl);
+          background-color: var(--boxel-200);
           border-radius: var(--boxel-border-radius-lg);
-        }
-        .summary > :deep(.markdown-content) {
-          width: 90%;
-          padding: var(--boxel-sp-lg);
-          margin: 0 auto;
-        }
-        .summary :deep(p) {
-          margin: 0;
           font-size: var(--font-small);
-        }
-        .summary :deep(p + p) {
-          margin-top: 1em;
-        }
-        .extended-bio {
-          margin-top: 3em;
         }
       </style>
     </template>
@@ -218,14 +204,16 @@ export class Author extends CardDef {
         <div
           class='thumbnail-image'
           style={{setBackgroundImage @model.thumbnailURL}}
-        />
+        >
+          {{#unless @model.thumbnailURL}}
+            <UserIcon width='30' height='30' />
+          {{/unless}}
+        </div>
         <header>
           <h3><@fields.title /></h3>
           <p class='desc'><@fields.description /></p>
         </header>
-        {{#if @model.bio}}
-          <p class='bio'><@fields.bio /></p>
-        {{/if}}
+        <p class='bio'><@fields.bio /></p>
         <div class='author-bio-links'>
           <@fields.contactLinks @format='embedded' />
         </div>
@@ -245,6 +233,24 @@ export class Author extends CardDef {
         header {
           align-self: center;
         }
+        header,
+        .bio,
+        .author-bio-links {
+          grid-column: 2;
+        }
+        .thumbnail-image {
+          grid-column: 1;
+          width: 60px;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-position: center;
+          background-size: cover;
+          background-repeat: no-repeat;
+          border-radius: 50%;
+          border: 1px solid var(--boxel-400);
+        }
         h3 {
           font: 600 var(--boxel-font);
           letter-spacing: var(--boxel-lsp-sm);
@@ -253,24 +259,14 @@ export class Author extends CardDef {
           font: 500 var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-sm);
         }
-        .thumbnail-image {
-          width: 60px;
-          height: 60px;
-          background-position: center;
-          background-size: cover;
-          background-repeat: no-repeat;
-          border-radius: 50%;
-          border: 1px solid var(--boxel-400);
-        }
         .bio {
-          display: -webkit-box;
-          -webkit-line-clamp: 5;
-          -webkit-box-orient: vertical;
-          text-overflow: ellipsis;
+          margin-bottom: 1em;
           font: var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-sm);
-        }
-        .author-bio-links {
+          display: -webkit-box;
+          -webkit-line-clamp: 10;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
         .author-bio-links > :deep(.embedded-format) {
           display: flex;
