@@ -99,6 +99,9 @@ jobs:
       - name: Package
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
+      - name: Node version FIXME
+        run: node --version
+        working-directory: packages/vscode-boxel-tools
       # - name: Publish to Visual Studio Marketplace
       #   run: |
       #     if [ "${{ inputs.environment }}" = "production" ]; then
