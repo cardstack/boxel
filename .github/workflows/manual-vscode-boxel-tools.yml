@@ -119,9 +119,9 @@ jobs:
         # FIXME: remove environment hack
         run: |
           if [ "never" = "production" ]; then
-            pnpm vscode:publish-open-vsx
+            npx ovsx publish --no-dependencies --pat $OVSX_TOKEN
           else
-            pnpm vscode:publish-open-vsx:prerelease
+            npx ovsx publish --no-dependencies --pre-release --pat $OVSX_TOKEN
           fi
         working-directory: packages/vscode-boxel-tools
         env:
