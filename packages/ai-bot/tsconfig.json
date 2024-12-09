@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
+    "lib": ["es2023"],
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,

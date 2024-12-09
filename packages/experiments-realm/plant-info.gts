@@ -11,6 +11,7 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import { BoxelDropdown, Menu, Button } from '@cardstack/boxel-ui/components';
 import { menuItemFunc } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import FlowerLotusIcon from '@cardstack/boxel-icons/flower-lotus';
 
 class Edit extends Component<typeof DropdownField> {
   <template>
@@ -109,6 +110,7 @@ export class PlantInfo extends CardDef {
   @field spread = contains(StringField);
   @field seasonOfInterest = containsMany(SeasonsDropdown);
   static displayName = 'Plant Info';
+  static icon = FlowerLotusIcon;
 
   /*
   static isolated = class Isolated extends Component<typeof this> {
@@ -126,6 +128,7 @@ export class PlantInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
   */

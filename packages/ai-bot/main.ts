@@ -9,10 +9,11 @@ import {
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
+  type PromptParts,
   constructHistory,
-  getModifyPrompt,
-  getTools,
   isCommandReactionStatusApplied,
+  getPromptParts,
+  extractCardFragmentsFromEvents,
 } from './helpers';
 import {
   shouldSetRoomTitle,
@@ -25,33 +26,55 @@ import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
+import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
+import { PgAdapter } from '@cardstack/postgres';
+
 let log = logger('ai-bot');
+
+let trackAiUsageCostPromises = new Map<string, Promise<void>>();
+
+const MINIMUM_CREDITS = 10;
 
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
+  pgAdapter: PgAdapter;
   id: string;
 
   constructor(client: MatrixClient, id: string) {
-    this.openai = new OpenAI();
+    this.openai = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
     this.id = id;
     this.client = client;
+    this.pgAdapter = new PgAdapter();
   }
 
-  getResponse(history: DiscreteMatrixEvent[]) {
-    let tools = getTools(history, this.id);
-    let messages = getModifyPrompt(history, this.id, tools);
-    if (tools.length === 0) {
+  async trackAiUsageCost(matrixUserId: string, generationId: string) {
+    if (trackAiUsageCostPromises.has(matrixUserId)) {
+      return;
+    }
+    trackAiUsageCostPromises.set(
+      matrixUserId,
+      saveUsageCost(this.pgAdapter, matrixUserId, generationId).finally(() => {
+        trackAiUsageCostPromises.delete(matrixUserId);
+      }),
+    );
+  }
+
+  getResponse(prompt: PromptParts) {
+    if (prompt.tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
-        model: 'gpt-4o',
-        messages: messages,
+        model: prompt.model,
+        messages: prompt.messages,
       });
     } else {
       return this.openai.beta.chat.completions.stream({
-        model: 'gpt-4o',
-        messages: messages,
-        tools: tools,
-        tool_choice: 'auto',
+        model: prompt.model,
+        messages: prompt.messages,
+        tools: prompt.tools,
+        tool_choice: prompt.toolChoice,
       });
     }
   }
@@ -130,6 +153,7 @@ Common issues are:
     async function (event, room, toStartOfTimeline) {
       try {
         let eventBody = event.getContent().body;
+        let senderMatrixUserId = event.getSender()!;
         if (!room) {
           return;
         }
@@ -147,7 +171,7 @@ Common issues are:
           return; // don't respond to card fragments, we just gather these in our history
         }
 
-        if (event.getSender() === aiBotUserId) {
+        if (senderMatrixUserId === aiBotUserId) {
           return;
         }
         log.info(
@@ -155,37 +179,58 @@ Common issues are:
           event.getType(),
           room?.name,
           room?.roomId,
-          event.getSender(),
+          senderMatrixUserId,
           eventBody,
         );
-
-        let initial = await client.roomInitialSync(room!.roomId, 1000);
-        let eventList = (initial!.messages?.chunk ||
-          []) as DiscreteMatrixEvent[];
-        log.info('Total event list', eventList.length);
-        let history: DiscreteMatrixEvent[] = [],
-          historyError = false;
-
-        try {
-          history = constructHistory(eventList);
-          log.info("Compressed into just the history that's ", history.length);
-        } catch (e) {
-          historyError = true;
-        }
 
         const responder = new Responder(client, room.roomId);
         await responder.initialize();
 
-        if (historyError) {
+        let promptParts: PromptParts;
+        let initial = await client.roomInitialSync(room!.roomId, 1000);
+        let eventList = (initial!.messages?.chunk ||
+          []) as DiscreteMatrixEvent[];
+        try {
+          promptParts = getPromptParts(eventList, aiBotUserId);
+        } catch (e) {
+          log.error(e);
           responder.finalize(
             'There was an error processing chat history. Please open another session.',
           );
           return;
         }
 
+        // Do not generate new responses if previous ones' cost is still being reported
+        let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
+          senderMatrixUserId!,
+        );
+        if (pendingCreditsConsumptionPromise) {
+          try {
+            await pendingCreditsConsumptionPromise;
+          } catch (e) {
+            log.error(e);
+            return responder.onError(
+              'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+            );
+          }
+        }
+
+        let availableCredits = await getAvailableCredits(
+          assistant.pgAdapter,
+          senderMatrixUserId,
+        );
+
+        if (availableCredits < MINIMUM_CREDITS) {
+          return responder.onError(
+            `You need a minimum of ${MINIMUM_CREDITS} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+          );
+        }
+
+        let generationId: string | undefined;
         const runner = assistant
-          .getResponse(history)
+          .getResponse(promptParts)
           .on('chunk', async (chunk, _snapshot) => {
+            generationId = chunk.id;
             await responder.onChunk(chunk);
           })
           .on('content', async (_delta, snapshot) => {
@@ -197,12 +242,25 @@ Common issues are:
           .on('error', async (error) => {
             await responder.onError(error);
           });
-        // We also need to catch the error when getting the final content
-        let finalContent = await runner.finalContent().catch(responder.onError);
-        await responder.finalize(finalContent);
+
+        let finalContent;
+        try {
+          finalContent = await runner.finalContent();
+          await responder.finalize(finalContent);
+        } catch (error) {
+          await responder.onError(error);
+        } finally {
+          if (generationId) {
+            assistant.trackAiUsageCost(senderMatrixUserId, generationId);
+          }
+        }
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-          return await assistant.setTitle(room.roomId, history, event);
+          return await assistant.setTitle(
+            room.roomId,
+            promptParts.history,
+            event,
+          );
         }
         return;
       } catch (e) {
@@ -233,10 +291,14 @@ Common issues are:
       //TODO: optimise this so we don't need to sync room events within a reaction event
       let initial = await client.roomInitialSync(room!.roomId, 1000);
       let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
-      let history: DiscreteMatrixEvent[] = constructHistory(eventList);
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
+      let cardFragments = extractCardFragmentsFromEvents(eventList);
+      let history: DiscreteMatrixEvent[] = constructHistory(
+        eventList,
+        cardFragments,
+      );
       return await assistant.setTitle(room.roomId, history, event);
     } catch (e) {
       log.error(e);

@@ -16,6 +16,7 @@ import {
 } from 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/+esm';
 import Modifier from 'ember-modifier';
 import { isAfter, isBefore, isEqual } from 'date-fns';
+import BikeIcon from '@cardstack/boxel-icons/bike';
 
 type ProgressChartModifierSignature = {
   Args: {
@@ -83,6 +84,7 @@ class CyclingLogEntry extends FieldDef {
 
 export class CyclingMileageLog extends CardDef {
   static displayName = 'Cycling Mileage Log';
+  static icon = BikeIcon;
 
   @field target = contains(NumberField);
   @field startDate = contains(Date);

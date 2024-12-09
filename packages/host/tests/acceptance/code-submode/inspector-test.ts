@@ -35,6 +35,7 @@ import {
   setupOnSave,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
   type TestContextWithSSE,
   type TestContextWithSave,
   setMonacoContent,
@@ -396,12 +397,13 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
+  let matrixRoomId: string;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions } = setupMockMatrix(hooks, {
+  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL, testRealmURL2],
   });
@@ -411,6 +413,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       [testRealmURL]: ['read', 'write'],
       [testRealmURL2]: ['read', 'write'],
     });
+
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -855,8 +860,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
-      .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .dom(
+        `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('aria-label', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -914,8 +921,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
-      .dom(`[data-test-code-mode-card-preview-header="${id}"] .icon`)
-      .hasAttribute('alt', 'Icon for workspace Test Workspace A');
+      .dom(
+        `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('aria-label', 'Test Workspace A');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
@@ -1833,7 +1842,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-create-definition]').isDisabled();
 
     await fillIn('[data-test-display-name-field]', 'Test Card');
-    assert.dom('[data-test-create-definition]').isDisabled();
+    assert.dom('[data-test-create-definition]').isEnabled();
     await fillIn('[data-test-file-name-field]', '/test-card');
     assert.dom('[data-test-create-definition]').isEnabled();
 

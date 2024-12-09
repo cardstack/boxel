@@ -56,7 +56,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-field-label-padding-top: 0;
 
       display: grid;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
     .label-container {
       align-items: start;
@@ -88,6 +88,15 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       flex-shrink: 0;
     }
 
+    .content {
+      max-width: 100%;
+      overflow: hidden;
+      padding: var(
+        --boxel-field-content-padding,
+        var(--boxel-outline-width)
+      ); /* necessary for our various overlays utilizing box-shadow */
+    }
+
     .horizontal {
       grid-template-columns: var(--boxel-field-label-size, minmax(8rem, 25%)) 1fr;
     }
@@ -101,17 +110,21 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       align-items: center;
     }
-
-    .horizontal > .content > :deep(*) {
+    /* TODO: refactor field-container so it doesn't impose flex on field contents */
+    .horizontal
+      > .content
+      > :deep(*):not(.ember-basic-dropdown-trigger):not(
+        .realm-dropdown-trigger
+      ) {
       flex: 1;
     }
 
     .vertical {
+      --boxel-label-font: 600 var(--boxel-font-xs);
       grid-template-rows: auto 1fr;
     }
 
     .vertical .label {
-      --boxel-label-font: 600 var(--boxel-font-xs);
       grid-column: 2;
       line-height: 1rem;
       margin-bottom: var(--boxel-sp-4xs);

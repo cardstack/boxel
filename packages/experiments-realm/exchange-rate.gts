@@ -8,9 +8,11 @@ import { Currency } from './asset';
 import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';
 import { MonetaryAmount } from './monetary-amount';
+import ExchangeIcon from '@cardstack/boxel-icons/exchange';
 
 export class ExchangeRate extends CardDef {
   static displayName = 'Exchange Rate';
+  static icon = ExchangeIcon;
 
   @field asset1 = linksTo(Currency);
   @field asset2 = linksTo(Currency);

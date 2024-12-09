@@ -16,6 +16,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { LeafletModifier } from './leaflet-map';
 import { optional } from '@cardstack/boxel-ui/helpers';
+import Map2Icon from '@cardstack/boxel-icons/map-2';
 
 type Route = {
   id: string;
@@ -25,6 +26,7 @@ type Route = {
 
 export class LeafletGtfs extends CardDef {
   static displayName = 'Leaflet GTFS';
+  static icon = Map2Icon;
   static prefersWideFormat = true;
   static headerColor = 'seagreen';
 
@@ -206,6 +208,7 @@ export class LeafletGtfs extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

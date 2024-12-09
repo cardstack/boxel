@@ -15,9 +15,12 @@ import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { PaymentMethod } from './payment-method';
 import GlimmerComponent from '@glimmer/component';
+import BuildingIcon from '@cardstack/boxel-icons/building';
 
 class VendorDetails extends FieldDef {
   static displayName = 'Vendor';
+  static icon = BuildingIcon;
+
   @field name = contains(StringCard); // required
   @field description = contains(TextAreaCard);
   @field logoURL = contains(StringCard); // url format

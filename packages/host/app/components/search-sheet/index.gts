@@ -270,21 +270,33 @@ export default class SearchSheet extends Component<Signature> {
     </div>
     <style scoped>
       :global(:root) {
-        --search-sheet-closed-height: 3.5rem;
+        --search-sheet-closed-height: calc(
+          var(--operator-mode-bottom-bar-item-height) +
+            var(--operator-mode-spacing)
+        );
         --search-sheet-closed-width: 10.75rem;
         --search-sheet-prompt-height: 9.375rem;
       }
 
       .search-sheet {
+        --search-sheet-left-offset: calc(
+          var(--container-button-size) + 2 * var(--operator-mode-spacing)
+        );
+        --search-sheet-right-offset: calc(
+          var(--container-button-size) + 2 * var(--operator-mode-spacing)
+        );
         background-color: transparent;
         bottom: 0;
         display: flex;
         flex-direction: column;
         justify-content: stretch;
-        left: calc(4.5 * var(--boxel-sp));
-        width: calc(100% - (9 * var(--boxel-sp)));
+        left: var(--search-sheet-left-offset);
+        width: calc(
+          100% - var(--search-sheet-left-offset) -
+            var(--search-sheet-right-offset)
+        );
         position: absolute;
-        z-index: 3;
+        z-index: var(--host-search-sheet-z-index);
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);

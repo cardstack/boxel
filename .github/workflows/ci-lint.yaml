@@ -90,6 +90,14 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/runtime-common
+      - name: Lint Billing
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/billing
+      - name: Lint Postgres
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/postgres
       - name: Lint Base Realm
         if: always()
         run: pnpm run lint

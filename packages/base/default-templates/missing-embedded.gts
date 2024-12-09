@@ -27,12 +27,12 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
       {{#if @context.actions.changeSubmode}}
         <Button
           class='open-code-submode'
-          @kind='text-only'
-          @size='small'
+          @kind='secondary-light'
+          @size='tall'
           {{on 'click' this.openCodeSubmode}}
           data-test-open-code-submode
         >
-          Open In Code Mode
+          Open in Code Mode
         </Button>
       {{/if}}
     </div>
@@ -62,8 +62,8 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         width: 100%;
         margin: 0;
       }
-      .open-code-submode:hover {
-        text-decoration: underline;
+      .open-code-submode {
+        margin-top: var(--boxel-sp-sm);
       }
     </style>
   </template>

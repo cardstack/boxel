@@ -1,16 +1,17 @@
-import { IconX } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
+import IconX from '../../icons/icon-x.gts';
+import Pill from '../pill/index.gts';
+
 // Inside the trigger component, the selected item component is called within in ember-power-select
-// It only passes option, select and extra as arguments
+// It only passes option, select
 // We follow the same convention when defining our own selected item component
 export interface SelectedItemSignature<ItemT> {
   Args: {
-    extra?: any;
     option: any;
     select: Select & {
       actions: {
@@ -19,7 +20,7 @@ export interface SelectedItemSignature<ItemT> {
     };
   };
   Blocks: {
-    default: [any];
+    default: [ItemT, Select];
   };
   Element: HTMLDivElement;
 }
@@ -43,35 +44,42 @@ export default class BoxelSelectedItem<ItemT> extends Component<
 
   <template>
     <div class='ember-power-select-multiple-option'>
-      {{@option.name}}
-      <button
-        type='button'
-        class='boxel-multi-select__remove-button'
-        {{on 'click' (fn this.remove @option)}}
-        aria-label='Remove {{@option.name}}'
-      >
-        <IconX
-          class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-        />
-      </button>
+      <Pill class='boxel-selected-option'>
+        <:default>
+          {{yield @option @select}}
+        </:default>
+        <:iconRight>
+          {{! TODO: Replace with icon button }}
+          <button
+            type='button'
+            class='boxel-multi-select__remove-button'
+            {{on 'click' (fn this.remove @option)}}
+            aria-label='Remove item'
+          >
+
+            <IconX class='boxel-multi-select__icon--remove' />
+          </button>
+        </:iconRight>
+      </Pill>
     </div>
 
     <style scoped>
       .ember-power-select-multiple-option {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
+        all: unset;
+      }
+      .boxel-selected-option {
+        --pill-gap: var(--boxel-sp-xxs);
       }
       .boxel-multi-select__remove-button {
         all: unset;
         display: flex;
         justify-content: center;
         align-items: center;
-        width: 20px;
-        height: 20px;
         cursor: pointer;
         border-radius: 50%;
         transition: background-color 0.2s ease;
+        width: 10px;
+        height: 10px;
       }
       .boxel-multi-select__icon--remove {
         width: 10px;

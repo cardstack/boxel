@@ -29,12 +29,15 @@ class InnerContainerContent extends Component<ContentSignature> {
     <style scoped>
       .inner-container__content {
         position: relative;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
         height: 100%;
       }
       .inner-container__header + .inner-container__content {
         padding-top: 0;
+      }
+      .inner-container__content > :deep(* + *) {
+        padding-top: var(--boxel-sp-sm);
       }
       .mask {
         scrollbar-color: white white;
@@ -119,3 +122,42 @@ const CodeSubmodeInnerContainer: TemplateOnlyComponent<Signature> = <template>
 </template>;
 
 export default CodeSubmodeInnerContainer;
+
+interface SectionHeaderSignature {
+  Element: HTMLElement;
+  Blocks: { default: [] };
+}
+
+const SectionHeader: TemplateOnlyComponent<SectionHeaderSignature> = <template>
+  <header class='section-header' ...attributes>
+    {{yield}}
+  </header>
+  <style scoped>
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--boxel-sp-5xs);
+      font: 600 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp-xs);
+    }
+  </style>
+</template>;
+
+export const PanelSection: TemplateOnlyComponent<{
+  Element: HTMLElement;
+  Blocks: {
+    default: [ComponentLike<SectionHeaderSignature>];
+  };
+}> = <template>
+  <section class='panel-section' ...attributes>
+    {{yield (component SectionHeader)}}
+  </section>
+  <style scoped>
+    .panel-section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--boxel-sp-xs);
+    }
+  </style>
+</template>;

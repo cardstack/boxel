@@ -38,27 +38,28 @@ class IconButton extends Component<Signature> {
       {{on 'mouseleave' this.onMouseLeaveButton}}
       ...attributes
     >
-      {{! Using inline style attribute because targeting the svg using <style scoped> does not work - css scoping works incorrectly }}
-      {{! template-lint-disable no-inline-styles }}
       {{#if @icon}}
         <@icon
           width={{if @width @width '16px'}}
           height={{if @height @height '16px'}}
-          style='margin: auto;'
+          class='svg-icon'
         />
       {{/if}}
     </button>
     <style scoped>
       button {
-        --boxel-icon-button-width: 40px;
-        --boxel-icon-button-height: 40px;
-
-        width: var(--boxel-icon-button-width);
-        height: var(--boxel-icon-button-height);
+        --inner-boxel-icon-button-width: var(--boxel-icon-button-width, 40px);
+        --inner-boxel-icon-button-height: var(--boxel-icon-button-height, 40px);
+        width: var(--inner-boxel-icon-button-width);
+        height: var(--inner-boxel-icon-button-height);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         padding: 0;
-        background: none;
+        background: var(--boxel-icon-button-background, none);
         border: 1px solid transparent;
         z-index: 0;
+        overflow: hidden;
       }
 
       button:hover {
@@ -76,14 +77,18 @@ class IconButton extends Component<Signature> {
 
       .secondary {
         --icon-color: var(--boxel-highlight);
-
         border: 1px solid rgb(255 255 255 / 35%);
         border-radius: 100px;
-        background-color: #41404d;
+        background-color: var(--boxel-icon-button-background, #41404d);
       }
 
       .secondary:hover {
         background-color: var(--boxel-purple-800);
+      }
+
+      .svg-icon {
+        width: auto;
+        height: auto;
       }
     </style>
   </template>

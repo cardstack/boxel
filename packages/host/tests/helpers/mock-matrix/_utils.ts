@@ -14,6 +14,17 @@ export class MockUtils {
   getRoomEvents = (roomId: string) => {
     return this.testState.sdk!.getRoomEvents(roomId);
   };
+  getRoomIds = () => {
+    return this.testState.sdk!.serverState.rooms.map((r) => r.id);
+  };
+  getRoomState = (roomId: string, eventType: string, stateKey?: string) => {
+    return this.testState.sdk!.serverState.getRoomState(
+      roomId,
+      eventType,
+      stateKey,
+    );
+  };
+
   setRealmPermissions = (permissions: Record<string, string[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();
@@ -34,6 +45,16 @@ export class MockUtils {
       overrides,
     );
   };
+
+  setReadReceipt = (roomId: string, eventId: string, reader: string) => {
+    return this.testState.sdk!.serverState.addReceiptEvent(
+      roomId,
+      eventId,
+      reader,
+      'm.read' as MatrixSDK.ReceiptType,
+    );
+  };
+
   setExpiresInSec = (sec: number) => {
     this.testState.opts!.expiresInSec = sec;
   };

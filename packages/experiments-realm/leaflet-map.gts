@@ -8,6 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import Modifier, { NamedArgs } from 'ember-modifier';
 import { action } from '@ember/object';
+import MapIcon from '@cardstack/boxel-icons/map';
 
 declare global {
   let L: any;
@@ -15,6 +16,7 @@ declare global {
 
 export class LeafletMap extends CardDef {
   static displayName = 'Leaflet Map';
+  static icon = MapIcon;
 
   @field lat = contains(NumberField);
   @field lon = contains(NumberField);
@@ -70,6 +72,7 @@ export class LeafletMap extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

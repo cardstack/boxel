@@ -7,12 +7,19 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, primitive } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  encodeWebSafeBase64,
+  primitive,
+  type Realm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
@@ -30,21 +37,31 @@ import {
   visitOperatorMode,
   lookupLoaderService,
   lookupNetworkService,
+  createJWT,
+  testRealmSecretSeed,
+  setupUserSubscription,
+  setupRealmServerEndpoints,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+let matrixRoomId: string;
 module('Acceptance | operator mode tests', function (hooks) {
+  let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setExpiresInSec } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
-  });
+  let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL],
+    });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     setExpiresInSec(60 * 60);
 
     let loader = lookupLoaderService().loader;
@@ -74,6 +91,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     class Pet extends CardDef {
       static displayName = 'Pet';
+      static headerColor = '#355e3b';
       @field name = contains(StringField);
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
@@ -85,6 +103,26 @@ module('Acceptance | operator mode tests', function (hooks) {
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
           </h3>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div class='pet-isolated'>
+            <h2 data-test-pet-isolated={{@model.name}}>
+              <@fields.name />
+            </h2>
+          </div>
+          <style scoped>
+            .pet-isolated {
+              height: 100%;
+              background-color: #355e3b;
+            }
+            h2 {
+              margin: 0;
+              padding: 20px;
+              color: white;
+            }
+          </style>
         </template>
       };
     }
@@ -243,7 +281,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
-    await setupAcceptanceTestRealm({
+    ({ realm: testRealm } = await setupAcceptanceTestRealm({
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
@@ -300,7 +338,6 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           },
         },
-
         'Person/fadhlan.json': {
           data: {
             attributes: {
@@ -318,6 +355,26 @@ module('Acceptance | operator mode tests', function (hooks) {
               pet: {
                 links: {
                   self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/error.json': {
+          data: {
+            attributes: {
+              firstName: 'Error',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: './missing-link',
                 },
               },
             },
@@ -373,7 +430,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    });
+    }));
   });
 
   test('visiting operator mode', async function (assert) {
@@ -382,6 +439,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    assert.strictEqual(getPageTitle(), 'Test Workspace B');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
@@ -417,94 +475,104 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
       submode: Submodes.Interact,
     });
-  });
 
-  test('can logout via profile info popover', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}employee.gts`,
-    });
-
-    await waitFor('[data-test-profile-icon-button]');
-    assert.dom('[data-test-profile-icon]').hasText('T');
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
-
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').exists();
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist(); // Clicking again closes the popover
-
-    await click('[data-test-profile-icon-button]');
-
-    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
-
-    await click('[data-test-signout-button]');
-
-    assert.dom('[data-test-login-btn]').exists();
-  });
-
-  test('can access and save settings via profile info popover', async function (assert) {
-    await visitOperatorMode({
+    await click(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    await percySnapshot(assert); /* snapshot for special styling */
+    assert.operatorModeParametersMatch(currentURL(), {
       stacks: [
         [
           {
-            id: `${testRealmURL}Person/fadhlan`,
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/mango`,
             format: 'isolated',
           },
         ],
       ],
-    })!;
+      submode: Submodes.Interact,
+    });
+    assert.strictEqual(getPageTitle(), 'Mango');
+  });
 
-    await click('[data-test-profile-icon-button]');
-    await click('[data-test-settings-button]');
-
-    assert.dom('[data-test-profile-popover]').doesNotExist();
-    assert.dom('[data-test-settings-modal]').exists();
-
-    assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
-    assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
-
-    assert
-      .dom('[data-test-profile-icon]')
-      .hasStyle({ backgroundColor: 'rgb(94, 173, 107)' });
-    assert.dom('[data-test-profile-icon-handle]').hasText('@testuser:staging');
-
-    await fillIn('[data-test-display-name-field]', '');
-    assert
-      .dom('[data-test-boxel-input-error-message]')
-      .hasText('Name is required');
-
-    await fillIn('[data-test-display-name-field]', 'MAKEMECRASH');
-
-    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-
-    await click('[data-test-profile-settings-save-button]');
-
-    assert
-      .dom('[data-test-profile-save-error]')
-      .hasText('Failed to save profile. Please try again.');
-
-    await fillIn('[data-test-display-name-field]', 'John');
-    await click('[data-test-profile-settings-save-button]');
-
-    assert.dom('[data-test-profile-save-error]').doesNotExist();
-
-    await waitUntil(
-      () =>
-        // @ts-ignore
-        document
-          .querySelector('[data-test-profile-display-name]')
-          .textContent.trim() === 'John',
+  test('index card shows last known good state for instances that have an error', async function (assert) {
+    await testRealm.write(
+      'Person/fadhlan.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            pet: {
+              links: {
+                self: './missing-link',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
     );
 
-    assert.dom('[data-test-profile-icon]').hasText('J'); // From display name "John"
+    await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error]`,
+      )
+      .exists('the instance with an error is displayed');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error] [data-test-card-title]`,
+      )
+      .containsText(
+        'Fadhlan',
+        'the last known good state of the instance is displayed',
+      );
+
+    await percySnapshot(assert);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+
+    assert.dom(`[data-test-card-error]`).exists();
+    assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
+  });
+
+  test('index card shows default error tile for instances that have an error and no last known good state', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,
+      )
+      .exists('the instance with an error is displayed');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error] [data-test-instance-error-name]`,
+      )
+      .containsText('Person/error');
+  });
+
+  test('can visit a card in error state via canonical URL', async function (assert) {
+    await visit('/test/Person/error');
+
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
+      )
+      .exists('the error state of the card is displayed');
+    assert.dom('[data-test-error-title]').includesText('Link Not Found');
+    await click('[data-test-error-detail-toggle] button');
+    assert
+      .dom('[data-test-error-detail]')
+      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
@@ -545,6 +613,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+    assert.strictEqual(
+      getPageTitle(),
+      `address-with-no-embedded-template.gts in Test Workspace B`,
+    );
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
@@ -750,6 +822,323 @@ module('Acceptance | operator mode tests', function (hooks) {
         newToken,
         'new session token is different than original session token',
       );
+    });
+  });
+
+  module('account popover', function (hooks) {
+    let userResponseBody = {
+      data: {
+        type: 'user',
+        id: 1,
+        attributes: {
+          matrixUserId: '@testuser:staging',
+          stripeCustomerId: 'stripe-id-1',
+          creditsAvailableInPlanAllowance: 1000,
+          creditsIncludedInPlanAllowance: 1000,
+          extraCreditsAvailableInBalance: 100,
+        },
+        relationships: {
+          subscription: {
+            data: {
+              type: 'subscription',
+              id: 1,
+            },
+          },
+        },
+      },
+      included: [
+        {
+          type: 'subscription',
+          id: 1,
+          attributes: {
+            startedAt: '2024-10-15T03:42:11.000Z',
+            endedAt: '2025-10-15T03:42:11.000Z',
+            status: 'active',
+          },
+          relationships: {
+            plan: {
+              data: {
+                type: 'plan',
+                id: 1,
+              },
+            },
+          },
+        },
+        {
+          type: 'plan',
+          id: 1,
+          attributes: {
+            name: 'Free',
+            monthlyPrice: 0,
+            creditsIncluded: 1000,
+          },
+        },
+      ],
+    };
+
+    setupRealmServerEndpoints(hooks, [
+      {
+        route: '_user',
+        getResponse: async (_req: Request) => {
+          return new Response(JSON.stringify(userResponseBody));
+        },
+      },
+      {
+        route: '_server-session',
+        getResponse: async (req: Request) => {
+          let data = await req.json();
+          if (!data.challenge) {
+            return new Response(
+              JSON.stringify({
+                challenge: 'test',
+                room: matrixRoomId,
+              }),
+              {
+                status: 401,
+              },
+            );
+          } else {
+            return new Response('Ok', {
+              status: 200,
+              headers: {
+                Authorization: createJWT(
+                  {
+                    user: '@testuser:staging',
+                    sessionRoom: matrixRoomId,
+                  },
+                  '1d',
+                  testRealmSecretSeed,
+                ),
+              },
+            });
+          }
+        },
+      },
+    ]);
+
+    test('can access and save settings via profile info popover', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await click('[data-test-profile-icon-button]');
+      await click('[data-test-settings-button]');
+
+      assert.dom('[data-test-profile-popover]').doesNotExist();
+      assert.dom('[data-test-settings-modal]').exists();
+
+      assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
+      assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
+      assert
+        .dom('[data-test-profile-icon]')
+        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
+      assert
+        .dom('[data-test-profile-icon-handle]')
+        .hasText('@testuser:staging');
+
+      await fillIn('[data-test-display-name-field]', '');
+      assert
+        .dom('[data-test-boxel-input-error-message]')
+        .hasText('Name is required');
+
+      await fillIn('[data-test-display-name-field]', 'MAKEMECRASH');
+
+      assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+
+      await click('[data-test-profile-settings-save-button]');
+
+      assert
+        .dom('[data-test-profile-save-error]')
+        .hasText('Failed to save profile. Please try again.');
+
+      await fillIn('[data-test-display-name-field]', 'John');
+      await click('[data-test-profile-settings-save-button]');
+
+      assert.dom('[data-test-profile-save-error]').doesNotExist();
+
+      await waitUntil(
+        () =>
+          // @ts-ignore
+          document
+            .querySelector('[data-test-profile-display-name]')
+            .textContent.trim() === 'John',
+      );
+
+      assert.dom('[data-test-profile-icon]').hasText('J'); // From display name "John"
+    });
+
+    test(`displays credit info in account popover`, async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        codePath: `${testRealmURL}employee.gts`,
+      });
+
+      await waitFor('[data-test-profile-icon-button]');
+      assert.dom('[data-test-profile-icon]').hasText('T');
+      assert
+        .dom('[data-test-profile-icon]')
+        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
+
+      assert.dom('[data-test-profile-popover]').doesNotExist();
+
+      await click('[data-test-profile-icon-button]');
+
+      assert.dom('[data-test-profile-popover]').exists();
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1000 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
+      assert.dom('[data-test-upgrade-plan-button]').exists();
+      assert.dom('[data-test-buy-more-credits]').exists();
+      assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-upgrade-plan-button]')
+        .hasAttribute('href', 'https://customer-portal-link');
+      assert
+        .dom('[data-test-upgrade-plan-button]')
+        .hasAttribute('target', '_blank');
+
+      assert.dom('[data-test-profile-popover]').exists();
+      await click('[data-test-buy-more-credits] button');
+      assert.dom('[data-test-profile-popover]').doesNotExist();
+      assert
+        .dom('[data-test-boxel-card-container]')
+        .hasClass('profile-settings');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1000 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-manage-plan-button]')
+        .hasAttribute('href', 'https://customer-portal-link');
+      assert
+        .dom('[data-test-manage-plan-button]')
+        .hasAttribute('target', '_blank');
+      assert.dom('[data-test-payment-link]').exists({ count: 3 });
+      assert
+        .dom('[data-test-pay-button="0"]')
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
+      assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
+      assert
+        .dom('[data-test-pay-button="1"]')
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
+      assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
+      assert
+        .dom('[data-test-pay-button="2"]')
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
+      assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
+
+      // out of credit
+      await click('[aria-label="close modal"]');
+
+      // out of monthly credit
+      userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 0;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
+
+      await click('[data-test-profile-icon-button]');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('0 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
+      assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+      await click('[data-test-profile-icon-button]');
+
+      // out of monthly credit and additional credit
+      userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
+      await click('[data-test-profile-icon-button]');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('0 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('0');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasClass('out-of-credit');
+      assert.dom('[data-test-buy-more-credits]').hasClass('out-of-credit');
+      await click('[data-test-profile-icon-button]');
+
+      // out of additional credit
+      userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 1000;
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: 'org.boxel.realm-server-event',
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
+      await click('[data-test-profile-icon-button]');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1000 of 1000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('0');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
+      assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
     });
   });
 });

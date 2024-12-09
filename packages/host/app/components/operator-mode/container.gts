@@ -2,6 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -9,15 +10,17 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { Modal } from '@cardstack/boxel-ui/components';
-import { and, not } from '@cardstack/boxel-ui/helpers';
+import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
+
+import { or, not, and } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, Query } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
+import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 import {
   getSearchResults,
@@ -31,11 +34,13 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';
 
+import type BillingService from '../../services/billing-service';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmServerService from '../../services/realm-server';
 
-const waiter = buildWaiter('operator-mode-container:write-waiter');
+const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
   Args: {
@@ -44,10 +49,12 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
+  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare messageService: MessageService;
+  @service declare realmServer: RealmServerService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -76,12 +83,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     });
   }
 
-  // public API
-  @action
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
-    return trackCard(owner, card, realmURL);
-  }
-
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
@@ -92,9 +93,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
   // at the same time
-  private write = task(async (card: CardDef) => {
+  private saveCard = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(this, card);
+      return await this.cardService.saveModel(card);
     });
   });
 
@@ -117,6 +118,20 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  private get isUserInfoLoading() {
+    return this.billingService.fetchingSubscriptionData;
+  }
+
+  private get isUserSubscribed() {
+    if (isTesting()) {
+      return true;
+    }
+    return (
+      !!this.billingService.subscriptionData?.stripeCustomerId &&
+      !!this.billingService.subscriptionData?.plan
+    );
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -127,15 +142,31 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
+      {{#if
+        (or
+          (not this.matrixService.isLoggedIn)
+          this.matrixService.isInitializingNewUser
+        )
+      }}
+        <Auth />
+      {{else if (and this.isUserInfoLoading (not this.isUserSubscribed))}}
+        <div class='loading-spinner-container'>
+          <div class='loading-spinner'>
+            <LoadingIndicator @color='var(--boxel-teal)' />
+            <div class='loading-spinner-text'>Loading…</div>
+          </div>
+        </div>
+      {{else if (not this.isUserSubscribed)}}
+        <PaymentSetup
+          @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
+        />
+      {{else if this.isCodeMode}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.write}}
+          @saveCardOnClose={{perform this.saveCard}}
         />
-      {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
-        <InteractSubmode @write={{perform this.write}} />
       {{else}}
-        <Auth />
+        <InteractSubmode @saveCard={{perform this.saveCard}} />
       {{/if}}
     </Modal>
 
@@ -143,9 +174,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
-        --container-button-size: var(--boxel-icon-lg);
+        --container-button-size: 2.5rem;
         --operator-mode-min-width: 20.5rem;
-        --operator-mode-left-column: 16rem;
+        --operator-mode-left-column: 15rem;
+        --operator-mode-spacing: var(--boxel-sp-sm);
+        --operator-mode-top-bar-item-height: var(--container-button-size);
+        --operator-mode-bottom-bar-item-height: var(--container-button-size);
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
@@ -168,6 +202,32 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       .operator-mode > div {
         align-items: flex-start;
+      }
+      .payment-setup-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100%;
+        padding: var(--boxel-sp-lg);
+      }
+      .loading-spinner-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      .loading-spinner {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .loading-spinner-text {
+        color: var(--boxel-light);
+        font-size: 12px;
+        font-weight: 600;
       }
       .loading {
         display: flex;

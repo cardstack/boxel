@@ -23,6 +23,7 @@ NODE_ENV=development \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4201' \
   --seedPath='../seed-realm' \
+  --migrateDB \
   \
   --path='../base' \
   --username='base_realm' \

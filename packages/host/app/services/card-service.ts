@@ -1,6 +1,10 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { buildWaiter } from '@ember/test-waiters';
+
+import { isTesting } from '@embroider/macros';
+
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -28,10 +32,9 @@ import type {
   FieldDef,
   Field,
   SerializeOpts,
+  IdentityContext,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
-import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
@@ -46,12 +49,29 @@ export type CardSaveSubscriber = (
 
 const { environment } = ENV;
 
+const waiter = buildWaiter('card-service:waiter');
+
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
   @service private declare network: NetworkService;
   @service private declare realm: Realm;
   @service private declare reset: ResetService;
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
@@ -117,6 +137,7 @@ export default class CardService extends Service {
 
       err.status = response.status;
       err.responseText = responseText;
+      err.responseHeaders = response.headers;
 
       throw err;
     }
@@ -130,9 +151,10 @@ export default class CardService extends Service {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
+    opts?: { identityContext?: IdentityContext },
   ): Promise<CardDef> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(resource, doc, relativeTo);
+    let card = await api.createFromSerialized(resource, doc, relativeTo, opts);
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
@@ -155,10 +177,30 @@ export default class CardService extends Service {
     return serialized;
   }
 
+  async reloadCard(card: CardDef): Promise<void> {
+    // we don't await this in the realm subscription callback, so this test
+    // waiter should catch otherwise leaky async in the tests
+    await this.withTestWaiters(async () => {
+      let incomingDoc: SingleCardDocument = (await this.fetchJSON(
+        card.id,
+        undefined,
+      )) as SingleCardDocument;
+
+      if (!isSingleCardDocument(incomingDoc)) {
+        throw new Error(
+          `bug: server returned a non card document for ${card.id}:
+        ${JSON.stringify(incomingDoc, null, 2)}`,
+        );
+      }
+      let api = await this.getAPI();
+      await api.updateFromSerialized<typeof CardDef>(card, incomingDoc);
+    });
+  }
+
   // we return undefined if the card changed locally while the save was in-flight
-  async saveModel<T extends object>(
-    owner: T,
+  async saveModel(
     card: CardDef,
+    defaultRealmHref?: string,
   ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
@@ -179,10 +221,12 @@ export default class CardService extends Service {
       // in the case where we get no realm URL from the card, we are dealing with
       // a new card instance that does not have a realm URL yet.
       if (!realmURL) {
-        if (!this.realm.defaultWritableRealm) {
+        defaultRealmHref =
+          defaultRealmHref ?? this.realm.defaultWritableRealm?.path;
+        if (!defaultRealmHref) {
           throw new Error('Could not find a writable realm');
         }
-        realmURL = new URL(this.realm.defaultWritableRealm.path);
+        realmURL = new URL(defaultRealmHref);
       }
       let json = await this.saveCardDocument(doc, realmURL);
       let isNew = !card.id;
@@ -203,20 +247,13 @@ export default class CardService extends Service {
         // save we'll correlate to the correct card ID
         card.id = json.data.id;
       }
-      if (isNew && result) {
-        result = trackCard(owner, result, realmURL);
-      }
       if (this.subscriber) {
         this.subscriber(new URL(json.data.id), json);
       }
       return result;
     } catch (err) {
-      // TODO for CS-6268 we'll need to show a visual indicator that the auto
-      // save has failed. Until that ticket is implemented, the only indication
-      // of a failed auto-save will be from the console.
       console.error(`Failed to save ${card.id}: `, err);
       throw err;
-      return;
     } finally {
       api.unsubscribeFromChanges(card, onCardChange);
     }
@@ -291,7 +328,7 @@ export default class CardService extends Service {
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    return await this.saveModel(this, updatedCard);
+    return await this.saveModel(updatedCard);
   }
 
   private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
@@ -303,7 +340,7 @@ export default class CardService extends Service {
     return card;
   }
 
-  async getCard(url: URL | string): Promise<CardDef | undefined> {
+  async getCard(url: URL | string): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
     }

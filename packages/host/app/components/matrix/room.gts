@@ -1,13 +1,25 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+
+import max from 'lodash/max';
+
+import { MatrixEvent } from 'matrix-js-sdk';
+
+import pluralize from 'pluralize';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import { unixTime } from '@cardstack/runtime-common';
@@ -33,6 +45,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
+import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -52,33 +65,47 @@ export default class Room extends Component<Signature> {
         data-test-room-name={{this.roomResource.name}}
         data-test-room={{@roomId}}
       >
-        <AiAssistantConversation>
-          {{#if this.messages}}
-            {{#each this.messages as |message i|}}
-              <RoomMessage
-                @roomId={{@roomId}}
-                @messages={{this.messages}}
-                @message={{message}}
-                @index={{i}}
-                @isPending={{this.isPendingMessage message}}
-                @monacoSDK={{@monacoSDK}}
-                @isStreaming={{this.isMessageStreaming message i}}
-                @currentEditor={{this.currentMonacoContainer}}
-                @setCurrentEditor={{this.setCurrentMonacoContainer}}
-                @retryAction={{this.maybeRetryAction i message}}
-                data-test-message-idx={{i}}
-              />
-            {{/each}}
+        <AiAssistantConversation
+          @registerConversationScroller={{this.registerConversationScroller}}
+          @setScrollPosition={{this.setScrollPosition}}
+        >
+          {{#each this.messages as |message i|}}
+            <RoomMessage
+              @roomId={{@roomId}}
+              @message={{message}}
+              @index={{i}}
+              @registerScroller={{this.registerMessageScroller}}
+              @isPending={{this.isPendingMessage message}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @retryAction={{this.maybeRetryAction i message}}
+              data-test-message-idx={{i}}
+            />
           {{else}}
             <NewSession @sendPrompt={{this.sendMessage}} />
-          {{/if}}
+          {{/each}}
           {{#if this.room}}
-            <AiAssistantSkillMenu
-              class='skills'
-              @skills={{this.skills}}
-              @onChooseCard={{this.attachSkill}}
-              data-test-skill-menu
-            />
+            {{#if this.showUnreadIndicator}}
+              <div class='unread-indicator'>
+                <BoxelButton
+                  @size='tall'
+                  @kind='primary'
+                  class='unread-button'
+                  data-test-unread-messages-button
+                  {{on 'click' this.scrollToFirstUnread}}
+                >{{this.unreadMessageText}}</BoxelButton>
+              </div>
+            {{else}}
+              <AiAssistantSkillMenu
+                class='skills'
+                @skills={{this.sortedSkills}}
+                @onChooseCard={{this.attachSkill}}
+                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
+                data-test-skill-menu
+              />
+            {{/if}}
           {{/if}}
         </AiAssistantConversation>
 
@@ -114,6 +141,15 @@ export default class Room extends Component<Signature> {
         bottom: 0;
         margin-left: auto;
       }
+      .unread-indicator {
+        position: sticky;
+        bottom: 0;
+        margin-left: auto;
+        width: 100%;
+      }
+      .unread-button {
+        width: 100%;
+      }
       .room-actions {
         padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
         box-shadow: var(--boxel-box-shadow);
@@ -139,7 +175,7 @@ export default class Room extends Component<Signature> {
   private roomResource = getRoom(
     this,
     () => this.args.roomId,
-    () => this.matrixService.getRoom(this.args.roomId)?.events,
+    () => this.matrixService.getRoomData(this.args.roomId)?.events,
   );
   private autoAttachmentResource = getAutoAttachment(
     this,
@@ -148,30 +184,232 @@ export default class Room extends Component<Signature> {
   );
 
   @tracked private currentMonacoContainer: number | undefined;
+  private getConversationScrollability: (() => boolean) | undefined;
+  private roomScrollState: WeakMap<
+    RoomData,
+    {
+      messageElemements: WeakMap<HTMLElement, number>;
+      messageScrollers: Map<number, Element['scrollIntoView']>;
+      messageVisibilityObserver: IntersectionObserver;
+      isScrolledToBottom: boolean;
+      userHasScrolled: boolean;
+      isConversationScrollable: boolean;
+    }
+  > = new WeakMap();
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
-
-    this.loadRoomSkills.perform();
   }
 
-  private loadRoomSkills = restartableTask(async () => {
-    await this.roomResource.loading;
-    let defaultSkills = await this.matrixService.loadDefaultSkills();
-    if (this.roomResource.room) {
-      this.roomResource.room.skills = defaultSkills;
+  private scrollState() {
+    if (!this.room) {
+      throw new Error(`Cannot get room scroll state before room is loaded`);
     }
-  });
+    let state = this.roomScrollState.get(this.room);
+    if (!state) {
+      state = new TrackedObject({
+        isScrolledToBottom: false,
+        userHasScrolled: false,
+        isConversationScrollable: false,
+        messageElemements: new WeakMap(),
+        messageScrollers: new Map(),
+        messageVisibilityObserver: new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            let index = this.messageElements.get(entry.target as HTMLElement);
+            if (index != null) {
+              if (
+                (!this.isConversationScrollable || entry.isIntersecting) &&
+                index > this.lastReadMessageIndex
+              ) {
+                this.sendReadReceipt(this.messages[index]);
+              }
+            }
+          });
+        }),
+      });
+      this.roomScrollState.set(this.room, state);
+    }
+    return state;
+  }
 
-  maybeRetryAction = (messageIndex: number, message: Message) => {
+  private get isScrolledToBottom() {
+    return this.scrollState().isScrolledToBottom;
+  }
+
+  private get userHasScrolled() {
+    return this.scrollState().userHasScrolled;
+  }
+
+  private get isConversationScrollable() {
+    return this.scrollState().isConversationScrollable;
+  }
+
+  private get messageElements() {
+    return this.scrollState().messageElemements;
+  }
+
+  private get messageScrollers() {
+    return this.scrollState().messageScrollers;
+  }
+
+  private get messageVisibilityObserver() {
+    return this.scrollState().messageVisibilityObserver;
+  }
+
+  private registerMessageScroller = ({
+    index,
+    element,
+    scrollTo,
+  }: {
+    index: number;
+    element: HTMLElement;
+    scrollTo: () => void;
+  }) => {
+    this.messageElements.set(element, index);
+    this.messageScrollers.set(index, scrollTo);
+    this.messageVisibilityObserver.observe(element);
+    this.scrollState().isConversationScrollable = Boolean(
+      this.getConversationScrollability?.(),
+    );
+    if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
+      return;
+    }
+
+    // TODO udpate this so that we preserve the scroll position as the user
+    // changes rooms and we restore the scroll position when a user enters a room
+    if (
+      // If we are permitted to auto-scroll and if there are no unread messages in the
+      // room, then scroll to the last message in the room.
+      !this.hasUnreadMessages &&
+      index === this.messages.length - 1
+    ) {
+      scrollTo();
+    } else if (
+      // otherwise if we are permitted to auto-scroll and if there are unread
+      // messages in the room, then scroll to the first unread message in the room.
+      this.hasUnreadMessages &&
+      index === this.lastReadMessageIndex + 1
+    ) {
+      scrollTo();
+    }
+  };
+
+  private registerConversationScroller = (
+    isConversationScrollable: () => boolean,
+  ) => {
+    this.getConversationScrollability = isConversationScrollable;
+  };
+
+  private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
+    this.scrollState().isScrolledToBottom = isBottom;
+    if (!isBottom) {
+      this.scrollState().userHasScrolled = true;
+    }
+  };
+
+  private scrollToFirstUnread = () => {
+    if (!this.hasUnreadMessages) {
+      return;
+    }
+
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    let scrollTo = this.messageScrollers.get(firstUnreadIndex);
+    if (!scrollTo) {
+      console.warn(`No scroller for message index ${firstUnreadIndex}`);
+    } else {
+      scrollTo({ behavior: 'smooth' });
+    }
+  };
+
+  private get isAllowedToAutoScroll() {
+    return !this.userHasScrolled || this.isScrolledToBottom;
+  }
+
+  // For efficiency, read receipts are implemented using “up to” markers. This
+  // marker indicates that the acknowledgement applies to all events “up to and
+  // including” the event specified. For example, marking an event as “read” would
+  // indicate that the user had read all events up to the referenced event.
+  @cached private get lastReadMessageIndex() {
+    let readReceiptIndicies: number[] = [];
+    for (let receipt of this.matrixService.currentUserEventReadReceipts.keys()) {
+      let maybeIndex = this.messages.findIndex((m) => m.eventId === receipt);
+      if (maybeIndex != null) {
+        readReceiptIndicies.push(maybeIndex);
+      }
+    }
+    return max(readReceiptIndicies) ?? -1;
+  }
+
+  @cached private get numberOfUnreadMessages() {
+    let unreadMessagesCount = 0;
+    let firstUnreadIndex = this.lastReadMessageIndex + 1;
+    for (let i = firstUnreadIndex; i < this.messages.length; i++) {
+      if (
+        this.matrixService.profile.userId === this.messages[i].author.userId
+      ) {
+        continue;
+      }
+      unreadMessagesCount++;
+    }
+    return unreadMessagesCount;
+  }
+
+  private get hasUnreadMessages() {
+    return this.numberOfUnreadMessages > 0;
+  }
+
+  private get showUnreadIndicator() {
+    // if user is already scrolled to bottom we don't show the indicator to
+    // prevent the flash of the indicator appearing and then disappearing during
+    // the read receipt acknowledgement
+    return (
+      this.isConversationScrollable &&
+      this.hasUnreadMessages &&
+      !this.isScrolledToBottom
+    );
+  }
+
+  private get unreadMessageText() {
+    return `${this.numberOfUnreadMessages} unread ${pluralize(
+      'message',
+      this.numberOfUnreadMessages,
+    )}`;
+  }
+
+  private sendReadReceipt(message: Message) {
+    if (this.matrixService.profile.userId === message.author.userId) {
+      return;
+    }
+    if (this.matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      return;
+    }
+
+    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix
+    // SDK), but it' not available to us here - however, we can fake it by adding
+    // the necessary methods
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => this.args.roomId,
+      getTs: () => message.created.getTime(),
+    };
+
+    // Without scheduling this after render, this produces the "attempted to
+    // update value, but it had already been used previously in the same
+    // computation" error
+    schedule('afterRender', () => {
+      this.matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+    });
+  }
+
+  private maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: Message, messageIndex: number) {
+  @action private isMessageStreaming(message: Message, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -197,8 +435,14 @@ export default class Room extends Component<Signature> {
     return this.roomResource.skills;
   }
 
+  private get sortedSkills(): Skill[] {
+    return [...this.skills].sort((a, b) => {
+      return a.card.title.localeCompare(b.card.title);
+    });
+  }
+
   private get room() {
-    let room = this.roomResource.room;
+    let room = this.roomResource.matrixRoom;
     return room;
   }
 
@@ -214,7 +458,7 @@ export default class Room extends Component<Signature> {
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
-  @action resendLastMessage() {
+  @action private resendLastMessage() {
     if (!this.room) {
       throw new Error(
         'Bug: should not be able to resend a message without a room.',
@@ -320,50 +564,38 @@ export default class Room extends Component<Signature> {
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
-      let activeSkillCards = this.skills
-        .filter((skill) => skill.isActive)
-        .map((c) => c.card);
-      await this.matrixService.sendMessage(
-        this.args.roomId,
-        message,
-        cards,
-        activeSkillCards,
-        clientGeneratedId,
-        context,
-      );
+      try {
+        await this.matrixService.sendMessage(
+          this.args.roomId,
+          message,
+          cards,
+          clientGeneratedId,
+          context,
+        );
+      } catch (e) {
+        console.error('Error sending message', e);
+      }
     },
   );
 
-  get topMostStackItems(): StackItem[] {
+  private get topMostStackItems(): StackItem[] {
     return this.operatorModeStateService.topMostStackItems();
-  }
-
-  get lastTopMostCard() {
-    let stackItems = this.operatorModeStateService.topMostStackItems();
-    if (stackItems.length === 0) {
-      return undefined;
-    }
-    let topMostItem = stackItems[stackItems.length - 1];
-    let topMostCard = topMostItem?.card;
-    if (!topMostCard) {
-      return undefined;
-    } else {
-      let realmURL = topMostItem.card[topMostItem.api.realmURL];
-      if (!realmURL) {
-        throw new Error(
-          `could not determine realm URL for card ${topMostItem.card.id}`,
-        );
-      }
-      if (topMostItem.card.id === `${realmURL.href}index`) {
-        return undefined;
-      }
-    }
-    return topMostCard;
   }
 
   private get autoAttachedCards() {
     return this.autoAttachmentResource.cards;
   }
+
+  // using enqueue task on this ensures that updates don't step on each other
+  private updateSkillIsActiveTask = enqueueTask(
+    async (skillEventId: string, isActive: boolean) => {
+      await this.matrixService.updateSkillIsActive(
+        this.args.roomId,
+        skillEventId,
+        isActive,
+      );
+    },
+  );
 
   private get canSend() {
     return (
@@ -391,9 +623,9 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  @action private attachSkill(card: SkillCard) {
-    this.roomResource?.addSkill(card);
-  }
+  private attachSkill = (card: SkillCard) => {
+    this.matrixService.addSkillCardsToRoom(this.args.roomId, [card]);
+  };
 }
 
 declare module '@glint/environment-ember-loose/registry' {

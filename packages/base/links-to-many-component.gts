@@ -3,8 +3,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
   BaseDef,
-  CardContext,
-  realmURL,
+  type CardContext,
   type Box,
   type BoxComponent,
   type CardDef,
@@ -29,6 +28,7 @@ import {
   identifyCard,
   getPlural,
   CardContextName,
+  RealmURLContextName,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -57,6 +57,7 @@ interface Signature {
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
     <div class='links-to-many-editor' data-test-links-to-many={{@field.name}}>
@@ -101,10 +102,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         offerToCreate: {
           ref: type,
           relativeTo: undefined,
-          realmURL: this.args.model.value[realmURL],
+          realmURL: this.realmURL,
         },
         multiSelect: true,
         createNewCard: this.cardContext?.actions?.createCard,
+        consumingRealm: this.realmURL,
       },
     );
     if (chosenCard) {
@@ -214,20 +216,20 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .editor {
         position: relative;
         display: grid;
-        grid-template-columns: 1fr var(--boxel-icon-lg);
-      }
-      .editor > :deep(.boxel-card-container.fitted-format) {
-        order: -1;
+        grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
       }
       .remove {
         --icon-color: var(--boxel-light);
+        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-dark);
         align-self: auto;
         outline: 0;
+        order: 1;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-dark);
-        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--boxel-highlight);
       }
       .remove:focus + :deep(.boxel-card-container.fitted-format),
       .remove:hover + :deep(.boxel-card-container.fitted-format) {
@@ -236,18 +238,13 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           var(--boxel-box-shadow-hover);
       }
       .add-new {
-        width: calc(100% - var(--boxel-icon-lg));
+        width: calc(100% - var(--boxel-icon-xxl));
+        margin-left: var(--boxel-icon-lg);
+        /* for alignment due to sort handle */
       }
       .sort {
-        position: absolute;
-        top: 0;
-        left: calc(-1 * var(--boxel-sp-xxl));
-
         cursor: move;
         cursor: grab;
-      }
-      .list > li + li > .sort {
-        top: var(--boxel-sp);
       }
       .sort:active {
         cursor: grabbing;

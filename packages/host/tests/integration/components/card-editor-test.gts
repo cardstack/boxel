@@ -74,7 +74,7 @@ module('Integration | card-editor', function (hooks) {
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
-          result ? result.error.detail : 'not found'
+          result ? result.error.errorDetail.message : 'not found'
         }`,
       );
     }
@@ -481,6 +481,7 @@ module('Integration | card-editor', function (hooks) {
     await click('[data-test-add-new]');
     await waitFor('[data-test-card-catalog-create-new-button]');
     await click('[data-test-card-catalog-create-new-button]');
+    await click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-create-new-card="Pet"]');
 
     assert.dom('[data-test-field="name"] input').exists();

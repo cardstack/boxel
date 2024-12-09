@@ -17,6 +17,8 @@ import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { baseRealm, getCards } from '@cardstack/runtime-common';
+import LayoutBoardSplitIcon from '@cardstack/boxel-icons/layout-board-split';
+import PlantIcon from '@cardstack/boxel-icons/plant';
 
 class Isolated extends Component<typeof GardenDesign> {
   <template>
@@ -380,6 +382,7 @@ export class GardenItem extends CardDef {
   });
 
   static displayName = 'Garden Item';
+  static icon = PlantIcon;
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -395,5 +398,6 @@ export class GardenDesign extends CardDef {
   @field columns = contains(NumberField);
   @field items = containsMany(PositionedCard);
   static displayName = 'Garden Design';
+  static icon = LayoutBoardSplitIcon;
   static isolated = Isolated;
 }

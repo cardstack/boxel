@@ -20,10 +20,10 @@ If you are working on boxel development, you do not need to connect this up to O
 
 ### Access to GPT4
 
-You can get an OpenAI api key one from the staging parameter store or ask within the team.
-Set this as the `OPENAI_API_KEY` environment variable. Note that if you set this broadly (such as in your bashrc) this will be used by default for many other openai based tools.
+You can get an OpenRouter api key one from the staging parameter store or ask within the team.
+Set this as the `OPENROUTER_API_KEY` environment variable.
 
-    OPENAI_API_KEY="sk-..."
+    OPENROUTER_API_KEY="sk-..."
 
 ## Running
 
@@ -42,7 +42,7 @@ It will be able to see any cards shared in the chat and can respond using GPT4 i
 You can deliberately trigger a specific patch by sending a message that starts `debug:patch:` and has the JSON patch you want returned. For example:
 
 ```
-debug:patch:{"card_id":"http://localhost:4200/experiments/Author/1", "description": "message", "attributes": {"firstName": "David"}}
+debug:patch:{"attributes": {"cardId":"http://localhost:4200/experiments/Author/1", "patch": { "attributes": {"firstName": "David"}}}}
 ```
 
 This will return a patch with the ID of the last card you uploaded. This does not hit GPT4 and is useful for testing the integration of the two components without waiting for streaming responses.

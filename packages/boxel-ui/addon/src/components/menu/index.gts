@@ -118,7 +118,7 @@ export default class Menu extends Component<Signature> {
                       check-icon--selected=menuItem.selected
                     }}
                   >
-                    <CheckMark width='12' height='12' />
+                    <CheckMark class='checkmark' width='12' height='12' />
                   </span>
                 </div>
               </li>
@@ -225,6 +225,7 @@ export default class Menu extends Component<Signature> {
           gap: var(--boxel-menu-item-gap);
         }
         .menu-item__icon-url {
+          flex-shrink: 0;
           display: inline-block;
           width: 16px;
           height: 16px;
@@ -240,6 +241,9 @@ export default class Menu extends Component<Signature> {
         }
         .check-icon--selected {
           visibility: visible;
+        }
+        .checkmark {
+          flex-shrink: 0;
         }
       }
     </style>

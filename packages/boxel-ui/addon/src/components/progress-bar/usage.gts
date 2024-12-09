@@ -1,4 +1,3 @@
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -8,6 +7,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { cssVar } from '../..//helpers/css-var.ts';
 import BoxelProgressBar, { type BoxelProgressBarPosition } from './index.gts';
 
 export default class ProgressBarUsage extends Component {
@@ -26,7 +26,9 @@ export default class ProgressBarUsage extends Component {
   declare boxelProgressBarFontColor: CSSVariableInfo;
 
   get progressValue() {
-    return `${this.value} / ${this.max}`;
+    const max = Math.round(Math.min(this.max));
+    const value = Math.round(Math.min(this.value));
+    return `${value} / ${max}`;
   }
 
   <template>
@@ -97,7 +99,7 @@ export default class ProgressBarUsage extends Component {
           />
           <Css.Basic
             @name='boxel-progress-bar-border-radius'
-            @type='size'
+            @type='length'
             @description='Border radius of the progress bar'
             @defaultValue={{this.boxelProgressBarBorderRadius.defaults}}
             @value={{this.boxelProgressBarBorderRadius.value}}
@@ -114,7 +116,7 @@ export default class ProgressBarUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name='Progress with value'>
+      <FreestyleUsage @name='Horizontal progress bar with value'>
         <:example>
           <BoxelProgressBar
             @value={{this.value}}

@@ -51,6 +51,7 @@
   --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 66.6px */
 
   /* common icon sizes */
+  --boxel-icon-xxs: 0.75rem; /* 12px */
   --boxel-icon-xs: 1rem; /* 16px */
   --boxel-icon-sm: 1.25rem; /* 20px */
   --boxel-icon-med: 1.875rem; /* 30px */
@@ -64,8 +65,9 @@
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
   --boxel-border-flexible: 1px solid rgba(255, 255, 255, 0.35);
-  --boxel-border-card: 1px solid rgba(0,0,0, 0.1 );
-  --boxel-border-radius-xs: 1.5px;
+  --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
+  --boxel-border-radius-xxs: 1.5px;
+  --boxel-border-radius-xs: 4px;
   --boxel-border-radius-sm: 6px;
   --boxel-border-radius: 7.5px;
   --boxel-border-radius-lg: 11.25px;
@@ -74,8 +76,9 @@
   --boxel-transition: 0.2s ease;
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
+  --boxel-outline-width: 2px;
   --boxel-outline-color: var(--boxel-blue);
-  --boxel-outline: 2px solid var(--boxel-outline-color);
+  --boxel-outline: var(--boxel-outline-width) solid var(--boxel-outline-color);
   --boxel-deep-box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.35);
 
   /* Container sizes */
@@ -86,7 +89,6 @@
   --boxel-lg-container: 43.75rem; /* 700px */
   --boxel-xl-container: 65rem; /* 1040px */
   --boxel-xxl-container: 83.76rem; /* 1340px */
-
 
   /* COLOR PALETTE */
 
@@ -101,8 +103,8 @@
   --boxel-700: #272330;
 
   --boxel-cyan: #00ebe5;
-  --boxel-teal: #03c4bf;
-  --boxel-dark-teal: #03b0ac;
+  --boxel-teal: #00ffba;
+  --boxel-dark-teal: #00ebac;
   --boxel-red: #ff5050;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
@@ -116,12 +118,14 @@
   --boxel-blue: #0069f9;
   --boxel-navy: #281e78;
 
-  --boxel-label-color: var(--boxel-dark);
+  --boxel-label-color: currentColor;
   /**** End of revisited colors ****/
 
   /* Primary colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
+  --boxel-dark-hover: rgba(0, 0, 0, 0.1);
+  --boxel-darker-hover: rgba(0, 0, 0, 0.5);
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
@@ -159,9 +163,9 @@
   --boxel-success-300: var(--boxel-dark-green);
 
   /* z-index layers */
-  --boxel-layer-floating-button: 10;
-  --boxel-layer-modal-default: 15;
-  --boxel-layer-modal-urgent: 20;
+  --boxel-layer-floating-button: 1000;
+  --boxel-layer-modal-default: 1500;
+  --boxel-layer-modal-urgent: 2000;
 
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */

@@ -13,9 +13,11 @@ import BigIntegerCard from 'https://cardstack.com/base/big-integer';
 import NumberCard from 'https://cardstack.com/base/number';
 import { Chain } from './chain';
 import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
+import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
 
 export class Transaction extends CardDef {
   static displayName = 'Transaction';
+  static icon = ShieldCheckIcon;
   @field transactionHash = contains(StringCard);
   @field status = contains(BooleanCard);
   @field blockHash = contains(StringCard);

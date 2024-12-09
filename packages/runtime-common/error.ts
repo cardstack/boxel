@@ -14,7 +14,7 @@ export interface ErrorDetails {
 }
 
 export interface SerializedError {
-  detail: string;
+  message: string;
   status: number;
   title?: string;
   source?: ErrorDetails['source'];
@@ -25,7 +25,7 @@ export interface SerializedError {
 }
 
 export class CardError extends Error implements SerializedError {
-  detail: string;
+  message: string;
   status: number;
   title?: string;
   source?: ErrorDetails['source'];
@@ -35,11 +35,11 @@ export class CardError extends Error implements SerializedError {
   deps?: string[];
 
   constructor(
-    detail: string,
+    message: string,
     { status, title, source, responseText }: ErrorDetails = {},
   ) {
-    super(detail);
-    this.detail = detail;
+    super(message);
+    this.message = message;
     this.status = status || 500;
     this.title = title || getReasonPhrase(this.status);
     this.responseText = responseText;
@@ -48,7 +48,7 @@ export class CardError extends Error implements SerializedError {
   toJSON() {
     return {
       title: this.title,
-      detail: this.detail,
+      message: this.message,
       code: this.status,
       source: this.source,
       stack: this.stack,
@@ -59,7 +59,7 @@ export class CardError extends Error implements SerializedError {
     if (!err || typeof err !== 'object' || !isCardError(err)) {
       return err;
     }
-    let result = new CardError(err.detail, {
+    let result = new CardError(err.message, {
       status: err.status,
       title: err.title,
       source: err.source,
@@ -136,7 +136,10 @@ export function serializableError(err: any): any {
     return err;
   }
 
-  let result = Object.assign({}, err, { stack: err.stack });
+  let result = Object.assign({}, err, {
+    stack: err.stack,
+    message: err.message,
+  });
   result.additionalErrors =
     result.additionalErrors?.map((inner) => serializableError(inner)) ?? null;
   return result;
@@ -145,9 +148,43 @@ export function serializableError(err: any): any {
 export function responseWithError(
   error: CardError,
   requestContext: RequestContext,
+): Response;
+export function responseWithError(
+  body: Record<string, any> | undefined,
+  error: CardError,
+  requestContext: RequestContext,
+): Response;
+export function responseWithError(
+  bodyOrError: CardError | Record<string, any> | undefined,
+  errorOrRequestContext: RequestContext | CardError,
+  maybeRequestContext?: RequestContext,
 ): Response {
+  let body: Record<string, any> | undefined;
+  let error: CardError | undefined;
+  let requestContext: RequestContext | undefined;
+  if (bodyOrError instanceof CardError) {
+    error = bodyOrError;
+  } else {
+    body = bodyOrError;
+  }
+  if (errorOrRequestContext instanceof CardError) {
+    error = errorOrRequestContext;
+  } else {
+    requestContext = errorOrRequestContext;
+  }
+  if (maybeRequestContext) {
+    requestContext = maybeRequestContext;
+  }
+  if (!error) {
+    throw new Error(`Could not fashion error response, error is missing`);
+  }
+  if (!requestContext) {
+    throw new Error(
+      `Could not fashion error response, requestContext is missing`,
+    );
+  }
   return createResponse({
-    body: JSON.stringify({ errors: [serializableError(error)] }),
+    body: JSON.stringify({ errors: [body ? body : serializableError(error)] }),
     init: {
       status: error.status,
       statusText: error.title,
@@ -200,14 +237,20 @@ export function systemUnavailable(
   );
 }
 
-export function systemError(
-  requestContext: RequestContext,
-  message: string,
-  additionalError?: CardError | Error,
-): Response {
+export function systemError({
+  requestContext,
+  message,
+  additionalError,
+  body,
+}: {
+  requestContext: RequestContext;
+  message: string;
+  additionalError?: CardError | Error;
+  body?: Record<string, any>;
+}): Response {
   let err = new CardError(message, { status: 500 });
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(err, requestContext);
+  return responseWithError(body, err, requestContext);
 }

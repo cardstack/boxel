@@ -179,13 +179,15 @@ export class RealmIndexUpdater {
       this.realmURL,
     );
     let owners = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions.includes('realm-owner'))
+      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
       .map(([userId]) => userId);
     let realmUserId =
       owners.length === 1
         ? owners[0]
         : owners.find((userId) => userId.startsWith('@realm/'));
-    if (realmUserId) {
+    // real matrix user ID's always start with an '@', if it doesn't that
+    // means we are testing
+    if (realmUserId?.startsWith('@')) {
       return getMatrixUsername(realmUserId);
     }
 

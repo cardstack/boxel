@@ -45,6 +45,7 @@ import { Resource } from 'ember-resources';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { tracked } from '@glimmer/tracking';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import ChessIcon from '@cardstack/boxel-icons/chess';
 
 type ChessboardModifierSignature = {
   Args: {
@@ -500,6 +501,7 @@ class PgnField extends FieldDef {
 
 export class Chess extends CardDef {
   static displayName = 'Chess';
+  static icon = ChessIcon;
   @field pgn = contains(PgnField);
   @field analysis = contains(BooleanField);
 

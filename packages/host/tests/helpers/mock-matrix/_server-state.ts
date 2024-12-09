@@ -1,10 +1,18 @@
-import type * as MatrixSDK from 'matrix-js-sdk';
+import * as MatrixSDK from 'matrix-js-sdk';
+
 type IEvent = MatrixSDK.IEvent;
 
 export class ServerState {
   #roomCounter = 0;
   #eventCounter = 0;
-  #rooms: Map<string, { events: IEvent[]; receipts: IEvent[] }> = new Map();
+  #rooms: Map<
+    string,
+    {
+      events: IEvent[];
+      receipts: IEvent[];
+      roomStateEvents: Map<string, Map<string, MatrixSDK.MatrixEvent>>;
+    }
+  > = new Map();
   #listeners: ((event: IEvent) => void)[] = [];
   #displayName: string;
   #now: () => number;
@@ -45,7 +53,11 @@ export class ServerState {
       throw new Error(`room ${roomId} already exists`);
     }
 
-    this.#rooms.set(roomId, { events: [], receipts: [] });
+    this.#rooms.set(roomId, {
+      events: [],
+      receipts: [],
+      roomStateEvents: new Map(),
+    });
 
     this.addRoomEvent(
       sender,
@@ -57,7 +69,7 @@ export class ServerState {
           room_version: '0',
         },
       },
-      { origin_server_ts: timestamp },
+      { origin_server_ts: timestamp, state_key: '' },
     );
 
     this.addRoomEvent(
@@ -67,7 +79,7 @@ export class ServerState {
         type: 'm.room.name',
         content: { name: name ?? roomId },
       },
-      { origin_server_ts: timestamp },
+      { origin_server_ts: timestamp, state_key: '' },
     );
 
     this.addRoomEvent(
@@ -82,7 +94,7 @@ export class ServerState {
           membershipInitiator: sender,
         },
       },
-      { origin_server_ts: timestamp },
+      { origin_server_ts: timestamp, state_key: sender },
     );
 
     this.addRoomEvent(
@@ -102,7 +114,69 @@ export class ServerState {
       },
     );
 
+    this.addRoomEvent(
+      '@aibot:localhost',
+      {
+        room_id: roomId,
+        type: 'm.room.member',
+        content: {
+          displayname: 'aibot',
+          membership: 'join',
+        },
+      },
+      {
+        origin_server_ts: timestamp,
+        // host application expects this for the bot to join the room
+        state_key: '@aibot:localhost',
+      },
+    );
+
     return roomId;
+  }
+
+  getRoomState(
+    roomId: string,
+    eventType: string,
+    stateKey?: string,
+  ): Record<string, any> {
+    let event = this.#rooms
+      .get(roomId)
+      ?.roomStateEvents.get(eventType)
+      ?.get(stateKey ?? '');
+    if (event) {
+      return event.event.content || {};
+    } else {
+      throw new MatrixSDK.MatrixError({
+        errcode: 'M_NOT_FOUND',
+        error: `room state event ${eventType} does not exist for state key ${stateKey}`,
+      });
+    }
+  }
+
+  setRoomState(
+    sender: string,
+    roomId: string,
+    eventType: string,
+    content: Record<string, any>,
+    stateKey?: string,
+    timestamp: number = this.#now(),
+  ) {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+    return this.addRoomEvent(
+      sender,
+      {
+        room_id: roomId,
+        type: eventType,
+        content,
+      },
+      {
+        origin_server_ts: timestamp,
+        state_key: stateKey ?? '',
+      },
+    );
   }
 
   addRoomEvent(
@@ -113,6 +187,7 @@ export class ServerState {
     >,
     overrides?: { state_key?: string; origin_server_ts?: number },
   ) {
+    // duplicate the event fully
     let room = event.room_id && this.#rooms.get(event.room_id);
     if (!room) {
       throw new Error(`room ${event.room_id} does not exist`);
@@ -126,7 +201,7 @@ export class ServerState {
       origin_server_ts: overrides?.origin_server_ts ?? this.#now(),
       unsigned: { age: 0 },
       sender,
-      state_key: overrides?.state_key ?? sender,
+      state_key: overrides?.state_key,
     };
     let matrixContent = matrixEvent.content as any;
     if (matrixContent?.data?.replace) {
@@ -137,8 +212,17 @@ export class ServerState {
       relatesTo.event_id = relatesTo.event_id.replace(/__EVENT_ID__/g, eventId);
     }
     room.events.push(matrixEvent);
-    this.#listeners.forEach((listener) => listener(matrixEvent));
-
+    setTimeout(() => {
+      this.#listeners.forEach((listener) => listener(matrixEvent));
+    }, 0);
+    if (typeof overrides?.state_key === 'string') {
+      if (!room.roomStateEvents.has(event.type)) {
+        room.roomStateEvents.set(event.type, new Map());
+      }
+      room.roomStateEvents
+        .get(event.type)!
+        .set(overrides.state_key, new MatrixSDK.MatrixEvent(matrixEvent));
+    }
     return matrixEvent.event_id;
   }
 
@@ -224,7 +308,15 @@ export class ServerState {
     if (!room) {
       throw new Error(`room ${roomId} does not exist`);
     }
-    return room.events;
+    return [...room.events];
+  }
+
+  getRoomStateUpdatePayload(roomId: string): MatrixSDK.RoomState {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+    return { events: room.roomStateEvents, roomId } as MatrixSDK.RoomState;
   }
 
   eventId(): string {

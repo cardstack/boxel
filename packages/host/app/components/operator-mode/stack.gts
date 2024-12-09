@@ -3,11 +3,16 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import type { Actions } from '@cardstack/runtime-common';
+import type { Actions, CommandContext } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import OperatorModeStackItem, { CardDefOrId } from './stack-item';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import OperatorModeStackItem, {
+  type StackItemComponentAPI,
+  CardDefOrId,
+} from './stack-item';
 
 interface Signature {
   Element: HTMLElement;
@@ -16,32 +21,64 @@ interface Signature {
     stackItems: StackItem[];
     stackIndex: number;
     publicAPI: Actions;
+    commandContext: CommandContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
     ) => void;
     setupStackItem: (
-      stackItem: StackItem,
-      clearSelections: () => void,
-      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-      doScrollIntoView: (selector: string) => void,
+      model: StackItem,
+      componentAPI: StackItemComponentAPI,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
   Blocks: {};
 }
 
 export default class OperatorModeStack extends Component<Signature> {
+  private stackItemComponentAPI = new WeakMap<
+    StackItem,
+    StackItemComponentAPI
+  >();
+
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
+
+    // Animate closing items
+    const animations = itemsToDismiss
+      .map((item) => {
+        const componentAPI = this.stackItemComponentAPI.get(item);
+        return componentAPI?.startAnimation('closing') ?? undefined;
+      })
+      .filter(Boolean);
+
+    // Animate next top item moving forward
+    const nextTopItem = this.args.stackItems[itemIndex];
+    const nextTopItemAPI = this.stackItemComponentAPI.get(nextTopItem);
+
+    if (nextTopItemAPI) {
+      animations.push(nextTopItemAPI.startAnimation('movingForward'));
+    }
+
+    await Promise.all(animations);
+
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
+  private setupStackItem = (
+    item: StackItem,
+    componentAPI: StackItemComponentAPI,
+  ) => {
+    this.args.setupStackItem(item, componentAPI);
+    this.stackItemComponentAPI.set(item, componentAPI);
+  };
+
   <template>
-    <div ...attributes>
+    <div class='operator-mode-stack' ...attributes>
       <div class='inner'>
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem
@@ -49,10 +86,12 @@ export default class OperatorModeStack extends Component<Signature> {
             @index={{i}}
             @stackItems={{@stackItems}}
             @publicAPI={{@publicAPI}}
+            @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
-            @setupStackItem={{@setupStackItem}}
+            @setupStackItem={{this.setupStackItem}}
+            @saveCard={{@saveCard}}
           />
         {{/each}}
       </div>
@@ -61,10 +100,12 @@ export default class OperatorModeStack extends Component<Signature> {
     <style scoped>
       :global(:root) {
         --stack-padding-top: calc(
-          var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
+          var(--operator-mode-top-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
         --stack-padding-bottom: calc(
-          var(--search-sheet-closed-height) + (var(--boxel-sp))
+          var(--operator-mode-bottom-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
       }
       .operator-mode-stack {
@@ -73,31 +114,11 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-        padding: var(--stack-padding-top) var(--boxel-sp)
+        padding: var(--stack-padding-top) var(--operator-mode-spacing)
           var(--stack-padding-bottom);
         position: relative;
+        transition: padding-top var(--boxel-transition);
       }
-      .operator-mode-stack.with-bg-image:before {
-        content: ' ';
-        height: 100%;
-        width: 2px;
-        background-color: black;
-        display: block;
-        position: absolute;
-        top: 0;
-        left: -1px;
-      }
-      .operator-mode-stack.with-bg-image:first-child:before {
-        display: none;
-      }
-
-      .operator-mode-stack.medium-padding-top {
-        padding-top: var(--submode-switcher-trigger-height);
-      }
-      .operator-mode-stack.small-padding-top {
-        padding-top: var(--boxel-sp);
-      }
-
       .operator-mode-stack
         :deep(.field-component-card.fitted-format .missing-embedded-template) {
         margin-top: calc(-1 * var(--boxel-sp-lg));
@@ -105,7 +126,6 @@ export default class OperatorModeStack extends Component<Signature> {
         border-bottom-left-radius: var(--boxel-form-control-border-radius);
         border-bottom-right-radius: var(--boxel-form-control-border-radius);
       }
-
       .inner {
         height: 100%;
         position: relative;

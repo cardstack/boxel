@@ -14,14 +14,14 @@ import {
   type BaseDef,
   type Box,
   type Field,
-  CardContext,
-  realmURL,
+  type CardContext,
 } from './card-api';
 import {
   chooseCard,
   baseCardRef,
   identifyCard,
   CardContextName,
+  RealmURLContextName,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
@@ -38,6 +38,7 @@ interface Signature {
 
 export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
     <PermissionsConsumer as |permissions|>
@@ -95,13 +96,15 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
       .remove {
         --icon-color: var(--boxel-light);
+        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-dark);
         align-self: center;
         outline: 0;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-dark);
-        --icon-border: var(--boxel-dark);
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--boxel-highlight);
       }
       .remove:focus + :deep(.boxel-card-container.embedded-format),
       .remove:hover + :deep(.boxel-card-container.embedded-format) {
@@ -147,9 +150,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         offerToCreate: {
           ref: type,
           relativeTo: undefined,
-          realmURL: this.args.model.value?.[realmURL],
+          realmURL: this.realmURL,
         },
         createNewCard: this.cardContext?.actions?.createCard,
+        consumingRealm: this.realmURL,
       },
     );
     if (chosenCard) {

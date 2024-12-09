@@ -20,6 +20,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -179,15 +180,19 @@ const friendCardSource = `
   }
 `;
 
+let matrixRoomId: string;
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
@@ -315,15 +320,23 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
-      .hasAttribute('alt', 'Icon for workspace Test Workspace B');
+      .hasStyle({
+        backgroundImage: 'url("https://i.postimg.cc/L8yXRvws/icon.png")',
+      })
+      .hasAttribute('role', 'img')
+      .hasAttribute('aria-label', 'Test Workspace B');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png');
+      .hasStyle({
+        backgroundImage:
+          'url("https://boxel-images.boxel.ai/icons/cardstack.png")',
+      })
+      .hasAttribute('role', 'img')
+      .hasAttribute('aria-label', 'Test Workspace A');
 
     await click('[data-test-file="index.json"]');
     assert
@@ -514,15 +527,22 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png')
-      .hasAttribute('alt', 'Icon for workspace Base Workspace');
+      .hasStyle({
+        backgroundImage:
+          'url("https://boxel-images.boxel.ai/icons/cardstack.png")',
+      })
+      .hasAttribute('role', 'img')
+      .hasAttribute('aria-label', 'Base Workspace');
 
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://boxel-images.boxel.ai/icons/cardstack.png');
+      .hasStyle({
+        backgroundImage:
+          'url("https://boxel-images.boxel.ai/icons/cardstack.png")',
+      });
 
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');

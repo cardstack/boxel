@@ -13,8 +13,9 @@ import { module, test } from 'qunit';
 import {
   Loader,
   Query,
-  type Realm,
   baseRealm,
+  type Realm,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -68,6 +69,11 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       @field author = contains(PersonField);
     }
 
+    class Publisher extends CardDef {
+      static displayName = 'Publisher';
+      @field name = contains(StringField);
+    }
+
     class Post extends CardDef {
       static displayName = 'Post';
       @field article = linksTo(Article);
@@ -80,11 +86,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     }
 
     const BookGtsImpl = `
-    import { Component, field, contains, CardDef } from 'https://cardstack.com/base/card-api';
+    import { Component, field, contains, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
     import { PersonField } from './person';
+    import { Publisher } from './publisher';
     export class Book extends CardDef {
       static displayName = 'Book';
       @field author = contains(PersonField);
+      @field publisher = linksTo(Publisher);
       static fitted = class Fitted extends Component<typeof this> {
         <template>
           <div class='book'>
@@ -295,6 +303,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         'book.gts': BookGtsImpl,
         'person.gts': { PersonField },
         'post.gts': { Post },
+        'publisher.gts': { Publisher },
         ...sampleCards,
       },
     }));
@@ -352,6 +361,95 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 
+  test(`can include last known good state for instances in error state`, async function (assert) {
+    await testRealm.write(
+      'card-1.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Card 1',
+            description: 'Sample book',
+            author: {
+              firstName: 'Cardy',
+              lastName: 'Stackington Jr. III',
+            },
+            views: 0,
+          },
+          relationships: {
+            publisher: {
+              links: {
+                self: './missing-instance',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}book`,
+              name: 'Book',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.firstName': 'Cardy',
+        },
+      },
+      sort: [
+        {
+          by: 'author.lastName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+        },
+      ],
+    };
+    let realms = [testRealmURL];
+
+    await render(<template>
+      <PrerenderedCardSearch
+        @query={{query}}
+        @format='fitted'
+        @realms={{realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#each cards as |card|}}
+            <div class='card-container' data-test-is-error={{card.isError}}>
+              <card.component />
+            </div>
+          {{/each}}
+        </:response>
+      </PrerenderedCardSearch>
+    </template>);
+    await waitFor('.card-container');
+    assert.dom('.card-container').exists({ count: 2 });
+    assert
+      .dom('.card-container:nth-child(1)')
+      .containsText('Card 2 by Cardy Jones');
+    assert
+      .dom('.card-container:nth-child(1)[data-test-is-error]')
+      .doesNotExist('the result is not an instance in an error state');
+    assert
+      .dom('.card-container:nth-child(2)')
+      .containsText('Cardy Stackington Jr. III');
+    assert
+      .dom('.card-container:nth-child(2)[data-test-is-error]')
+      .exists('the result is an instance in an error state');
+    assert
+      .dom('.card-container .book')
+      .hasStyle({ backgroundColor: 'rgb(255, 255, 0)' });
+    assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
+  });
+
   test<TestContextWithSSE>(`refreshes when a queried realm changes`, async function (assert) {
     let query: Query = {
       filter: {
@@ -402,7 +500,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       callback: async () => {
         let owner = (getContext() as TestContext).owner;
         let cardService = owner.lookup('service:card-service') as CardService;
-        console.log('triggering card deletion');
         await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
       },
     });

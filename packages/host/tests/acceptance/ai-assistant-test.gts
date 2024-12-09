@@ -10,6 +10,7 @@ import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
+  setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
@@ -94,18 +95,22 @@ async function assertMessages(
   }
 }
 
+let matrixRoomId: string;
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);

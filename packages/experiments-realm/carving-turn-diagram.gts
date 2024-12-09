@@ -53,6 +53,7 @@ import type Owner from '@ember/owner';
 import { fn, concat, get } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoardAnnotation } from './board-annotation';
+import Route from '@cardstack/boxel-icons/route';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -539,6 +540,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
 
 export class CarvingTurnDiagram extends CardDef {
   static displayName = 'Carving Turn Diagram';
+  static icon = Route;
   @field diagramType = contains(DiagramType, {
     description:
       'An indicator for which turns to include in the diagram: toe turn, heel turn, or both toe and heel turns.',

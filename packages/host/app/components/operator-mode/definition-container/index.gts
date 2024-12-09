@@ -107,3 +107,6 @@ export {
   InstanceDefinitionContainer,
   ClickableModuleDefinitionContainer,
 };
+
+export { Divider } from './divider';
+export { BaseContainer } from './base';

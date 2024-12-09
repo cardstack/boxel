@@ -21,9 +21,7 @@ export interface AccordionItemSignature {
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
     <button class='title' {{on 'click' @onClick}}>
-      <span class='caret'>
-        <DropdownArrowDown width={{12}} height={{12}} />
-      </span>
+      <DropdownArrowDown class='caret' width='12' height='12' />
       {{yield to='title'}}
     </button>
     <div class={{cn 'content' @contentClass}}>
@@ -60,7 +58,9 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       transition: all var(--boxel-transition);
     }
     .title {
-      display: flex;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--boxel-sp-xxs);
       padding: var(--accordion-item-title-padding);
       font: var(--accordion-item-title-font);
       letter-spacing: var(--accordion-item-title-letter-spacing);
@@ -72,18 +72,12 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       cursor: pointer;
     }
     .caret {
-      --icon-color: var(--boxel-highlight);
-      display: inline-block;
-      width: var(--boxel-icon-sm);
-      height: var(--boxel-icon-sm);
-    }
-
-    .caret :deep(svg) {
+      flex-shrink: 0;
       transform: rotate(-90deg);
       transition: transform var(--boxel-transition);
     }
 
-    .accordion-item.open > .title > .caret :deep(svg) {
+    .accordion-item.open > .title > .caret {
       transform: rotate(0deg);
     }
   </style>

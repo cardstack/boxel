@@ -1,0 +1,23 @@
+{
+  "name": "@cardstack/billing",
+  "version": "0.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "stripe": "^17.2.1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1"
+  },
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:glint": "glint"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

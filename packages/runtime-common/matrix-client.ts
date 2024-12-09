@@ -170,6 +170,9 @@ export class MatrixClient {
   }
 
   async getAccountData<T>(type: string) {
+    if (!this.access) {
+      await this.login();
+    }
     let response = await this.request(
       `_matrix/client/v3/user/${encodeURIComponent(
         this.access!.userId,
@@ -241,6 +244,7 @@ export class MatrixClient {
         event_id: string;
         content: {
           body: string;
+          msgtype: string;
         };
       }[];
     };

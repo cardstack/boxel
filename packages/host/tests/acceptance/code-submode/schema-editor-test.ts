@@ -21,6 +21,7 @@ import {
   getMonacoContent,
   visitOperatorMode,
   waitForCodeEditor,
+  setupUserSubscription,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
@@ -205,6 +206,7 @@ const ambiguousDisplayNamesCardSource = `
   }
 `;
 
+let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
 
@@ -226,12 +228,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
+  let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({
@@ -571,8 +576,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     assert.dom('[data-test-edit-field-modal]').exists();
 
-    await waitFor('[data-test-selected-field-display-name]');
-    assert.dom('[data-test-selected-field-display-name]').hasText('String'); // String field selected by default
+    await waitFor('[data-test-selected-type-display-name]');
+    assert.dom('[data-test-selected-type-display-name]').hasText('String'); // String field selected by default
 
     await click('[data-test-choose-card-button]');
     await waitFor(
@@ -587,13 +592,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-selected-field-display-name]')
+          .querySelector('[data-test-selected-type-display-name]')
           ?.textContent?.includes('BigInteger'),
     );
 
-    await assert.dom('[data-test-selected-field-realm-icon] img').exists();
     await assert
-      .dom('[data-test-selected-field-display-name]')
+      .dom('[data-test-selected-type] [data-test-realm-icon-url]')
+      .exists();
+    await assert
+      .dom('[data-test-selected-type-display-name]')
       .hasText('BigInteger');
 
     await click('[data-test-choose-card-button]');
@@ -611,11 +618,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-selected-field-display-name]')
+          .querySelector('[data-test-selected-type-display-name]')
           ?.textContent?.includes('Date'),
     );
 
-    await assert.dom('[data-test-selected-field-display-name]').hasText('Date');
+    await assert.dom('[data-test-selected-type-display-name]').hasText('Date');
     assert.dom('[data-test-save-field-button]').hasAttribute('disabled');
 
     await fillIn('[data-test-field-name-input]', ' birth date');
@@ -705,9 +712,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await waitFor('.card-chooser-area [data-test-selected-field-display-name]');
+    await waitFor('.card-chooser-area [data-test-selected-type-display-name]');
     assert
-      .dom('.card-chooser-area [data-test-selected-field-display-name]')
+      .dom('.card-chooser-area [data-test-selected-type-display-name]')
       .containsText('BigInteger');
     await saveField(this, assert, expectedEvents);
 

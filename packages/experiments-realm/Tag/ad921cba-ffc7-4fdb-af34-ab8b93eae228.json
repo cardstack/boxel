@@ -3,12 +3,13 @@
     "type": "card",
     "attributes": {
       "name": "Application",
+      "color": "",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../productivity/task",
+        "module": "../tag",
         "name": "Tag"
       }
     }

@@ -1,4 +1,3 @@
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -8,18 +7,22 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import { cssVar } from '../../helpers/css-var.ts';
 import Avatar from './index.gts';
 
 export default class AvatarUsage extends Component {
   @tracked userId = 'user123';
   @tracked displayName = 'John Doe';
+  @tracked thumbnailURL =
+    'https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1';
   @tracked isReady = true;
 
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
   declare profileAvatarIconSize: CSSVariableInfo;
-
   @cssVariable({ cssClassName: 'avatar-freestyle-container' })
   declare profileAvatarIconBorder: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'avatar-freestyle-container' })
+  declare profileAvatarTextColor: CSSVariableInfo;
 
   <template>
     <div
@@ -38,12 +41,14 @@ export default class AvatarUsage extends Component {
           <Avatar
             @userId={{this.userId}}
             @displayName={{this.displayName}}
+            @thumbnailURL={{this.thumbnailURL}}
             @isReady={{this.isReady}}
           />
         </:example>
         <:api as |Args|>
           <Args.String
             @name='userId'
+            @required={{true}}
             @description='Unique identifier for the user'
             @value={{this.userId}}
             @onInput={{fn (mut this.userId)}}
@@ -51,13 +56,20 @@ export default class AvatarUsage extends Component {
           <Args.String
             @name='displayName'
             @description='User display name'
+            @defaultValue='userId'
             @value={{this.displayName}}
             @onInput={{fn (mut this.displayName)}}
           />
+          <Args.String
+            @name='thumbnailURL'
+            @description='URL of the user thumbnail'
+            @value={{this.thumbnailURL}}
+            @onInput={{fn (mut this.thumbnailURL)}}
+          />
           <Args.Bool
             @name='isReady'
-            @description='Whether the avatar is ready to display'
-            @defaultValue={{true}}
+            @required={{true}}
+            @description='Shows initials on the avatar once this is true'
             @value={{this.isReady}}
             @onInput={{fn (mut this.isReady)}}
           />
@@ -65,15 +77,15 @@ export default class AvatarUsage extends Component {
         <:cssVars as |Css|>
           <Css.Basic
             @name='profile-avatar-icon-size'
-            @type='size'
-            @description='Size of the avatar (CSS length value)'
+            @type='length'
+            @description='Size of the avatar (CSS length value).'
             @value={{this.profileAvatarIconSize.value}}
             @onInput={{this.profileAvatarIconSize.update}}
           />
           <Css.Basic
             @name='profile-avatar-icon-border'
-            @type='size'
-            @description='Border of the avatar (CSS border value)'
+            @type='<line-width> || <line-style> || <color>'
+            @description='Border of the avatar (CSS border value).'
             @value={{this.profileAvatarIconBorder.value}}
             @onInput={{this.profileAvatarIconBorder.update}}
           />

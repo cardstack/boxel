@@ -7,7 +7,7 @@ import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -32,7 +32,6 @@ import {
   type ResolvedCodeRef,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
-import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -50,15 +49,19 @@ import {
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../lib/html-component';
 import FileTree from '../editor/file-tree';
 
+import CardError from './card-error';
+import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -120,6 +123,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
+  @service private declare loaderService: LoaderService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -260,12 +264,49 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get isCardPreviewError() {
-    return this.isCard && this.cardResource.cardError;
+    return this.isCard && this.cardError;
+  }
+
+  private get isEmptyFile() {
+    return this.readyFile.content.match(/^\s*$/);
+  }
+
+  @cached
+  get cardError() {
+    return this.cardResource.cardError;
+  }
+
+  @cached
+  get lastKnownGoodHtml() {
+    if (this.cardError?.meta.lastKnownGoodHtml) {
+      this.loadScopedCSS.perform();
+      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
+    }
+    return undefined;
+  }
+
+  @cached
+  get cardErrorSummary() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return this.cardError.status === 404 &&
+      // a missing link error looks a lot like a missing card error
+      this.cardError.message?.includes('missing')
+      ? `Link Not Found`
+      : this.cardError.title;
+  }
+
+  get cardErrorTitle() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return `Card Error: ${this.cardErrorSummary}`;
   }
 
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
-      if (this.cardResource.cardError) {
+      if (this.cardError) {
         return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
       }
     }
@@ -309,51 +350,6 @@ export default class CodeSubmode extends Component<Signature> {
     }
 
     return null;
-  }
-
-  private get fileIncompatibilityErrors() {
-    if (this.isCard) {
-      if (this.cardResource.cardError) {
-        try {
-          let error = this.cardResource.cardError.error;
-
-          if (error.responseText) {
-            let parsedError = JSON.parse(error.responseText);
-
-            let allDetails = parsedError.errors
-              .concat(
-                ...parsedError.errors.map(
-                  (e: SerializedError) => e.additionalErrors,
-                ),
-              )
-              .map((e: SerializedError) => e.detail);
-
-            // There’s often a pair of errors where one has an unhelpful prefix like this:
-            // cannot return card from index: Not Found - http://test-realm/test/non-card not found
-            // http://test-realm/test/non-card not found
-
-            let detailsWithoutDuplicateSuffixes = allDetails.reduce(
-              (details: string[], currentDetail: string) => {
-                return [
-                  ...details.filter(
-                    (existingDetail) => !existingDetail.endsWith(currentDetail),
-                  ),
-                  currentDetail,
-                ];
-              },
-              [],
-            );
-
-            return detailsWithoutDuplicateSuffixes;
-          }
-        } catch (e) {
-          console.log('Error extracting card preview errors', e);
-          return [];
-        }
-      }
-    }
-
-    return [];
   }
 
   private get currentOpenFile() {
@@ -487,7 +483,17 @@ export default class CodeSubmode extends Component<Signature> {
   private saveCard = restartableTask(async (card: CardDef) => {
     // these saves can happen so fast that we'll make sure to wait at
     // least 500ms for human consumption
-    await all([this.cardService.saveModel(this, card), timeout(500)]);
+    await all([this.cardService.saveModel(card), timeout(500)]);
+  });
+
+  private loadScopedCSS = restartableTask(async () => {
+    if (this.cardError?.meta.scopedCssUrls) {
+      await Promise.all(
+        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
+          this.loaderService.loader.import(cssModuleUrl),
+        ),
+      );
+    }
   });
 
   private get isSaving() {
@@ -770,7 +776,6 @@ export default class CodeSubmode extends Component<Signature> {
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
-                          data-test-card-inspector-panel
                         />
                       {{/if}}
                     </:inspector>
@@ -786,7 +791,7 @@ export default class CodeSubmode extends Component<Signature> {
                   @minLengthPx={{100}}
                 >
                   <InnerContainer
-                    class='recent-files'
+                    class='recent-files-panel'
                     as |InnerContainerContent InnerContainerHeader|
                   >
                     <InnerContainerHeader aria-label='Recent Files Header'>
@@ -836,28 +841,43 @@ export default class CodeSubmode extends Component<Signature> {
                 {{#if this.isReady}}
                   {{#if this.isCardPreviewError}}
                     <div
-                      class='preview-error-container'
-                      data-test-file-incompatibility-message
+                      class='stack-item-content card-error'
+                      data-test-card-error
                     >
-                      <div class='preview-error-box'>
-                        <div class='preview-error-text'>
-                          Card Preview Error
-                        </div>
-                        <p>
-                          {{this.fileIncompatibilityMessage}}
-                        </p>
-
-                        <hr class='preview-error' />
-
-                        {{#each this.fileIncompatibilityErrors as |error|}}
-                          <pre
-                            class='preview-error'
-                            data-test-card-preview-error
-                          >{{error}}</pre>
-                        {{/each}}
-                      </div>
+                      {{#if this.lastKnownGoodHtml}}
+                        <this.lastKnownGoodHtml />
+                      {{else}}
+                        <CardError />
+                      {{/if}}
                     </div>
+                    {{! this is here to make TS happy, this is always true }}
+                    {{#if this.cardError}}
+                      <CardErrorDetail
+                        @error={{this.cardError}}
+                        @title={{this.cardErrorSummary}}
+                      />
+                    {{/if}}
+                  {{else if this.isEmptyFile}}
+                    <Accordion as |A|>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
+                        @isOpen={{eq
+                          this.selectedAccordionItem
+                          'schema-editor'
+                        }}
+                      >
+                        <:title>
+                          <SchemaEditorTitle @hasModuleError={{true}} />
+                        </:title>
+                        <:content>
+                          <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+                        </:content>
+                      </A.Item>
+                    </Accordion>
                   {{else if this.fileIncompatibilityMessage}}
+
                     <div
                       class='file-incompatible-message'
                       data-test-file-incompatibility-message
@@ -958,11 +978,17 @@ export default class CodeSubmode extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
+        --code-mode-panel-background-color: #ebeaed;
+        --code-mode-container-border-radius: 10px;
+        --code-mode-realm-icon-size: 1.125rem;
+        --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
         --code-mode-padding-top: calc(
-          var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
+          var(--operator-mode-top-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
         --code-mode-padding-bottom: calc(
-          var(--search-sheet-closed-height) + (var(--boxel-sp))
+          var(--operator-mode-bottom-bar-item-height) +
+            (2 * (var(--operator-mode-spacing)))
         );
       }
 
@@ -971,7 +997,7 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        padding: var(--code-mode-padding-top) var(--boxel-sp)
+        padding: var(--code-mode-padding-top) var(--operator-mode-spacing)
           var(--code-mode-padding-bottom);
         overflow: auto;
         flex: 1;
@@ -1002,8 +1028,8 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .inner-container.recent-files {
-        background-color: var(--boxel-200);
+      .recent-files-panel {
+        background-color: var(--code-mode-panel-background-color);
       }
 
       .choose-file-prompt {
@@ -1015,14 +1041,14 @@ export default class CodeSubmode extends Component<Signature> {
 
       .code-mode-top-bar {
         --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--boxel-sp)
-        );
+          var(--operator-mode-left-column) - var(--operator-mode-spacing)
+        ); /* subtract additional padding */
 
         position: absolute;
         top: 0;
         right: 0;
         left: var(--code-mode-top-bar-left-offset);
-        padding: var(--boxel-sp);
+        padding: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
       }
@@ -1049,9 +1075,6 @@ export default class CodeSubmode extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
-      .empty-container > :deep(svg) {
-        --icon-color: var(--boxel-highlight);
-      }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;
       }
@@ -1059,7 +1082,9 @@ export default class CodeSubmode extends Component<Signature> {
         border-bottom: var(--boxel-border);
       }
       .accordion-content {
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--code-mode-panel-background-color);
+        min-height: 100%;
       }
 
       .preview-error-container {
@@ -1089,6 +1114,14 @@ export default class CodeSubmode extends Component<Signature> {
       pre.preview-error {
         white-space: pre-wrap;
         text-align: left;
+      }
+
+      .card-error {
+        flex: 2;
+        opacity: 0.4;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: auto;
       }
     </style>
   </template>

@@ -20,7 +20,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../product-requirement-document",
+        "module": "/catalog/product-requirement-document",
         "name": "ProductRequirementDocument"
       }
     }

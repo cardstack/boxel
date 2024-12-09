@@ -75,10 +75,14 @@ export default class DatetimeField extends FieldDef {
         @onInput={{fn this.parseInput @set}}
         @max='9999-12-31T23:59:59'
         @disabled={{not @canEdit}}
+        data-test-datetime-field-editor
       />
     </template>
 
     parseInput(set: Function, date: string) {
+      if (!date?.length) {
+        return set(null);
+      }
       return set(parseISO(date));
     }
 

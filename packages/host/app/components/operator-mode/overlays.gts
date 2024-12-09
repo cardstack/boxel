@@ -193,7 +193,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         container-type: size;
       }
       .actions-overlay.selected {
-        box-shadow: 0 0 0 2px var(--boxel-highlight);
+        box-shadow: 0 0 0 var(--boxel-outline-width) var(--boxel-highlight);
       }
       .hovered {
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
@@ -330,7 +330,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .actions-item__button:hover {
         --icon-bg: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-cyan);
+        background-color: var(--boxel-highlight);
       }
       .selected .actions-item.select {
         visibility: visible;
@@ -539,18 +539,17 @@ export default class OperatorModeOverlays extends Component<Signature> {
       format = canWrite ? format : 'isolated';
 
       let card: CardDef | undefined;
-      if (typeof cardDefOrId === 'string') {
-        card = await this.cardService.getCard(cardId);
-      } else {
-        card = cardDefOrId;
-      }
-
-      if (!card) {
+      try {
+        if (typeof cardDefOrId === 'string') {
+          card = await this.cardService.getCard(cardId);
+        } else {
+          card = cardDefOrId;
+        }
+      } catch (e) {
         console.error(`can't load card: ${cardId}`);
-        return;
       }
 
-      await this.args.publicAPI.viewCard(card, format, {
+      await this.args.publicAPI.viewCard(card ?? new URL(cardId), format, {
         fieldType,
         fieldName,
       });

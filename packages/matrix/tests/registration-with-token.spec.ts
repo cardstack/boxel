@@ -20,9 +20,13 @@ import {
   assertLoggedOut,
   logout,
   login,
+  assertPaymentLink,
+  setupPayment,
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
+  setupUser,
+  encodeWebSafeBase64,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -105,17 +109,26 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
 
+    await page.bringToFront();
+
+    await expect(page.locator('[data-test-email-validated]')).toContainText(
+      'Success! Your email has been validated',
+    );
+
+    await assertPaymentLink(page, {
+      username: '@user1:localhost',
+      email: 'user1@example.com',
+    });
+
+    // base 64 encode the matrix user id
+    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
+    await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page, {
       email: 'user1@example.com',
       displayName: 'Test User',
     });
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-    await expect(
-      page.locator(
-        '[data-test-workspace-list] [data-test-workspace-loading-indicator]',
-      ),
-    ).toHaveCount(1);
     await expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]',
@@ -135,11 +148,13 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toContainText('private', { timeout: 30_000 });
     await expect(
-      page.locator(`[data-test-workspace="Test User's Workspace"] img`),
+      page.locator(
+        `[data-test-workspace="Test User's Workspace"] [data-test-realm-icon-url]`,
+      ),
       'the "T" icon URL is shown',
     ).toHaveAttribute(
-      'src',
-      'https://boxel-images.boxel.ai/icons/Letter-t.png',
+      'style',
+      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-t.png");',
     );
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
@@ -149,6 +164,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-workspace-chooser-toggle]`),
       'workspace toggle button is disabled when no workspaces opened',
     ).toBeDisabled();
+    await expect(
+      page.locator(
+        `[data-test-catalog-list] [data-test-workspace="Test Workspace A"]`,
+      ),
+    ).toHaveCount(1);
 
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
@@ -179,11 +199,22 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
 
+    await setupUser('@user2:localhost', realmServer);
+
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
+
+    await expect(
+      page.locator('[data-test-setup-payment-message]'),
+    ).toContainText('Set up your payment method now to enjoy Boxel');
+
+    const user2MatrixUserId = encodeWebSafeBase64('@user2:localhost');
+
+    await setupPayment(user2MatrixUserId, realmServer, page);
+
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
       displayName: 'user2',
@@ -196,6 +227,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(0);
+    await expect(
+      page.locator(
+        `[data-test-catalog-list] [data-test-workspace="Test Workspace A"]`,
+      ),
+    ).toHaveCount(1);
 
     // assert newly registered user can login with their credentials
     await logout(page);
@@ -212,6 +248,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await page.reload();
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        `[data-test-catalog-list] [data-test-workspace="Test Workspace A"]`,
+      ),
     ).toHaveCount(1);
 
     // we're including the following assertions in this test because the

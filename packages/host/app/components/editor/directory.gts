@@ -107,7 +107,7 @@ export default class Directory extends Component<Args> {
 
       .file.selected,
       .file:active {
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
       }
 

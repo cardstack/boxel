@@ -33,16 +33,21 @@ export async function handleDebugCommands(
     let patchMessage = eventBody.split('debug:patch:')[1];
     // If there's a card attached, we need to split it off to parse the json
     patchMessage = patchMessage.split('(Card')[0];
-    let command: {
-      card_id?: string;
+    let toolArguments: {
+      attributes?: {
+        cardId?: string;
+        patch?: any;
+      };
       description?: string;
-      attributes?: any;
     } = {};
     try {
-      command = JSON.parse(patchMessage);
-      if (!command.card_id || !command.description || !command.attributes) {
+      toolArguments = JSON.parse(patchMessage);
+      if (
+        !toolArguments.attributes?.cardId ||
+        !toolArguments.attributes?.patch
+      ) {
         throw new Error(
-          'Invalid debug patch: card_id, description, or attributes is missing.',
+          'Invalid debug patch: attributes.cardId, or attributes.patch is missing.',
         );
       }
     } catch (error) {
@@ -54,7 +59,17 @@ export async function handleDebugCommands(
         undefined,
       );
     }
-    return await sendOption(client, roomId, command, undefined);
+    return await sendOption(
+      client,
+      roomId,
+      {
+        id: 'patchCard-debug',
+        name: 'patchCard',
+        type: 'function',
+        arguments: toolArguments,
+      },
+      undefined,
+    );
   }
   return;
 }

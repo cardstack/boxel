@@ -4,8 +4,10 @@ import {
   CardDef,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import ViewIcon from '@cardstack/boxel-icons/view';
 
 export class EmbeddedViewDriver extends CardDef {
+  static icon = ViewIcon;
   @field card = linksTo(CardDef);
   static isolated = class Isolated extends Component<typeof this> {
     <template>

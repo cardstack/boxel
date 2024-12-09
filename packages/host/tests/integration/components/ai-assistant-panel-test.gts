@@ -72,18 +72,22 @@ module('Integration | ai-assistant-panel', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  let { createAndJoinRoom, simulateRemoteMessage, getRoomEvents } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
-      activeRealms: [testRealmURL],
-      autostart: true,
-      now: (() => {
-        // deterministic clock so that, for example, screenshots
-        // have consistent content
-        let clock = new Date(2024, 8, 19).getTime();
-        return () => (clock += 10);
-      })(),
-    });
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    getRoomEvents,
+    setReadReceipt,
+  } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+    now: (() => {
+      // deterministic clock so that, for example, screenshots
+      // have consistent content
+      let clock = new Date(2024, 8, 19).getTime();
+      return () => (clock += 10);
+    })(),
+  });
 
   let noop = () => {};
 
@@ -302,13 +306,79 @@ module('Integration | ai-assistant-panel', function (hooks) {
     return roomId;
   }
 
+  async function scrollAiAssistantToBottom() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    conversationElement.scrollTop =
+      conversationElement.scrollHeight - conversationElement.clientHeight;
+    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
+  }
+
+  async function scrollAiAssistantToTop() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    conversationElement.scrollTop = 0;
+    await triggerEvent('[data-test-ai-assistant-conversation]', 'scroll');
+    await new Promise((r) => setTimeout(r, 500)); // wait for the 500ms throttle on the scroll event handler
+  }
+
+  function isAiAssistantScrolledToBottom() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+
+    return (
+      Math.abs(
+        conversationElement.scrollHeight -
+          conversationElement.clientHeight -
+          conversationElement.scrollTop,
+        // we'll use a 20px threshold for considering the ai assistant scrolled
+        // all the way to the bottom
+      ) < 20
+    );
+  }
+  function isAiAssistantScrolledToTop() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+
+    return conversationElement.scrollTop === 0;
+  }
+
+  function fillRoomWithReadMessages(
+    roomId: string,
+    messagesHaveBeenRead = true,
+  ) {
+    for (let i = 0; i < 20; i++) {
+      simulateRemoteMessage(roomId, '@testuser:staging', {
+        body: `question #${i + 1}`,
+        msgtype: 'org.boxel.message',
+        formatted_body: `question #${i + 1}`,
+        format: 'org.matrix.custom.html',
+      });
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: `answer #${i + 1}`,
+        msgtype: 'm.text',
+        formatted_body: `answer #${i + 1}`,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      if (messagesHaveBeenRead) {
+        setReadReceipt(roomId, eventId, '@testuser:staging');
+      }
+    }
+  }
+
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
     assert.expect(4);
 
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -320,8 +390,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -388,8 +462,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Evie' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -409,8 +487,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Jackie' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Jackie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -472,82 +554,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
   });
 
-  test('it only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
-    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-
-    let otherCardID = `${testRealmURL}Person/burcu`;
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'i am the body',
-      msgtype: 'org.boxel.command',
-      formatted_body:
-        'A patch<pre><code>https://www.example.com/path/to/resource?query=param1value&anotherQueryParam=anotherValue&additionalParam=additionalValue&longparameter1=someLongValue1</code></pre>',
-      format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'patchCard',
-          arguments: {
-            card_id: otherCardID,
-            attributes: { firstName: 'Dave' },
-          },
-        },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
-    });
-
-    await waitFor('[data-test-command-apply="ready"]');
-    await click('[data-test-command-apply]');
-
-    await waitFor('[data-test-command-card-idle]');
-    assert
-      .dom('[data-test-card-error]')
-      .containsText(`Please open card '${otherCardID}' to make changes to it.`);
-    assert.dom('[data-test-apply-state="failed"]').exists();
-    assert.dom('[data-test-ai-bot-retry-button]').exists();
-    assert.dom('[data-test-command-apply]').doesNotExist();
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
-      'mouseenter',
-    );
-    await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
-    await percySnapshot(
-      'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
-    );
-
-    await setCardInOperatorModeState(otherCardID);
-    await waitFor('[data-test-person="Burcu"]');
-    click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
-    await waitFor('[data-test-apply-state="applying"]');
-    assert.dom('[data-test-apply-state="applying"]').exists();
-
-    await waitFor('[data-test-command-card-idle]');
-    await waitFor('[data-test-apply-state="applied"]');
-    assert.dom('[data-test-apply-state="applied"]').exists();
-    assert.dom('[data-test-person]').hasText('Dave');
-    assert.dom('[data-test-command-apply]').doesNotExist();
-    assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
-
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
-      'mouseenter',
-    );
-    assert
-      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
-      .exists();
-    await percySnapshot(
-      'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
-    );
-  });
-
   test('it can apply change to nested contains field', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
@@ -557,10 +563,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let payload = {
       name: 'patchCard',
       arguments: {
-        card_id: `${testRealmURL}Person/fadhlan`,
         attributes: {
-          firstName: 'Joy',
-          address: { shippingInfo: { preferredCarrier: 'UPS' } },
+          cardId: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: {
+              firstName: 'Joy',
+              address: { shippingInfo: { preferredCarrier: 'UPS' } },
+            },
+          },
         },
       },
       eventId: 'event1',
@@ -588,14 +598,18 @@ module('Integration | ai-assistant-panel', function (hooks) {
         name: 'patchCard',
         payload: {
           attributes: {
-            address: {
-              shippingInfo: {
-                preferredCarrier: 'UPS',
+            cardId: 'http://test-realm/test/Person/fadhlan',
+            patch: {
+              attributes: {
+                address: {
+                  shippingInfo: {
+                    preferredCarrier: 'UPS',
+                  },
+                },
+                firstName: 'Joy',
               },
             },
-            firstName: 'Joy',
           },
-          card_id: 'http://test-realm/test/Person/fadhlan',
         },
       },
       'it can preview code when a change is proposed',
@@ -628,12 +642,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
             attributes: {
-              address: { shippingInfo: { preferredCarrier: 'Fedex' } },
-            },
-            relationships: {
-              pet: { links: { self: null } },
+              cardId: id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'Fedex' } },
+                },
+                relationships: {
+                  pet: { links: { self: null } },
+                },
+              },
             },
           },
         },
@@ -666,13 +684,17 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
             attributes: {
-              address: { shippingInfo: { preferredCarrier: 'UPS' } },
-            },
-            relationships: {
-              pet: {
-                links: { self: `${testRealmURL}Pet/mango` },
+              cardId: id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'UPS' } },
+                },
+                relationships: {
+                  pet: {
+                    links: { self: `${testRealmURL}Pet/mango` },
+                  },
+                },
               },
             },
           },
@@ -715,8 +737,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-            attributes: { trips: { tripTitle: 'Trip to Japan' } },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: {
+                  trips: {
+                    tripTitle: 'Trip to Japan',
+                  },
+                },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -749,9 +779,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -792,8 +825,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-            attributes: { firstName: 'Jackie' },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: { firstName: 'Jackie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -853,8 +890,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: id,
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -1027,7 +1068,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-past-sessions-button]');
     assert.dom('[data-test-past-sessions]').exists();
     assert.dom('[data-test-joined-room]').exists({ count: 1 });
-    await click('.operator-mode__main');
+    await click('.interact-submode'); // outside click
     assert.dom('[data-test-past-sessions]').doesNotExist();
 
     await click('[data-test-past-sessions-button]');
@@ -1128,7 +1169,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
-
     await waitFor('[data-test-ai-assistant-message].is-error');
     await waitUntil(
       () =>
@@ -1161,8 +1201,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Dave' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -1282,6 +1326,127 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .doesNotContainText('Updated');
   });
 
+  test('it shows unread message indicator when new message received and not scrolled to bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when all messages have been read',
+      );
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .exists('unread messages button exists when there are unread messages');
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .containsText('1 unread message');
+  });
+
+  test('clicking on unread message indicator scrolls to unread message', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when all messages have been read',
+      );
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    await click('[data-test-unread-messages-button]');
+    await new Promise((r) => setTimeout(r, 2000)); // wait for animated scroll to complete
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
+  test('it does not show unread message indicator when new message received and scrolled to bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+    await scrollAiAssistantToBottom();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'This is an unread message',
+      msgtype: 'm.text',
+      formatted_body: 'This is an unread message',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    assert
+      .dom('[data-test-unread-messages-button]')
+      .doesNotExist(
+        'unread messages button does not exist when scrolled to the bottom',
+      );
+  });
+
+  test('it scrolls to first unread message when opening a room with unread messages', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId, false);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToTop(),
+      'AI assistant is scrolled to top (where the first unread message is)',
+    );
+  });
+
+  test('it scrolls to last message when opening a room with no unread messages', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -1329,6 +1494,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-has-active-sessions]');
     await click('[data-test-past-sessions-button]');
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
+    await waitFor('[data-test-message-idx="0"]');
 
     let matrixService = this.owner.lookup(
       'service:matrix-service',
@@ -1700,8 +1866,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            attributes: { firstName: 'Evie' },
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
           },
         },
         eventId: '__EVENT_ID__',
@@ -1769,11 +1939,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
@@ -1833,11 +2005,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
@@ -1892,10 +2066,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              contains: {
-                title: 'Mango',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                contains: {
+                  title: 'Mango',
+                },
               },
             },
           },
@@ -1948,11 +2124,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
         toolCall: {
           name: 'searchCard',
           arguments: {
-            description: 'Searching for card',
-            filter: {
-              type: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+            attributes: {
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
               },
             },
           },
@@ -1998,10 +2176,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const roomId = await renderAiAssistantPanel(id);
     const toolArgs = {
       description: 'Search for Person cards',
-      filter: {
-        type: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
+      attributes: {
+        filter: {
+          type: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
         },
       },
     };
@@ -2043,7 +2223,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-command-result] [data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
-      .dom(`${rightStackItem} [data-test-boxel-header-title]`)
+      .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
       .hasText('Command Result');
 
     const savedCardId = document
@@ -2057,7 +2237,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasText(`Description ${toolArgs.description}`);
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
@@ -2071,10 +2251,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const roomId = await renderAiAssistantPanel(id);
     const toolArgs = {
       description: 'Search for Person cards',
-      filter: {
-        type: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
+      attributes: {
+        filter: {
+          type: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
         },
       },
     };
@@ -2118,7 +2300,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-command-result] [data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
-      .dom(`${stackItem} [data-test-boxel-header-title]`)
+      .dom(`${stackItem} [data-test-boxel-card-header-title]`)
       .hasText('Command Result');
 
     const savedCardId = document
@@ -2132,7 +2314,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasText(`Description ${toolArgs.description}`);
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.filter, null, 2)}`);
+      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });

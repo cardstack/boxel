@@ -1,3 +1,5 @@
+import deburr from 'lodash/deburr';
+
 export function stripFileExtension(path: string): string {
   return path.replace(/\.[^/.]+$/, '');
 }
@@ -26,12 +28,19 @@ export function stringToColor(string: string | null) {
   return color;
 }
 
+export function cleanseString(value: string, separator = '_') {
+  return deburr(value.toLocaleLowerCase())
+    .replace(/[^a-z0-9-_]+/g, separator)
+    .replace(/^[^a-z0-9]/, '')
+    .replace(/[^a-z0-9]$/, '');
+}
+
 export function iconURLFor(word: string) {
   if (!word) {
     return undefined;
   }
-
-  return iconURLs[word.toLocaleLowerCase().charAt(0)];
+  let cleansedWord = cleanseString(word).replace(/^[0-9]+/, '');
+  return iconURLs[cleansedWord.charAt(0)];
 }
 
 export function getRandomBackgroundURL() {
@@ -68,11 +77,15 @@ const iconURLs: { [letter: string]: string } = Object.freeze({
   z: 'https://boxel-images.boxel.ai/icons/letter-z.png',
 });
 const backgroundURLs: readonly string[] = Object.freeze([
+  'https://boxel-images.boxel.ai/background-images/4k-arrow-weave.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-atmosphere-curvature.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-brushed-slabs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-coral-reefs.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-crescent-lake.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-curvilinear-stairs.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-desert-dunes.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-doodle-board.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-fallen-leaves.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-flowing-mesh.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-glass-reflection.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-glow-cells.jpg',
@@ -80,7 +93,9 @@ const backgroundURLs: readonly string[] = Object.freeze([
   'https://boxel-images.boxel.ai/background-images/4k-joshua-dawn.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-leaves-moss.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-lowres-glitch.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-metallic-leather.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-microscopic-crystals.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-paint-swirl.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-pastel-triangles.jpg',
@@ -89,7 +104,12 @@ const backgroundURLs: readonly string[] = Object.freeze([
   'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-redrock-canyon.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-rock-portal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-rolling-hills.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-sand-stone.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-silver-fur.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-stained-glass.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-stone-veins.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-tangerine-plains.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-techno-floor.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-water-surface.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-watercolor-splashes.jpg',

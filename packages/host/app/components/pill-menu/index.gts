@@ -36,6 +36,7 @@ interface Signature {
     canAttachCard?: boolean;
     query?: CardCatalogQuery;
     onChooseCard?: (card: CardDef) => void;
+    onChangeItemIsActive: (item: PillMenuItem, isActive: boolean) => void;
   };
   Blocks: {
     headerIcon: [];
@@ -101,10 +102,10 @@ export default class PillMenu extends Component<Signature> {
         {{#if @canAttachCard}}
           <footer class='menu-footer'>
             <AddButton
-              class='add-button'
+              class='attach-button'
               @variant='pill'
-              @iconWidth='15px'
-              @iconHeight='15px'
+              @iconWidth='14'
+              @iconHeight='14'
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
               data-test-pill-menu-add-button
@@ -187,28 +188,24 @@ export default class PillMenu extends Component<Signature> {
       .pill-list:deep(.card-content) {
         max-width: initial;
       }
-      .add-button {
-        --icon-color: var(--boxel-highlight);
-        width: max-content;
-        margin: var(--button-outline);
-        padding: var(--pill-menu-spacing);
-        background: none;
-        box-shadow: none;
-        border-radius: var(--boxel-border-radius-xl);
-        color: var(--boxel-highlight);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        transition: color var(--boxel-transition);
+      .menu-footer {
+        padding: var(--boxel-sp-xxs);
       }
-      .add-button:hover:not(:disabled),
-      .add-button:focus:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
-        color: var(--boxel-highlight-hover);
+      .attach-button {
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xs);
+        background: none;
+      }
+      .attach-button:hover:not(:disabled),
+      .attach-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
         background: none;
         box-shadow: none;
       }
-      .add-button:focus:focus-visible {
-        outline-color: var(--boxel-highlight);
+      .attach-button > :deep(svg > path) {
+        stroke: none;
       }
     </style>
   </template>
@@ -234,7 +231,7 @@ export default class PillMenu extends Component<Signature> {
   }
 
   @action private toggleActive(item: PillMenuItem) {
-    item.isActive = !item.isActive;
+    this.args.onChangeItemIsActive(item, !item.isActive);
   }
 
   @action private attachCard() {

@@ -3,9 +3,12 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule } from '@ember/runloop';
+import { schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
+
+import { isTesting } from '@embroider/macros';
+
 import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
@@ -16,69 +19,69 @@ import {
   restartableTask,
   timeout,
   waitForProperty,
+  dropTask,
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
-  BoxelDropdown,
-  Menu as BoxelMenu,
   CardContainer,
-  Header,
-  IconButton,
-  Tooltip,
+  CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  cn,
-  cssVar,
-  eq,
-  optional,
-  getContrastColor,
-} from '@cardstack/boxel-ui/helpers';
+import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import { cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
-import {
-  IconPencil,
-  IconX,
-  IconTrash,
-  IconLink,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink, Warning } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
+  type Permissions,
   cardTypeDisplayName,
   PermissionsContextName,
-  type Permissions,
+  RealmURLContextName,
   Deferred,
+  cardTypeIcon,
+  CommandContext,
 } from '@cardstack/runtime-common';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import config from '@cardstack/host/config/environment';
 
 import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import type {
+  CardContext,
   CardDef,
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../lib/html-component';
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
+
+import CardError from './card-error';
+import CardErrorDetail from './card-error-detail';
 
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
 import type EnvironmentService from '../../services/environment-service';
+import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+
+export interface StackItemComponentAPI {
+  clearSelections: () => void;
+  doWithStableScroll: (
+    changeSizeCallback: () => Promise<void>,
+  ) => Promise<void>;
+  scrollIntoView: (selector: string) => Promise<void>;
+  startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
+}
 
 interface Signature {
   Args: {
@@ -86,6 +89,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
+    commandContext: CommandContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
     onSelectedCards: (
@@ -93,11 +97,10 @@ interface Signature {
       stackItem: StackItem,
     ) => void;
     setupStackItem: (
-      stackItem: StackItem,
-      clearSelections: () => void,
-      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-      doScrollIntoView: (selector: string) => void,
+      model: StackItem,
+      componentAPI: StackItemComponentAPI,
     ) => void;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -118,23 +121,37 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare loaderService: LoaderService;
 
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
-  @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
+  @tracked private animationType:
+    | 'opening'
+    | 'closing'
+    | 'movingForward'
+    | undefined = 'opening';
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
+  @tracked private lastSaveError: Error | undefined;
   private refreshSaveMsg: number | undefined;
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
+  private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
   get permissions(): Permissions {
     return this.realm.permissions(this.card.id);
   }
+
+  @provide(RealmURLContextName)
+  get realmURL() {
+    let api = this.args.item.api;
+    return this.card[api.realmURL];
+  }
+
   cardTracker = new ElementTracker<{
     cardId?: string;
     card?: CardDef;
@@ -147,12 +164,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.loadCard.perform();
     this.subscribeToCard.perform();
-    this.args.setupStackItem(
-      this.args.item,
-      this.clearSelections,
-      this.doWithStableScroll.perform,
-      this.scrollIntoView.perform,
-    );
+    this.args.setupStackItem(this.args.item, {
+      clearSelections: this.clearSelections,
+      doWithStableScroll: this.doWithStableScroll.perform,
+      scrollIntoView: this.scrollIntoView.perform,
+      startAnimation: this.startAnimation.perform,
+    });
   }
 
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -194,7 +211,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     if (numberOfCards > 1) {
       if (isLastCard) {
-        marginTopPx = numberOfCards === 2 ? 30 : 55;
+        marginTopPx = numberOfCards === 2 ? 25 : 50;
       } else if (isSecondLastCard && numberOfCards > 2) {
         marginTopPx = 25;
       }
@@ -211,11 +228,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
+      transition: margin-top var(--boxel-transition), width var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
-
-    if (this.args.item.isWideFormat) {
-      styles += 'transition: width var(--boxel-transition)';
-    }
 
     return htmlSafe(styles);
   }
@@ -228,12 +242,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried;
   }
 
-  private get cardContext() {
+  private get cardContext(): Omit<
+    CardContext,
+    'prerenderedCardSearchComponent'
+  > {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
+      commandContext: this.args.commandContext,
     };
   }
+
+  private closeItem = dropTask(async () => {
+    await this.startAnimation.perform('closing');
+    this.args.close(this.args.item);
+  });
 
   @action private toggleSelect(cardDefOrId: CardDefOrId) {
     let index = this.selectedCards.findIndex((c) => c === cardDefOrId);
@@ -259,35 +282,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
     await navigator.clipboard.writeText(this.card.id);
   });
 
-  private fetchRealmInfo = trackedFunction(
-    this,
-    async () => await this.cardService.getRealmInfo(this.card),
-  );
-
   private clearSelections = () => {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
-
-  private get realmName() {
-    return this.fetchRealmInfo.value?.name;
-  }
 
   private get cardIdentifier() {
     return this.args.item.url?.href;
   }
 
-  @action
-  private hoverOnRealmIcon() {
-    this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
-  }
-
   private get headerTitle() {
-    return this.isHoverOnRealmIcon && this.realmName
-      ? `In ${this.realmName}`
-      : cardTypeDisplayName(this.card);
+    return cardTypeDisplayName(this.card);
   }
 
   private get moreOptionsMenuItems() {
+    if (this.isBuried) {
+      return undefined;
+    }
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () => this.copyToClipboard.perform(),
@@ -316,20 +326,67 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.item.card;
   }
 
+  @cached
+  get cardError() {
+    return this.args.item.cardError;
+  }
+
+  @cached
+  get lastKnownGoodHtml() {
+    if (this.cardError?.meta.lastKnownGoodHtml) {
+      this.loadScopedCSS.perform();
+      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
+    }
+    return undefined;
+  }
+
+  @cached
+  get cardErrorSummary() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return this.cardError.status === 404 &&
+      // a missing link error looks a lot like a missing card error
+      this.cardError.message?.includes('missing')
+      ? `Link Not Found`
+      : this.cardError.title;
+  }
+
+  get cardErrorTitle() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return `Card Error: ${this.cardErrorSummary}`;
+  }
+
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
   });
 
+  private loadScopedCSS = restartableTask(async () => {
+    if (this.cardError?.meta.scopedCssUrls) {
+      await Promise.all(
+        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
+          this.loaderService.loader.import(cssModuleUrl),
+        ),
+      );
+    }
+  });
+
   private subscribeToCard = task(async () => {
     await this.args.item.ready();
-    this.subscribedCard = this.card;
-    let api = this.args.item.api;
-    registerDestructor(this, this.cleanup);
-    api.subscribeToChanges(this.subscribedCard, this.onCardChange);
-    this.refreshSaveMsg = setInterval(
-      () => this.calculateLastSavedMsg(),
-      10 * 1000,
-    ) as unknown as number;
+    // TODO how do we make sure that this is called after the error is cleared?
+    // Address this as part of SSE support for card errors
+    if (!this.cardError) {
+      this.subscribedCard = this.card;
+      let api = this.args.item.api;
+      registerDestructor(this, this.cleanup);
+      api.subscribeToChanges(this.subscribedCard, this.onCardChange);
+      this.refreshSaveMsg = setInterval(
+        () => this.calculateLastSavedMsg(),
+        10 * 1000,
+      ) as unknown as number;
+    }
   });
 
   private cleanup = () => {
@@ -347,47 +404,70 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private initiateAutoSaveTask = restartableTask(async () => {
     this.hasUnsavedChanges = true;
     await timeout(this.environmentService.autoSaveDelayMs);
-    this.isSaving = true;
-    await this.args.publicAPI.saveCard(this.card, false);
-    this.hasUnsavedChanges = false;
-    this.isSaving = false;
-    this.lastSaved = Date.now();
-    this.calculateLastSavedMsg();
+    try {
+      this.isSaving = true;
+      this.lastSaveError = undefined;
+      await timeout(25);
+      await this.args.saveCard(this.card);
+      this.hasUnsavedChanges = false;
+      this.lastSaved = Date.now();
+    } catch (error) {
+      // error will already be logged in CardService
+      this.lastSaveError = error as Error;
+    } finally {
+      this.isSaving = false;
+      this.calculateLastSavedMsg();
+    }
   });
 
   private calculateLastSavedMsg() {
-    // runs frequently, so only change a tracked property if the value has changed
-    if (this.lastSaved == null) {
-      if (this.lastSavedMsg) {
-        this.lastSavedMsg = undefined;
-      }
-    } else {
-      let savedMessage = `Saved ${formatDistanceToNow(this.lastSaved, {
+    let savedMessage: string | undefined;
+    if (this.lastSaveError) {
+      savedMessage = `Failed to save: ${this.getErrorMessage(
+        this.lastSaveError,
+      )}`;
+    } else if (this.lastSaved) {
+      savedMessage = `Saved ${formatDistanceToNow(this.lastSaved, {
         addSuffix: true,
       })}`;
-      if (this.lastSavedMsg != savedMessage) {
-        this.lastSavedMsg = savedMessage;
-      }
+    }
+    // runs frequently, so only change a tracked property if the value has changed
+    if (this.lastSavedMsg != savedMessage) {
+      this.lastSavedMsg = savedMessage;
     }
   }
 
+  private getErrorMessage(error: Error) {
+    if ((error as any).responseHeaders?.get('x-blocked-by-waf-rule')) {
+      return 'Rejected by firewall';
+    }
+    if (error.message) {
+      return error.message;
+    }
+    return 'Unknown error';
+  }
+
   private doneEditing = restartableTask(async () => {
+    let item = this.args.item;
+    let { request } = item;
     // if the card is actually different do the save and dismiss, otherwise
     // just change the stack item's format to isolated
     if (this.hasUnsavedChanges) {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
-      this.args.publicAPI.saveCard(this.card, true);
-    } else {
-      let { request } = this.args.item;
-      this.operatorModeStateService.replaceItemInStack(
-        this.args.item,
-        this.args.item.clone({
-          request,
-          format: 'isolated',
-        }),
-      );
+      let updatedCard = await this.args.saveCard(item.card);
+
+      if (updatedCard) {
+        request?.fulfill(updatedCard);
+      }
     }
+    this.operatorModeStateService.replaceItemInStack(
+      item,
+      item.clone({
+        request,
+        format: 'isolated',
+      }),
+    );
   });
 
   private doWithStableScroll = restartableTask(
@@ -434,6 +514,32 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
+  private startAnimation = dropTask(
+    async (animationType: 'closing' | 'movingForward') => {
+      this.animationType = animationType;
+      if (!this.itemEl) return;
+      await new Promise<void>((resolve) => {
+        scheduleOnce(
+          'afterRender',
+          this,
+          this.handleAnimationCompletion,
+          resolve,
+        );
+      });
+    },
+  );
+
+  private handleAnimationCompletion(resolve: () => void) {
+    if (!this.itemEl) {
+      return;
+    }
+    const animations = this.itemEl.getAnimations() || [];
+    Promise.all(animations.map((animation) => animation.finished)).then(() => {
+      this.animationType = undefined;
+      resolve();
+    });
+  }
+
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
   };
@@ -442,18 +548,59 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private get canEdit() {
+    return (
+      !this.isBuried && !this.isEditing && this.realm.canWrite(this.card.id)
+    );
+  }
+
+  private get isEditing() {
+    return !this.isBuried && this.args.item.format === 'edit';
+  }
+
+  private setupItemEl = (el: HTMLElement) => {
+    this.itemEl = el;
+  };
+
+  private get doOpeningAnimation() {
+    return (
+      this.isTopCard &&
+      this.animationType === 'opening' &&
+      !this.isEditing &&
+      !(this.args.item.format === 'isolated' && this.args.item.request) // Skip animation if we have a request and we're in isolated format, it means we're completing an edit operation
+    );
+  }
+
+  private get doClosingAnimation() {
+    return this.animationType === 'closing';
+  }
+
+  private get doMovingForwardAnimation() {
+    return this.animationType === 'movingForward';
+  }
+
+  private get isTesting() {
+    return isTesting();
+  }
+
   <template>
     <div
-      class='item {{if this.isBuried "buried"}}'
+      class='item
+        {{if this.isBuried "buried"}}
+        {{if this.doOpeningAnimation "opening-animation"}}
+        {{if this.doClosingAnimation "closing-animation"}}
+        {{if this.doMovingForwardAnimation "move-forward-animation"}}
+        {{if this.isTesting "testing"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
+      {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
-        class={{cn 'card' edit=(eq @item.format 'edit')}}
+        class='stack-item-card'
         {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if this.loadCard.isRunning}}
@@ -461,16 +608,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>
           </div>
-        {{else}}
-          <Header
-            @size='large'
-            @title={{this.headerTitle}}
-            @hasBackground={{true}}
-            class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
+        {{else if this.cardError}}
+          <CardHeader
+            @cardTypeDisplayName={{this.cardErrorTitle}}
+            @cardTypeIcon={{Warning}}
+            @isTopCard={{this.isTopCard}}
+            @onClose={{unless this.isBuried (perform this.closeItem)}}
+            class='stack-item-header'
             style={{cssVar
-              boxel-header-background-color=@item.headerColor
-              boxel-header-text-color=(getContrastColor @item.headerColor)
+              boxel-card-header-icon-container-min-width=(if
+                this.isBuried '50px' '95px'
+              )
+              boxel-card-header-actions-min-width=(if
+                this.isBuried '50px' '95px'
+              )
+              realm-icon-background=(getContrastColor
+                @item.headerColor 'transparent'
+              )
             }}
+            role={{if this.isBuried 'button' 'banner'}}
             {{on
               'click'
               (optional
@@ -478,127 +634,62 @@ export default class OperatorModeStackItem extends Component<Signature> {
               )
             }}
             data-test-stack-card-header
-          >
-            <:icon>
-              {{#let (this.realm.info this.card.id) as |realmInfo|}}
-                {{#if realmInfo.iconURL}}
-                  <RealmIcon
-                    @realmInfo={{realmInfo}}
-                    @canAnimate={{this.isTopCard}}
-                    class='header-icon'
-                    style={{cssVar
-                      realm-icon-background=(getContrastColor
-                        @item.headerColor 'transparent'
-                      )
-                    }}
-                    data-test-boxel-header-icon={{realmInfo.iconURL}}
-                    {{on 'mouseenter' this.hoverOnRealmIcon}}
-                    {{on 'mouseleave' this.hoverOnRealmIcon}}
-                  />
-                {{/if}}
-              {{/let}}
-            </:icon>
-            <:actions>
-              {{#if (this.realm.canWrite this.card.id)}}
-                {{#if (eq @item.format 'isolated')}}
-                  <Tooltip @placement='top'>
-                    <:trigger>
-                      <IconButton
-                        @icon={{IconPencil}}
-                        @width='20px'
-                        @height='20px'
-                        class='icon-button'
-                        aria-label='Edit'
-                        {{on 'click' (fn @publicAPI.editCard this.card)}}
-                        data-test-edit-button
-                      />
-                    </:trigger>
-                    <:content>
-                      Edit
-                    </:content>
-                  </Tooltip>
-                {{else}}
-                  <Tooltip @placement='top'>
-                    <:trigger>
-                      <IconButton
-                        @icon={{IconPencil}}
-                        @width='20px'
-                        @height='20px'
-                        class='icon-save'
-                        aria-label='Finish Editing'
-                        {{on 'click' (perform this.doneEditing)}}
-                        data-test-edit-button
-                      />
-                    </:trigger>
-                    <:content>
-                      Finish Editing
-                    </:content>
-                  </Tooltip>
-                {{/if}}
-              {{/if}}
-              <div>
-                <BoxelDropdown>
-                  <:trigger as |bindings|>
-                    <Tooltip @placement='top'>
-                      <:trigger>
-                        <IconButton
-                          @icon={{ThreeDotsHorizontal}}
-                          @width='20px'
-                          @height='20px'
-                          class='icon-button'
-                          aria-label='Options'
-                          data-test-more-options-button
-                          {{bindings}}
-                        />
-                      </:trigger>
-                      <:content>
-                        More Options
-                      </:content>
-                    </Tooltip>
-                  </:trigger>
-                  <:content as |dd|>
-                    <BoxelMenu
-                      @closeMenu={{dd.close}}
-                      @items={{this.moreOptionsMenuItems}}
-                    />
-                  </:content>
-                </BoxelDropdown>
-              </div>
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <IconButton
-                    @icon={{IconX}}
-                    @width='16px'
-                    @height='16px'
-                    class='icon-button'
-                    aria-label='Close'
-                    {{on 'click' (fn @close @item)}}
-                    data-test-close-button
-                  />
-                </:trigger>
-                <:content>
-                  Close
-                </:content>
-              </Tooltip>
-            </:actions>
-            <:detail>
-              <div class='save-indicator' data-test-auto-save-indicator>
-                {{#if this.isSaving}}
-                  Saving…
-                {{else if this.lastSavedMsg}}
-                  <div data-test-last-saved>
-                    {{this.lastSavedMsg}}
-                  </div>
-                {{/if}}
-              </div>
-            </:detail>
-          </Header>
+          />
+          <div class='stack-item-content card-error' data-test-card-error>
+            {{#if this.lastKnownGoodHtml}}
+              <this.lastKnownGoodHtml />
+            {{else}}
+              <CardError />
+            {{/if}}
+          </div>
+          <CardErrorDetail
+            @error={{this.cardError}}
+            @title={{this.cardErrorSummary}}
+            @viewInCodeMode={{true}}
+          />
+        {{else}}
+          {{#let (this.realm.info this.card.id) as |realmInfo|}}
+            <CardHeader
+              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeIcon={{cardTypeIcon @item.card}}
+              @headerColor={{@item.headerColor}}
+              @isSaving={{this.isSaving}}
+              @isTopCard={{this.isTopCard}}
+              @lastSavedMessage={{this.lastSavedMsg}}
+              @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              @realmInfo={{realmInfo}}
+              @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
+              @onFinishEditing={{if this.isEditing (perform this.doneEditing)}}
+              @onClose={{unless this.isBuried (perform this.closeItem)}}
+              class='stack-item-header'
+              style={{cssVar
+                boxel-card-header-icon-container-min-width=(if
+                  this.isBuried '50px' '95px'
+                )
+                boxel-card-header-actions-min-width=(if
+                  this.isBuried '50px' '95px'
+                )
+                realm-icon-background=(getContrastColor
+                  @item.headerColor 'transparent'
+                )
+              }}
+              role={{if this.isBuried 'button' 'banner'}}
+              {{on
+                'click'
+                (optional
+                  (if this.isBuried (fn @dismissStackedCardsAbove @index))
+                )
+              }}
+              data-test-stack-card-header
+            />
+          {{/let}}
           <div
-            class='content'
+            class='stack-item-content'
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
             <Preview
+              class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
               @cardContext={{this.cardContext}}
@@ -616,52 +707,42 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <style scoped>
       :global(:root) {
         --stack-card-footer-height: 6rem;
-        --stack-item-header-area-height: 3.375rem;
-        --buried-operator-mode-header-height: 2.5rem;
       }
 
-      .header {
-        --boxel-header-icon-width: var(--boxel-icon-med);
-        --boxel-header-icon-height: var(--boxel-icon-med);
-        --boxel-header-padding: var(--boxel-sp-sm);
-        --boxel-header-text-font: var(--boxel-font-med);
-        --boxel-header-border-radius: var(--boxel-border-radius-xl);
-        --boxel-header-background-color: var(--boxel-light);
-        z-index: 1;
-        max-width: max-content;
-        height: fit-content;
-        min-width: 100%;
-        gap: var(--boxel-sp-xxs);
+      @keyframes scaleIn {
+        from {
+          transform: scale(0.1);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(100%);
+        }
       }
 
-      .header:not(.edit .header) {
-        --boxel-header-detail-max-width: none;
-      }
-
-      .header-icon {
-        background-color: var(--realm-icon-background);
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 7px;
-      }
-
-      .edit .header-icon {
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-light);
-      }
-
-      .header--icon-hovered {
-        --boxel-header-text-color: var(--boxel-highlight);
-        --boxel-header-text-font: var(--boxel-font);
-      }
-
-      .save-indicator {
-        font: var(--boxel-font-sm);
-        padding-top: 0.4rem;
-        padding-left: 0.5rem;
-        opacity: 0.6;
+      @keyframes moveForward {
+        from {
+          transform: translateY(0);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateY(25px);
+          opacity: 1;
+        }
       }
 
       .item {
+        --stack-item-header-height: 3rem;
         justify-self: center;
         position: absolute;
         width: 89%;
@@ -669,102 +750,77 @@ export default class OperatorModeStackItem extends Component<Signature> {
         z-index: 0;
         pointer-events: none;
       }
+      .item.opening-animation {
+        animation: scaleIn 0.2s forwards;
+        transition: margin-top var(--boxel-transition);
+      }
+      .item.closing-animation {
+        animation: fadeOut 0.2s forwards;
+      }
+      .item.move-forward-animation {
+        animation: moveForward 0.2s none;
+      }
+      .item.opening-animation.testing {
+        animation-duration: 0s;
+      }
+      .item.closing-animation.testing {
+        animation-duration: 0s;
+      }
+      .item.move-forward-animation.testing {
+        animation-duration: 0s;
+      }
 
-      .card {
-        border-radius: var(--boxel-border-radius-xl);
+      .item.buried {
+        --stack-item-header-height: 2.5rem;
+      }
+
+      .stack-item-card {
         position: relative;
         height: 100%;
         display: grid;
-        grid-template-rows: var(--stack-item-header-area-height) auto;
+        grid-template-rows: var(--stack-item-header-height) auto;
+        border-radius: var(--boxel-border-radius-xl);
         box-shadow: var(--boxel-deep-box-shadow);
         pointer-events: auto;
-      }
-
-      .content {
-        overflow: auto;
-      }
-
-      :global(.content > .boxel-card-container.boundaries) {
-        box-shadow: none;
-      }
-
-      .card {
         overflow: hidden;
       }
 
-      .buried .card {
+      .stack-item-header {
+        --boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        --boxel-card-header-background-color: var(--boxel-light);
+        border-radius: 0;
+        z-index: 1;
+        max-width: max-content;
+        height: var(--stack-item-header-height);
+        min-width: 100%;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .stack-item-content {
+        overflow: auto;
+      }
+
+      .stack-item-preview {
+        border-radius: 0;
+        box-shadow: none;
+        overflow: auto;
+      }
+
+      .buried > .stack-item-card {
         border-radius: var(--boxel-border-radius-lg);
         background-color: var(--boxel-200);
-        grid-template-rows: var(--buried-operator-mode-header-height) auto;
       }
 
-      .buried > .card > .content {
-        display: none;
-      }
-
-      .buried .header .icon-button {
-        display: none;
-      }
-
-      .buried .header {
-        cursor: pointer;
-        font: 600 var(--boxel-font);
+      .buried .stack-item-header {
+        font: 600 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxxs);
-        --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-font: var(--boxel-font-size);
-        --boxel-header-icon-width: var(--boxel-icon-sm);
-        --boxel-header-icon-height: var(--boxel-icon-sm);
-        --boxel-header-border-radius: var(--boxel-border-radius-lg);
+        --boxel-card-header-text-font: var(--boxel-font-size-xs);
+        --boxel-card-header-realm-icon-size: var(--boxel-icon-sm);
+        --boxel-card-header-card-type-icon-size: var(--boxel-icon-xs);
       }
 
-      .edit .header {
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-light);
-      }
-
-      .edit .icon-button {
-        --icon-color: var(--boxel-light);
-      }
-
-      .edit .icon-button:hover {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
-      }
-
-      .icon-button,
-      .icon-save {
-        --boxel-icon-button-width: 26px;
-        --boxel-icon-button-height: 26px;
-        border-radius: 4px;
-
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font: var(--boxel-font-sm);
-        z-index: 1;
-      }
-
-      .icon-button {
-        --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
-      }
-
-      .icon-button:hover {
-        --icon-color: var(--boxel-light);
-        background-color: var(--boxel-highlight);
-      }
-
-      .icon-save {
-        --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-light);
-      }
-
-      .icon-save:hover {
-        --icon-color: var(--boxel-highlight);
-      }
-
-      .header-icon {
-        width: var(--boxel-header-icon-width);
-        height: var(--boxel-header-icon-height);
+      .buried .stack-item-content {
+        display: none;
       }
 
       .loading {
@@ -772,7 +828,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify-content: center;
         align-items: center;
-        height: calc(100% - var(--stack-item-header-area-height));
+        height: calc(100% - var(--stack-item-header-height));
         padding: var(--boxel-sp);
         color: var(--boxel-dark);
 
@@ -785,6 +841,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
+      }
+      .card-error {
+        flex: 2;
+        opacity: 0.4;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: auto;
       }
     </style>
   </template>

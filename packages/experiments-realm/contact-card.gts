@@ -9,9 +9,12 @@ import {
   containsMany,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import ContactIcon from '@cardstack/boxel-icons/contact';
 
 class Alias extends CardDef {
   static displayName = 'Alias';
+  static icon = ContactIcon;
+
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Alias) {

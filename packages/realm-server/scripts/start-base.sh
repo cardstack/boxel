@@ -21,6 +21,7 @@ NODE_ENV=development \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4201' \
+  --migrateDB \
   \
   --path='../base' \
   --username='base_realm' \

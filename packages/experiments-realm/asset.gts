@@ -7,6 +7,8 @@ import {
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import CurrencyIcon from '@cardstack/boxel-icons/currency';
+import CircleDotIcon from '@cardstack/boxel-icons/circle-dot';
 
 export class Asset extends CardDef {
   static displayName = 'Asset';
@@ -154,12 +156,14 @@ export class Currency extends Asset {
 
 export class CurrencyField extends AssetField {
   static displayName = 'Currency';
+  static icon = CurrencyIcon;
   @field sign = contains(StringField); // $, €, £, ¥, ₽, ₿ etc.
 }
 
 // For crypto
 export class Token extends Asset {
   static displayName = 'Token';
+  static icon = CircleDotIcon;
   @field address = contains(StringField);
 }
 

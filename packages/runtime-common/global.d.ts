@@ -13,16 +13,6 @@ declare module '@cardstack/ember-template-imports/src/babel-plugin' {
   export default function makePlugin(babel: typeof Babel): Babel.PluginObj;
 }
 
-declare module '@babel/plugin-proposal-decorators' {
-  import * as Babel from '@babel/core';
-  export default function makePlugin(babel: typeof Babel): Babel.PluginObj;
-}
-
-declare module '@babel/plugin-transform-class-properties' {
-  import * as Babel from '@babel/core';
-  export default function makePlugin(babel: typeof Babel): Babel.PluginObj;
-}
-
 declare module '@babel/plugin-transform-typescript' {
   import * as Babel from '@babel/core';
   export default function makePlugin(babel: typeof Babel): Babel.PluginObj;

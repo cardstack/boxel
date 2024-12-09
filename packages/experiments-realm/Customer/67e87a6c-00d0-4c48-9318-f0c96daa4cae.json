@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Olivia Chen",
+      "primaryEmail": null,
+      "secondaryEmail": null,
+      "phoneMobile": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "phoneOffice": {
+        "country": null,
+        "area": null,
+        "phoneNumber": null
+      },
+      "status": {
+        "index": 1,
+        "label": "Lead"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/customer",
+        "name": "Customer"
+      }
+    }
+  }
+}

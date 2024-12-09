@@ -2,11 +2,19 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
+
+export interface FilterListIconSignature {
+  Element: SVGElement;
+}
+
+export type FilterListIcon = ComponentLike<FilterListIconSignature>;
 
 import { cn, eq } from '../../helpers.ts';
 
 export type Filter = {
   displayName: string;
+  icon: FilterListIcon;
 };
 
 interface Signature {
@@ -31,7 +39,9 @@ export default class FilterList extends Component<Signature> {
           class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
           {{on 'click' (fn this.onChanged filter)}}
           data-test-boxel-filter-list-button={{filter.displayName}}
-        >{{filter.displayName}}</button>
+        ><filter.icon
+            class='filter-list__icon'
+          />{{filter.displayName}}</button>
       {{/each}}
     </div>
     <style scoped>
@@ -57,6 +67,11 @@ export default class FilterList extends Component<Signature> {
       .filter-list__button:not(.selected):hover {
         background: var(--boxel-300);
         border-radius: 6px;
+      }
+      .filter-list__icon {
+        width: var(--boxel-icon-xs);
+        height: var(--boxel-icon-xs);
+        vertical-align: top;
       }
     </style>
   </template>

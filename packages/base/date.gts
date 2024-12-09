@@ -37,7 +37,7 @@ class View extends Component<typeof DateField> {
 }
 
 export default class DateField extends FieldDef {
-  static icons = CalendarIcon;
+  static icon = CalendarIcon;
   static [primitive]: Date;
   static [serialize](date: Date) {
     return format(date, dateFormat);
@@ -72,10 +72,14 @@ export default class DateField extends FieldDef {
         @onInput={{fn this.parseInput @set}}
         @max='9999-12-31'
         @disabled={{not @canEdit}}
+        data-test-date-field-editor
       />
     </template>
 
     parseInput(set: Function, date: string) {
+      if (!date?.length) {
+        return set(null);
+      }
       return set(parse(date, dateFormat, new Date()));
     }
 

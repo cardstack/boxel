@@ -13,9 +13,11 @@ import CodeRef from './code-ref';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
+import BoxModel from '@cardstack/boxel-icons/box-model';
 
 export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
+  static icon = BoxModel;
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field ref = contains(CodeRef);

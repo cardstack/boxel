@@ -61,6 +61,7 @@ export interface RealmPrerenderedCards {
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, EveryFilter, Query } from './query';
 import { Loader } from './loader';
+export * from './commands';
 export * from './constants';
 export * from './queue';
 export * from './expression';
@@ -73,10 +74,12 @@ export * from './stream';
 export * from './realm';
 export * from './fetcher';
 export * from './scoped-css';
+export * from './utils';
 export * from './authorization-middleware';
+export * from './query';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
-export { RealmPaths, Loader, type LocalPath, type Query };
+export { RealmPaths, Loader, type LocalPath };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export {
   cardTypeDisplayName,
@@ -186,6 +189,7 @@ export interface CardChooser {
       };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
+      consumingRealm?: URL;
     },
   ): Promise<undefined | T>;
 }
@@ -201,6 +205,7 @@ export async function chooseCard<T extends BaseDef>(
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
     preselectedCardTypeQuery?: Query;
+    consumingRealm?: URL;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;
@@ -223,15 +228,14 @@ export interface CardSearch {
     loaded: Promise<void>;
     isLoading: boolean;
   };
-  getCard(
+  getCard<T extends CardDef>(
     url: URL,
     opts?: { loader?: Loader; isLive?: boolean },
   ): {
-    card: CardDef | undefined;
+    card: T | undefined;
     loaded: Promise<void> | undefined;
     cardError?: undefined | { id: string; error: Error };
   };
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
 }
 
 export interface CardCatalogQuery extends Query {
@@ -244,7 +248,7 @@ export function getCards(query: Query, realms?: string[]) {
   return finder?.getCards(query, realms);
 }
 
-export function getCard(
+export function getCard<T extends CardDef>(
   url: URL,
   opts?: { loader?: Loader; isLive?: boolean },
 ) {
@@ -254,21 +258,7 @@ export function getCard(
     return { card: undefined, loaded: undefined };
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCard(url, opts);
-}
-
-export function trackCard<T extends object>(
-  owner: T,
-  card: CardDef,
-  realmURL: URL,
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return card;
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.trackCard(owner, card, realmURL);
+  return finder?.getCard<T>(url, opts);
 }
 
 export interface CardCreator {
@@ -335,7 +325,7 @@ export interface Actions {
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (
-    card: CardDef,
+    cardOrURL: CardDef | URL,
     format?: Format,
     opts?: {
       openCardInRightMostStack?: boolean;
@@ -345,18 +335,13 @@ export interface Actions {
   ) => Promise<void>;
   editCard: (card: CardDef) => void;
   copyCard?: (card: CardDef) => Promise<CardDef>;
-  saveCard(card: CardDef, dismissItem: boolean): Promise<void>;
+  saveCard(card: CardDef): Promise<void>;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-  runCommand?: (
-    card: CardDef, // the card that the command is being run on
-    skillCardId: string, // skill card id that the command is associated with
-    message?: string, // message that posts in the chat
-  ) => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {

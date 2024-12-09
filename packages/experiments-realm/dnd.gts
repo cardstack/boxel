@@ -13,6 +13,10 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import Package from '@cardstack/boxel-icons/package';
+import Scroll from '@cardstack/boxel-icons/scroll';
+import Sword from '@cardstack/boxel-icons/sword';
+import Wand from '@cardstack/boxel-icons/wand';
 
 /**
  * These imports *are* used, but a bug causes them to be flagged as unused
@@ -25,6 +29,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
 export class Spell extends CardDef {
+  static icon = Wand;
   @field name = contains(StringField);
   @field level = contains(NumberField);
   @field isPrepared = contains(BooleanField);
@@ -196,18 +201,22 @@ export class Spell extends CardDef {
 
 // Define the Item card
 export class DnDItem extends CardDef {
+  static icon = Sword;
   @field name = contains(StringField);
   @field value = contains(NumberField);
 }
 
 // Define the InventoryItem card
 export class InventoryItem extends CardDef {
+  static icon = Package;
   @field item = linksTo(DnDItem);
   @field quantity = contains(NumberField);
 }
 
 // Define the CharacterSheet card with attributes
 export class CharacterSheet extends CardDef {
+  static displayName = 'Character Sheet';
+  static icon = Scroll;
   @field name = contains(StringField);
   @field level = contains(NumberField);
   @field class = contains(StringField);

@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import {
-  generateCardPatchCallSpecification,
+  generateJsonSchemaForCardType,
   basicMappings,
   type LinksToSchema,
   type RelationshipSchema,
@@ -78,11 +78,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field bigIntegerField = contains(BigIntegerField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      BasicCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(BasicCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -97,6 +93,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           dateTimeField: { type: 'string', format: 'date-time' },
           bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -117,11 +117,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containerField = contains(InternalField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      BasicCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(BasicCard, cardApi, mappings);
     const links: LinksToSchema['properties']['links'] = {
       type: 'object',
       properties: {
@@ -177,11 +173,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containerField = contains(InternalField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -196,6 +188,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -214,11 +210,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field linkedCard2 = linksTo(OtherCard);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
 
     let attributes: ObjectSchema = {
       type: 'object',
@@ -265,11 +257,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field linkedCards = linksToMany(OtherCard);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
 
     let attributes: ObjectSchema = {
       type: 'object',
@@ -326,11 +314,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field child = contains(ChildField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      ParentCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(ParentCard, cardApi, mappings);
 
     let attributes: ObjectSchema = {
       type: 'object',
@@ -399,11 +383,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field traveler = contains(Traveler);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TripInfo,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TripInfo, cardApi, mappings);
     const links: LinksToSchema['properties']['links'] = {
       type: 'object',
       properties: {
@@ -478,11 +458,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field skipField = contains(NewField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -492,6 +468,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           description: { type: 'string' },
           keepField: { type: 'string' },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -509,11 +489,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field keepField = contains(NewField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -523,6 +499,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
           description: { type: 'string' },
           keepField: { type: 'string' },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -544,11 +524,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field containingField = contains(ContainingField);
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
 
     assert.deepEqual(schema, {
       attributes: {
@@ -564,6 +540,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -581,11 +561,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       });
     }
 
-    let schema = generateCardPatchCallSpecification(
-      BasicCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(BasicCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -601,6 +577,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });
@@ -630,11 +610,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       });
     }
 
-    let schema = generateCardPatchCallSpecification(
-      BasicCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(BasicCard, cardApi, mappings);
     const links: LinksToSchema['properties']['links'] = {
       type: 'object',
       properties: {
@@ -714,11 +690,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field linkedCard2 = linksTo(OtherCard, { description: 'linked card' });
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
 
     let attributes: ObjectSchema = {
       type: 'object',
@@ -780,11 +752,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       });
     }
 
-    let schema = generateCardPatchCallSpecification(
-      TestCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
 
     let attributes: ObjectSchema = {
       type: 'object',
@@ -834,11 +802,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       });
     }
 
-    let schema = generateCardPatchCallSpecification(
-      BasicCard,
-      cardApi,
-      mappings,
-    );
+    let schema = generateJsonSchemaForCardType(BasicCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -857,6 +821,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {},
       },
     });
   });

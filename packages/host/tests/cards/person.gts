@@ -1,3 +1,7 @@
+import { on } from '@ember/modifier';
+
+import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+
 import {
   contains,
   field,
@@ -26,9 +30,25 @@ export class Person extends CardDef {
   @field description = contains(StringCard, { computeVia: () => 'Person' });
 
   static isolated = class Isolated extends Component<typeof this> {
+    runSwitchToCodeModeCommandViaAiAssistant = () => {
+      let commandContext = this.args.context?.commandContext;
+      if (!commandContext) {
+        console.error('No command context found');
+        return;
+      }
+      let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
+      commandContext.sendAiAssistantMessage({
+        prompt: 'Switch to code mode',
+        commands: [{ command: switchSubmodeCommand, autoExecute: true }],
+      });
+    };
     <template>
       <h1><@fields.firstName /></h1>
       <h1><@fields.title /></h1>
+      <button
+        {{on 'click' this.runSwitchToCodeModeCommandViaAiAssistant}}
+        data-test-switch-to-code-mode-button
+      >Switch to code-mode</button>
     </template>
   };
   static embedded = class Embedded extends Component<typeof this> {

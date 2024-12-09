@@ -1,5 +1,3 @@
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -9,8 +7,9 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import cssVar from '../../helpers/css-var.ts';
+import ThreeDotsHorizontal from '../../icons/three-dots-horizontal.gts';
 import BoxelButton from '../button/index.gts';
-import CardContainer from '../card-container/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import IconButton from '../icon-button/index.gts';
 import BoxelHeader from './index.gts';
@@ -20,7 +19,6 @@ export default class HeaderUsage extends Component {
   @tracked subtitle = undefined;
   @tracked size: 'large' | undefined = 'large';
   @tracked hasBackground = true;
-  @tracked isHighlighted = false;
   @tracked hasBottomBorder = false;
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
@@ -50,7 +48,6 @@ export default class HeaderUsage extends Component {
             @subtitle={{this.subtitle}}
             @size={{this.size}}
             @hasBackground={{this.hasBackground}}
-            @isHighlighted={{this.isHighlighted}}
             @hasBottomBorder={{this.hasBottomBorder}}
           >
             <:icon>
@@ -89,13 +86,6 @@ export default class HeaderUsage extends Component {
             @onInput={{fn (mut this.hasBackground)}}
           />
           <Args.Bool
-            @name='isHighlighted'
-            @description='(styling) Highlights header'
-            @defaultValue={{false}}
-            @value={{this.isHighlighted}}
-            @onInput={{fn (mut this.isHighlighted)}}
-          />
-          <Args.Bool
             @name='hasBottomBorder'
             @description='bottom border'
             @defaultValue={{false}}
@@ -128,18 +118,6 @@ export default class HeaderUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name='Card Container Usage'>
-        <:example>
-          <CardContainer>
-            <BoxelHeader
-              @size='large'
-              @title='Card'
-              @isHighlighted={{this.isHighlighted}}
-            />
-            <div>Card Here</div>
-          </CardContainer>
-        </:example>
-      </FreestyleUsage>
       <FreestyleUsage @name='Definition Usage'>
         <:example>
           <BoxelHeader
@@ -161,7 +139,6 @@ export default class HeaderUsage extends Component {
             @title=' Results'
             @subtitle='25 results'
             @hasBackground={{this.hasBackground}}
-            @isHighlighted={{this.isHighlighted}}
             class='command-results'
           >
             <:icon>

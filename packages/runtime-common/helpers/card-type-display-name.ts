@@ -5,5 +5,8 @@ export function cardTypeDisplayName(cardOrField: BaseDef): string {
 }
 
 export function cardTypeIcon(cardOrField: BaseDef) {
-  return cardOrField.constructor.getIconComponent(cardOrField);
+  if (!cardOrField.constructor) {
+    console.warn('cardOrField.constructor is undefined', cardOrField);
+  }
+  return cardOrField.constructor?.getIconComponent?.(cardOrField);
 }

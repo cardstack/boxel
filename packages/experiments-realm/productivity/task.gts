@@ -1,202 +1,30 @@
 import {
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   field,
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
 import {
-  BoxelSelect,
   Avatar,
   Pill,
-  RadioInput,
   ProgressBar,
+  ProgressRadial,
 } from '@cardstack/boxel-ui/components';
-import { action } from '@ember/object';
-import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
-import DateField from 'https://cardstack.com/base/date';
-import TextAreaCard from '../../base/text-area';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
-
-export class StatusField extends FieldDef {
-  @field index = contains(NumberField); //sorting order
-  @field label = contains(StringField);
-  statuses: StatusFieldData[] = []; //help with the types
-
-  get color() {
-    return this.statuses.find((status) => {
-      return status.label === this.label;
-    })?.color;
-  }
-}
-
-interface StatusFieldData {
-  index?: number;
-  label?: string;
-  color?: string;
-}
-
-class Edit extends Component<typeof StatusField> {
-  @tracked label: string | undefined = this.args.model.label;
-  <template>
-    <BoxelSelect
-      @placeholder={{this.placeholder}}
-      @options={{this.statuses}}
-      @selected={{this.selectedStatus}}
-      @onChange={{this.onSelectStatus}}
-      as |item|
-    >
-      <div> {{item.label}}</div>
-    </BoxelSelect>
-  </template>
-
-  get selectedStatus() {
-    return this.statuses?.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  get statuses() {
-    return this.args.model?.statuses;
-  }
-
-  @action onSelectStatus(status: StatusFieldData): void {
-    this.label = status.label;
-    this.args.model.label = this.selectedStatus?.label;
-    this.args.model.index = this.selectedStatus?.index;
-  }
-
-  get placeholder() {
-    return 'Fill in';
-  }
-}
-
-export class TaskStatusField extends StatusField {
-  // loosey goosey pattern
-
-  statuses = [
-    { index: 0, label: 'Backlog', color: '#B0BEC5' },
-    {
-      index: 1,
-      label: 'Next Sprint',
-      color: '#64B5F6',
-    },
-    {
-      index: 2,
-      label: 'Current Sprint',
-      color: '#00BCD4',
-    },
-    {
-      index: 3,
-      label: 'In Progress',
-      color: '#FFB74D',
-    },
-    {
-      index: 4,
-      label: 'In Review',
-      color: '#9575CD',
-    },
-    {
-      index: 5,
-      label: 'Staged',
-      color: '#26A69A',
-    },
-    {
-      index: 6,
-      label: 'Shipped',
-      color: '#66BB6A',
-    },
-  ];
-
-  static embedded = class Embedded extends Component<typeof TaskStatusField> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
-
-  static edit = Edit;
-}
-
-class EditPriority extends Component<typeof TaskPriorityField> {
-  @tracked label = this.args.model.label;
-
-  get statuses() {
-    return this.args.model?.statuses;
-  }
-
-  get selectedPriority() {
-    return this.statuses?.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  @action handlePriorityChange(priority: StatusFieldData): void {
-    this.label = priority.label;
-    this.args.model.label = this.selectedPriority?.label;
-    this.args.model.index = this.selectedPriority?.index;
-  }
-
-  <template>
-    <div class='priority-field'>
-      <RadioInput
-        @groupDescription='Select Task Priority'
-        @items={{@model.statuses}}
-        @checkedId={{this.selectedPriority.label}}
-        @orientation='horizontal'
-        @spacing='default'
-        @keyName='label'
-        as |item|
-      >
-        <item.component @onChange={{fn this.handlePriorityChange item.data}}>
-          {{item.data.label}}
-        </item.component>
-      </RadioInput>
-    </div>
-  </template>
-}
-
-export class TaskPriorityField extends StatusField {
-  // loosey goosey pattern
-
-  statuses = [
-    { index: 0, label: 'Low' },
-    {
-      index: 1,
-      label: 'Medium',
-    },
-    {
-      index: 2,
-      label: 'High',
-    },
-  ];
-
-  static edit = EditPriority;
-  static embedded = class Embedded extends Component<typeof TaskPriorityField> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
-}
-
-export class User extends CardDef {
-  static displayName = 'User';
-  @field name = contains(StringField);
-  @field email = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Team) {
-      return this.name;
-    },
-  });
-}
+import FolderGitIcon from '@cardstack/boxel-icons/folder-git';
+import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
+import UsersIcon from '@cardstack/boxel-icons/users';
+import UserIcon from '@cardstack/boxel-icons/user';
+import Calendar from '@cardstack/boxel-icons/calendar';
+import { isToday, isThisWeek, addWeeks } from 'date-fns';
+import { User } from '../user';
+import { TaskBase, BaseTaskStatusField, BaseTaskPriority } from '../task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
+  static icon = UsersIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Team) {
@@ -223,11 +51,55 @@ export class Team extends CardDef {
 
 export class TeamMember extends User {
   static displayName = 'Team Member';
+  static icon = UserIcon;
   @field team = linksTo(Team);
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model}}
+        <div class='assignee-display'>
+          <Avatar
+            class='avatar'
+            @userId={{@model.id}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
+          <span class='assignee-name'>
+            {{@model.name}}
+          </span>
+        </div>
+      {{/if}}
+      <style scoped>
+        .assignee-display {
+          display: inline-flex;
+          align-items: center;
+          background-color: var(--boxel-200);
+          border-radius: 100px;
+          overflow: hidden;
+          max-width: 100px;
+          width: fit-content;
+        }
+        .avatar {
+          --profile-avatar-icon-size: 20px;
+          --profile-avatar-icon-border: 0px;
+          flex-shrink: 0;
+        }
+        .assignee-name {
+          padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-xxxs);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class Project extends CardDef {
   static displayName = 'Project';
+  static icon = FolderGitIcon;
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
@@ -269,437 +141,314 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
-class Fitted extends Component<typeof Task> {
-  <template>
-    <div class='task-card'>
-      <div class='header'>
-        <span class='short-id'>{{@model.shortId}}</span>
-        <h3 class='task-title'>{{@model.taskName}}</h3>
-      </div>
-      <div class='footer'>
-        <div class='footer-left'>
-          {{#if @model.assignee}}
-            <Avatar
-              class='avatar'
-              @userId={{@model.assignee.id}}
-              @displayName={{@model.assignee.name}}
-              @isReady={{true}}
-            />
-          {{/if}}
-          {{#if @model.project.name}}
-            <Pill>
-              <:default>
-                {{@model.project.name}}
-              </:default>
-            </Pill>
-          {{/if}}
-        </div>
-        <div class='footer-right'>
-          <@fields.dueDate />
-        </div>
-      </div>
-    </div>
-    <style scoped>
-      .task-card {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        gap: var(--boxel-sp-sm);
-        height: 100%;
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
-        background-color: #ffffff;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        transition: box-shadow 0.2s ease;
-      }
-      .footer {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .footer-left {
-        display: flex;
-        gap: var(--boxel-sp-xxs);
-      }
-      .short-id {
-        color: var(--boxel-purple);
-        font-size: var(--boxel-font-size-sm);
-      }
-      .task-title {
-        font-size: 16px;
-        font-weight: bold;
-        color: #333;
-        margin: 0;
-      }
-      .avatar {
-        --profile-avatar-icon-size: 25px;
-      }
+function getDueDateStatus(dueDateString: string | null) {
+  if (!dueDateString) return null;
 
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 225px) or ( 100px < height < 120px)) {
-        .footer-right {
-          display: none; /* Hide dueDate when container is narrow */
-        }
-      }
+  const dueDate = new Date(dueDateString);
+  const today = new Date();
+  const nextWeek = addWeeks(today, 1);
 
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 225px) and (height < 120px)) {
-        .footer {
-          display: none;
-        }
-      }
+  if (isToday(dueDate)) {
+    return {
+      label: 'Due Today',
+      color: '#01de67',
+    };
+  } else if (isThisWeek(dueDate)) {
+    return {
+      label: 'This Week',
+      color: '#ffbc00',
+    };
+  } else if (dueDate > today && dueDate < nextWeek) {
+    return {
+      label: 'Next Week',
+      color: '#4fc8fd',
+    };
+  }
 
-      @container fitted-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
-        .footer {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio > 2.0) and (height < 250px) {
-        .footer {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio < 1) and (height < 180px) {
-        .task-title {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      }
-
-      /* New container query for strip-like layout */
-      @container fitted-card (width > 400px) and (aspect-ratio > 6) {
-        .task-card {
-          flex-direction: row;
-          align-items: center;
-          justify-content: space-between;
-          padding: var(--boxel-sp-xxs) var(--boxel-sp);
-        }
-        .header {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
-          min-width: 0; /* Allow flexbox to shrink this item */
-        }
-        .footer {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
-        }
-        .footer-left {
-          margin-left: var(--boxel-sp);
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
-        .footer-right {
-          display: none; /* Hide the date in strip layout */
-        }
-        .task-title {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .avatar {
-          order: 2; /* Move avatar after the project name */
-        }
-      }
-    </style>
-  </template>
-}
-
-export class Tag extends CardDef {
-  static displayName = 'Tag';
-  @field name = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Tag) {
-      return this.name;
-    },
-  });
-
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      <Pill>
-        <:default>
-          {{@model.name}}
-        </:default>
-      </Pill>
-    </template>
-  };
+  return null;
 }
 
 class TaskIsolated extends Component<typeof Task> {
+  get dueDate() {
+    return this.args.model.dateRange?.end;
+  }
+
+  get dueDateStatus() {
+    return this.dueDate ? getDueDateStatus(this.dueDate.toString()) : undefined;
+  }
+
+  get hasDueDate() {
+    return Boolean(this.dueDate);
+  }
+
+  get hasDueDateStatus() {
+    return Boolean(this.dueDateStatus);
+  }
+
   <template>
-    <div class='task-card'>
-      <div class='task-header'>
-        <h2 class='task-title'>{{@model.taskName}}</h2>
-        <Pill
-          class='small-pill'
-          style={{cssVar
-            pill-font-color=@model.status.color
-            pill-border-color=@model.status.color
-          }}
-        >
-          <:default>
+    <div class='task-container'>
+      <header>
+        <div class='left-column'>
+          <h2 class='task-title'>{{@model.taskName}}</h2>
+          <div class='status-label'>
+            <span class='text-gray'>in</span>
             {{@model.status.label}}
-          </:default>
-        </Pill>
-      </div>
-      <div class='task-detail'>
-        {{@model.taskDetail}}
-      </div>
-      <div class='task-meta'>
-        <div class='row-1'>
-          <Avatar
-            class='avatar'
-            @userId={{@model.assignee.id}}
-            @displayName={{@model.assignee.name}}
-            @isReady={{true}}
+          </div>
+        </div>
+
+        <div class='right-column'>
+          <ProgressRadial
+            @value={{this.progress}}
+            @max={{100}}
+            @variant='circular'
+            class='task-progress-radial'
           />
-          {{@model.assignee.name}}
-          {{#if this.hasDateRange}}
-            <div class='task-dates'>
-              <svg
-                class='calendar-icon'
-                width='16'
-                height='16'
-                viewBox='0 0 16 16'
-                fill='none'
-                xmlns='http://www.w3.org/2000/svg'
-              >
-                <path
-                  d='M12.6667 2.66667H3.33333C2.59695 2.66667 2 3.26362 2 4V13.3333C2 14.0697 2.59695 14.6667 3.33333 14.6667H12.6667C13.403 14.6667 14 14.0697 14 13.3333V4C14 3.26362 13.403 2.66667 12.6667 2.66667Z'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-                <path
-                  d='M10.6667 1.33333V4'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-                <path
-                  d='M5.33333 1.33333V4'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-                <path
-                  d='M2 6.66667H14'
-                  stroke='currentColor'
-                  stroke-width='1.33333'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                />
-              </svg>
-              <span class='date-range'>
-                <@fields.dateStarted />
-                -
-                <@fields.dueDate />
-              </span>
-            </div>
+          {{#if this.hasProgress}}
+            <ProgressBar
+              @value={{this.progress}}
+              @max={{100}}
+              @label={{this.progressLabel}}
+              @variant='horizontal'
+              class='task-progress-bar'
+            />
           {{/if}}
         </div>
-        <div class='row-2'>
-          {{#each this.tagNames as |tagLabel|}}
-            <Pill class='tag-pill'>
-              <:default>
-                <span class='tag-dot'></span>
-                {{tagLabel}}
-              </:default>
-            </Pill>
-          {{/each}}
+      </header>
+
+      <hr class='task-divider border-gray' />
+
+      <div class='task-info'>
+        <div class='left-column'>
+          <h4>Description</h4>
+          {{#if @model.taskDetail}}
+            <p>{{@model.taskDetail}}</p>
+          {{else}}
+            <span class='no-data-found-txt'>No Task Description Provided</span>
+          {{/if}}
+        </div>
+
+        <div class='right-column'>
+          <div class='assignees'>
+            <h4>Assignees</h4>
+
+            {{#if @model.assignee}}
+              <@fields.assignee
+                @format='atom'
+                @displayContainer={{false}}
+                class='task-assignee'
+              />
+            {{else}}
+              <span class='no-data-found-txt'>No Assignees Found</span>
+            {{/if}}
+          </div>
+
+          <div class='due-date'>
+            <h4>Due Date</h4>
+            <div class='date-info-container'>
+              {{#if this.hasDueDate}}
+                <div class='date-status-pill-container'>
+                  {{#if this.dueDateStatus}}
+                    <Pill
+                      class='date-status-pill'
+                      @pillBackgroundColor={{this.dueDateStatus.color}}
+                    >
+                      <:default>{{this.dueDateStatus.label}}</:default>
+                    </Pill>
+                  {{/if}}
+
+                  <div class='calendar-icon-container'>
+                    <Calendar
+                      width='14px'
+                      height='14px'
+                      class='calendar-icon'
+                    />
+                    <@fields.dateRange.end @format='atom' />
+                  </div>
+                </div>
+              {{else}}
+                <span class='no-data-found-txt'>No Due Date Assigned</span>
+              {{/if}}
+            </div>
+          </div>
+
+          <div class='tags'>
+            <h4>Tags</h4>
+            {{#if @model.tags}}
+              <div class='task-tags'>
+                {{#each @fields.tags as |Tag|}}
+                  <Tag
+                    @format='atom'
+                    class='task-tag'
+                    @displayContainer={{false}}
+                  />
+                {{/each}}
+              </div>
+            {{else}}
+              <span class='no-data-found-txt'>No Tags Found</span>
+            {{/if}}
+          </div>
         </div>
       </div>
-      {{#if this.hasChildren}}
-        <div class='subtasks-section'>
-          <div class='subtasks-header-container'>
-            <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
-              child tasks)</h4>
-            <div class='progress-bar-container'>
-              <ProgressBar
-                @label={{this.progressLabel}}
-                @value={{this.progress}}
-                @max={{100}}
-              />
-            </div>
-          </div>
-          <div class='subtasks-container'>
-            <div class='status-column'>
-              {{#each this.shippedArr as |isShipped|}}
-                <div class='status-indicator'>
-                  {{#if isShipped}}
-                    <div class='circle completed'>
-                      <CheckMark width='15px' height='15px' />
-                    </div>
-                  {{else}}
-                    <div class='circle incomplete'></div>
-                  {{/if}}
-                </div>
-              {{/each}}
-            </div>
-            <div class='children-column'>
-              {{#each @fields.children as |ChildTask|}}
-                <div class='subtask-item'>
-                  <ChildTask />
-                </div>
-              {{/each}}
-            </div>
-          </div>
-        </div>
-      {{/if}}
+
+      <hr class='task-divider border-white' />
+
+      <div class='task-subtasks'>
+        <h4>Subtasks ({{@model.children.length}})</h4>
+
+        {{#if @model.children}}
+          <@fields.children @format='fitted' />
+        {{else}}
+          <span class='no-data-found-txt'>No Subtasks Found</span>
+        {{/if}}
+      </div>
     </div>
+
     <style scoped>
-      .task-card {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        padding: 0 var(--boxel-sp);
+      h2,
+      h4,
+      p {
+        margin-block-start: 0;
+        margin-block-end: 1em;
+        word-break: break-word;
       }
-      .task-header {
+      p {
+        font-size: var(--boxel-font-size-sm);
+      }
+      .task-container {
+        --task-font-weight-500: 500;
+        --task-font-weight-600: 600;
+        --tasl-font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
+        padding: var(--boxel-sp-lg);
+        container-type: inline-size;
+      }
+      .task-container > * {
+        margin-top: var(--boxel-sp-lg);
+      }
+      header {
         display: flex;
         justify-content: space-between;
         align-items: center;
       }
-      .task-detail {
-        min-height: var(--boxel-form-control-height);
-        margin-bottom: var(--boxel-sp-sm);
+      .task-title {
+        font-size: var(--boxel-font-size-med);
+        font-weight: var(--task-font-weight-600);
       }
-      .task-meta {
+      .status-label {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: var(--task-font-weight-600);
+        margin-top: var(--boxel-sp-xs);
+      }
+      .text-gray {
+        color: var(--boxel-400);
+      }
+      .task-progress-bar {
+        display: none;
+        --progress-bar-font-color: var(--boxel-dark);
+        border: 0px;
+        margin-top: var(--boxel-sp);
+      }
+      .task-divider.border-gray {
+        border: 1px solid var(--boxel-100);
+      }
+      .task-divider.border-white {
+        border: 1px solid var(--boxel-light);
+      }
+      .task-info {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-xl);
+      }
+      .task-info .right-column {
+        display: grid;
+        gap: var(--boxel-sp-xl);
+      }
+      .task-assignee {
+        width: auto;
+        height: auto;
+        overflow: unset;
+      }
+      .task-tags {
         display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        overflow: hidden;
       }
-      .avatar {
-        --profile-avatar-icon-size: var(--boxel-icon-med);
+      .task-tag {
+        width: auto;
+        height: auto;
+        overflow: unset;
       }
-      .row-1 {
+      .no-data-found-txt {
+        font-size: calc(var(--boxel-font-size-xs) * 0.95);
+        font-weight: var(--task-font-weight-500);
+        color: var(--boxel-400);
+        white-space: nowrap;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 1px;
+      }
+      .date-status-pill-container {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
-      .row-2 {
-        display: flex;
-        gap: var(--boxel-sp-xxs);
+      .date-status-pill {
+        height: 24px;
+        border: none;
+        border-radius: 5px 0 0 5px;
+        font-size: var(--tasl-font-size-extra-small);
+        font-weight: var(--task-font-weight-500);
+        position: relative;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
+          var(--boxel-sp-xxs);
+        clip-path: polygon(
+          0 0,
+          calc(100% - 8px) 0,
+          100% 50%,
+          calc(100% - 8px) 100%,
+          0 100%
+        );
       }
-      .progress-bar-container {
-        --boxel-progress-bar-fill-color: var(--boxel-highlight);
-        width: 35%;
-        max-width: 400px;
-      }
-      .task-dates {
-        display: flex;
+      .calendar-icon-container {
+        font-size: var(--tasl-font-size-extra-small);
+        display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
-        color: var(--boxel-400); /* Light grey color for the text */
+        gap: var(--boxel-sp-xxxs);
+        overflow: hidden;
       }
       .calendar-icon {
-        color: var(--boxel-400); /* Light grey color for the icon */
+        flex-shrink: 0;
       }
-      .date-range {
-        font-size: var(--boxel-font-size-sm);
-      }
-      .children-header {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-purple);
-        margin-bottom: var(--boxel-sp-xxs);
-      }
-      .subtasks-section {
-        border-radius: var(--boxel-border-radius);
-        min-width: 150px;
-        max-width: 600px;
-      }
-      .subtasks-header-container {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .subtasks-header {
-        padding: 0 var(--boxel-sp-xxs);
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-purple);
-      }
-      .subtasks-container {
-        display: flex;
-        gap: var(--boxel-sp-sm);
-      }
-      .status-column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxs);
-      }
-      .children-column {
-        flex-grow: 1;
-      }
-      .status-indicator {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 65px; /* Increased height to match subtask-item */
-      }
-      .subtask-item {
-        height: 65px; /* Set a fixed height for subtask items */
-        width: 100%;
-        display: flex;
-        align-items: center;
-      }
-      .circle {
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 2px solid var(--boxel-dark);
-      }
-      .circle.completed {
-        background-color: var(--boxel-highlight);
-      }
-      .circle.incomplete {
-        background-color: white;
-      }
-      .tag-pill {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
-      .tag-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background-color: var(--boxel-purple);
+
+      @container (max-width: 600px) {
+        header {
+          display: block;
+        }
+        .task-progress-radial {
+          display: none;
+        }
+        .task-progress-bar {
+          display: block;
+        }
+        .task-info {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-lg);
+        }
+        .task-info .right-column {
+          gap: var(--boxel-sp-lg);
+        }
       }
     </style>
   </template>
-
-  get shippedArr() {
-    return (
-      this.args.model.children?.map(
-        (child) => child.status.label === 'Shipped',
-      ) ?? []
-    );
-  }
-
-  @action
-  isShipped(status: unknown): boolean {
-    if (typeof status === 'string') {
-      return status.includes('Shipped'); // checking for html content
-    }
-    return false;
-  }
 
   get tagNames() {
     return this.args.model.tags?.map((tag) => tag.name) ?? [];
   }
-
   get hasDateRange() {
-    return this.args.model.dateStarted && this.args.model.dueDate;
+    return this.args.model.dateRange;
   }
 
   get progress() {
@@ -707,7 +456,12 @@ class TaskIsolated extends Component<typeof Task> {
     const shippedCount = this.args.model.children!.filter(
       (child) => child.status.label === 'Shipped',
     ).length;
+
     return Math.round((shippedCount / this.childrenCount) * 100);
+  }
+
+  get hasProgress() {
+    return this.progress > 0;
   }
 
   get progressLabel() {
@@ -731,8 +485,66 @@ class TaskIsolated extends Component<typeof Task> {
   }
 }
 
-export class Task extends CardDef {
+export class TaskStatusField extends BaseTaskStatusField {
+  static values = [
+    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
+    {
+      index: 1,
+      label: 'Next Sprint',
+      color: '#64B5F6',
+      completed: false,
+    },
+    {
+      index: 2,
+      label: 'Current Sprint',
+      color: '#00BCD4',
+      completed: false,
+    },
+    {
+      index: 3,
+      label: 'In Progress',
+      color: '#FFB74D',
+      completed: false,
+    },
+    {
+      index: 4,
+      label: 'In Review',
+      color: '#9575CD',
+      completed: false,
+    },
+    {
+      index: 5,
+      label: 'Staged',
+      color: '#26A69A',
+      completed: false,
+    },
+    {
+      index: 6,
+      label: 'Shipped',
+      color: '#66BB6A',
+      completed: true,
+    },
+  ];
+}
+
+export class Task extends TaskBase {
   static displayName = 'Task';
+  static icon = CheckboxIcon;
+  @field priority = contains(BaseTaskPriority);
+  @field project = linksTo(Project);
+  @field team = linksTo(Team);
+  @field children = linksToMany(() => Task);
+  @field status = contains(TaskStatusField);
+
+  @field title = contains(StringField, {
+    computeVia: function (this: Task) {
+      return this.taskName;
+    },
+  });
+
+  //Removing this causes a missing .title error
+  @field assignee = linksTo(() => TeamMember);
+
   @field shortId = contains(StringField, {
     computeVia: function (this: Task) {
       if (this.id) {
@@ -749,42 +561,6 @@ export class Task extends CardDef {
       return;
     },
   });
-  @field taskName = contains(StringField);
-  @field taskDetail = contains(TextAreaCard);
-  @field status = contains(TaskStatusField);
-  @field priority = contains(TaskPriorityField);
-  @field assignee = linksTo(TeamMember);
-  @field project = linksTo(Project);
-  @field team = linksTo(Team);
-  @field dateStarted = contains(DateField);
-  @field dueDate = contains(DateField);
-  @field children = linksToMany(() => Task);
-  @field tags = linksToMany(() => Tag);
-  @field title = contains(StringField, {
-    computeVia: function (this: Task) {
-      return this.taskName;
-    },
-  });
 
   static isolated = TaskIsolated;
-
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      <span class='short-id'>{{@model.shortId}}</span>
-      {{@model.taskName}}
-      <Avatar
-        @userId={{@model.assignee.id}}
-        @displayName={{@model.assignee.name}}
-        @isReady={{true}}
-      />
-      <style scoped>
-        .short-id {
-          color: var(--boxel-purple);
-          font-size: var(--boxel-font-size-sm);
-        }
-      </style>
-    </template>
-  };
-
-  static fitted = Fitted;
 }

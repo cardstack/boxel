@@ -13,15 +13,14 @@ import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
 //@ts-ignore no types are available
 import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-plugin';
-//@ts-ignore no types are available
-import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
-//@ts-ignore no types are available
-import classPropertiesPlugin from '@babel/plugin-transform-class-properties';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
+
+//@ts-ignore no upstream types
+import decoratorTransforms from 'decorator-transforms';
 
 export function transpileJS(content: string, debugFilename: string): string {
   let contentIsAllWhitespace = content.match(/^\s*$/);
@@ -51,8 +50,7 @@ export function transpileJS(content: string, debugFilename: string): string {
       glimmerTemplatePlugin,
       emberConcurrencyAsyncPlugin,
       [typescriptPlugin, { allowDeclareFields: true }],
-      [decoratorsProposalPlugin, { legacy: true }],
-      classPropertiesPlugin,
+      [decoratorTransforms],
       [makeEmberTemplatePlugin, templateOptions],
       loaderPlugin,
     ],

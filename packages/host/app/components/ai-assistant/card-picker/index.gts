@@ -76,12 +76,14 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         <AddButton
           class={{cn 'attach-button' icon-only=this.cardsToDisplay.length}}
           @variant='pill'
+          @iconWidth='14'
+          @iconHeight='14'
           {{on 'click' this.chooseCard}}
           @disabled={{this.doChooseCard.isRunning}}
           data-test-choose-card-btn
         >
           <span class={{if this.cardsToDisplay.length 'boxel-sr-only'}}>
-            Add a Card
+            Add Card
           </span>
         </AddButton>
       {{/if}}
@@ -96,29 +98,25 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         padding: var(--boxel-sp-xxs);
       }
       .attach-button {
-        --icon-color: var(--boxel-highlight);
         --boxel-add-button-pill-font: var(--boxel-font-sm);
         height: var(--pill-height);
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs) var(--boxel-sp-4xs)
-          var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xs);
         background: none;
-        color: var(--boxel-highlight);
-        transition: color var(--boxel-transition);
-        outline: 0;
-      }
-      .attach-button :deep(svg) {
-        padding: var(--boxel-sp-5xs);
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
-        color: var(--boxel-highlight-hover);
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
         background: none;
         box-shadow: none;
       }
       .attach-button.icon-only {
         width: 30px;
-        height: var(--pill-height);
+        height: var(--pill-height, 30px);
+      }
+      .attach-button > :deep(svg > path) {
+        stroke: none;
       }
     </style>
   </template>

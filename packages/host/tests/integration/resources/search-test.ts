@@ -276,7 +276,6 @@ module(`Integration | search resource`, function (hooks) {
       },
     })) as Search;
     await search.loaded;
-    console.log(search.instances[0]);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}card-2`);
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
   });

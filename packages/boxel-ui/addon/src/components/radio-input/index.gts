@@ -45,50 +45,58 @@ export default class RadioInput extends Component<Signature> {
 
   <template>
     <style scoped>
-      .boxel-radio-fieldset {
-        border: 0;
-        padding: 0.01em 0 0;
-        min-width: 0;
-      }
+      @layer {
+        .boxel-radio-fieldset {
+          --boxel-radio-gap: var(--boxel-sp);
+          --boxel-radio-input-option-padding: var(--boxel-sp);
+          --boxel-radio-input-option-gap: var(--boxel-sp-sm);
+          border: 0;
+          margin-inline: 0;
+          padding: 0.01em 0 0;
+          min-width: 0;
+        }
+        .boxel-radio-fieldset--compact {
+          --boxel-radio-gap: var(--boxel-sp-xxs);
+          --boxel-radio-input-option-padding: var(--boxel-sp-xxxs);
+          --boxel-radio-input-option-gap: var(--boxel-sp-xxxs);
+        }
 
-      .boxel-radio-fieldset__legend {
-        opacity: 0;
-        position: absolute;
-        left: -9999px;
-        max-width: 1px;
-        max-height: 1px;
-        white-space: nowrap;
-      }
+        .boxel-radio-fieldset__legend {
+          opacity: 0;
+          position: absolute;
+          left: -9999px;
+          max-width: 1px;
+          max-height: 1px;
+          white-space: nowrap;
+        }
 
-      /* Div container inside the fieldset component. Use \`display: contents\` to move
+        /* Div container inside the fieldset component. Use \`display: contents\` to move
     these styles up when that css property is more widely available. */
-      .boxel-radio-fieldset__container {
-        --boxel-radio-gap: var(--boxel-sp);
+        .boxel-radio-fieldset__container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-radio-gap);
+          width: 100%;
+          max-width: 100%;
+        }
 
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-radio-gap);
-        width: 100%;
-        max-width: 100%;
-        --boxel-radio-input-option-padding: var(--boxel-sp);
-        --boxel-radio-input-option-gap: var(--boxel-sp-sm);
-      }
+        .boxel-radio-fieldset__container--vertical {
+          flex-direction: column;
+        }
 
-      .boxel-radio-fieldset__container--vertical {
-        flex-direction: column;
-      }
-
-      .boxel-radio-fieldset__container--compact {
-        --boxel-radio-gap: var(--boxel-sp-xxs);
-        --boxel-radio-input-option-padding: var(--boxel-sp-xxxs);
-        --boxel-radio-input-option-gap: var(--boxel-sp-xxxs);
-      }
-
-      .boxel-radio-fieldset__container--horizontal > * {
-        flex: 1;
+        .boxel-radio-fieldset__container--horizontal > * {
+          flex: 1;
+        }
       }
     </style>
-    <fieldset class='boxel-radio-fieldset' disabled={{@disabled}} ...attributes>
+    <fieldset
+      class={{cn
+        'boxel-radio-fieldset'
+        boxel-radio-fieldset--compact=(eq @spacing 'compact')
+      }}
+      disabled={{@disabled}}
+      ...attributes
+    >
       <legend class='boxel-radio-fieldset__legend'>
         {{@groupDescription}}
       </legend>
@@ -96,7 +104,6 @@ export default class RadioInput extends Component<Signature> {
       <div
         class={{cn
           'boxel-radio-fieldset__container'
-          boxel-radio-fieldset__container--compact=(eq @spacing 'compact')
           boxel-radio-fieldset__container--horizontal=(eq
             @orientation 'horizontal'
           )

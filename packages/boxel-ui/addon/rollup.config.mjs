@@ -44,7 +44,7 @@ export default {
 
     // addons are allowed to contain imports of .css files, which we want rollup
     // to leave alone and keep in the published output.
-    addon.keepAssets(['**/*.css', '**/*.png'], 'default'),
+    addon.keepAssets(['styles/*', '**/*.webp']),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean({ runOnce: true }),

@@ -19,6 +19,7 @@ import {
   BoxelInput,
   LoadingIndicator,
   Pill,
+  RealmIcon,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -43,13 +44,13 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import { cleanseString } from '../../lib/utils';
+
 import ModalContainer from '../modal-container';
 
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
-
-import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
@@ -109,7 +110,7 @@ export default class CreateFileModal extends Component<Signature> {
               {{else}}
                 <FieldContainer @label='Create In' @tag='label' class='field'>
                   <RealmDropdown
-                    @dropdownWidth='15rem'
+                    class='realm-dropdown'
                     @selectedRealmURL={{this.selectedRealmURL}}
                     @onSelect={{this.onSelectRealm}}
                   />
@@ -126,20 +127,18 @@ export default class CreateFileModal extends Component<Signature> {
                   >
                     <div class='field-contents'>
                       {{#if this.definitionClass}}
-                        <Pill class='definition-pill'>
-                          {{this.definitionClass.displayName}}
-                        </Pill>
+                        <SelectedTypePill
+                          @title={{this.definitionClass.displayName}}
+                          @id={{this.definitionClass.ref.module}}
+                        />
                       {{else}}
                         {{#if this.selectedCatalogEntry}}
                           <SelectedTypePill
-                            @entry={{this.selectedCatalogEntry}}
+                            @title={{this.selectedCatalogEntry.title}}
+                            @id={{this.selectedCatalogEntry.id}}
                           />
                         {{/if}}
                         <Button
-                          class={{if
-                            this.selectedCatalogEntry
-                            'change-trigger'
-                          }}
                           @kind='text-only'
                           @size='small'
                           @disabled={{this.isCreateRunning}}
@@ -264,59 +263,67 @@ export default class CreateFileModal extends Component<Signature> {
       <:loading></:loading>
     </WithKnownRealmsLoaded>
     <style scoped>
+      .create-file-modal {
+        --horizontal-gap: var(--boxel-sp-xs);
+      }
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
       :deep(.create-file) {
         height: 32rem;
       }
-      .boxel-field + .boxel-field {
-        margin-top: var(--boxel-sp);
+      .field + .field {
+        margin-top: var(--boxel-sp-sm);
       }
       .field {
-        --boxel-field-label-size: 8rem;
-        padding-right: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxxs) var(--horizontal-gap);
+      }
+      .field :deep(.label-container) {
+        width: 8rem;
+      }
+      .field :deep(.content) {
+        flex-grow: 1;
+        max-width: 100%;
+        min-width: 13rem;
+      }
+      .field .realm-dropdown {
+        flex: initial;
       }
       .field-contents {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .change-trigger {
-        margin-left: auto;
+        justify-content: space-between;
+        gap: var(--horizontal-gap);
       }
       .footer-buttons {
         display: flex;
         margin-left: auto;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--horizontal-gap);
       }
       .gts-extension {
+        --gts-label-width: var(--boxel-sp-xxl);
         position: relative;
       }
       .gts-extension input {
-        padding-right: var(--boxel-sp-xxl);
+        padding-right: var(--gts-label-width);
       }
       .gts-extension:after {
         content: '.gts';
-        width: var(--boxel-sp-xxl);
-        height: 20px;
+        width: var(--gts-label-width);
         position: absolute;
         display: block;
-        right: -5px;
-        top: 10px;
+        right: 0;
+        top: var(--boxel-sp-sm);
         color: var(--boxel-450);
-        font: var(--boxel-font-sm);
-        font-weight: 500;
+        font: 500 var(--boxel-font-sm);
         text-transform: uppercase;
         letter-spacing: var(--boxel-lsp-lg);
-        line-height: 1.82;
       }
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
-      }
-      .definition-pill {
-        padding-left: var(--boxel-sp-xxxs);
       }
     </style>
   </template>
@@ -327,6 +334,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
+  @tracked private hasUserEditedFileName = false;
   @tracked private fileNameError: string | undefined;
   @tracked private saveError: string | undefined;
   @tracked private currentRequest:
@@ -399,6 +407,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.fileNameError = undefined;
     this.displayName = '';
     this.fileName = '';
+    this.hasUserEditedFileName = false;
     this.clearSaveError();
   }
 
@@ -428,9 +437,14 @@ export default class CreateFileModal extends Component<Signature> {
   @action private setDisplayName(name: string) {
     this.clearSaveError();
     this.displayName = name;
+    if (!this.hasUserEditedFileName) {
+      // if the user starts typing in the filename field, then stop helping them
+      this.fileName = cleanseString(name);
+    }
   }
 
   @action private setFileName(name: string) {
+    this.hasUserEditedFileName = true;
     this.clearSaveError();
     this.fileNameError = undefined;
     this.fileName = name;
@@ -690,7 +704,7 @@ export class ${className} extends ${exportName} {
       this.currentRequest.sourceInstance,
       this.selectedRealmURL,
     );
-    let saved = await this.cardService.saveModel(this, duplicate);
+    let saved = await this.cardService.saveModel(duplicate);
     if (!saved) {
       throw new Error(`unable to save duplicated card instance`);
     }
@@ -744,7 +758,7 @@ export class ${className} extends ${exportName} {
           `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
         );
       }
-      await this.cardService.saveModel(this, card);
+      await this.cardService.saveModel(card);
       this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
     } catch (e: any) {
       console.log('Error saving', e);
@@ -784,29 +798,30 @@ export function convertToClassName(input: string) {
 
 interface SelectedTypePillSignature {
   Args: {
-    entry: CatalogEntry;
+    title: string;
+    id: string;
   };
 }
 
-class SelectedTypePill extends Component<SelectedTypePillSignature> {
+export class SelectedTypePill extends Component<SelectedTypePillSignature> {
   @service private declare realm: RealmService;
 
   <template>
-    <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
-      <:icon>
-        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
-      </:icon>
+    <Pill class='selected-type' data-test-selected-type={{@title}}>
+      <:iconLeft>
+        <RealmIcon @realmInfo={{this.realm.info @id}} />
+      </:iconLeft>
       <:default>
-        {{@entry.title}}
+        <span class='boxel-contents-only' data-test-selected-type-display-name>
+          {{@title}}
+        </span>
       </:default>
     </Pill>
     <style scoped>
       .selected-type {
-        padding: var(--boxel-sp-xxxs);
-        gap: var(--boxel-sp-xxxs);
-      }
-      .selected-type :deep(.icon) {
-        margin-right: 0;
+        --pill-gap: var(--boxel-sp-xxs);
+        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+        min-height: 2rem;
       }
     </style>
   </template>

@@ -8,6 +8,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import BoxelField from '../field-container/index.gts';
 import BoxelSelect from './index.gts';
 
 interface Country {
@@ -45,17 +46,8 @@ export default class BoxelSelectUsage extends Component {
   }
 
   <template>
-    {{! template-lint-disable require-scoped-style }}
-    <style
-    >
-      .boxel-select-usage {
-        --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
-        --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
-      }
-    </style>
     <FreestyleUsage @name='Select'>
       <:example>
-
         <BoxelSelect
           @placeholder={{this.placeholder}}
           @searchEnabled={{this.searchEnabled}}
@@ -145,22 +137,29 @@ export default class BoxelSelectUsage extends Component {
           @description='Tells the component what property of the options should be used to filter'
         />
       </:api>
-      <:cssVars as |Css|>
-        <Css.Basic
-          @name='boxel-select-current-color'
-          @type='color'
-          @defaultValue={{this.boxelSelectCurrentColor.defaults}}
-          @value={{this.boxelSelectCurrentColor.value}}
-          @onInput={{this.boxelSelectCurrentColor.update}}
-        />
-        <Css.Basic
-          @name='boxel-select-selected-color'
-          @type='color'
-          @defaultValue={{this.boxelSelectSelectedColor.defaults}}
-          @value={{this.boxelSelectSelectedColor.value}}
-          @onInput={{this.boxelSelectSelectedColor.update}}
-        />
-      </:cssVars>
+    </FreestyleUsage>
+    <FreestyleUsage @name='Usage with FieldContainer'>
+      <:example>
+        <BoxelField @label='Country'>
+          <BoxelSelect
+            @placeholder={{this.placeholder}}
+            @searchEnabled={{this.searchEnabled}}
+            @searchField={{this.searchField}}
+            @selected={{this.selectedItem}}
+            @onChange={{this.onSelectItem}}
+            @options={{this.items}}
+            @verticalPosition={{this.verticalPosition}}
+            @renderInPlace={{this.renderInPlace}}
+            @disabled={{this.disabled}}
+            @dropdownClass='boxel-select-usage'
+            @matchTriggerWidth={{this.matchTriggerWidth}}
+            aria-label={{this.placeholder}}
+            as |item|
+          >
+            <div>{{item.name}}</div>
+          </BoxelSelect>
+        </BoxelField>
+      </:example>
     </FreestyleUsage>
   </template>
 }

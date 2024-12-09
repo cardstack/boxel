@@ -1,5 +1,4 @@
 import { action } from '@ember/object';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -10,18 +9,17 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
-  linksToMany,
 } from './card-api';
 import {
   AddButton,
   CardContainer,
   FilterList,
-  IconButton,
   Tooltip,
   type Filter,
   BoxelDropdown,
   Menu as BoxelMenu,
   BoxelButton,
+  ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
@@ -31,6 +29,7 @@ import {
   baseRealm,
   isCardInstance,
   SupportedMimeType,
+  subscribeToRealm,
   Query,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -41,7 +40,12 @@ import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
+import Captions from '@cardstack/boxel-icons/captions';
+import CardsIcon from '@cardstack/boxel-icons/cards';
+import { registerDestructor } from '@ember/destroyable';
 
+type IconComponent = typeof Captions;
 interface SortOption {
   displayName: string;
   sort: Query['sort'];
@@ -96,34 +100,15 @@ class Isolated extends Component<typeof CardsGrid> {
           <div class='title'>
             {{this.activeFilter.displayName}}
           </div>
-          <div class='view-as'>
-            <span>View as</span>
-            <IconButton
-              @icon={{IconList}}
-              @width='20px'
-              @height='20px'
-              class={{cn
-                'view-as__button'
-                is-selected-view=(eq this.viewSize 'strip')
-              }}
-              {{on 'click' (fn (mut this.viewSize) 'strip')}}
-            />
-            <IconButton
-              @icon={{IconGrid}}
-              @width='20px'
-              @height='20px'
-              class={{cn
-                'view-as__button'
-                is-selected-view=(eq this.viewSize 'grid')
-              }}
-              {{on 'click' (fn (mut this.viewSize) 'grid')}}
-            />
-          </div>
+          <ViewSelector
+            @items={{this.viewOptions}}
+            @onChange={{this.onViewChange}}
+            @selectedId={{this.viewSize}}
+          />
           <div class='sorting'>
             <span>
               Sort by
             </span>
-
             <BoxelDropdown>
               <:trigger as |bindings|>
                 <BoxelButton class='sort-button' {{bindings}}>
@@ -142,43 +127,42 @@ class Isolated extends Component<typeof CardsGrid> {
         </div>
 
         <ul class='cards' data-test-cards-grid-cards>
-          {{#if this.isShowingCards}}
-            {{#let
-              (component @context.prerenderedCardSearchComponent)
-              as |PrerenderedCardSearch|
-            }}
-              <PrerenderedCardSearch
-                @query={{this.query}}
-                @format='fitted'
-                @realms={{this.realms}}
-              >
+          {{#let
+            (component @context.prerenderedCardSearchComponent)
+            as |PrerenderedCardSearch|
+          }}
+            <PrerenderedCardSearch
+              @query={{this.query}}
+              @format='fitted'
+              @realms={{this.realms}}
+            >
 
-                <:loading>
-                  Loading...
-                </:loading>
-                <:response as |cards|>
-                  {{#each cards as |card|}}
-                    <li
-                      class='card'
-                      {{@context.cardComponentModifier
-                        cardId=card.url
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                    >
-                      <CardContainer @displayBoundaries='true'>
-                        {{card.component}}
-                      </CardContainer>
-                    </li>
-                  {{/each}}
-                </:response>
-              </PrerenderedCardSearch>
-            {{/let}}
-          {{/if}}
+              <:loading>
+                Loading...
+              </:loading>
+              <:response as |cards|>
+                {{#each cards as |card|}}
+                  <li
+                    class='card {{if card.isError "instance-error"}}'
+                    data-test-instance-error={{card.isError}}
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
+                    <CardContainer @displayBoundaries='true'>
+                      {{card.component}}
+                    </CardContainer>
+                  </li>
+                {{/each}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/let}}
         </ul>
 
         {{#if @context.actions.createCard}}
@@ -254,6 +238,9 @@ class Isolated extends Component<typeof CardsGrid> {
         top: var(--cards-grid-padding-top);
         padding-right: var(--boxel-sp-sm);
         height: 100%;
+        overflow-y: hidden;
+      }
+      :deep(.filter-list:hover) {
         overflow-y: auto;
       }
       :deep(.filter-list__button:first-child) {
@@ -267,23 +254,6 @@ class Isolated extends Component<typeof CardsGrid> {
         position: relative; /* Do not change this */
         overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
-      }
-      .view-as {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-      }
-      .view-as > span {
-        text-wrap: nowrap;
-        margin-right: var(--boxel-sp-xxs);
-      }
-      .view-as__button {
-        --boxel-icon-button-width: 20px;
-        --boxel-icon-button-height: 20px;
-        --icon-color: var(--boxel-450);
-      }
-      .is-selected-view {
-        --icon-color: var(--boxel-dark);
       }
       .cards {
         list-style-type: none;
@@ -315,38 +285,45 @@ class Isolated extends Component<typeof CardsGrid> {
       .operator-mode .buried .add-button {
         display: none;
       }
+      .instance-error {
+        opacity: 0.33;
+        color: var(--boxel-error-100);
+      }
     </style>
   </template>
 
-  filters: { displayName: string; query: any }[] = new TrackedArray([
-    {
-      displayName: 'Favorites',
-      query: {
-        filter: {
-          any:
-            this.args.model.favorites?.map((card) => {
-              return { eq: { id: card.id } } ?? {};
-            }) ?? [],
-        },
-      },
-    },
-    {
-      displayName: 'All Cards',
-      query: {
-        filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
+  filters: { displayName: string; icon: IconComponent; query: any }[] =
+    new TrackedArray([
+      {
+        displayName: 'All Cards',
+        icon: CardsIcon,
+        query: {
+          filter: {
+            not: {
+              eq: {
+                _cardType: 'Cards Grid',
+              },
             },
           },
         },
       },
-    },
-  ]);
+    ]);
 
+  private viewOptions = [
+    { id: 'strip', icon: IconList },
+    { id: 'grid', icon: IconGrid },
+  ];
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
   @tracked viewSize: 'grid' | 'strip' = 'grid';
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadFilterList.perform();
+    let unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
+
+    registerDestructor(this, unsubscribe);
+  }
 
   @action setSelectedSortOption(option: SortOption) {
     this.selectedSortOption = option;
@@ -357,14 +334,13 @@ class Isolated extends Component<typeof CardsGrid> {
     this.activeFilter = filter;
   }
 
+  @action onViewChange(viewId: 'grid' | 'strip') {
+    this.viewSize = viewId;
+  }
+
   @action
   createNew() {
     this.createCard.perform();
-  }
-
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadFilterList.perform();
   }
 
   private get sortMenuOptions() {
@@ -383,13 +359,6 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private get query() {
     return { ...this.activeFilter.query, sort: this.selectedSortOption.sort };
-  }
-
-  private get isShowingCards() {
-    return (
-      this.activeFilter.displayName !== 'Favorites' ||
-      (this.args.model.favorites && this.args.model.favorites.length > 0)
-    );
   }
 
   private createCard = restartableTask(async () => {
@@ -447,6 +416,10 @@ class Isolated extends Component<typeof CardsGrid> {
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
+
+    // Remove all filter items except the first one,
+    // as 'All Cards' is a predefined filter and not a result from the card type summary API.
+    this.filters.splice(1, this.filters.length);
     cardTypeSummaries.forEach((summary) => {
       if (excludedCardTypeIds.includes(summary.id)) {
         return;
@@ -454,6 +427,7 @@ class Isolated extends Component<typeof CardsGrid> {
       const lastIndex = summary.id.lastIndexOf('/');
       this.filters.push({
         displayName: summary.attributes.displayName,
+        icon: Captions,
         query: {
           filter: {
             type: {
@@ -464,11 +438,24 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       });
     });
+
+    this.activeFilter =
+      this.filters.find(
+        (filter) => filter.displayName === this.activeFilter.displayName,
+      ) ?? this.filters[0];
   });
+
+  private refreshFilterList = (ev: MessageEvent) => {
+    let data = JSON.parse(ev.data);
+    if (ev.type === 'index' && data.type === 'incremental') {
+      this.loadFilterList.perform();
+    }
+  };
 }
 
 export class CardsGrid extends CardDef {
   static displayName = 'Cards Grid';
+  static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
   @field realmName = contains(StringField, {
@@ -481,7 +468,6 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
-  @field favorites = linksToMany(CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {

@@ -9,9 +9,11 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import { Person } from './person';
+import CalendarCheck from '@cardstack/boxel-icons/calendar-check';
 
 export class Booking extends CardDef {
   static displayName = 'Booking';
+  static icon = CalendarCheck;
   @field title = contains(StringCard);
   @field venue = contains(StringCard);
   @field startTime = contains(DateTimeCard);

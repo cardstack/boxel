@@ -21,16 +21,7 @@ module.exports = function (defaults) {
       disableDecoratorTransforms: true,
     },
     babel: {
-      plugins: [
-        [
-          require.resolve('decorator-transforms'),
-          {
-            runtime: {
-              import: require.resolve('decorator-transforms/runtime'),
-            },
-          },
-        ],
-      ],
+      plugins: [[require.resolve('decorator-transforms')]],
     },
   });
   return compatBuild(app, Webpack, {

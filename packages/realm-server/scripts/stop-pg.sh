@@ -1,2 +1,1 @@
-#! /bin/sh
-docker stop boxel-pg >/dev/null
+../../postgres/scripts/stop-pg.sh

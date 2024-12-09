@@ -132,4 +132,9 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('ethers', ethers);
   virtualNetwork.shimModule('super-fast-md5', { md5: (_data: string) => {} });
   virtualNetwork.shimModule('matrix-js-sdk', {});
+
+  virtualNetwork.shimAsyncModule({
+    prefix: '@cardstack/boxel-host/commands/',
+    resolve: async () => class {},
+  });
 }

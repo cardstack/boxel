@@ -85,7 +85,7 @@ module.exports = function (environment) {
 
 function getLatestSchemaFile() {
   const migrationsDir = path.resolve(
-    path.join(__dirname, '..', '..', 'realm-server', 'migrations'),
+    path.join(__dirname, '..', '..', 'postgres', 'migrations'),
   );
   let migrations = fs.readdirSync(migrationsDir);
   let lastMigration = migrations
@@ -100,7 +100,7 @@ function getLatestSchemaFile() {
     ['development', 'test'].includes(process.env.EMBER_ENV)
   ) {
     throw new Error(
-      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the realm server`,
+      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the postgres package`,
     );
   }
   return path.join(schemaDir, latestSchemaFile);

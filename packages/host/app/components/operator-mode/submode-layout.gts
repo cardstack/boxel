@@ -15,7 +15,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
@@ -24,7 +24,6 @@ import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
-import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
@@ -273,15 +272,17 @@ export default class SubmodeLayout extends Component<Signature> {
               openSearchToResults=this.openSearchAndShowResults
             )
           }}
-          <div class='profile-icon-container'>
-            <button
-              class='profile-icon-button'
-              {{on 'click' this.toggleProfileSummary}}
-              data-test-profile-icon-button
-            >
-              <ProfileAvatarIcon @userId={{this.matrixService.userId}} />
-            </button>
-          </div>
+          <button
+            class='profile-icon-button'
+            {{on 'click' this.toggleProfileSummary}}
+            data-test-profile-icon-button
+          >
+            <Avatar
+              @isReady={{this.matrixService.profile.loaded}}
+              @userId={{this.matrixService.userId}}
+              @displayName={{this.matrixService.profile.displayName}}
+            />
+          </button>
           <SearchSheet
             @mode={{this.searchSheetMode}}
             @onSetup={{this.setupSearch}}
@@ -360,16 +361,15 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .chat-btn {
         position: absolute;
-        bottom: var(--boxel-sp);
-        right: var(--boxel-sp);
-        margin-right: 0;
+        bottom: var(--operator-mode-spacing);
+        right: var(--operator-mode-spacing);
         background-color: var(--boxel-ai-purple);
         box-shadow: var(--boxel-deep-box-shadow);
-        z-index: calc(var(--boxel-modal-z-index) - 2);
+        z-index: var(--host-ai-panel-button-z-index);
       }
 
       .ai-assistant-panel {
-        z-index: 2;
+        z-index: var(--host-ai-panel-z-index);
       }
 
       .top-left-menu {
@@ -377,8 +377,8 @@ export default class SubmodeLayout extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        padding: var(--boxel-sp);
-        z-index: 4;
+        padding: var(--operator-mode-spacing);
+        z-index: var(--host-top-left-menu-z-index);
 
         display: flex;
         align-items: center;
@@ -390,31 +390,30 @@ export default class SubmodeLayout extends Component<Signature> {
         letter-spacing: 3px;
       }
 
-      .profile-icon-container {
-        bottom: 0;
-        position: absolute;
-        width: var(--search-sheet-closed-height);
-        height: var(--search-sheet-closed-height);
-        border-radius: 50px;
-        margin-left: var(--boxel-sp);
-        z-index: 3;
-      }
-
       .profile-icon-button {
-        border: 0;
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
+        position: absolute;
+        bottom: var(--operator-mode-spacing);
+        left: var(--operator-mode-spacing);
         padding: 0;
-        background: transparent;
+        background: none;
+        border: none;
+        border-radius: 50px;
+        z-index: var(--host-profile-z-index);
       }
 
       .workspace-button {
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
         border: none;
         outline: var(--boxel-border-flexible);
-        margin-right: var(--boxel-sp);
+        margin-right: var(--operator-mode-spacing);
         border-radius: var(--boxel-border-radius);
       }
       .dark-icon {
         --icon-bg-opacity: 1;
-        --icon-color: black;
+        --icon-color: var(--boxel-dark);
       }
     </style>
   </template>

@@ -34,6 +34,7 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   type TestContextWithSSE,
+  setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -403,6 +404,7 @@ const notFoundAdoptionInstance = `{
 }
 `;
 
+let matrixRoomId: string;
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
     let personalRealmURL: string;
@@ -412,7 +414,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
-    let { setActiveRealms } = setupMockMatrix(hooks, {
+    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:staging',
     });
 
@@ -423,6 +425,9 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
+      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      setupUserSubscription(matrixRoomId);
+
       let realmServerService = this.owner.lookup(
         'service:realm-server',
       ) as RealmServerService;
@@ -519,12 +524,15 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
-    let { setActiveRealms } = setupMockMatrix(hooks, {
+    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:staging',
       activeRealms: [testRealmURL],
     });
 
     hooks.beforeEach(async function () {
+      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      setupUserSubscription(matrixRoomId);
+
       monacoService = this.owner.lookup(
         'service:monaco-service',
       ) as MonacoService;
@@ -815,11 +823,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}not-found-adoption-instance.json`,
       });
 
-      await waitFor('[data-test-card-preview-error]');
+      await waitFor('[data-test-card-error]');
 
+      await click('[data-test-error-detail-toggle] button');
       assert
-        .dom('[data-test-card-preview-error]')
-        .exists({ count: 1 })
+        .dom('[data-test-error-detail]')
         .includesText(`${testRealmURL}non-card not found`);
 
       await visitOperatorMode({
@@ -827,10 +835,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}broken-adoption-instance.json`,
       });
 
-      await waitFor('[data-test-card-preview-error]');
+      await waitFor('[data-test-card-error]');
 
+      await click('[data-test-error-detail-toggle] button');
       assert
-        .dom('[data-test-card-preview-error]')
+        .dom('[data-test-error-detail]')
         .includesText(
           'Encountered error rendering HTML for card: formatName is not defined',
         );

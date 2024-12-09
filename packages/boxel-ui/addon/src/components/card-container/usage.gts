@@ -8,7 +8,6 @@ import BoxelCardContainer from './index.gts';
 
 export default class CardContainerUsage extends Component {
   @tracked displayBoundaries = true;
-  @tracked isHighlighted = false;
 
   <template>
     {{! template-lint-disable no-inline-styles }}
@@ -17,16 +16,9 @@ export default class CardContainerUsage extends Component {
         A wrapper container for a card.
       </:description>
       <:example>
-        <BoxelCardContainer
-          @displayBoundaries={{this.displayBoundaries}}
-          @isHighlighted={{this.isHighlighted}}
-        >
+        <BoxelCardContainer @displayBoundaries={{this.displayBoundaries}}>
           {{! Usage with BoxelHeader component }}
-          <BoxelHeader
-            @size='large'
-            @title='Card'
-            @isHighlighted={{this.isHighlighted}}
-          />
+          <BoxelHeader @size='large' @title='Card' />
           <div>Card Here</div>
         </BoxelCardContainer>
       </:example>
@@ -37,13 +29,6 @@ export default class CardContainerUsage extends Component {
           @defaultValue={{false}}
           @value={{this.displayBoundaries}}
           @onInput={{fn (mut this.displayBoundaries)}}
-        />
-        <Args.Bool
-          @name='isHighlighted'
-          @description='(styling) Highlights card boundary'
-          @defaultValue={{false}}
-          @value={{this.isHighlighted}}
-          @onInput={{fn (mut this.isHighlighted)}}
         />
         <Args.Yield
           @description='Unstyled area for custom card content and fields'

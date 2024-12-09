@@ -23,10 +23,8 @@ import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
-  aiBotUsername,
   Deferred,
   codeRefWithAbsoluteURL,
-  getCard,
   moduleFrom,
   RealmPaths,
   type Actions,
@@ -40,7 +38,11 @@ import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgr
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -48,7 +50,10 @@ import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
 
+import type { StackItemComponentAPI } from './stack-item';
+
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 
@@ -67,14 +72,7 @@ type Values<T> = T[keyof T];
 type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
-const clearSelections = new WeakMap<StackItem, () => void>();
-const stackItemScrollers = new WeakMap<
-  StackItem,
-  {
-    stableScroll: (_changeSizeCallback: () => Promise<void>) => void;
-    scrollIntoView: (_selector: string) => void;
-  }
->();
+const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
 
 interface NeighborStackTriggerButtonSignature {
   Element: HTMLButtonElement;
@@ -99,30 +97,53 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
 
   <template>
     <button
-      ...attributes
       class={{cn
         'add-card-to-neighbor-stack'
         this.triggerSideClass
-        (if
-          (eq @activeTrigger @triggerSide) 'add-card-to-neighbor-stack--active'
-        )
+        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
+      ...attributes
     >
       <Download width='19' height='19' />
     </button>
+    <style scoped>
+      .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
+        width: var(--container-button-size);
+        height: var(--container-button-size);
+        padding: 0;
+        border-radius: 50%;
+        background-color: var(--boxel-light-100);
+        border-color: transparent;
+        box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--boxel-layer-floating-button);
+      }
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack--active {
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
+      }
+      .add-card-to-neighbor-stack--left {
+        margin-left: var(--operator-mode-spacing);
+      }
+      .add-card-to-neighbor-stack--right {
+        margin-right: var(--operator-mode-spacing);
+      }
+    </style>
   </template>
 }
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    write: (card: CardDef) => Promise<CardDef | undefined>;
+    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: Realm;
@@ -190,14 +211,14 @@ export default class InteractSubmode extends Component<Signature> {
         // looks like perhaps there is a race condition (or something else) when a
         // new linked card is created, and when it is added to the stack and closed
         // - the parent card is not updated with the new linked card
-        await here.cardService.saveModel(here, newCard);
+        await here.cardService.saveModel(newCard);
 
         await newItem.ready();
         here.addToStack(newItem);
         return newCard;
       },
       viewCard: async (
-        card: CardDef,
+        cardOrURL: CardDef | URL,
         format: Format = 'isolated',
         opts?: { openCardInRightMostStack?: boolean },
       ): Promise<void> => {
@@ -206,7 +227,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let newItem = new StackItem({
           owner: here,
-          card,
+          ...(cardOrURL instanceof URL
+            ? { url: cardOrURL }
+            : { card: cardOrURL }),
           format,
           stackIndex,
         });
@@ -229,17 +252,8 @@ export default class InteractSubmode extends Component<Signature> {
         here._copyCard.perform(card, stackIndex, deferred);
         return await deferred.promise;
       },
-      saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
-        let item = here.findCardInStack(card, stackIndex);
-        // WARNING: never await an ember concurrency perform outside of a task.
-        // Inside of a task, the `await` is actually just syntactic sugar for a
-        // `yield`. But if you await `perform()` outside of a task, that will cast
-        // the the task to an uncancellable promise which defeats the point of using
-        // ember concurrency.
-        // https://ember-concurrency.com/docs/task-cancelation-help
-        let deferred = new Deferred<void>();
-        here.save.perform(item, dismissItem, deferred);
-        await deferred.promise;
+      saveCard: async (card: CardDef): Promise<void> => {
+        await here.args.saveCard(card);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
@@ -277,7 +291,7 @@ export default class InteractSubmode extends Component<Signature> {
           stackItem = stack.find((item: StackItem) => item.card === card);
           if (stackItem) {
             let doWithStableScroll =
-              stackItemScrollers.get(stackItem)?.stableScroll;
+              stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
             if (doWithStableScroll) {
               doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
               return;
@@ -289,13 +303,6 @@ export default class InteractSubmode extends Component<Signature> {
       changeSubmode: (url: URL, submode: Submode = 'code'): void => {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
-      },
-      runCommand: (
-        card: CardDef,
-        skillCardId: string,
-        message?: string,
-      ): void => {
-        here.runCommand.perform(card, skillCardId, message ?? 'Run command');
       },
     };
   }
@@ -327,73 +334,22 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private close = task(async (item: StackItem) => {
-    let { card, request } = item;
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
+    if (item.cardError) {
+      return;
+    }
+
+    let { card, request } = item;
 
     // only save when closing a stack item in edit mode. there should be no unsaved
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
     if (item.format === 'edit') {
-      let updatedCard = await this.args.write(card);
+      let updatedCard = this.args.saveCard(card);
       request?.fulfill(updatedCard);
     }
   });
-
-  private save = task(
-    async (
-      item: StackItem,
-      dismissStackItem: boolean,
-      done: Deferred<void>,
-    ) => {
-      let { request } = item;
-      let hasRejected = false;
-      try {
-        let updatedCard = await this.args.write(item.card);
-
-        if (updatedCard) {
-          request?.fulfill(updatedCard);
-          if (!dismissStackItem) {
-            return;
-          }
-          this.operatorModeStateService.replaceItemInStack(
-            item,
-            item.clone({
-              request,
-              format: 'isolated',
-            }),
-          );
-        }
-      } catch (e) {
-        hasRejected = true;
-        done.reject(e);
-      } finally {
-        if (!hasRejected) {
-          done.fulfill();
-        }
-      }
-    },
-  );
-
-  private runCommand = restartableTask(
-    async (card: CardDef, skillCardId: string, message: string) => {
-      let resource = getCard(new URL(skillCardId));
-      await resource.loaded;
-      let commandCard = resource.card;
-      if (!commandCard) {
-        throw new Error(`Could not find card "${skillCardId}"`);
-      }
-      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
-        aiBotUsername,
-      ]);
-      await this.matrixService.sendMessage(
-        newRoomId,
-        message,
-        [card],
-        [commandCard],
-      );
-    },
-  );
 
   @action private onCancelDelete() {
     this.itemToDelete = undefined;
@@ -503,16 +459,18 @@ export default class InteractSubmode extends Component<Signature> {
             scrollToCard = newCard; // we scroll to the first card lexically by title
           }
         }
-        let clearSelection = clearSelections.get(sourceItem);
+        let clearSelection =
+          stackItemComponentAPI.get(sourceItem)?.clearSelections;
         if (typeof clearSelection === 'function') {
           clearSelection();
         }
         cardSelections.delete(sourceItem);
-        let scroller = stackItemScrollers.get(destinationItem);
+        let scrollIntoView =
+          stackItemComponentAPI.get(destinationItem)?.scrollIntoView;
         if (scrollToCard) {
           // Currently the destination item is always a cards-grid, so we use that
           // fact to be able to scroll to the newly copied item
-          scroller?.scrollIntoView(
+          scrollIntoView?.(
             `[data-stack-card="${destinationItem.card.id}"] [data-cards-grid-item="${scrollToCard.id}"]`,
           );
         }
@@ -564,15 +522,9 @@ export default class InteractSubmode extends Component<Signature> {
 
   private setupStackItem = (
     item: StackItem,
-    doClearSelections: () => void,
-    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
-    doScrollIntoView: (selector: string) => void,
+    componentAPI: StackItemComponentAPI,
   ) => {
-    clearSelections.set(item, doClearSelections);
-    stackItemScrollers.set(item, {
-      stableScroll: doWithStableScroll,
-      scrollIntoView: doScrollIntoView,
-    });
+    stackItemComponentAPI.set(item, componentAPI);
   };
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
@@ -679,9 +631,14 @@ export default class InteractSubmode extends Component<Signature> {
 
   @provide(CardContextName)
   // @ts-ignore "cardContext is declared but not used"
-  private get cardContext() {
+  private get cardContext(): Omit<
+    CardContext,
+    'prerenderedCardSearchComponent'
+  > {
     return {
       actions: this.publicAPI(this, 0),
+      // TODO: should we include this here??
+      commandContext: this.commandService.commandContext,
     };
   }
 
@@ -691,7 +648,7 @@ export default class InteractSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
     >
-      <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+      <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='right'>
             <:trigger>
@@ -722,13 +679,11 @@ export default class InteractSubmode extends Component<Signature> {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
-                  'operator-mode-stack'
-                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                  (if
-                    (and (gt stack.length 1) (lt stack.length 3))
-                    'medium-padding-top'
+                  stack-with-bg-image=backgroundImageURLSpecificToThisStack
+                  stack-medium-padding-top=(and
+                    (gt stack.length 1) (lt stack.length 3)
                   )
-                  (if (gt stack.length 2) 'small-padding-top')
+                  stack-small-padding-top=(gt stack.length 2)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -743,9 +698,11 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
+                @commandContext={{this.commandService.commandContext}}
                 @close={{perform this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
+                @saveCard={{@saveCard}}
               />
             {{/let}}
           {{/each}}
@@ -760,6 +717,7 @@ export default class InteractSubmode extends Component<Signature> {
           <Tooltip @placement='left'>
             <:trigger>
               <NeighborStackTriggerButton
+                class='neighbor-stack-trigger'
                 data-test-add-card-right-stack
                 @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
                 @activeTrigger={{this.searchSheetTrigger}}
@@ -786,7 +744,7 @@ export default class InteractSubmode extends Component<Signature> {
     </SubmodeLayout>
 
     <style scoped>
-      .operator-mode__main {
+      .interact-submode {
         display: flex;
         justify-content: center;
         align-items: center;
@@ -795,38 +753,35 @@ export default class InteractSubmode extends Component<Signature> {
         background-size: cover;
         height: 100%;
       }
-      .operator-mode__main .stacks {
+      .stacks {
         flex: 1;
         height: 100%;
         display: flex;
         justify-content: center;
         align-items: center;
       }
-      .operator-mode__main .add-card-to-neighbor-stack {
+      .stack-with-bg-image:before {
+        content: ' ';
+        height: 100%;
+        width: 2px;
+        background-color: var(--boxel-dark);
+        display: block;
+        position: absolute;
+        top: 0;
+        left: -1px;
+      }
+      .stack-with-bg-image:first-child:before {
+        display: none;
+      }
+      .stack-medium-padding-top {
+        padding-top: var(--operator-mode-top-bar-item-height);
+      }
+      .stack-small-padding-top {
+        padding-top: var(--operator-mode-spacing);
+      }
+      .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--boxel-sp);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--boxel-sp);
       }
     </style>
   </template>

@@ -20,6 +20,6 @@ This script should be run when an icon is added, removed, updated, or renamed.
 
 ### `pnpm rebuild:usage`
 
-This script generates src/usage.ts, which is the module that re-exports the usage files for the test-app to include in it's component explorer UI.
+This script generates src/usage.ts, which is the module that re-exports the usage modules that the test-app uses to include in it's component explorer UI.
 
 This script should be run when a usage file is added, removed, or renamed.

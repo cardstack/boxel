@@ -395,10 +395,14 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
   @tracked showAllResults = true;
 
   get filterString() {
-    if (!this.args.model.toolCallArgs?.filter) {
+    if (!this.args.model.toolCallArgs?.attributes.filter) {
       return;
     }
-    return JSON.stringify(this.args.model.toolCallArgs.filter, null, 2);
+    return JSON.stringify(
+      this.args.model.toolCallArgs.attributes.filter,
+      null,
+      2,
+    );
   }
 }
 
