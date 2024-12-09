@@ -785,7 +785,6 @@ export default class CodeSubmode extends Component<Signature> {
           {{#if this.codePath}}
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
-              @collapsible={{false}}
               @minSize={{30}}
             >
               <InnerContainer>
