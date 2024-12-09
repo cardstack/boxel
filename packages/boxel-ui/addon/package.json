@@ -71,7 +71,7 @@
     "@babel/plugin-transform-class-static-block": "^7.22.11",
     "@babel/plugin-transform-typescript": "^7.22.15",
     "@babel/runtime": "^7.24.4",
-    "@embroider/addon-dev": "5.0.1-unstable.c51ca2b",
+    "@embroider/addon-dev": "^7.0.0",
     "@embroider/macros": "^1.16.9",
     "@rollup/plugin-babel": "^6.0.4",
     "@tsconfig/ember": "3.0.1",

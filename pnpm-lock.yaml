@@ -290,8 +290,8 @@ importers:
         specifier: ^7.24.4
         version: 7.26.0
       '@embroider/addon-dev':
-        specifier: 5.0.1-unstable.c51ca2b
-        version: 5.0.1-unstable.c51ca2b(@glint/template@1.3.0)(rollup@4.18.1)
+        specifier: ^7.0.0
+        version: 7.0.0(@glint/template@1.3.0)(rollup@4.18.1)
       '@embroider/macros':
         specifier: ^1.16.9
         version: 1.16.9(@glint/template@1.3.0)
@@ -438,8 +438,8 @@ importers:
         specifier: ^7.24.4
         version: 7.26.0
       '@embroider/addon-dev':
-        specifier: 5.0.1-unstable.c51ca2b
-        version: 5.0.1-unstable.c51ca2b(@glint/template@1.3.0)(rollup@4.18.1)
+        specifier: ^7.0.0
+        version: 7.0.0(@glint/template@1.3.0)(rollup@4.18.1)
       '@embroider/macros':
         specifier: ^1.16.9
         version: 1.16.9(@glint/template@1.3.0)
@@ -862,8 +862,8 @@ importers:
         specifier: ^7.24.4
         version: 7.26.0
       '@embroider/addon-dev':
-        specifier: 5.0.1-unstable.c51ca2b
-        version: 5.0.1-unstable.c51ca2b(@glint/template@1.3.0)(rollup@4.18.1)
+        specifier: ^7.0.0
+        version: 7.0.0(@glint/template@1.3.0)(rollup@4.18.1)
       '@embroider/macros':
         specifier: ^1.16.9
         version: 1.16.9(@glint/template@1.3.0)
@@ -4556,8 +4556,8 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /@embroider/addon-dev@5.0.1-unstable.c51ca2b(@glint/template@1.3.0)(rollup@4.18.1):
-    resolution: {integrity: sha512-d430FqHr/+sxJh7+d/0XsmD9BLTmKlqL1LP8F3FLMQmAaeRgIpPYLDJEAdHXIOopChqEtHej6IXDfuybYbybKA==}
+  /@embroider/addon-dev@7.0.0(@glint/template@1.3.0)(rollup@4.18.1):
+    resolution: {integrity: sha512-jxRh++d2YXnEAjPxvjHGsTqx/Gd9U3LDeuLYBhLW6wzXakCyvU3K6V7jbYfx5fAxbdGkr2jFIp2gmGEsai2fpQ==}
     engines: {node: 12.* || 14.* || >= 16}
     hasBin: true
     peerDependencies:
@@ -4567,8 +4567,8 @@ packages:
         optional: true
     dependencies:
       '@embroider/core': 3.4.19(@glint/template@1.3.0)
-      '@rollup/pluginutils': 5.1.3(rollup@4.18.1)
-      content-tag: 2.0.3
+      '@rollup/pluginutils': 4.2.1
+      content-tag: 3.0.0
       fs-extra: 10.1.0
       minimatch: 3.1.2
       rollup: 4.18.1
@@ -6538,6 +6538,14 @@ packages:
       rollup: 4.18.1
     dev: true
 
+  /@rollup/pluginutils@4.2.1:
+    resolution: {integrity: sha512-iKnFXr7NkdZAIHiIWE+BX5ULi/ucVFYWD6TbAV+rZctiRTY2PL6tsIKhoIOaoskiWAkgu+VsbXgUVDNLHf+InQ==}
+    engines: {node: '>= 8.0.0'}
+    dependencies:
+      estree-walker: 2.0.2
+      picomatch: 2.3.1
+    dev: true
+
   /@rollup/pluginutils@5.0.5(rollup@4.18.1):
     resolution: {integrity: sha512-6aEYR910NyP73oHiJglti74iRyOwgFU4x3meH/H8OJx6Ry0j6cOVZ5X/wTvub7G7Ao6qaHBEaNsV3GLJkSsF+Q==}
     engines: {node: '>=14.0.0'}
@@ -6550,21 +6558,6 @@ packages:
       '@types/estree': 1.0.5
       estree-walker: 2.0.2
       picomatch: 2.3.1
-      rollup: 4.18.1
-    dev: true
-
-  /@rollup/pluginutils@5.1.3(rollup@4.18.1):
-    resolution: {integrity: sha512-Pnsb6f32CD2W3uCaLZIzDmeFyQ2b8UWMFI7xtwUezpcGBDVDW6y9XgAWIlARiGAo6eNF5FK5aQTr0LFyNyqq5A==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-    dependencies:
-      '@types/estree': 1.0.5
-      estree-walker: 2.0.2
-      picomatch: 4.0.2
       rollup: 4.18.1
     dev: true
 
@@ -11769,10 +11762,6 @@ packages:
 
   /content-tag@1.2.2:
     resolution: {integrity: sha512-9guqKIx2H+78N17otBpl8yLZbQGL5q1vBO/jDb3gF2JjixtcVpC62jDUNxjVMNoaZ09oxRX84ZOD6VX02qkVvg==}
-    dev: true
-
-  /content-tag@2.0.3:
-    resolution: {integrity: sha512-htLIdtfhhKW2fHlFLnZH7GFzHSdSpHhDLrWVswkNiiPMZ5uXq5JfrGboQKFhNQuAAFF8VNB2EYUj3MsdJrKKpg==}
     dev: true
 
   /content-tag@3.0.0:
@@ -21319,11 +21308,6 @@ packages:
   /picomatch@2.3.1:
     resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
     engines: {node: '>=8.6'}
-
-  /picomatch@4.0.2:
-    resolution: {integrity: sha512-M7BAV6Rlcy5u+m6oPhAPFgJTzAioX/6B0DxyvDlo9l8+T3nLKbrczg2WLUyzd45L8RqfUMyGPzekbMvX2Ldkwg==}
-    engines: {node: '>=12'}
-    dev: true
 
   /pidtree@0.3.1:
     resolution: {integrity: sha512-qQbW94hLHEqCg7nhby4yRC7G2+jYHY4Rguc2bjw7Uug4GIJuu1tvf2uHaZv5Q8zdt+WKJ6qK1FOI6amaWUo5FA==}

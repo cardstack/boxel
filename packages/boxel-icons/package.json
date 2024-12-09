@@ -47,7 +47,7 @@
     "@babel/runtime": "^7.24.4",
     "@lucide/lab": "^0.1.2",
     "@tabler/icons": "^3.19.0",
-    "@embroider/addon-dev": "5.0.1-unstable.c51ca2b",
+    "@embroider/addon-dev": "^7.0.0",
     "@embroider/macros": "^1.16.9",
     "@rollup/plugin-babel": "^6.0.4",
     "@tsconfig/ember": "3.0.1",
