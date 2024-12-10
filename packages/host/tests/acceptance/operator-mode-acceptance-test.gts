@@ -22,10 +22,9 @@ import {
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import {
-  tokenRefreshPeriodSec,
-  sessionLocalStorageKey,
-} from '@cardstack/host/services/realm';
+import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
+
+import { sessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,

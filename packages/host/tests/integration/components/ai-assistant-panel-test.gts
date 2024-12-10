@@ -16,12 +16,13 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { currentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CommandResultEvent } from 'https://cardstack.com/base/matrix-event';
 

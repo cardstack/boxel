@@ -41,6 +41,11 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
+import {
+  currentRoomIdPersistenceKey,
+  newSessionIdPersistenceKey,
+} from '@cardstack/host/utils/local-storage-keys';
+
 import assistantIcon from './ai-assist-icon.webp';
 
 const { matrixServerName } = ENV;
@@ -61,10 +66,6 @@ export interface SessionRoomData {
   created: Date;
   lastActiveTimestamp: number;
 }
-
-// Local storage keys
-export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
-let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
   get hasOtherActiveSessions() {
@@ -557,8 +558,8 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
-      await this.matrixService.client.leave(roomId);
-      await this.matrixService.client.forget(roomId);
+      await this.matrixService.leave(roomId);
+      await this.matrixService.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       this.matrixService.roomResourcesCache.delete(roomId);
 

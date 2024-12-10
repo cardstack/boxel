@@ -513,8 +513,9 @@ export default class RegisterUser extends Component<Signature> {
       return;
     }
 
-    this.isUsernameAvailable =
-      await this.matrixService.client.isUsernameAvailable(this.username);
+    this.isUsernameAvailable = await this.matrixService.isUsernameAvailable(
+      this.username,
+    );
     if (!this.isUsernameAvailable) {
       this.usernameError = 'Username is already taken';
     }
@@ -675,7 +676,7 @@ export default class RegisterUser extends Component<Signature> {
     let auth: RegisterResponse;
 
     try {
-      auth = await this.matrixService.client.registerRequest({
+      auth = await this.matrixService.registerRequest({
         username: this.state.username,
         password: this.state.password,
         auth: {

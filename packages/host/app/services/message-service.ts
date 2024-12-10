@@ -8,7 +8,7 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
-import { sessionLocalStorageKey } from './realm';
+import { sessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
 

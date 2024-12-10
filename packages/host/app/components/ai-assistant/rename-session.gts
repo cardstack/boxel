@@ -122,7 +122,7 @@ export default class RenameSession extends Component<Signature> {
       throw new Error(`bug: should never get here`);
     }
     try {
-      await this.matrixService.client.setRoomName(
+      await this.matrixService.setRoomName(
         this.args.room.roomId,
         this.newRoomName,
       );

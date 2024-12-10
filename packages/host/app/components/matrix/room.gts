@@ -400,7 +400,7 @@ export default class Room extends Component<Signature> {
     // update value, but it had already been used previously in the same
     // computation" error
     schedule('afterRender', () => {
-      this.matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+      this.matrixService.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }
 

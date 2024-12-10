@@ -34,6 +34,8 @@ import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
+import { sessionLocalStorageKey } from '../utils/local-storage-keys';
+
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -649,7 +651,6 @@ export default class RealmService extends Service {
 }
 
 export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-export const sessionLocalStorageKey = 'boxel-session';
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');

@@ -37,7 +37,6 @@ import {
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
-import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import {
   type Submode,
   Submodes,
@@ -68,6 +67,8 @@ import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
+
+import { currentRoomIdPersistenceKey } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
@@ -890,6 +891,22 @@ export default class MatrixService extends Service {
     return card;
   }
 
+  async getProfileInfo(userId: string) {
+    return await this.client.getProfileInfo(userId);
+  }
+
+  async getThreePids() {
+    return await this.client.getThreePids();
+  }
+
+  async addThreePidOnly(data: MatrixSDK.IAddThreePidOnlyBody) {
+    return await this.client.addThreePidOnly(data);
+  }
+
+  async deleteThreePid(medium: string, address: string) {
+    return await this.client.deleteThreePid(medium, address);
+  }
+
   async setPowerLevel(roomId: string, userId: string, powerLevel: number) {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
@@ -915,6 +932,61 @@ export default class MatrixService extends Service {
     await roomData.mutex.dispatch(async () => {
       return this.client.sendStateEvent(roomId, eventType, content, stateKey);
     });
+  }
+
+  async leave(roomId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.leave(roomId);
+    });
+  }
+
+  async forget(roomId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.forget(roomId);
+    });
+  }
+
+  async setRoomName(roomId: string, name: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.setRoomName(roomId, name);
+    });
+  }
+
+  async requestPasswordEmailToken(
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+    nextLink?: string,
+  ) {
+    return await this.client.requestPasswordEmailToken(
+      email,
+      clientSecret,
+      sendAttempt,
+      nextLink,
+    );
+  }
+
+  async setPassword(
+    authDict: MatrixSDK.AuthDict,
+    newPassword: string,
+    logoutDevices?: boolean,
+  ) {
+    return await this.client.setPassword(authDict, newPassword, logoutDevices);
+  }
+
+  async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
+    return await this.client.registerRequest(data, kind);
+  }
+
+  async sendReadReceipt(matrixEvent: MatrixEvent) {
+    return await this.client.sendReadReceipt(matrixEvent);
+  }
+
+  async isUsernameAvailable(username: string) {
+    return await this.client.isUsernameAvailable(username);
   }
 
   private addRoomEvent(event: TempEvent, oldEventId?: string) {
