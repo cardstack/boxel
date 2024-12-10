@@ -108,7 +108,7 @@ export default class MatrixService extends Service {
   @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
 
-  profile = getMatrixProfile(this, () => this.client.getUserId());
+  profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
 
@@ -129,7 +129,7 @@ export default class MatrixService extends Service {
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
-  skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
+  private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
   private defaultSkills: SkillCard[] = [];
 
   constructor(owner: Owner) {
@@ -190,7 +190,7 @@ export default class MatrixService extends Service {
     return this.client.isLoggedIn() && this.postLoginCompleted;
   }
 
-  get client() {
+  private get client() {
     if (!this._client) {
       throw new Error(`cannot use matrix client before matrix SDK has loaded`);
     }
@@ -505,6 +505,14 @@ export default class MatrixService extends Service {
         }`,
       );
     }
+  }
+
+  async addSkillCardsToRoomHistory(
+    skills: SkillCard[],
+    roomId: string,
+    opts?: CardAPI.SerializeOpts,
+  ): Promise<string[]> {
+    return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
   }
 
   async addCardsToRoom(
@@ -858,6 +866,10 @@ export default class MatrixService extends Service {
     }
   }
 
+  async createRoom(opts: MatrixSDK.ICreateRoomOpts) {
+    return this.client.createRoom(opts);
+  }
+
   async createCard<T extends typeof BaseDef>(
     codeRef: ResolvedCodeRef,
     attr: Record<string, any>,
@@ -878,6 +890,33 @@ export default class MatrixService extends Service {
     return card;
   }
 
+  async setPowerLevel(roomId: string, userId: string, powerLevel: number) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.setPowerLevel(roomId, userId, powerLevel);
+    });
+  }
+
+  async getStateEvent(
+    roomId: string,
+    eventType: string,
+    stateKey: string = '',
+  ) {
+    return this.client.getStateEvent(roomId, eventType, stateKey);
+  }
+
+  async sendStateEvent(
+    roomId: string,
+    eventType: string,
+    content: Record<string, any>,
+    stateKey: string = '',
+  ) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.sendStateEvent(roomId, eventType, content, stateKey);
+    });
+  }
+
   private addRoomEvent(event: TempEvent, oldEventId?: string) {
     let { room_id: roomId } = event;
 
@@ -890,7 +929,7 @@ export default class MatrixService extends Service {
     roomData.addEvent(event, oldEventId);
   }
 
-  ensureRoomData(roomId: string) {
+  private ensureRoomData(roomId: string) {
     let roomData = this.getRoomData(roomId);
     if (!roomData) {
       roomData = new Room();

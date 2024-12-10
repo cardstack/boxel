@@ -23,17 +23,16 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.AddSkillsToRoomInput,
   ): Promise<undefined> {
-    let { client } = this.matrixService;
+    let { matrixService } = this;
     let { roomId, skills } = input;
-    let roomSkillEventIds = await this.matrixService.addCardsToRoom(
+    let roomSkillEventIds = await matrixService.addSkillCardsToRoomHistory(
       skills,
       roomId,
-      this.matrixService.skillCardHashes,
       { includeComputeds: true, maybeRelativeURL: null },
     );
     let skillEventIdsStateEvent: Record<string, any> = {};
     try {
-      skillEventIdsStateEvent = await client.getStateEvent(
+      skillEventIdsStateEvent = await matrixService.getStateEvent(
         roomId,
         SKILLS_STATE_EVENT_TYPE,
         '',
@@ -45,19 +44,14 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
         throw e;
       }
     }
-    let roomData = this.matrixService.ensureRoomData(roomId);
-    await roomData.mutex.dispatch(async () => {
-      client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
-        enabledEventIds: [
-          ...new Set([
-            ...(skillEventIdsStateEvent?.enabledEventIds || []),
-            ...roomSkillEventIds,
-          ]),
-        ],
-        disabledEventIds: [
-          ...(skillEventIdsStateEvent?.disabledEventIds || []),
-        ],
-      });
+    await matrixService.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
+      enabledEventIds: [
+        ...new Set([
+          ...(skillEventIdsStateEvent?.enabledEventIds || []),
+          ...roomSkillEventIds,
+        ]),
+      ],
+      disabledEventIds: [...(skillEventIdsStateEvent?.disabledEventIds || [])],
     });
   }
 }

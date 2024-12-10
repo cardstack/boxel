@@ -27,8 +27,8 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CreateAIAssistantRoomInput,
   ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
-    let { client, matrixSDK } = this.matrixService;
-    let userId = client.getUserId();
+    let { matrixService } = this;
+    let { matrixSDK, userId } = matrixService;
     if (!userId) {
       throw new Error(
         `bug: there is no userId associated with the matrix client`,
@@ -36,7 +36,7 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
     }
     let server = userId!.split(':')[1];
     let aiBotFullId = `@${aiBotUsername}:${server}`;
-    let { room_id: roomId } = await client.createRoom({
+    let { room_id: roomId } = await matrixService.createRoom({
       preset: matrixSDK.Preset.PrivateChat,
       invite: [aiBotFullId],
       name: input.name,
@@ -48,10 +48,11 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
         )} - ${userId}`,
       ),
     });
-    let roomData = this.matrixService.ensureRoomData(roomId);
-    roomData.mutex.dispatch(async () => {
-      client.setPowerLevel(roomId, aiBotFullId, AI_BOT_POWER_LEVEL, null);
-    });
+    await this.matrixService.setPowerLevel(
+      roomId,
+      aiBotFullId,
+      AI_BOT_POWER_LEVEL,
+    );
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomResult } = commandModule;
     return new CreateAIAssistantRoomResult({ roomId });
