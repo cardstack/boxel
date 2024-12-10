@@ -11,6 +11,7 @@ import type {
   CommandResultEvent,
   ReactionEvent,
   Tool,
+  SkillsConfigEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -45,6 +46,14 @@ type TextMessage = {
   complete: boolean;
 };
 
+export interface PromptParts {
+  tools: Tool[];
+  messages: OpenAIPromptMessage[];
+  model: string;
+  history: DiscreteMatrixEvent[];
+  toolChoice: 'auto' | 'none';
+}
+
 export type Message = CommandMessage | TextMessage;
 
 export class HistoryConstructionError extends Error {
@@ -54,7 +63,46 @@ export class HistoryConstructionError extends Error {
   }
 }
 
-export function constructHistory(history: IRoomEvent[]) {
+export function getPromptParts(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): PromptParts {
+  let cardFragments: Map<string, CardFragmentContent> =
+    extractCardFragmentsFromEvents(eventList);
+  let history: DiscreteMatrixEvent[] = constructHistory(
+    eventList,
+    cardFragments,
+  );
+  let skills = getEnabledSkills(eventList, cardFragments);
+  let tools = getTools(history, aiBotUserId);
+  let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
+  return {
+    tools,
+    messages,
+    model: 'openai/gpt-4o',
+    history,
+    toolChoice: 'auto',
+  };
+}
+
+export function extractCardFragmentsFromEvents(
+  eventList: IRoomEvent[],
+): Map<string, CardFragmentContent> {
+  const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
+  for (let event of eventList) {
+    if (event.type === 'm.room.message') {
+      if (event.content.msgtype === 'org.boxel.cardFragment') {
+        fragments.set(event.event_id, event.content as CardFragmentContent);
+      }
+    }
+  }
+  return fragments;
+}
+
+export function constructHistory(
+  eventlist: IRoomEvent[],
+  cardFragments: Map<string, CardFragmentContent>,
+) {
   /**
    * We send a lot of events to create messages,
    * as we stream updates to the UI. This works by
@@ -65,9 +113,8 @@ export function constructHistory(history: IRoomEvent[]) {
    * would see it - with only the latest event for each
    * message.
    */
-  const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of history) {
+  for (let rawEvent of eventlist) {
     if (rawEvent.content.data) {
       try {
         rawEvent.content.data = JSON.parse(rawEvent.content.data);
@@ -83,18 +130,13 @@ export function constructHistory(history: IRoomEvent[]) {
     }
     let eventId = event.event_id!;
     if (event.content.msgtype === 'org.boxel.cardFragment') {
-      fragments.set(eventId, event.content);
       continue;
-    } else if (event.content.msgtype === 'org.boxel.message') {
-      let { attachedCardsEventIds, attachedSkillEventIds } = event.content.data;
+    }
+    if (event.content.msgtype === 'org.boxel.message') {
+      let { attachedCardsEventIds } = event.content.data;
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
         event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
-          serializedCardFromFragments(id, fragments),
-        );
-      }
-      if (attachedSkillEventIds && attachedSkillEventIds.length > 0) {
-        event.content.data.skillCards = attachedSkillEventIds.map((id) =>
-          serializedCardFromFragments(id, fragments),
+          serializedCardFromFragments(id, cardFragments),
         );
       }
     }
@@ -118,6 +160,22 @@ export function constructHistory(history: IRoomEvent[]) {
   let latestEvents = Array.from(latestEventsMap.values());
   latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   return latestEvents;
+}
+
+function getEnabledSkills(
+  eventlist: DiscreteMatrixEvent[],
+  cardFragments: Map<string, CardFragmentContent>,
+): LooseCardResource[] {
+  let skillsConfigEvent = eventlist.findLast(
+    (event) => event.type === 'com.cardstack.boxel.room.skills',
+  ) as SkillsConfigEvent;
+  if (!skillsConfigEvent) {
+    return [];
+  }
+  let enabledEventIds = skillsConfigEvent.content.enabledEventIds;
+  return enabledEventIds.map(
+    (id: string) => serializedCardFromFragments(id, cardFragments).data,
+  );
 }
 
 function serializedCardFromFragments(
@@ -186,7 +244,6 @@ function setRelevantCards(
 interface RelevantCards {
   mostRecentlyAttachedCard: LooseCardResource | undefined;
   attachedCards: LooseCardResource[];
-  skillCards: CardResource[];
 }
 
 function getMostRecentlyAttachedCard(attachedCards: LooseSingleCardDocument[]) {
@@ -202,10 +259,6 @@ export function getRelevantCards(
 ): RelevantCards {
   let mostRecentlyAttachedCard: LooseCardResource | undefined;
   let attachedCardMap = new Map<string, CardResource>();
-  let skillCardMap = new Map<string, CardResource>();
-  let latestMessageEventId = history
-    .filter((ev) => ev.sender !== aiBotUserId && ev.type === 'm.room.message')
-    .slice(-1)[0]?.event_id;
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -219,11 +272,6 @@ export function getRelevantCards(
             content.data?.attachedCards,
           );
         }
-
-        // setting skill card instructions only based on the latest boxel message event (not cumulative)
-        if (event.event_id === latestMessageEventId) {
-          setRelevantCards(skillCardMap, content.data?.skillCards);
-        }
       }
     }
   }
@@ -232,13 +280,9 @@ export function getRelevantCards(
     return a.id.localeCompare(b.id);
   });
 
-  let skillCards = Array.from(skillCardMap.values()).sort((a, b) =>
-    a.id.localeCompare(b.id),
-  );
   return {
     mostRecentlyAttachedCard: mostRecentlyAttachedCard,
     attachedCards: sortedCards,
-    skillCards,
   };
 }
 
@@ -248,7 +292,7 @@ export function getTools(
 ): Tool[] {
   // TODO: there should be no default tools defined in the ai-bot, tools must be determined by the host
   let searchTool = getSearchTool();
-  let tools = [searchTool];
+  let tools = [searchTool as Tool];
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
@@ -361,6 +405,7 @@ export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
+  skillCards: LooseCardResource[] = [],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -416,8 +461,10 @@ export function getModifyPrompt(
     }
   }
 
-  let { mostRecentlyAttachedCard, attachedCards, skillCards } =
-    getRelevantCards(history, aiBotUserId);
+  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
+    history,
+    aiBotUserId,
+  );
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
@@ -466,10 +513,8 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessage = (cards: CardResource[]) => {
-  return `${JSON.stringify(
-    cards.map((card) => card.attributes?.instructions),
-  )}`;
+export const skillCardsToMessage = (cards: LooseCardResource[]) => {
+  return cards.map((card) => card.attributes?.instructions).join('\n');
 };
 
 export function cleanContent(content: string) {

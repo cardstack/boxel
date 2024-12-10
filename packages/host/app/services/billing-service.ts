@@ -3,8 +3,6 @@ import Service from '@ember/service';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask } from 'ember-concurrency';
-
 import { trackedFunction } from 'ember-resources/util/function';
 
 import {
@@ -33,6 +31,7 @@ interface StripeLink {
 
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
+  @tracked private _fetchingSubscriptionData = false;
 
   @service private declare realmServer: RealmServerService;
   @service private declare network: NetworkService;
@@ -42,7 +41,7 @@ export default class BillingService extends Service {
     super(owner);
     this.realmServer.subscribeEvent(
       'billing-notification',
-      this.subscriptionDataRefresher.bind(this),
+      this.fetchSubscriptionData.bind(this),
     );
     this.reset.register(this);
   }
@@ -129,13 +128,14 @@ export default class BillingService extends Service {
     };
   });
 
-  getStripePaymentLink(matrixUserId: string): string {
+  getStripePaymentLink(matrixUserId: string, matrixUserEmail: string): string {
     // We use the matrix user id (@username:example.com) as the client reference id for stripe
     // so we can identify the user payment in our system when we get the webhook
     // the client reference id must be alphanumeric, so we encode the matrix user id
     // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
     const clientReferenceId = encodeWebSafeBase64(matrixUserId);
-    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}`;
+    const encodedEmail = encodeURIComponent(matrixUserEmail);
+    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}&prefilled_email=${encodedEmail}`;
   }
 
   @cached
@@ -144,53 +144,50 @@ export default class BillingService extends Service {
   }
 
   get fetchingSubscriptionData() {
-    return this.fetchSubscriptionDataTask.isRunning;
+    return this._fetchingSubscriptionData;
   }
 
-  fetchSubscriptionData() {
-    this.fetchSubscriptionDataTask.perform();
-  }
-
-  private async subscriptionDataRefresher() {
-    await this.fetchSubscriptionDataTask.perform();
-  }
-
-  private fetchSubscriptionDataTask = dropTask(async () => {
-    let response = await this.network.fetch(`${this.url.origin}/_user`, {
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${await this.getToken()}`,
-      },
-    });
-    if (!response.ok) {
-      console.error(
-        `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
-      );
-      return;
+  async fetchSubscriptionData() {
+    this._fetchingSubscriptionData = true;
+    try {
+      let response = await this.network.fetch(`${this.url.origin}/_user`, {
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await this.getToken()}`,
+        },
+      });
+      if (!response.ok) {
+        console.error(
+          `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
+        );
+        return;
+      }
+      let json = await response.json();
+      let plan =
+        json.included?.find((i: { type: string }) => i.type === 'plan')
+          ?.attributes?.name ?? null;
+      let creditsAvailableInPlanAllowance =
+        json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
+      let creditsIncludedInPlanAllowance =
+        json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
+      let extraCreditsAvailableInBalance =
+        json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
+      let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
+      let stripeCustomerEmail =
+        json.data?.attributes?.stripeCustomerEmail ?? null;
+      this._subscriptionData = {
+        plan,
+        creditsAvailableInPlanAllowance,
+        creditsIncludedInPlanAllowance,
+        extraCreditsAvailableInBalance,
+        stripeCustomerId,
+        stripeCustomerEmail,
+      };
+    } finally {
+      this._fetchingSubscriptionData = false;
     }
-    let json = await response.json();
-    let plan =
-      json.included?.find((i: { type: string }) => i.type === 'plan')
-        ?.attributes?.name ?? null;
-    let creditsAvailableInPlanAllowance =
-      json.data?.attributes?.creditsAvailableInPlanAllowance ?? null;
-    let creditsIncludedInPlanAllowance =
-      json.data?.attributes?.creditsIncludedInPlanAllowance ?? null;
-    let extraCreditsAvailableInBalance =
-      json.data?.attributes?.extraCreditsAvailableInBalance ?? null;
-    let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
-    let stripeCustomerEmail =
-      json.data?.attributes?.stripeCustomerEmail ?? null;
-    this._subscriptionData = {
-      plan,
-      creditsAvailableInPlanAllowance,
-      creditsIncludedInPlanAllowance,
-      extraCreditsAvailableInBalance,
-      stripeCustomerId,
-      stripeCustomerEmail,
-    };
-  });
+  }
 
   private async getToken() {
     if (!this.realmServer.token) {
