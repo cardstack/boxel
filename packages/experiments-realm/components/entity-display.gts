@@ -13,17 +13,22 @@ interface EntityDisplayArgs {
 
 export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
   <template>
-    <div class='row'>
-      {{yield to='thumbnail'}}
+    <div class='entity-display' ...attributes>
+      <div class='row'>
+        {{yield to='thumbnail'}}
 
-      <div class='name-tag'>
-        <span class='name {{if @underline "underline"}}'>
-          {{@name}}
-        </span>
-        {{yield to='tag'}}
+        <div class='name-tag'>
+          <span class='name {{if @underline "underline"}}'>
+            {{@name}}
+          </span>
+          {{yield to='tag'}}
+        </div>
       </div>
     </div>
     <style scoped>
+      .entity-display {
+        container-type: inline-size;
+      }
       .row {
         display: inline-flex;
         align-items: center;
@@ -37,6 +42,12 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
       }
       .name.underline {
         text-decoration: underline;
+      }
+
+      @container (max-width: 447px) {
+        .row {
+          align-items: start;
+        }
       }
     </style>
   </template>

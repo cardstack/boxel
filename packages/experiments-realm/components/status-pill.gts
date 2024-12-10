@@ -27,6 +27,7 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
       class='status-pill'
       data-test-selected-type={{@label}}
       style={{htmlSafe (concat 'background-color: ' @iconLightColor ';')}}
+      ...attributes
     >
       <:iconLeft>
         <div
