@@ -19,7 +19,7 @@ import type CommandService from '../../services/command-service';
 
 interface Signature {
   Args: {
-    error: CardError['errors'][0];
+    error: CardError;
     viewInCodeMode?: true;
     title?: string;
   };

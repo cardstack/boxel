@@ -2172,8 +2172,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('it can copy search results card to workspace', async function (assert) {
-    const id = `${testRealmURL}Person/fadhlan.json`;
-    const roomId = await renderAiAssistantPanel(id);
+    const id = `${testRealmURL}Person/fadhlan`;
+    const roomId = await renderAiAssistantPanel(`${id}.json`);
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
@@ -2247,8 +2247,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('it can copy search results card to workspace (no cards in stack)', async function (assert) {
-    const id = `${testRealmURL}Person/fadhlan.json`;
-    const roomId = await renderAiAssistantPanel(id);
+    const id = `${testRealmURL}Person/fadhlan`;
+    const roomId = await renderAiAssistantPanel(`${id}.json`);
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
