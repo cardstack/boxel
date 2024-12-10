@@ -71,6 +71,7 @@ import {
   addToCreditsLedger,
   insertSubscriptionCycle,
   insertSubscription,
+  getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
   createJWT as createRealmServerJWT,
@@ -3675,6 +3676,52 @@ module('Realm Server', function (hooks) {
     test('returns 404 for request that has malformed URI', async function (assert) {
       let response = await request2.get('/%c0').set('Accept', '*/*');
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
+    });
+
+    test('can create a user', async function (assert) {
+      let ownerUserId = '@mango:boxel.ai';
+      let response = await request2
+        .post('/_user')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'user',
+            attributes: {
+              registrationToken: 'reg_token_123',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.text, 'ok', 'response body is correct');
+
+      let user = await getUserByMatrixUserId(dbAdapter, ownerUserId);
+      if (!user) {
+        throw new Error('user does not exist in db');
+      }
+      assert.strictEqual(
+        user.matrixUserId,
+        ownerUserId,
+        'matrix user ID is correct',
+      );
+      assert.strictEqual(
+        user.matrixRegistrationToken,
+        'reg_token_123',
+        'registration token is correct',
+      );
+    });
+
+    test('can not create a user without a jwt', async function (assert) {
+      let response = await request2.post('/_user').send({});
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
     test('can dynamically load a card definition from own realm', async function (assert) {
