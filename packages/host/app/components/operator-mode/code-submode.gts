@@ -837,7 +837,7 @@ export default class CodeSubmode extends Component<Signature> {
           {{#if this.codePath}}
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
-              @minSize={{30}}
+              @minSize={{20}}
             >
               <InnerContainer>
                 {{#if this.isReady}}
@@ -1145,6 +1145,11 @@ export default class CodeSubmode extends Component<Signature> {
         border-radius: 0;
         box-shadow: none;
         overflow: auto;
+      }
+
+      :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {
+        box-shadow: var(--boxel-deep-box-shadow);
+        border-radius: var(--boxel-border-radius-xl);
       }
     </style>
   </template>
