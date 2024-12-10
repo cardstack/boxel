@@ -18,9 +18,13 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
-import { isToday, isThisWeek, addWeeks } from 'date-fns';
 import { User } from '../user';
-import { TaskBase, BaseTaskStatusField, BaseTaskPriority } from '../task';
+import {
+  TaskBase,
+  BaseTaskStatusField,
+  BaseTaskPriority,
+  getDueDateStatus,
+} from '../task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -139,33 +143,6 @@ function shortenId(id: string): string {
   const shortUuid = id.slice(0, 8);
   const decimal = parseInt(shortUuid, 16);
   return decimal.toString(36).padStart(6, '0');
-}
-
-function getDueDateStatus(dueDateString: string | null) {
-  if (!dueDateString) return null;
-
-  const dueDate = new Date(dueDateString);
-  const today = new Date();
-  const nextWeek = addWeeks(today, 1);
-
-  if (isToday(dueDate)) {
-    return {
-      label: 'Due Today',
-      color: '#01de67',
-    };
-  } else if (isThisWeek(dueDate)) {
-    return {
-      label: 'This Week',
-      color: '#ffbc00',
-    };
-  } else if (dueDate > today && dueDate < nextWeek) {
-    return {
-      label: 'Next Week',
-      color: '#4fc8fd',
-    };
-  }
-
-  return null;
 }
 
 class TaskIsolated extends Component<typeof Task> {
