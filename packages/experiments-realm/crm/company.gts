@@ -13,7 +13,7 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 
 class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
-    <div class='row'>
+    <div class='row company-group'>
       <BuildingIcon class='icon' />
 
       {{#if @model.name}}
