@@ -1,3 +1,4 @@
+import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
 import { PhoneField } from './phone';
@@ -28,6 +29,8 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field phone = contains(PhoneField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
+  @field featuredImage = contains(FeaturedImageField);
+  @field images = containsMany(FeaturedImageField);
   static displayName = 'Custom Fields ';
   static isolated = class Isolated extends Component<typeof this> {
     <template>
