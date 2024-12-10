@@ -91,7 +91,7 @@ import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
 import { baseRealm, getCard } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import AddSkillsToRoomCommand from '../../host/app/commands/add-skills-to-room';
+import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';

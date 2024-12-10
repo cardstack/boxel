@@ -12,7 +12,7 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
 import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
 import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import AddSkillsToRoomCommand from '../../host/app/commands/add-skills-to-room';
+import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
