@@ -197,6 +197,11 @@ class EmbeddedTemplate extends Component<typeof Contact> {
 }
 
 class FittedTemplate extends Component<typeof Contact> {
+  get hasSocialLinks() {
+    return (
+      this.args.model.socialLinks && this.args.model.socialLinks.length > 0
+    );
+  }
   <template>
     <article class='fitted-contact-card'>
       <AvatarGroup
@@ -220,7 +225,7 @@ class FittedTemplate extends Component<typeof Contact> {
         <@fields.phoneOffice @format='atom' />
       </div>
 
-      {{#if @model.socialLinks.length}}
+      {{#if this.hasSocialLinks}}
         <div class='links'>
           <@fields.socialLinks @format='atom' />
         </div>
