@@ -30,8 +30,6 @@ import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
@@ -99,12 +97,16 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  private get lastCardInRightMostStack(): CardDef | null {
+  private get lastCardIdInRightMostStack() {
     if (this.allStackItems.length <= 0) {
       return null;
     }
 
-    return this.allStackItems[this.allStackItems.length - 1].card;
+    let stackItem = this.allStackItems[this.allStackItems.length - 1];
+    if (stackItem.cardError) {
+      return stackItem.cardError.id;
+    }
+    return stackItem.card.id;
   }
 
   private get isToggleWorkspaceChooserDisabled() {
@@ -118,8 +120,8 @@ export default class SubmodeLayout extends Component<Signature> {
         break;
       case Submodes.Code:
         this.operatorModeStateService.updateCodePath(
-          this.lastCardInRightMostStack
-            ? new URL(this.lastCardInRightMostStack.id + '.json')
+          this.lastCardIdInRightMostStack
+            ? new URL(this.lastCardIdInRightMostStack + '.json')
             : null,
         );
         break;

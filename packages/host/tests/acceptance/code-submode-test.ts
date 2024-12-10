@@ -1527,6 +1527,95 @@ module('Acceptance | code submode tests', function (_hooks) {
         .includesText('FadhlanXXX');
     });
 
+    test<TestContextWithSSE>('card preview live updates with error', async function (assert) {
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}Person/fadhlan`],
+          },
+        },
+      ];
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+      await waitFor('[data-test-card-resource-loaded]');
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('card error state is not displayed');
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                relationships: {
+                  'friends.0': {
+                    links: { self: './missing' },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      await waitFor('[data-test-card-error]');
+      assert
+        .dom('[data-test-card-error]')
+        .exists('card error state is displayed');
+
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                relationships: {
+                  'friends.0': {
+                    links: { self: null },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      await waitFor('[data-test-card-error]', { count: 0 });
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('card error state is not displayed');
+    });
+
     test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
