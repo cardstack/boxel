@@ -91,9 +91,15 @@ export default class CardErrorDetail extends Component<Signature> {
 
     <style scoped>
       .error-detail {
+        flex: 1.5;
         overflow: auto;
         margin-top: auto;
         max-height: fit-content;
+      }
+      @media (min-height: 800px) {
+        .error-detail {
+          flex: 1;
+        }
       }
       .error-detail.open {
         max-height: unset;

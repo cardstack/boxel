@@ -1117,6 +1117,7 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .card-error {
+        flex: 2;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;

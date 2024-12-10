@@ -847,6 +847,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         align-items: center;
       }
       .card-error {
+        flex: 2;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;
