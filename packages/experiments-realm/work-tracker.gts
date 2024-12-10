@@ -488,6 +488,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         position: relative;
         flex-direction: column;
         font: var(--boxel-font);
+        padding-left: var(--boxel-sp);
         height: 100%;
       }
       .disabled {
