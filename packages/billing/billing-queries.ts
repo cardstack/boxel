@@ -1,6 +1,7 @@
 import {
   DBAdapter,
   Expression,
+  PgPrimitive,
   addExplicitParens,
   asExpressions,
   every,
@@ -58,6 +59,16 @@ export interface LedgerEntry {
   subscriptionCycleId: string | null;
 }
 
+function planRowToPlan(row: Record<string, PgPrimitive>): Plan {
+  return {
+    id: row.id,
+    name: row.name,
+    monthlyPrice: parseFloat(row.monthly_price as string),
+    creditsIncluded: row.credits_included,
+    stripePlanId: row.stripe_plan_id,
+  } as Plan;
+}
+
 export async function insertStripeEvent(
   dbAdapter: DBAdapter,
   event: StripeEvent,
@@ -99,13 +110,7 @@ export async function getPlanByStripeId(
     return null;
   }
 
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-    stripePlanId: results[0].stripe_plan_id,
-  } as Plan;
+  return planRowToPlan(results[0]);
 }
 
 export async function updateUserStripeCustomerId(
@@ -456,13 +461,7 @@ export async function getPlanById(
     return null;
   }
 
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-    stripePlanId: results[0].stripe_plan_id,
-  } as Plan;
+  return planRowToPlan(results[0]);
 }
 
 export async function getPlanByMonthlyPrice(
@@ -478,13 +477,7 @@ export async function getPlanByMonthlyPrice(
     return null;
   }
 
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-    stripePlanId: results[0].stripe_plan_id,
-  } as Plan;
+  return planRowToPlan(results[0]);
 }
 
 export async function expireRemainingPlanAllowanceInSubscriptionCycle(

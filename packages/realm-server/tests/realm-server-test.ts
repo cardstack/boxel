@@ -2762,7 +2762,7 @@ module('Realm Server', function (hooks) {
       john: ['read', 'write'],
     });
 
-    test('user is not found', async function (assert) {
+    test('responds with 404 if user is not found', async function (assert) {
       let response = await request
         .get(`/_user`)
         .set('Accept', 'application/vnd.api+json')
@@ -2773,7 +2773,7 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
     });
 
-    test('subscription is not found', async function (assert) {
+    test('responds with 200 and null subscription values if user is not subscribed', async function (assert) {
       let user = await insertUser(
         dbAdapter,
         'user@test',
@@ -2813,7 +2813,7 @@ module('Realm Server', function (hooks) {
       );
     });
 
-    test('user subscibes to a plan and has extra credit', async function (assert) {
+    test('response has correct values for subscribed user who has some extra credits', async function (assert) {
       let user = await insertUser(
         dbAdapter,
         'user@test',
