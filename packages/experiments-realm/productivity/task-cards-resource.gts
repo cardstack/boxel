@@ -106,7 +106,7 @@ class TaskCollection extends Resource<Args> {
 
 export default function getTaskCardsResource(
   parent: object,
-  query: () => Query,
+  query: () => Query | undefined,
   realm: () => string,
 ) {
   return TaskCollection.from(parent, () => ({
