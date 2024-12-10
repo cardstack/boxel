@@ -9,6 +9,7 @@ import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
 import { healthCheck, jwtMiddleware, livenessCheck } from './middleware';
 import Koa from 'koa';
 import handleStripeLinksRequest from './handlers/handle-stripe-links';
+import handleCreateUserRequest from './handlers/handle-create-user';
 
 export type CreateRoutesArgs = {
   dbAdapter: DBAdapter;
@@ -50,6 +51,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user',
     jwtMiddleware(args.secretSeed),
     handleFetchUserRequest(args),
+  );
+  router.post(
+    '/_user',
+    jwtMiddleware(args.secretSeed),
+    handleCreateUserRequest(args),
   );
   router.get('/_stripe-links', handleStripeLinksRequest());
 
