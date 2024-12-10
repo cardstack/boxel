@@ -102,10 +102,6 @@ class IsolatedTemplate extends Component<typeof Account> {
     return 'https://picsum.photos/id/237/200/300';
   }
 
-  get companyName() {
-    return 'TechNova Solutions';
-  }
-
   get hasCompanyInfo() {
     return this.args.model.website || this.args.model.address?.country?.name;
   }
@@ -120,9 +116,9 @@ class IsolatedTemplate extends Component<typeof Account> {
   <template>
     <AccountPageLayout>
       <:header>
-        <AccountHeader @logoURL={{this.logoURL}} @name={{this.companyName}}>
+        <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
           <:name>
-            <h1 class='account-name'>{{this.companyName}}</h1>
+            <h1 class='account-name'>{{@model.name}}</h1>
           </:name>
           <:content>
             <div class='description'>
@@ -264,6 +260,11 @@ class IsolatedTemplate extends Component<typeof Account> {
 export class Account extends CardDef {
   static displayName = 'CRM Account';
 
+  @field name = contains(StringField, {
+    computeVia: function (this: Account) {
+      return this.company?.name;
+    },
+  });
   @field company = linksTo(Company);
   @field primaryContact = linksTo(Contact);
   @field contacts = linksToMany(Contact);
