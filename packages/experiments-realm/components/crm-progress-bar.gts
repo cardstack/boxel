@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { ProgressBar } from '@cardstack/boxel-ui/components';
+import { htmlSafe } from '@ember/template';
 
 interface CrmProgressBarArgs {
   Args: {
@@ -11,16 +12,18 @@ interface CrmProgressBarArgs {
 }
 
 class CrmProgressBar extends GlimmerComponent<CrmProgressBarArgs> {
+  get progressBarStyle() {
+    return htmlSafe(`--boxel-progress-bar-fill-color: ${this.args.color};`);
+  }
+
   <template>
     <ProgressBar
       @value={{@value}}
       @max={{@max}}
-      {{! template-lint-disable no-inline-styles }}
-      style='--boxel-progress-bar-fill-color: {{@color}};'
+      style={{this.progressBarStyle}}
       class='progress-bar'
       ...attributes
     />
-
     <style scoped>
       .progress-bar {
         width: 100px;

@@ -4,10 +4,14 @@ import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/captions';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import UserSquare from '@cardstack/boxel-icons/user-square';
+import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
+import { EntityDisplay } from '../components/entity-display';
+import { htmlSafe } from '@ember/template';
+import { concat } from '@ember/helper';
 
 class IsolatedTemplate extends Component<typeof Deal> {
   //Mock Data:
@@ -19,6 +23,20 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return 'TechNova Solutions';
   }
 
+  get primaryContactwithPosition() {
+    const contactName = 'Olivia';
+    const contactPosition = 'Head of Partnerships';
+
+    return `${contactName} - ${contactPosition}`;
+  }
+
+  get pillsData() {
+    return [
+      { label: 'Proposal', backgroundColor: 'var(--boxel-lilac)' },
+      { label: 'High Priority', backgroundColor: 'var(--boxel-yellow)' },
+    ];
+  }
+
   <template>
     <DealPageLayout>
       <:header>
@@ -27,7 +45,28 @@ class IsolatedTemplate extends Component<typeof Deal> {
             <h1 class='account-name'>{{this.companyName}}</h1>
           </:name>
           <:content>
-            <p class='description'>Description</p>
+            <EntityDisplay
+              @name={{this.primaryContactwithPosition}}
+              @underline={{true}}
+            >
+              <:thumbnail>
+                <UserSquare class='user-icon' width='20px' height='20px' />
+              </:thumbnail>
+            </EntityDisplay>
+
+            <div class='tag-container'>
+              {{#each this.pillsData as |pill|}}
+                <Pill
+                  style={{htmlSafe
+                    (concat
+                      'background-color: '
+                      pill.backgroundColor
+                      '; border-color: transparent;'
+                    )
+                  }}
+                >{{pill.label}}</Pill>
+              {{/each}}
+            </div>
           </:content>
         </AccountHeader>
       </:header>
@@ -73,22 +112,24 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 <label>Value Breakdown</label>
               </header>
               <table class='breakdown-table'>
-                <tr>
-                  <td class='item-name'>Venue Rental:</td>
-                  <td class='item-value'>$100,000</td>
-                </tr>
-                <tr>
-                  <td class='item-name'>Catering:</td>
-                  <td class='item-value'>$75,000</td>
-                </tr>
-                <tr>
-                  <td class='item-name'>AV Equipment:</td>
-                  <td class='item-value'>$50,000</td>
-                </tr>
-                <tr>
-                  <td class='item-name'>Staff and Management:</td>
-                  <td class='item-value'>$25,000</td>
-                </tr>
+                <tbody>
+                  <tr>
+                    <td class='item-name'>Venue Rental:</td>
+                    <td class='item-value'>$100,000</td>
+                  </tr>
+                  <tr>
+                    <td class='item-name'>Catering:</td>
+                    <td class='item-value'>$75,000</td>
+                  </tr>
+                  <tr>
+                    <td class='item-name'>AV Equipment:</td>
+                    <td class='item-value'>$50,000</td>
+                  </tr>
+                  <tr>
+                    <td class='item-name'>Staff and Management:</td>
+                    <td class='item-value'>$25,000</td>
+                  </tr>
+                </tbody>
               </table>
             </article>
 
@@ -96,10 +137,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
             <footer class='next-steps'>
               <div class='next-steps-row'>
-                <div class='next-steps-info'>
-                  <Info class='info-icon' width='20px' height='20px' />
-                  <label>Next Steps</label>
-                </div>
+                <EntityDisplay @name='Next Steps'>
+                  <:thumbnail>
+                    <Info class='info-icon' width='20px' height='20px' />
+                  </:thumbnail>
+                </EntityDisplay>
 
                 <BoxelButton
                   @as='button'
@@ -223,16 +265,23 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .account-name {
         font: 600 var(--boxel-font-lg);
       }
-      .summary-title {
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xxs);
-        align-self: flex-start;
-      }
-      .header-icon {
+      .user-icon {
         width: var(--boxel-icon-sm);
         height: var(--boxel-icon-sm);
         flex-shrink: 0;
         margin-left: auto;
+      }
+      .tag-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        margin-top: var(--boxel-sp-xxs);
+      }
+      .summary-title {
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xxs);
+        align-self: flex-start;
       }
       .summary-highlight {
         font: 600 var(--boxel-font-lg);
@@ -274,14 +323,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         justify-content: space-between;
         align-items: center;
         gap: var(--boxel-sp-sm);
-      }
-      .next-steps-info {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
-      .info-icon {
-        flex-shrink: 0;
       }
       .view-proposal-btn {
         font-weight: 600;
@@ -330,8 +371,8 @@ class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
-        widivh: 100%;
-        padding: 20px;
+        width: 100%;
+        padding: var(--boxel-sp-lg);
         box-sizing: border-box;
       }
     </style>
