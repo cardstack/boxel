@@ -7,7 +7,6 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import max from 'lodash/max';
 
@@ -104,7 +103,7 @@ export default class Room extends Component<Signature> {
                 class='skills'
                 @skills={{this.sortedSkills}}
                 @onChooseCard={{this.attachSkill}}
-                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
+                @onUpdateSkillIsActive={{this.updateSkillIsActiveTask}}
                 data-test-skill-menu
               />
             {{/if}}
@@ -589,16 +588,13 @@ export default class Room extends Component<Signature> {
     return this.autoAttachmentResource.cards;
   }
 
-  // using enqueue task on this ensures that updates don't step on each other
-  private updateSkillIsActiveTask = enqueueTask(
-    async (skillEventId: string, isActive: boolean) => {
-      await this.matrixService.updateSkillIsActive(
-        this.args.roomId,
-        skillEventId,
-        isActive,
-      );
-    },
-  );
+  updateSkillIsActiveTask = async (skillEventId: string, isActive: boolean) => {
+    await this.matrixService.updateSkillIsActive(
+      this.args.roomId,
+      skillEventId,
+      isActive,
+    );
+  };
 
   private get canSend() {
     return (

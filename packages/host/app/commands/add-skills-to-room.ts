@@ -45,14 +45,19 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
         throw e;
       }
     }
-    client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
-      enabledEventIds: [
-        ...new Set([
-          ...(skillEventIdsStateEvent?.enabledEventIds || []),
-          ...roomSkillEventIds,
-        ]),
-      ],
-      disabledEventIds: [...(skillEventIdsStateEvent?.disabledEventIds || [])],
+    let roomData = this.matrixService.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
+        enabledEventIds: [
+          ...new Set([
+            ...(skillEventIdsStateEvent?.enabledEventIds || []),
+            ...roomSkillEventIds,
+          ]),
+        ],
+        disabledEventIds: [
+          ...(skillEventIdsStateEvent?.disabledEventIds || []),
+        ],
+      });
     });
   }
 }

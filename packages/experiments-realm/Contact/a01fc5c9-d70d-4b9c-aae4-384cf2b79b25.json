@@ -4,23 +4,36 @@
     "attributes": {
       "firstName": "David Paul",
       "lastName": "Jackson",
+      "position": null,
       "department": "IT",
       "primaryEmail": "david@gmail.com",
-      "secondaryEmail": "david@gmail.com",
+      "secondaryEmail": "david23232@gmail.com",
       "phoneMobile": {
+        "type": "office",
         "country": 1,
         "area": 415,
-        "phoneNumber": 1112222
+        "number": 123456
       },
       "phoneOffice": {
+        "type": null,
         "country": null,
         "area": null,
-        "phoneNumber": null
+        "number": null
       },
       "status": {
         "index": 1,
         "label": "Lead"
       },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "davidlinkedin.com"
+        },
+        {
+          "label": "X",
+          "value": "x.com"
+        }
+      ],
       "description": null,
       "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1"
     },

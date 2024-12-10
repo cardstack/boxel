@@ -48,7 +48,10 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
         )} - ${userId}`,
       ),
     });
-    client.setPowerLevel(roomId, aiBotFullId, AI_BOT_POWER_LEVEL, null);
+    let roomData = this.matrixService.ensureRoomData(roomId);
+    roomData.mutex.dispatch(async () => {
+      client.setPowerLevel(roomId, aiBotFullId, AI_BOT_POWER_LEVEL, null);
+    });
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomResult } = commandModule;
     return new CreateAIAssistantRoomResult({ roomId });

@@ -350,8 +350,8 @@ module('billing', function (hooks) {
 
         subscriptionCycle = subscriptionCycles[0];
 
-        // User received 5000 credits from the creator plan, plus 500 from the plan allowance they had left from the free plan
-        assert.strictEqual(creditsBalance, 5500);
+        // User received 5000 credits from the creator plan, but the 500 credits from the plan allowance they had left from the free plan were expired
+        assert.strictEqual(creditsBalance, 5000);
 
         // User spent 2000 credits from the plan allowance
         await addToCreditsLedger(dbAdapter, {
@@ -361,11 +361,11 @@ module('billing', function (hooks) {
           subscriptionCycleId: subscriptionCycle.id,
         });
 
-        // Assert that the user now has 3500 credits left
+        // Assert that the user now has 3000 credits left
         creditsBalance = await sumUpCreditsLedger(dbAdapter, {
           userId: user.id,
         });
-        assert.strictEqual(creditsBalance, 3500);
+        assert.strictEqual(creditsBalance, 3000);
 
         // Now, user upgrades to power user plan ($49 monthly) in the middle of the month:
 

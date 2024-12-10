@@ -2,7 +2,43 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": null,
+      "address": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "shippingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "website": "https://technova.com",
       "description": null,
       "thumbnailURL": null
     },
@@ -14,27 +50,12 @@
       },
       "primaryContact": {
         "links": {
-          "self": "../Contact/ed6f4f12-01ae-4c5c-a507-6d128eb09a17"
+          "self": null
         }
       },
-      "contacts.0": {
+      "contacts": {
         "links": {
-          "self": "../Contact/ed6f4f12-01ae-4c5c-a507-6d128eb09a17"
-        }
-      },
-      "contacts.1": {
-        "links": {
-          "self": "../Customer/67e87a6c-00d0-4c48-9318-f0c96daa4cae"
-        }
-      },
-      "deals.0": {
-        "links": {
-          "self": "../Deal/4fdd3053-14f1-4800-827f-d3e2a5c44ae8"
-        }
-      },
-      "deals.1": {
-        "links": {
-          "self": "../Deal/f0d769bd-e347-4203-9a96-89332cfba0e2"
+          "self": null
         }
       }
     },

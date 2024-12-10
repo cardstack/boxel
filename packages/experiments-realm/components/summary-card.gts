@@ -11,7 +11,7 @@ interface SummaryCardArgs {
 
 export default class SummaryCard extends GlimmerComponent<SummaryCardArgs> {
   <template>
-    <article class='summary-card'>
+    <article class='summary-card' ...attributes>
       <header class='summary-card-header'>
         {{#if (has-block 'title')}}
           {{yield to='title'}}
