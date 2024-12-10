@@ -20,6 +20,7 @@ import type CommandService from '../../services/command-service';
 interface Signature {
   Args: {
     error: CardError['errors'][0];
+    viewInCodeMode?: true;
     title?: string;
   };
 }
@@ -43,7 +44,7 @@ export default class CardErrorDetail extends Component<Signature> {
   });
 
   <template>
-    <Accordion as |A|>
+    <Accordion class='error-detail' as |A|>
       <A.Item
         data-test-error-detail-toggle
         @onClick={{fn this.toggleDetail 'schema'}}
@@ -52,16 +53,18 @@ export default class CardErrorDetail extends Component<Signature> {
         <:title>
           <TriangleAlert />
           An error was encountered on this card:
-          <span class='error-detail' data-test-error-title>{{@title}}</span>
+          <span data-test-error-title>{{@title}}</span>
         </:title>
         <:content>
-          <div class='actions'>
-            <Button
-              data-test-view-in-code-mode-button
-              @kind='primary'
-              {{on 'click' (perform this.viewInCodeMode)}}
-            >View in Code Mode</Button>
-          </div>
+          {{#if @viewInCodeMode}}
+            <div class='actions'>
+              <Button
+                data-test-view-in-code-mode-button
+                @kind='primary'
+                {{on 'click' (perform this.viewInCodeMode)}}
+              >View in Code Mode</Button>
+            </div>
+          {{/if}}
           <div class='detail'>
             <div class='detail-item'>
               <div class='detail-title'>Details:</div>
@@ -75,6 +78,7 @@ export default class CardErrorDetail extends Component<Signature> {
                 <div class='detail-title'>Stack trace:</div>
                 <pre
                   data-test-error-stack
+                  data-test-percy-hide
                 >
 {{@error.meta.stack}}
                 </pre>
@@ -86,6 +90,9 @@ export default class CardErrorDetail extends Component<Signature> {
     </Accordion>
 
     <style scoped>
+      .error-detail {
+        flex: 1;
+      }
       .actions {
         display: flex;
         justify-content: center;

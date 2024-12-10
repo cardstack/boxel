@@ -20,6 +20,7 @@ import {
   assertLoggedOut,
   logout,
   login,
+  assertPaymentLink,
   setupPayment,
   registerRealmUsers,
   enterWorkspace,
@@ -114,6 +115,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'Success! Your email has been validated',
     );
 
+    await assertPaymentLink(page, {
+      username: '@user1:localhost',
+      email: 'user1@example.com',
+    });
+
     // base 64 encode the matrix user id
     const matrixUserId = encodeWebSafeBase64('@user1:localhost');
     await setupPayment(matrixUserId, realmServer, page);
@@ -203,7 +209,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await expect(
       page.locator('[data-test-setup-payment-message]'),
-    ).toContainText('Setup your payment method now to enjoy Boxel');
+    ).toContainText('Set up your payment method now to enjoy Boxel');
 
     const user2MatrixUserId = encodeWebSafeBase64('@user2:localhost');
 

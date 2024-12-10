@@ -1,8 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 
+import isEqual from 'lodash/isEqual';
 import { type IEvent } from 'matrix-js-sdk';
-
-import type { Skill } from '@cardstack/host/components/ai-assistant/skill-menu';
 
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -13,12 +12,41 @@ export type TempEvent = Partial<IEvent> & {
   error?: MatrixSDK.MatrixError;
 };
 
-export default class RoomState {
+export type SkillsConfig = {
+  enabledEventIds: string[];
+  disabledEventIds: string[];
+};
+
+export default class Room {
   @tracked private _events: DiscreteMatrixEvent[] = [];
-  @tracked skills: Skill[] = [];
+  @tracked private _name: string | undefined;
+  @tracked private _skillsConfig: SkillsConfig = {
+    enabledEventIds: [],
+    disabledEventIds: [],
+  };
 
   get events() {
     return this._events;
+  }
+
+  get name() {
+    return this._name;
+  }
+
+  updateName(name: string) {
+    if (this._name !== name) {
+      this._name = name;
+    }
+  }
+
+  get skillsConfig() {
+    return this._skillsConfig;
+  }
+
+  updateSkillsConfig(config: SkillsConfig | undefined) {
+    if (config && !isEqual(this._skillsConfig, config)) {
+      this._skillsConfig = config;
+    }
   }
 
   addEvent(event: TempEvent, oldEventId?: string) {

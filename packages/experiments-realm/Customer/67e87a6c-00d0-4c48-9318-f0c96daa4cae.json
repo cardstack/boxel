@@ -15,10 +15,6 @@
         "area": null,
         "phoneNumber": null
       },
-      "socialLinks": {
-        "twitterURL": null,
-        "linkedInURL": null
-      },
       "status": {
         "index": 1,
         "label": "Lead"
@@ -29,7 +25,7 @@
     "relationships": {
       "company": {
         "links": {
-          "self": "../CompanyCard/b9ee2c7c-8e42-4c36-82ee-84f3536bb459"
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
         }
       }
     },

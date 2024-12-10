@@ -17,6 +17,14 @@ export class MockUtils {
   getRoomIds = () => {
     return this.testState.sdk!.serverState.rooms.map((r) => r.id);
   };
+  getRoomState = (roomId: string, eventType: string, stateKey?: string) => {
+    return this.testState.sdk!.serverState.getRoomState(
+      roomId,
+      eventType,
+      stateKey,
+    );
+  };
+
   setRealmPermissions = (permissions: Record<string, string[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();

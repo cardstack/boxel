@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "url": "https://youtube.com",
+      "urls": [
+        "https://boxel/alice",
+        "https://boxel/dan"
+      ],
+      "location": {
+        "addressLine1": "285 Fulton Street ",
+        "addressLine2": null,
+        "city": "New York City",
+        "state": "NY",
+        "postalCode": "10007",
+        "country": {
+          "name": "United States of America",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "website": "https://cardstack.com/",
+      "email": "alice@email.com",
+      "emails": [
+        "alice@email.com",
+        "dan@email.com"
+      ],
+      "contactLink": {
+        "label": "Email",
+        "value": "alice@email.com"
+      },
+      "contactLinks": [
+        {
+          "label": "Email",
+          "value": "alice@email.com"
+        },
+        {
+          "label": "Phone",
+          "value": "+12345678989"
+        },
+        {
+          "label": "Other",
+          "value": "https://boxel/alice"
+        }
+      ],
+      "title": "Custom Field Preview",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../experiments_fields_preview",
+        "name": "ExperimentsFieldsPreview"
+      }
+    }
+  }
+}

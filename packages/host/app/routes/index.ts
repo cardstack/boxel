@@ -6,6 +6,8 @@ import { isTesting } from '@embroider/macros';
 
 import stringify from 'safe-stable-stringify';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import ENV from '@cardstack/host/config/environment';
 import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -42,6 +44,9 @@ export default class Index extends Route<void> {
   async fetchCard(url: string) {
     let resource = getCard(this, () => url);
     await resource.loaded;
+    if (resource.cardError) {
+      return resource.cardError;
+    }
     return resource.card;
   }
 
@@ -79,22 +84,25 @@ export default class Index extends Route<void> {
         cardUrl = new URL(cardPath, window.location.origin).href;
       }
 
-      let card = await this.fetchCard(cardUrl); // We are fetching the card here to make sure we have the canonical URL for the card
-
-      if (!card) {
+      let cardOrError = await this.fetchCard(cardUrl); // We are fetching the card here to make sure we have the canonical URL for the card
+      if (
+        !cardOrError ||
+        (!isCardInstance(cardOrError) && cardOrError.status === 401)
+      ) {
         // This is a temporary workaround to fix a strange race condition that happens after user tries to see a
         // card but has to login first. Immediately after login the route will refresh this.fetchCard(cardUrl) will sometimes fail
         // with a 401 even when the user has permissions to access the card. There has to be a race condition where this happens before
         // the realm session is established.
         // TODO: fix the root cause instead of this hack
         await new Promise((resolve) => setTimeout(resolve, 500)); // Wait for a bit to so that the realm session is established
-        card = await this.fetchCard(cardUrl);
+        cardOrError = await this.fetchCard(cardUrl);
       }
 
-      let canonicalCardUrl = card?.id;
+      let canonicalCardUrl = cardOrError?.id;
 
       if (!canonicalCardUrl) {
-        // TODO: what to do if card is not found, or not accessible?
+        // TODO: show a 404 page
+        // https://linear.app/cardstack/issue/CS-7364/show-user-a-clear-message-when-they-try-to-access-a-realm-they-cannot
         alert(`Card not found: ${cardUrl}`);
       }
 
