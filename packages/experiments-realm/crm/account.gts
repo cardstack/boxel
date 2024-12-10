@@ -74,7 +74,7 @@ class ContactRow extends GlimmerComponent<ContactRowArgs> {
         />
       </:thumbnail>
       <:tag>
-        {{#if this.args.isPrimary}}
+        {{#if @isPrimary}}
           <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
             Primary
           </Pill>
