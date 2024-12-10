@@ -20,6 +20,56 @@ interface PhoneTypeArgs {
   label: string;
 }
 
+class EditTemplate extends Component<typeof PhoneField> {
+  get options() {
+    return [
+      {
+        type: 'mobile',
+        label: 'Mobile',
+      },
+      {
+        type: 'office',
+        label: 'Office',
+      },
+    ] as PhoneTypeArgs[];
+  }
+
+  get selectedOption() {
+    return this.options?.find((option) => option.type === this.args.model.type);
+  }
+
+  @action
+  onSelect(option: PhoneTypeArgs) {
+    this.args.model.type = option.type;
+  }
+
+  <template>
+    <FieldContainer @vertical={{true}} @label='Type'>
+      <BoxelSelect
+        @options={{this.options}}
+        @selected={{this.selectedOption}}
+        @onChange={{this.onSelect}}
+        @placeholder='Please Select'
+        as |item|
+      >
+        <div>{{item.label}}</div>
+      </BoxelSelect>
+    </FieldContainer>
+
+    <FieldContainer @vertical={{true}} @label='Country'>
+      <@fields.country />
+    </FieldContainer>
+
+    <FieldContainer @vertical={{true}} @label='Area'>
+      <@fields.area />
+    </FieldContainer>
+
+    <FieldContainer @vertical={{true}} @label='Number'>
+      <@fields.number />
+    </FieldContainer>
+  </template>
+}
+
 export class PhoneField extends FieldDef {
   static displayName = 'phoneMobile';
 
@@ -34,57 +84,7 @@ export class PhoneField extends FieldDef {
     },
   });
 
-  static edit = class Edit extends Component<typeof this> {
-    get options() {
-      return [
-        {
-          type: 'mobile',
-          label: 'Mobile',
-        },
-        {
-          type: 'office',
-          label: 'Office',
-        },
-      ] as PhoneTypeArgs[];
-    }
-
-    get selectedOption() {
-      return this.options?.find(
-        (option) => option.type === this.args.model.type,
-      );
-    }
-
-    @action
-    onSelect(option: PhoneTypeArgs) {
-      this.args.model.type = option.type;
-    }
-
-    <template>
-      <FieldContainer @vertical={{true}} @label='Type'>
-        <BoxelSelect
-          @options={{this.options}}
-          @selected={{this.selectedOption}}
-          @onChange={{this.onSelect}}
-          @placeholder='Please Select'
-          as |item|
-        >
-          <div>{{item.label}}</div>
-        </BoxelSelect>
-      </FieldContainer>
-
-      <FieldContainer @vertical={{true}} @label='Country'>
-        <@fields.country />
-      </FieldContainer>
-
-      <FieldContainer @vertical={{true}} @label='Area'>
-        <@fields.area />
-      </FieldContainer>
-
-      <FieldContainer @vertical={{true}} @label='Number'>
-        <@fields.number />
-      </FieldContainer>
-    </template>
-  };
+  static edit = EditTemplate;
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
