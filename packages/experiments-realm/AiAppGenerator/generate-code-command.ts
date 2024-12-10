@@ -119,7 +119,7 @@ export default class GenerateCodeCommand extends Command<
   get skillCard() {
     return new SkillCard({
       id: 'CodeGeneratorHelper',
-      name: 'Code Generator',
+      title: 'Code Generator',
       description:
         'This skill card can be used to help with creating field and card definitions for a boxel app',
       instructions: `The user has shared with you a product requirement document for an application they want to build. You must build that. Look at the domain for the area they are interested in and use your general knowledge to ensure data structures and the linkages between them are created.
