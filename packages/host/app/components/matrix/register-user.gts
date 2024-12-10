@@ -720,7 +720,7 @@ export default class RegisterUser extends Component<Signature> {
     if (
       auth.access_token &&
       auth.device_id &&
-      this.state.type === 'waitForEmailValidation'
+      this.state.type === 'waitForEmailValidation' // In our setup, waiting for email validation is the last step of matrix registration - this condition is to satisfy the type check where token is only defined in sendToken and waitForEmailValidation states
     ) {
       await this.matrixService.initializeNewUser(
         auth as LoginResponse,
