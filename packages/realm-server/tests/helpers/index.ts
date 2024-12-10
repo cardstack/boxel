@@ -461,7 +461,7 @@ export async function insertPlan(
   return {
     id: result[0].id,
     name: result[0].name,
-    monthlyPrice: result[0].monthly_price,
+    monthlyPrice: parseFloat(result[0].monthly_price as string),
     creditsIncluded: result[0].credits_included,
     stripePlanId: result[0].stripe_plan_id,
   } as Plan;

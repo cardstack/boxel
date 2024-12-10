@@ -22,10 +22,6 @@ import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
 import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 import { ProrationCalculator } from '../proration-calculator';
 
-// TODOs that will be handled in a separated PRs:
-// - signal to frontend that subscription has been created and credits have been added
-// - put this in a background job
-
 export async function handlePaymentSucceeded(
   dbAdapter: DBAdapter,
   event: StripeInvoicePaymentSucceededWebhookEvent,

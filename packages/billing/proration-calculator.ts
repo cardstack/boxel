@@ -20,17 +20,23 @@ export class ProrationCalculator {
   }) {
     let { currentPlan, newPlan, invoiceLines, currentAllowance } = params;
 
-    // Sum up monetary credit (refunds) given to the user by Stripe for unused time on previous plans
-    // (there can be multiple such lines if user switches to larger plans multiple times in the same billing period)
-    // and convert it to credits. In other words, take away the credits calculated from the money that Stripe
-    // returned to the user for unused time.
     let creditsToExpireForUnusedTime = 0;
-    for (let line of invoiceLines) {
-      if (line.amount > 0) continue;
-      creditsToExpireForUnusedTime += this.centsToCredits(
-        -line.amount,
-        currentPlan,
-      );
+
+    if (currentPlan.monthlyPrice === 0) {
+      // If the user is upgrading from a free plan, we do not want to carry over any credits from the free plan into the paid plan
+      creditsToExpireForUnusedTime = currentAllowance;
+    } else {
+      // Sum up monetary credit (refunds) given to the user by Stripe for unused time on previous plans
+      // (there can be multiple such lines if user switches to larger plans multiple times in the same billing period)
+      // and convert it to credits. In other words, take away the credits calculated from the money that Stripe
+      // returned to the user for unused time.
+      for (let line of invoiceLines) {
+        if (line.amount > 0) continue;
+        creditsToExpireForUnusedTime += this.centsToCredits(
+          -line.amount,
+          currentPlan,
+        );
+      }
     }
 
     // Find invoice line for the new plan the user is subscribing to

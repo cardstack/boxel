@@ -101,7 +101,7 @@ export async function getPlanByStripeId(
   return {
     id: results[0].id,
     name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
+    monthlyPrice: parseFloat(results[0].monthly_price as string),
     creditsIncluded: results[0].credits_included,
     stripePlanId: results[0].stripe_plan_id,
   } as Plan;
@@ -456,7 +456,7 @@ export async function getPlanById(
   return {
     id: results[0].id,
     name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
+    monthlyPrice: parseFloat(results[0].monthly_price as string),
     creditsIncluded: results[0].credits_included,
     stripePlanId: results[0].stripe_plan_id,
   } as Plan;
@@ -478,7 +478,7 @@ export async function getPlanByMonthlyPrice(
   return {
     id: results[0].id,
     name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
+    monthlyPrice: parseFloat(results[0].monthly_price as string),
     creditsIncluded: results[0].credits_included,
     stripePlanId: results[0].stripe_plan_id,
   } as Plan;
