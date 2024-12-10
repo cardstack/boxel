@@ -46,9 +46,9 @@ export const setBackgroundImage = (
 
 interface TitleGroupSignature {
   Args: {
-    title: string;
-    tagline: string;
-    thumbnailURL: string;
+    title?: string;
+    tagline?: string;
+    thumbnailURL?: string;
     element?: keyof HTMLElementTagNameMap;
   };
   Element: HTMLElement;
