@@ -22,6 +22,7 @@ import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import NewSession from '@cardstack/host/components/ai-assistant/new-session';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
 import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
@@ -35,6 +36,7 @@ import {
   eventDebounceMs,
 } from '@cardstack/host/lib/matrix-utils';
 
+import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -360,6 +362,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
   @service private declare router: RouterService;
+  @service private declare commandService: CommandService;
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
@@ -420,22 +423,24 @@ export default class AiAssistantPanel extends Component<Signature> {
       return;
     }
     let newRoomName = 'New AI Assistant Chat';
-    this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
+    this.doCreateRoom.perform(newRoomName);
   }
 
-  private doCreateRoom = restartableTask(
-    async (name: string, invites: string[]) => {
-      try {
-        let newRoomId = await this.matrixService.createRoom(name, invites);
-        window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
-        this.enterRoom(newRoomId);
-      } catch (e) {
-        console.log(e);
-        this.displayRoomError = true;
-        this.currentRoomId = undefined;
-      }
-    },
-  );
+  private doCreateRoom = restartableTask(async (name: string) => {
+    try {
+      let command = new CreateAIAssistantRoomCommand(
+        this.commandService.commandContext,
+      );
+      let InputType = await command.getInputType();
+      let { roomId } = await command.execute(new InputType({ name }));
+      window.localStorage.setItem(newSessionIdPersistenceKey, roomId);
+      this.enterRoom(roomId);
+    } catch (e) {
+      console.log(e);
+      this.displayRoomError = true;
+      this.currentRoomId = undefined;
+    }
+  });
 
   private get newSessionId() {
     let id = window.localStorage.getItem(newSessionIdPersistenceKey);

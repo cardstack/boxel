@@ -6,11 +6,13 @@ import {
   contains,
   field,
   linksTo,
+  linksToMany,
   primitive,
   queryableValue,
 } from './card-api';
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
+import { SkillCard } from './skill-card';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -74,4 +76,17 @@ export class WriteTextFileInput extends CardDef {
 export class CreateInstanceInput extends CardDef {
   @field module = contains(CodeRefField);
   @field realm = contains(StringField);
+}
+
+export class CreateAIAssistantRoomInput extends CardDef {
+  @field name = contains(StringField);
+}
+
+export class CreateAIAssistantRoomResult extends CardDef {
+  @field roomId = contains(StringField);
+}
+
+export class AddSkillsToRoomInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field skills = linksToMany(SkillCard);
 }
