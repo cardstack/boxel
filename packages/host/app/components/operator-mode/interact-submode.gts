@@ -211,7 +211,7 @@ export default class InteractSubmode extends Component<Signature> {
         // looks like perhaps there is a race condition (or something else) when a
         // new linked card is created, and when it is added to the stack and closed
         // - the parent card is not updated with the new linked card
-        await here.cardService.saveModel(here, newCard);
+        await here.cardService.saveModel(newCard);
 
         await newItem.ready();
         here.addToStack(newItem);

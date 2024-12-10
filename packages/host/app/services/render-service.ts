@@ -17,9 +17,9 @@ import {
 import config from '@cardstack/host/config/environment';
 
 import {
-  type IdentityContext as IdentityContextType,
   type CardDef,
   type Format,
+  type IdentityContext,
 } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -33,14 +33,27 @@ import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
+export class IdentityContextWithErrors implements IdentityContext {
+  #cards = new Map<string, CardDef>();
+
+  get(url: string): CardDef | undefined {
+    return this.#cards.get(url);
+  }
+  set(url: string, instance: CardDef): void {
+    this.#cards.set(url, instance);
+  }
+
+  readonly errors = new Set<string>();
+}
+
 interface RenderCardParams {
   card: CardDef;
   visit: (
     url: URL,
-    identityContext: IdentityContextType | undefined,
+    identityContext: IdentityContextWithErrors | undefined,
   ) => Promise<void>;
   format?: Format;
-  identityContext: IdentityContextType;
+  identityContext: IdentityContextWithErrors;
   realmPath: RealmPaths;
   componentCodeRef?: CodeRef;
 }

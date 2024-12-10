@@ -7,7 +7,7 @@ import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -49,15 +49,19 @@ import {
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../lib/html-component';
 import FileTree from '../editor/file-tree';
 
+import CardError from './card-error';
+import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -119,6 +123,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
+  @service private declare loaderService: LoaderService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -259,16 +264,49 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get isCardPreviewError() {
-    return this.isCard && this.cardResource.cardError;
+    return this.isCard && this.cardError;
   }
 
   private get isEmptyFile() {
     return this.readyFile.content.match(/^\s*$/);
   }
 
+  @cached
+  get cardError() {
+    return this.cardResource.cardError;
+  }
+
+  @cached
+  get lastKnownGoodHtml() {
+    if (this.cardError?.meta.lastKnownGoodHtml) {
+      this.loadScopedCSS.perform();
+      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
+    }
+    return undefined;
+  }
+
+  @cached
+  get cardErrorSummary() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return this.cardError.status === 404 &&
+      // a missing link error looks a lot like a missing card error
+      this.cardError.message?.includes('missing')
+      ? `Link Not Found`
+      : this.cardError.title;
+  }
+
+  get cardErrorTitle() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return `Card Error: ${this.cardErrorSummary}`;
+  }
+
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
-      if (this.cardResource.cardError) {
+      if (this.cardError) {
         return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
       }
     }
@@ -445,7 +483,17 @@ export default class CodeSubmode extends Component<Signature> {
   private saveCard = restartableTask(async (card: CardDef) => {
     // these saves can happen so fast that we'll make sure to wait at
     // least 500ms for human consumption
-    await all([this.cardService.saveModel(this, card), timeout(500)]);
+    await all([this.cardService.saveModel(card), timeout(500)]);
+  });
+
+  private loadScopedCSS = restartableTask(async () => {
+    if (this.cardError?.meta.scopedCssUrls) {
+      await Promise.all(
+        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
+          this.loaderService.loader.import(cssModuleUrl),
+        ),
+      );
+    }
   });
 
   private get isSaving() {
@@ -793,25 +841,22 @@ export default class CodeSubmode extends Component<Signature> {
                 {{#if this.isReady}}
                   {{#if this.isCardPreviewError}}
                     <div
-                      class='preview-error-container'
-                      data-test-file-incompatibility-message
+                      class='stack-item-content card-error'
+                      data-test-card-error
                     >
-                      <div class='preview-error-box'>
-                        <div class='preview-error-text'>
-                          Card Preview Error
-                        </div>
-                        <p>
-                          {{this.fileIncompatibilityMessage}}
-                        </p>
-
-                        <hr class='preview-error' />
-
-                        <pre
-                          class='preview-error'
-                          data-test-card-preview-error
-                        >{{this.cardResource.cardError.message}}</pre>
-                      </div>
+                      {{#if this.lastKnownGoodHtml}}
+                        <this.lastKnownGoodHtml />
+                      {{else}}
+                        <CardError />
+                      {{/if}}
                     </div>
+                    {{! this is here to make TS happy, this is always true }}
+                    {{#if this.cardError}}
+                      <CardErrorDetail
+                        @error={{this.cardError}}
+                        @title={{this.cardErrorSummary}}
+                      />
+                    {{/if}}
                   {{else if this.isEmptyFile}}
                     <Accordion as |A|>
                       <A.Item
@@ -832,6 +877,7 @@ export default class CodeSubmode extends Component<Signature> {
                       </A.Item>
                     </Accordion>
                   {{else if this.fileIncompatibilityMessage}}
+
                     <div
                       class='file-incompatible-message'
                       data-test-file-incompatibility-message
@@ -1068,6 +1114,14 @@ export default class CodeSubmode extends Component<Signature> {
       pre.preview-error {
         white-space: pre-wrap;
         text-align: left;
+      }
+
+      .card-error {
+        flex: 2;
+        opacity: 0.4;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: auto;
       }
     </style>
   </template>

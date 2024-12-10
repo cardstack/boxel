@@ -10,17 +10,18 @@ export interface PillSignature {
   Args: {
     kind?: BoxelPillKind;
     pillBackgroundColor?: string;
+    tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
     default: [];
     iconLeft?: [];
     iconRight?: [];
   };
-  Element: HTMLButtonElement | HTMLDivElement;
+  Element: HTMLElement;
 }
 
 const Pill: TemplateOnlyComponent<PillSignature> = <template>
-  {{#let (element (if (eq @kind 'button') 'button' 'div')) as |Tag|}}
+  {{#let (element (if (eq @kind 'button') 'button' @tag)) as |Tag|}}
     <Tag
       class={{cn 'pill' button-pill=(eq @kind 'button')}}
       style={{cssVar
@@ -48,15 +49,18 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
   <style scoped>
     @layer {
       .pill {
+        --default-pill-font: 600 var(--boxel-font-sm);
+        --default-pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
+        --default-pill-border: 1px solid var(--boxel-400);
         display: inline-flex;
         align-items: center;
         gap: var(--pill-gap, var(--boxel-sp-5xs));
-        padding: var(--pill-padding, var(--boxel-sp-5xs) var(--boxel-sp-xxxs));
+        padding: var(--pill-padding, var(--default-pill-padding));
         background-color: var(--pill-background-color, var(--boxel-light));
         color: var(--pill-font-color, var(--boxel-dark));
-        border: 1px solid var(--pill-font-color, var(--boxel-400));
-        border-radius: var(--boxel-border-radius-sm);
-        font: 600 var(--boxel-font-sm);
+        border: var(--pill-border, var(--default-pill-border));
+        border-radius: var(--pill-border-radius, var(--boxel-border-radius-sm));
+        font: var(--pill-font, var(--default-pill-font));
         letter-spacing: var(--boxel-lsp-xs);
         word-break: break-word;
       }

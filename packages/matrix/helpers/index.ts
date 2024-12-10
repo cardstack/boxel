@@ -585,6 +585,29 @@ export async function setupUser(
   );
 }
 
+export async function assertPaymentLink(
+  page: Page,
+  { username, email }: { username: string; email: string },
+) {
+  const paymentLink =
+    (await page.locator('[data-test-setup-payment]').getAttribute('href')) ??
+    '';
+
+  const queryString = paymentLink.split('?')[1];
+  const params = new Map(
+    queryString.split('&').map((param) => {
+      const [key, value] = param.split('=');
+      return [key, value];
+    }),
+  );
+
+  const clientReferenceId = params.get('client_reference_id');
+  expect(clientReferenceId).toBe(encodeWebSafeBase64(username));
+
+  const emailFromUrl = params.get('prefilled_email');
+  expect(emailFromUrl).toBe(encodeURIComponent(email));
+}
+
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,

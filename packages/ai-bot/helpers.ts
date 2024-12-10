@@ -11,6 +11,7 @@ import type {
   CommandResultEvent,
   ReactionEvent,
   Tool,
+  SkillsConfigEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -164,10 +165,10 @@ export function constructHistory(
 function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   cardFragments: Map<string, CardFragmentContent>,
-): CardResource[] {
-  let skillsConfigEvent = eventlist
-    .reverse()
-    .find((event) => event.type === 'com.cardstack.boxel.room.skills');
+): LooseCardResource[] {
+  let skillsConfigEvent = eventlist.findLast(
+    (event) => event.type === 'com.cardstack.boxel.room.skills',
+  ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
     return [];
   }
@@ -291,7 +292,7 @@ export function getTools(
 ): Tool[] {
   // TODO: there should be no default tools defined in the ai-bot, tools must be determined by the host
   let searchTool = getSearchTool();
-  let tools = [searchTool];
+  let tools = [searchTool as Tool];
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
@@ -404,7 +405,7 @@ export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
-  skillCards: CardResource[] = [],
+  skillCards: LooseCardResource[] = [],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -512,7 +513,7 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessage = (cards: CardResource[]) => {
+export const skillCardsToMessage = (cards: LooseCardResource[]) => {
   return cards.map((card) => card.attributes?.instructions).join('\n');
 };
 

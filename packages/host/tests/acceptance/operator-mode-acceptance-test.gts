@@ -560,6 +560,21 @@ module('Acceptance | operator mode tests', function (hooks) {
       .containsText('Person/error');
   });
 
+  test('can visit a card in error state via canonical URL', async function (assert) {
+    await visit('/test/Person/error');
+
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
+      )
+      .exists('the error state of the card is displayed');
+    assert.dom('[data-test-error-title]').includesText('Link Not Found');
+    await click('[data-test-error-detail-toggle] button');
+    assert
+      .dom('[data-test-error-detail]')
+      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+  });
+
   test('can open code submode when card or field has no embedded template', async function (assert) {
     await visitOperatorMode({
       stacks: [
