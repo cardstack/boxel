@@ -1184,9 +1184,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-ai-bot-retry-button]').exists();
     await percySnapshot(assert);
 
-    await click('[data-test-ai-bot-retry-button]');
+    click('[data-test-ai-bot-retry-button]');
+    await waitFor('[data-test-ai-assistant-message].is-pending');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
+    await settled();
+    assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
   });
 
   test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {

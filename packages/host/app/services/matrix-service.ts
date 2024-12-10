@@ -463,10 +463,18 @@ export default class MatrixService extends Service {
         }`,
       ),
     });
+    let roomData = this.ensureRoomData(roomId);
     invites.map((i) => {
       let fullId = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;
       if (i === aiBotUsername) {
-        this.client.setPowerLevel(roomId, fullId, AI_BOT_POWER_LEVEL, null);
+        roomData.mutex.dispatch(async () => {
+          return this.client.setPowerLevel(
+            roomId,
+            fullId,
+            AI_BOT_POWER_LEVEL,
+            null,
+          );
+        });
       }
     });
     this.addSkillCardsToRoom(roomId, await this.loadDefaultSkills());
@@ -482,15 +490,18 @@ export default class MatrixService extends Service {
       | ReactionEventContent
       | CommandResultContent,
   ) {
-    if ('data' in content) {
-      const encodedContent = {
-        ...content,
-        data: JSON.stringify(content.data),
-      };
-      return await this.client.sendEvent(roomId, eventType, encodedContent);
-    } else {
-      return await this.client.sendEvent(roomId, eventType, content);
-    }
+    let roomData = this.ensureRoomData(roomId);
+    return roomData.mutex.dispatch(async () => {
+      if ('data' in content) {
+        const encodedContent = {
+          ...content,
+          data: JSON.stringify(content.data),
+        };
+        return await this.client.sendEvent(roomId, eventType, encodedContent);
+      } else {
+        return await this.client.sendEvent(roomId, eventType, content);
+      }
+    });
   }
 
   async sendReactionEvent(roomId: string, eventId: string, status: string) {
@@ -502,7 +513,7 @@ export default class MatrixService extends Service {
       },
     };
     try {
-      return await this.client.sendEvent(roomId, 'm.reaction', content);
+      return await this.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
         `Error sending reaction event: ${
@@ -659,14 +670,19 @@ export default class MatrixService extends Service {
         throw e;
       }
     }
-    this.client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
-      enabledEventIds: [
-        ...new Set([
-          ...(skillEventIdsStateEvent?.enabledEventIds || []),
-          ...attachedSkillEventIds,
-        ]),
-      ],
-      disabledEventIds: [...(skillEventIdsStateEvent?.disabledEventIds || [])],
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      await this.client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
+        enabledEventIds: [
+          ...new Set([
+            ...(skillEventIdsStateEvent?.enabledEventIds || []),
+            ...attachedSkillEventIds,
+          ]),
+        ],
+        disabledEventIds: [
+          ...(skillEventIdsStateEvent?.disabledEventIds || []),
+        ],
+      });
     });
   }
 
@@ -675,30 +691,32 @@ export default class MatrixService extends Service {
     skillEventId: string,
     isActive: boolean,
   ) => {
-    let currentSkillsConfig = await this.client.getStateEvent(
-      roomId,
-      SKILLS_STATE_EVENT_TYPE,
-      '',
-    );
-    let newSkillsConfig = {
-      enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
-      disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
-    };
-    if (isActive) {
-      newSkillsConfig.enabledEventIds.push(skillEventId);
-      newSkillsConfig.disabledEventIds =
-        newSkillsConfig.disabledEventIds.filter((id) => id !== skillEventId);
-    } else {
-      newSkillsConfig.disabledEventIds.push(skillEventId);
-      newSkillsConfig.enabledEventIds = newSkillsConfig.enabledEventIds.filter(
-        (id) => id !== skillEventId,
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      let currentSkillsConfig = await this.client.getStateEvent(
+        roomId,
+        SKILLS_STATE_EVENT_TYPE,
+        '',
       );
-    }
-    await this.client.sendStateEvent(
-      roomId,
-      SKILLS_STATE_EVENT_TYPE,
-      newSkillsConfig,
-    );
+      let newSkillsConfig = {
+        enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
+        disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
+      };
+      if (isActive) {
+        newSkillsConfig.enabledEventIds.push(skillEventId);
+        newSkillsConfig.disabledEventIds =
+          newSkillsConfig.disabledEventIds.filter((id) => id !== skillEventId);
+      } else {
+        newSkillsConfig.disabledEventIds.push(skillEventId);
+        newSkillsConfig.enabledEventIds =
+          newSkillsConfig.enabledEventIds.filter((id) => id !== skillEventId);
+      }
+      await this.client.sendStateEvent(
+        roomId,
+        SKILLS_STATE_EVENT_TYPE,
+        newSkillsConfig,
+      );
+    });
   };
 
   public async sendAiAssistantMessage(params: {
@@ -962,13 +980,17 @@ export default class MatrixService extends Service {
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
+    let roomData = this.ensureRoomData(roomId);
+    roomData.addEvent(event, oldEventId);
+  }
+
+  private ensureRoomData(roomId: string) {
     let roomData = this.getRoomData(roomId);
     if (!roomData) {
       roomData = new Room();
       this.setRoomData(roomId, roomData);
     }
-
-    roomData.addEvent(event, oldEventId);
+    return roomData;
   }
 
   private onMembership = (event: MatrixEvent, member: RoomMember) => {
@@ -1084,11 +1106,7 @@ export default class MatrixService extends Service {
     }
     roomStates = Array.from(roomStateMap.values());
     for (let rs of roomStates) {
-      let roomData = this.getRoomData(rs.roomId);
-      if (!roomData) {
-        roomData = new Room();
-        this.setRoomData(rs.roomId, roomData);
-      }
+      let roomData = this.ensureRoomData(rs.roomId);
       let name = rs.events.get('m.room.name')?.get('')?.event.content?.name;
       if (name) {
         roomData.updateName(name);

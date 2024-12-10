@@ -5,6 +5,8 @@ import { type IEvent } from 'matrix-js-sdk';
 
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
+import Mutex from '../mutex';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export type TempEvent = Partial<IEvent> & {
@@ -24,6 +26,8 @@ export default class Room {
     enabledEventIds: [],
     disabledEventIds: [],
   };
+
+  readonly mutex = new Mutex();
 
   get events() {
     return this._events;
