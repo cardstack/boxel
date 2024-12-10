@@ -17,7 +17,7 @@
     "relationships": {
       "project": {
         "links": {
-          "self": null
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       }
     },

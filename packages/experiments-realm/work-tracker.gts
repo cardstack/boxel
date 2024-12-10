@@ -179,10 +179,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     return this.args.model.project;
   }
 
-  get getTaskQuery(): Query {
+  get getTaskQuery(): Query | undefined {
     let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
-    if (!this.currentProject || !this.currentProject.id || !this.realmURL) {
-      throw new Error(`Missing card id or realm url`);
+    if (!this.realmURL) {
+      throw new Error('No realm url');
+    }
+    if (!this.currentProject || !this.currentProject.id) {
+      console.log('No project');
+      return;
     }
     let relativeTo = getRelativeUrl(
       this.currentProject.id,
