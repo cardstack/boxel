@@ -9,7 +9,7 @@ interface SummaryGridContainerArgs {
 
 export default class SummaryGridContainer extends GlimmerComponent<SummaryGridContainerArgs> {
   <template>
-    <div class='summary-container'>
+    <div class='summary-container' ...attributes>
       <div class='summary-grid'>
         {{yield}}
       </div>
