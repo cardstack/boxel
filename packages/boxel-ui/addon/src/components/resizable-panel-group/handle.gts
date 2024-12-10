@@ -1,22 +1,33 @@
-import { registerDestructor } from '@ember/destroyable';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { scheduleOnce } from '@ember/runloop';
+import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
-import type ResizablePanelGroup from './index.gts';
+import {
+  type ResizeHandlerAction,
+  registerResizeHandle,
+} from './utils/panel-resize-handle-registry.ts';
+import type {
+  Orientation,
+  ResizeEvent,
+  ResizeHandler,
+  ResizeHandleState,
+} from './utils/types.ts';
+
+type RegisterResizeHandleResult = {
+  doubleClickHandler: ResizeHandler;
+  resizeHandler: ResizeHandler;
+  startDragging: ResizeHandler;
+  stopDragging: ResizeHandler;
+};
 
 interface Signature {
   Args: {
-    hide: boolean;
-    onDoubleClick: (event: MouseEvent) => void;
-    onMouseDown: (event: MouseEvent) => void;
-    orientation: 'horizontal' | 'vertical';
-    panelGroupComponent: ResizablePanelGroup;
-    registerHandle: (handle: Handle) => void;
-    reverseArrow: boolean;
-    unregisterHandle: (handle: Handle) => void;
+    groupId: string;
+    hide?: boolean;
+    orientation: Orientation;
+    registerResizeHandle: (handle: Handle) => RegisterResizeHandleResult;
   };
   Blocks: {
     default: [];
@@ -24,23 +35,26 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let registerHandle = modifier((element, [handle]: [Handle]) => {
+let manageHandleRegistration = modifier((element, [handle]: [Handle]) => {
   handle.element = element as HTMLDivElement;
-  scheduleOnce('afterRender', handle, handle.registerHandle);
+  handle.registerHandle();
 });
 
 export default class Handle extends Component<Signature> {
   <template>
     <div
       class='separator-{{@orientation}}'
-      {{registerHandle this}}
+      data-boxel-panel-group-id={{@groupId}}
+      data-boxel-panel-resize-handle-id={{this.id}}
+      {{manageHandleRegistration this}}
       ...attributes
     >
       <button
-        class='resize-handle {{@orientation}} {{if @hide "hidden"}}'
+        class='resize-handle
+          {{@orientation}}
+          {{if this.isHover "hover"}}
+          {{if @hide "hidden"}}'
         aria-label='Resize handle'
-        {{on 'mousedown' @onMouseDown}}
-        {{on 'dblclick' @onDoubleClick}}
         data-test-resize-handle
       />
     </div>
@@ -83,7 +97,8 @@ export default class Handle extends Component<Signature> {
         position: relative;
       }
 
-      .resize-handle:hover {
+      .resize-handle:hover,
+      .resize-handle.hover {
         background-color: var(
           --boxel-panel-resize-handle-hover-background-color
         );
@@ -104,14 +119,67 @@ export default class Handle extends Component<Signature> {
   </template>
 
   element!: HTMLDivElement;
+  private _id = guidFor(this);
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-
-    registerDestructor(this, this.args.unregisterHandle);
-  }
+  @tracked private state: ResizeHandleState = 'inactive';
 
   @action registerHandle() {
-    this.args.registerHandle(this);
+    const { resizeHandler, startDragging, stopDragging, doubleClickHandler } =
+      this.args.registerResizeHandle(this);
+
+    const setResizeHandlerState = (
+      action: ResizeHandlerAction,
+      isActive: boolean,
+      event: ResizeEvent,
+    ) => {
+      if (isActive) {
+        switch (action) {
+          case 'down': {
+            this.state = 'drag';
+
+            startDragging(event);
+            break;
+          }
+          case 'move': {
+            if (this.state !== 'drag') {
+              this.state = 'hover';
+            }
+
+            resizeHandler(event);
+            break;
+          }
+          case 'up': {
+            this.state = 'hover';
+            stopDragging(event);
+            break;
+          }
+          case 'dblclick': {
+            doubleClickHandler(event);
+            break;
+          }
+        }
+      } else {
+        this.state = 'inactive';
+      }
+    };
+
+    registerResizeHandle(
+      this.id,
+      this.element.children[0]! as HTMLElement,
+      this.args.orientation,
+      {
+        coarse: 15,
+        fine: 5,
+      },
+      setResizeHandlerState,
+    );
+  }
+
+  get id() {
+    return this._id;
+  }
+
+  private get isHover() {
+    return this.state !== 'inactive';
   }
 }
