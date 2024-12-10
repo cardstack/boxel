@@ -17,9 +17,10 @@ import { tracked } from '@glimmer/tracking';
 import { AppCard } from './app-card';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 
-import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
+import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
 
 import GenerateCodeCommand from './AiAppGenerator/generate-code-command';
 import { GenerateCodeInput } from './AiAppGenerator/generate-code-command';
@@ -252,9 +253,16 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     }
     this.errorMessage = '';
     try {
+      let createRoomCommand = new CreateAIAssistantRoomCommand(commandContext);
+      let { roomId } = await createRoomCommand.execute(
+        new (await createRoomCommand.getInputType())({
+          name: 'AI Assistant Room',
+        }),
+      );
       let generateCodeCommand = new GenerateCodeCommand(commandContext);
       let generateCodeInput = new GenerateCodeInput({
         productRequirements: this.args.model,
+        roomId,
       });
 
       let { code, appName } =
