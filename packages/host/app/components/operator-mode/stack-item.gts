@@ -13,6 +13,7 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
+import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import { formatDistanceToNow } from 'date-fns';
 import {
   task,
@@ -35,7 +36,7 @@ import {
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash, IconLink, Warning } from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
@@ -611,10 +612,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{else if this.cardError}}
           <CardHeader
             @cardTypeDisplayName={{this.cardErrorTitle}}
-            @cardTypeIcon={{Warning}}
+            @cardTypeIcon={{ExclamationCircle}}
             @isTopCard={{this.isTopCard}}
             @onClose={{unless this.isBuried (perform this.closeItem)}}
-            class='stack-item-header'
+            class='stack-item-header stack-item-header-error'
             style={{cssVar
               boxel-card-header-icon-container-min-width=(if
                 this.isBuried '50px' '95px'
@@ -795,6 +796,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
       }
+      .stack-item-header-error {
+        color: var(--boxel-error-300);
+      }
 
       .stack-item-content {
         overflow: auto;
@@ -843,7 +847,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         align-items: center;
       }
       .card-error {
-        flex: 2;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;

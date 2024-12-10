@@ -298,7 +298,7 @@ class Isolated extends Component<typeof CardsGrid> {
         background-color: rgba(255, 0, 0, 0.1);
       }
       .instance-error .boundaries {
-        box-shadow: 0 0 0 1px #ff0000;
+        box-shadow: 0 0 0 1px var(--boxel-error-300);
       }
       .instance-error:hover .boundaries {
         box-shadow: 0 0 0 1px var(--boxel-dark);
