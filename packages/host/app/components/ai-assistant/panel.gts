@@ -22,6 +22,7 @@ import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import NewSession from '@cardstack/host/components/ai-assistant/new-session';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
@@ -430,11 +431,21 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private doCreateRoom = restartableTask(async (name: string) => {
     try {
-      let command = new CreateAIAssistantRoomCommand(
+      let createRoomCommand = new CreateAIAssistantRoomCommand(
         this.commandService.commandContext,
       );
-      let InputType = await command.getInputType();
-      let { roomId } = await command.execute(new InputType({ name }));
+      let InputType = await createRoomCommand.getInputType();
+      let { roomId } = await createRoomCommand.execute(new InputType({ name }));
+
+      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+        this.commandService.commandContext,
+      );
+      await addSkillsToRoomCommand.execute(
+        new (await addSkillsToRoomCommand.getInputType())({
+          roomId,
+          skills: await this.matrixService.loadDefaultSkills(),
+        }),
+      );
       window.localStorage.setItem(newSessionIdPersistenceKey, roomId);
       this.enterRoom(roomId);
     } catch (e) {
