@@ -51,7 +51,9 @@ export abstract class Command<
   CommandConfiguration extends any | undefined = undefined,
 > {
   // Is this actually type checking ?
-  abstract getInputType(): Promise<{ new (args: any): CardInputType }>; // TODO: can we do better than any here?
+  abstract getInputType(): Promise<
+    { new (args: any): CardInputType } | undefined
+  >; // TODO: can we do better than any here?
 
   invocations: CommandInvocation<CardInputType, CardResultType>[] = [];
 
@@ -66,20 +68,38 @@ export abstract class Command<
     protected readonly configuration?: CommandConfiguration | undefined, // we'd like this to be required *if* CommandConfiguration is defined, and allow the user to skip it when CommandConfiguration is undefined
   ) {}
 
-  async execute(input: CardInputType): Promise<CardResultType> {
+  async execute(
+    input: CardInputType extends CardDef | undefined
+      ? CardInputType | Omit<CardInputType, keyof CardDef>
+      : never,
+  ): Promise<CardResultType> {
     // internal bookkeeping
     // todo: support for this.runTask being defined
     // runTask would be an ember task, run would just be a normal function
 
+    let inputCard: CardInputType;
+    if (input === undefined) {
+      inputCard = undefined as CardInputType;
+    } else if ('isCardDef' in input && input.isCardDef) {
+      inputCard = input as CardInputType;
+    } else {
+      let InputType = await this.getInputType();
+      if (!InputType) {
+        inputCard = undefined as CardInputType;
+      } else {
+        inputCard = new InputType(input) as CardInputType;
+      }
+    }
+
     let invocation = new CommandInvocation<CardInputType, CardResultType>(
-      input,
+      inputCard,
     );
 
     this.invocations.push(invocation);
     this.nextCompletionDeferred.fulfill(invocation.promise);
 
     try {
-      let result = await this.run(input);
+      let result = await this.run(inputCard);
       invocation.fulfill(result);
       return result;
     } catch (error) {

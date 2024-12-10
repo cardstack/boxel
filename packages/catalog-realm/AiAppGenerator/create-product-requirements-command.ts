@@ -59,13 +59,10 @@ export default class CreateProductRequirementsInstance extends Command<
     let prdCard = new ProductRequirementDocument();
 
     let saveCardCommand = new SaveCardCommand(this.commandContext);
-    let SaveCardInputType = await saveCardCommand.getInputType();
-    await saveCardCommand.execute(
-      new SaveCardInputType({
-        realm: input.realm,
-        card: prdCard,
-      }),
-    );
+    await saveCardCommand.execute({
+      realm: input.realm,
+      card: prdCard,
+    });
     // Get patch command, this takes the card and returns a command that can be used to patch the card
     let patchPRDCommand = new PatchCardCommand(this.commandContext, {
       cardType: ProductRequirementDocument,
