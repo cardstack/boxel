@@ -219,6 +219,14 @@ export interface CardFragmentContent {
   };
 }
 
+export interface SkillsConfigEvent extends RoomStateEvent {
+  type: 'com.cardstack.boxel.room.skills';
+  content: {
+    enabledEventIds: string[];
+    disabledEventIds: string[];
+  };
+}
+
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandResultContent;
@@ -258,4 +266,5 @@ export type MatrixEvent =
   | RoomTopicEvent
   | InviteEvent
   | JoinEvent
-  | LeaveEvent;
+  | LeaveEvent
+  | SkillsConfigEvent;

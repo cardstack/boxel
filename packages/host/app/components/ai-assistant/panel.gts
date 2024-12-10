@@ -463,15 +463,21 @@ export default class AiAssistantPanel extends Component<Signature> {
   private get aiSessionRooms() {
     let sessions: SessionRoomData[] = [];
     for (let resource of this.roomResources.values()) {
-      if (!resource.roomState) {
+      if (!resource.matrixRoom) {
         continue;
       }
+      let isAiBotInvited = !!resource.invitedMembers.find(
+        (m) => aiBotUserId === m.userId,
+      );
+      let isAiBotJoined = !!resource.joinedMembers.find(
+        (m) => aiBotUserId === m.userId,
+      );
+      let isUserJoined = !!resource.joinedMembers.find(
+        (m) => this.matrixService.userId === m.userId,
+      );
       if (
-        (resource.invitedMembers.find((m) => aiBotUserId === m.userId) ||
-          resource.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
-        resource.joinedMembers.find(
-          (m) => this.matrixService.userId === m.userId,
-        ) &&
+        (isAiBotInvited || isAiBotJoined) &&
+        isUserJoined &&
         resource.name &&
         resource.roomId
       ) {

@@ -36,6 +36,7 @@ interface Signature {
     canAttachCard?: boolean;
     query?: CardCatalogQuery;
     onChooseCard?: (card: CardDef) => void;
+    onChangeItemIsActive: (item: PillMenuItem, isActive: boolean) => void;
   };
   Blocks: {
     headerIcon: [];
@@ -230,7 +231,7 @@ export default class PillMenu extends Component<Signature> {
   }
 
   @action private toggleActive(item: PillMenuItem) {
-    item.isActive = !item.isActive;
+    this.args.onChangeItemIsActive(item, !item.isActive);
   }
 
   @action private attachCard() {
