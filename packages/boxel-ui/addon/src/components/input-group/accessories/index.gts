@@ -152,6 +152,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         @onChange={{@onChange}}
         @onBlur={{@onBlur}}
         @matchTriggerWidth={{@matchTriggerWidth}}
+        @selectedItemComponent={{@selectedItemComponent}}
         data-test-boxel-input-group-select-accessory-trigger
         ...attributes
         as |item|
