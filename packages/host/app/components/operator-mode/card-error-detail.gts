@@ -19,7 +19,7 @@ import type CommandService from '../../services/command-service';
 
 interface Signature {
   Args: {
-    error: CardError['errors'][0];
+    error: CardError;
     viewInCodeMode?: true;
     title?: string;
   };
@@ -78,6 +78,7 @@ export default class CardErrorDetail extends Component<Signature> {
                 <div class='detail-title'>Stack trace:</div>
                 <pre
                   data-test-error-stack
+                  data-test-percy-hide
                 >
 {{@error.meta.stack}}
                 </pre>

@@ -265,11 +265,24 @@ export default class MatrixService extends Service {
     return this._isNewUser;
   }
 
-  async initializeNewUser(auth: LoginResponse, displayName: string) {
+  async initializeNewUser(
+    auth: LoginResponse,
+    displayName: string,
+    registrationToken?: string,
+  ) {
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
+    let userId = this.client.getUserId();
+    if (!userId) {
+      throw new Error(
+        `bug: there is no userId associated with the matrix client`,
+      );
+    }
+
+    await this.realmServer.createUser(userId, registrationToken);
+
     await Promise.all([
       this.createPersonalRealmForUser({
         endpoint: 'personal',

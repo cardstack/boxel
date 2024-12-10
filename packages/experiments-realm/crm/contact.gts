@@ -1,6 +1,8 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-
+import { PhoneField } from '../phone';
+import { EmailField } from '../email';
+import { ContactLinkField } from '../fields/contact-link';
 import {
   Component,
   CardDef,
@@ -8,13 +10,12 @@ import {
   field,
   contains,
   linksTo,
+  containsMany,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
-import { RadioInput, Pill } from '@cardstack/boxel-ui/components';
-import MailIcon from '@cardstack/boxel-icons/mail';
-import PhoneIcon from '@cardstack/boxel-icons/phone';
+import { RadioInput } from '@cardstack/boxel-ui/components';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import AvatarGroup from '../components/avatar-group';
@@ -22,21 +23,40 @@ import { Company } from './company';
 import { Avatar } from '@cardstack/boxel-ui/components';
 import { StatusPill } from '../components/status-pill';
 import type IconComponent from '@cardstack/boxel-icons/captions';
+import ContactIcon from '@cardstack/boxel-icons/contact';
+import Email from '@cardstack/boxel-icons/mail';
+import Linkedin from '@cardstack/boxel-icons/linkedin';
+import XIcon from '@cardstack/boxel-icons/brand-x';
+
+export class SocialLinkField extends ContactLinkField {
+  static displayName = 'social-link';
+
+  static values = [
+    {
+      type: 'social',
+      label: 'X',
+      icon: XIcon,
+      cta: 'Follow',
+    },
+    {
+      type: 'social',
+      label: 'LinkedIn',
+      icon: Linkedin,
+      cta: 'Connect',
+    },
+    {
+      type: 'email',
+      label: 'Email',
+      icon: Email,
+      cta: 'Contact',
+    },
+  ];
+}
 
 const getStatusData = (
   label: string | undefined,
 ): LooseyGooseyData | undefined => {
   return StatusField.values.find((status) => status.label === label);
-};
-
-const formatPhone = (phone: any) => {
-  if (!phone) return undefined;
-  return `+${phone.country} (${phone.area}) ${phone.phoneNumber}`;
-};
-
-const formatEmail = (email: string) => {
-  if (!email) return undefined;
-  return email;
 };
 
 export interface LooseyGooseyData {
@@ -118,72 +138,28 @@ export class StatusField extends LooseGooseyField {
   };
 }
 
-export class PhoneField extends FieldDef {
-  static displayName = 'phoneMobile';
-  @field country = contains(NumberField);
-  @field area = contains(NumberField);
-  @field phoneNumber = contains(NumberField);
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      (+<@fields.country />) <@fields.area />-<@fields.phoneNumber />
-    </template>
-  };
-}
-
 class EmbeddedTemplate extends Component<typeof Contact> {
   <template>
     <article class='embedded-contact-card'>
-      {{#if @model.id}}
-        <AvatarGroup
-          @userID={{@model.id}}
-          @name={{@model.name}}
-          @thumbnailURL={{@model.thumbnailURL}}
-        >
-          <:content>
-            <@fields.company
-              @format='atom'
-              @displayContainer={{false}}
-              class='company-container'
-            />
-          </:content>
-        </AvatarGroup>
-      {{/if}}
+      <AvatarGroup
+        @userId={{@model.id}}
+        @name={{@model.name}}
+        @thumbnailURL={{@model.thumbnailURL}}
+      >
+        <:content>
+          <@fields.company
+            @format='atom'
+            @displayContainer={{false}}
+            class='company-container'
+          />
+        </:content>
+      </AvatarGroup>
 
       <div class='contact-info'>
-        {{#if @model.primaryEmail}}
-          <div class='row primary-email'>
-            <MailIcon class='icon gray' />
-            <span>{{formatEmail @model.primaryEmail}}</span>
-          </div>
-        {{/if}}
-
-        {{#if @model.secondaryEmail}}
-          <div class='row secondary-email'>
-            <MailIcon class='icon gray' />
-            <span>{{formatEmail @model.secondaryEmail}}</span>
-          </div>
-        {{/if}}
-
-        {{#if (formatPhone @model.phoneMobile)}}
-          <div class='row primary-phone'>
-            <PhoneIcon class='icon gray' />
-            <span>{{formatPhone @model.phoneMobile}}</span>
-            <Pill class='pill-gray'>
-              mobile
-            </Pill>
-          </div>
-        {{/if}}
-
-        {{#if (formatPhone @model.phoneOffice)}}
-          <div class='row secondary-phone'>
-            <PhoneIcon class='icon gray' />
-            <span>{{formatPhone @model.phoneOffice}}</span>
-            <Pill class='pill-gray'>
-              office
-            </Pill>
-          </div>
-        {{/if}}
+        <@fields.primaryEmail @format='atom' />
+        <@fields.secondaryEmail @format='atom' />
+        <@fields.phoneMobile @format='atom' />
+        <@fields.phoneOffice @format='atom' />
       </div>
 
       {{#if @model.status.label}}
@@ -207,7 +183,8 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         flex-direction: column;
         background: var(--boxel-light);
       }
-      .contact-info {
+      .contact-info,
+      .links {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
@@ -215,86 +192,44 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         color: var(--boxel-dark);
         margin-top: var(--boxel-sp);
       }
-      .row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        word-break: break-all;
-        gap: var(--boxel-sp-xxs);
-      }
-      .icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-      }
-      .icon.gray {
-        color: var(--boxel-400);
-      }
-      .pill-gray {
-        font-weight: 500;
-        font-size: var(--boxel-font-size-sm);
-        word-break: keep-all;
-        --pill-background-color: var(--boxel-200);
-        border: none;
-      }
     </style>
   </template>
 }
 
 class FittedTemplate extends Component<typeof Contact> {
+  get hasSocialLinks() {
+    return (
+      this.args.model.socialLinks && this.args.model.socialLinks.length > 0
+    );
+  }
   <template>
     <article class='fitted-contact-card'>
-      {{#if @model.id}}
-        <AvatarGroup
-          @userID={{@model.id}}
-          @name={{@model.name}}
-          @thumbnailURL={{@model.thumbnailURL}}
-        >
-          <:content>
-            <@fields.company
-              @format='atom'
-              @displayContainer={{false}}
-              class='company-container'
-            />
-          </:content>
-        </AvatarGroup>
-      {{/if}}
+      <AvatarGroup
+        @userId={{@model.id}}
+        @name={{@model.name}}
+        @thumbnailURL={{@model.thumbnailURL}}
+      >
+        <:content>
+          <@fields.company
+            @format='atom'
+            @displayContainer={{false}}
+            class='company-container'
+          />
+        </:content>
+      </AvatarGroup>
 
       <div class='contact-info'>
-        {{#if @model.primaryEmail}}
-          <div class='row primary-email'>
-            <MailIcon class='icon gray' />
-            <span>{{formatEmail @model.primaryEmail}}</span>
-          </div>
-        {{/if}}
-
-        {{#if @model.secondaryEmail}}
-          <div class='row secondary-email'>
-            <MailIcon class='icon gray' />
-            <span>{{formatEmail @model.secondaryEmail}}</span>
-          </div>
-        {{/if}}
-
-        {{#if @model.phoneMobile}}
-          <div class='row primary-phone'>
-            <PhoneIcon class='icon gray' />
-            <span>{{formatPhone @model.phoneMobile}}</span>
-            <Pill class='pill-gray'>
-              mobile
-            </Pill>
-          </div>
-        {{/if}}
-
-        {{#if @model.phoneOffice}}
-          <div class='row secondary-phone'>
-            <PhoneIcon class='icon gray' />
-            <span>{{formatPhone @model.phoneOffice}}</span>
-            <Pill class='pill-gray'>
-              office
-            </Pill>
-          </div>
-        {{/if}}
+        <@fields.primaryEmail @format='atom' />
+        <@fields.secondaryEmail @format='atom' />
+        <@fields.phoneMobile @format='atom' />
+        <@fields.phoneOffice @format='atom' />
       </div>
+
+      {{#if this.hasSocialLinks}}
+        <div class='links'>
+          <@fields.socialLinks @format='atom' />
+        </div>
+      {{/if}}
 
       {{#if @model.status.label}}
         {{#let (getStatusData @model.status.label) as |statusData|}}
@@ -319,57 +254,33 @@ class FittedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-xs);
       }
-      .contact-info {
+      .contact-info,
+      .links {
         font-size: var(--boxel-font-xs);
         align-self: normal;
       }
-      .contact-info > * + * {
+      .contact-info,
+      .links > * + * {
         margin-top: var(--boxel-sp-xxs);
       }
-      .icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        flex-shrink: 0;
-      }
-      .icon.gray {
-        color: var(--boxel-400);
-      }
-      .pill-gray {
-        font-weight: 300;
-        font-size: 10px;
-        word-break: keep-all;
-        --pill-background-color: var(--boxel-200);
-        border: none;
-      }
-      .status-pill {
-        border-color: transparent;
-        padding: 0;
-        flex: none;
-        overflow: hidden;
-        margin-top: auto;
-      }
-      .row {
+      .links :deep(div) {
         display: flex;
-        align-items: center;
-        word-break: break-all;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxxs);
+        flex-wrap: wrap;
+      }
+
+      .fitted-contact-card > .status-pill {
+        display: none;
       }
 
       /* Square layout (aspect-ratio = 1.0) or portrait layout with height < 226px */
       @container fitted-card ((aspect-ratio = 1.0) or ((aspect-ratio < 1.0) and (height < 226px))) {
         .fitted-contact-card {
           flex-direction: column;
-          justify-content: center;
-          align-items: center;
           padding: var(--boxel-sp-xs);
         }
-
         .contact-info,
-        .status-pill,
-        .primary-email,
-        .secondary-email,
-        .secondary-phone,
-        .pill-gray {
+        .links {
           display: none;
         }
       }
@@ -377,51 +288,35 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card (aspect-ratio <= 1.0) and (226px < height) {
         .fitted-contact-card {
           flex-direction: column;
-          justify-content: center;
-          align-items: center;
           padding: var(--boxel-sp-xs);
         }
 
-        .status-pill {
-          align-self: flex-end;
-        }
-
-        .primary-email,
-        .secondary-email,
-        .secondary-phone,
-        .pill-gray {
+        .contact-info,
+        .links {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (58px <= height < 180px)) {
         .fitted-contact-card {
-          align-items: center;
-          align-content: center;
           gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-xxs);
         }
 
-        .primary-email,
-        .secondary-email,
-        .secondary-phone,
-        .pill-gray {
+        .contact-info,
+        .links {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
         .fitted-contact-card {
-          align-items: center;
-          align-content: center;
           gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-xxs);
         }
 
-        .primary-email,
-        .secondary-email,
-        .secondary-phone,
-        .pill-gray {
+        .contact-info,
+        .links {
           display: none;
         }
       }
@@ -430,40 +325,38 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (115px <= height)) {
         .fitted-contact-card {
           flex-direction: column;
-          justify-content: center;
           gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-sm);
         }
 
-        .primary-email,
-        .secondary-email,
-        .secondary-phone,
-        .pill-gray {
+        .contact-info,
+        .links {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (115px <= height < 180px)) {
-        .status-pill {
+        .contact-info,
+        .links {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (180px <= height)) {
-        .status-pill {
-          align-self: flex-end;
+        .contact-info,
+        .links {
+          display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (58px <= height < 115px)) {
         .fitted-contact-card {
           display: flex;
-          align-items: center;
           padding: var(--boxel-sp-sm);
         }
 
         .contact-info,
-        .status-pill {
+        .links {
           display: none;
         }
       }
@@ -472,14 +365,11 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (50px <= height < 58px)) {
         .fitted-contact-card {
           display: flex;
-          align-items: center;
-          align-content: center;
           padding: var(--boxel-sp-xxxs);
         }
 
         .contact-info,
-        .status-pill,
-        .company-container {
+        .links {
           display: none;
         }
       }
@@ -487,20 +377,12 @@ class FittedTemplate extends Component<typeof Contact> {
       /* Fallback for extremely small sizes */
       @container fitted-card ((1.0 < aspect-ratio) and (height < 50px)) {
         .fitted-contact-card {
-          grid-template: 'avatar-container';
           display: flex;
-          align-items: center;
-          align-content: center;
           padding: var(--boxel-sp-xxxs);
         }
 
-        .name {
-          font-size: var(--boxel-font-xs);
-        }
-
         .contact-info,
-        .status-pill,
-        .company-container {
+        .links {
           display: none;
         }
       }
@@ -509,6 +391,11 @@ class FittedTemplate extends Component<typeof Contact> {
 }
 
 class AtomTemplate extends Component<typeof Contact> {
+  get label() {
+    return this.args.model?.name && this.args.model?.position
+      ? `${this.args.model?.name} • ${this.args.model?.position}`
+      : this.args.model?.name ?? '';
+  }
   <template>
     <div class='contact'>
       {{#if @model.id}}
@@ -557,28 +444,29 @@ class AtomTemplate extends Component<typeof Contact> {
 
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
+  static icon = ContactIcon;
 
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
-  @field company = linksTo(Company); // Links to the Company Card
+  @field position = contains(StringField);
+  @field company = linksTo(Company);
   @field department = contains(StringField);
-  @field primaryEmail = contains(StringField); // Stores primary email, format may change after final emailField PR is approved
-  @field secondaryEmail = contains(StringField); // Stores secondary email, format may change after final emailField PR is approved
-  @field phoneMobile = contains(PhoneField); // Stores mobile phone, format may change after final phoneField PR is approved
-  @field phoneOffice = contains(PhoneField); // Stores office phone, format may change after final phoneField PR is approved
-  @field status = contains(StatusField); // Stores status as a status field
-  //@field socialLinks = containsMany(UrlField); // Pending format discussion with Burcu for consistency
-  //@field account = linksTo(Account) // Pending completion of account card
-
-  @field title = contains(StringField, {
-    computeVia: function (this: Contact) {
-      return this.name;
-    },
-  });
+  @field primaryEmail = contains(EmailField);
+  @field secondaryEmail = contains(EmailField);
+  @field phoneMobile = contains(PhoneField);
+  @field phoneOffice = contains(PhoneField);
+  @field status = contains(StatusField);
+  @field socialLinks = containsMany(SocialLinkField);
 
   @field name = contains(StringField, {
     computeVia: function (this: Contact) {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
+
+  @field title = contains(StringField, {
+    computeVia: function (this: Contact) {
+      return this.name;
     },
   });
 

@@ -1,6 +1,7 @@
 import {
   DBAdapter,
   Expression,
+  PgPrimitive,
   addExplicitParens,
   asExpressions,
   every,
@@ -17,6 +18,7 @@ export interface User {
   matrixUserId: string;
   stripeCustomerId: string;
   stripeCustomerEmail: string | null;
+  matrixRegistrationToken: string | null;
 }
 
 export interface Plan {
@@ -55,6 +57,16 @@ export interface LedgerEntry {
     | 'extra_credit_used'
     | 'plan_allowance_expired';
   subscriptionCycleId: string | null;
+}
+
+function planRowToPlan(row: Record<string, PgPrimitive>): Plan {
+  return {
+    id: row.id,
+    name: row.name,
+    monthlyPrice: parseFloat(row.monthly_price as string),
+    creditsIncluded: row.credits_included,
+    stripePlanId: row.stripe_plan_id,
+  } as Plan;
 }
 
 export async function insertStripeEvent(
@@ -98,13 +110,7 @@ export async function getPlanByStripeId(
     return null;
   }
 
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-    stripePlanId: results[0].stripe_plan_id,
-  } as Plan;
+  return planRowToPlan(results[0]);
 }
 
 export async function updateUserStripeCustomerId(
@@ -167,6 +173,7 @@ export async function getUserByStripeId(
     id: results[0].id,
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
+    matrixRegistrationToken: results[0].matrix_registration_token,
   } as User;
 }
 
@@ -188,6 +195,7 @@ export async function getUserByMatrixUserId(
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
     stripeCustomerEmail: results[0].stripe_customer_email,
+    matrixRegistrationToken: results[0].matrix_registration_token,
   } as User;
 }
 
@@ -453,13 +461,7 @@ export async function getPlanById(
     return null;
   }
 
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-    stripePlanId: results[0].stripe_plan_id,
-  } as Plan;
+  return planRowToPlan(results[0]);
 }
 
 export async function getPlanByMonthlyPrice(
@@ -475,13 +477,7 @@ export async function getPlanByMonthlyPrice(
     return null;
   }
 
-  return {
-    id: results[0].id,
-    name: results[0].name,
-    monthlyPrice: results[0].monthly_price,
-    creditsIncluded: results[0].credits_included,
-    stripePlanId: results[0].stripe_plan_id,
-  } as Plan;
+  return planRowToPlan(results[0]);
 }
 
 export async function expireRemainingPlanAllowanceInSubscriptionCycle(
