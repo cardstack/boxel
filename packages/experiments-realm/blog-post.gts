@@ -625,6 +625,9 @@ export class BlogPost extends CardDef {
           </ul>
         </header>
         <@fields.body />
+        {{#if @model.authorBio.firstName}}
+          <@fields.authorBio class='author-embedded-bio' @format='embedded' />
+        {{/if}}
       </article>
       <style scoped>
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
@@ -700,6 +703,9 @@ export class BlogPost extends CardDef {
         }
         .author {
           display: contents;
+        }
+        .author-embedded-bio {
+          margin-top: var(--boxel-sp-xl);
         }
       </style>
     </template>

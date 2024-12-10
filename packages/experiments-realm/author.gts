@@ -204,6 +204,8 @@ export class Author extends CardDef {
         <div
           class='thumbnail-image'
           style={{setBackgroundImage @model.thumbnailURL}}
+          role='img'
+          alt={{@model.title}}
         >
           {{#unless @model.thumbnailURL}}
             <UserIcon width='30' height='30' />
@@ -213,18 +215,24 @@ export class Author extends CardDef {
           <h3><@fields.title /></h3>
           <p class='desc'><@fields.description /></p>
         </header>
-        <p class='bio'><@fields.bio /></p>
-        <div class='author-bio-links'>
-          <@fields.contactLinks @format='embedded' />
-        </div>
+        {{#if @model.bio}}
+          <p class='bio'><@fields.bio /></p>
+        {{/if}}
+        {{#if @model.contactLinks.length}}
+          <div class='author-bio-links'>
+            <@fields.contactLinks @format='embedded' />
+          </div>
+        {{/if}}
       </article>
       <style scoped>
         .author-embedded {
+          --background-color: var(--author-background-color, #efefef);
+          background-color: var(--background-color);
           height: 100%;
           display: grid;
           grid-template-columns: max-content 1fr;
           gap: var(--boxel-sp) var(--boxel-sp-lg);
-          padding: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
         }
         h3,
         p {
@@ -263,15 +271,15 @@ export class Author extends CardDef {
           margin-bottom: 1em;
           font: var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-sm);
-          display: -webkit-box;
-          -webkit-line-clamp: 10;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
         }
         .author-bio-links > :deep(.embedded-format) {
           display: flex;
           flex-wrap: wrap;
           gap: var(--boxel-sp-xs);
+          background-color: inherit;
+        }
+        .author-bio-links :deep(.pill) {
+          --pill-background-color: var(--background-color);
         }
       </style>
     </template>
@@ -284,6 +292,8 @@ export class Author extends CardDef {
           <span
             class='author-thumbnail'
             style={{setBackgroundImage @model.thumbnailURL}}
+            role='img'
+            alt={{@model.title}}
           />
         {{else}}
           <@model.constructor.icon class='author-icon' width='20' height='20' />
@@ -299,8 +309,8 @@ export class Author extends CardDef {
           flex-shrink: 0;
         }
         .author-thumbnail {
-          width: 30px;
-          height: 30px;
+          width: 24px;
+          height: 24px;
           border-radius: 50%;
           overflow: hidden;
           background-position: center;
