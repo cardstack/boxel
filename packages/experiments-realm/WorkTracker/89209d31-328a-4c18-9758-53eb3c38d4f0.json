@@ -14,6 +14,13 @@
       "description": null,
       "thumbnailURL": null
     },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": null
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../work-tracker",

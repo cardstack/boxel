@@ -11,7 +11,7 @@ import { Resource } from 'ember-resources';
 
 interface Args {
   named: {
-    query: Query;
+    query: Query | undefined;
     realm: string;
   };
 }
@@ -95,7 +95,10 @@ class TaskCollection extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    if (this.query === undefined || this.queryHasChanged(named.query)) {
+    if (
+      named.query &&
+      (this.query === undefined || this.queryHasChanged(named.query))
+    ) {
       this.run.perform(named.query, named.realm);
     }
   }

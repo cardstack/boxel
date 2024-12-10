@@ -2963,6 +2963,11 @@ export function getFields(
           return [];
         }
       }
+      // console.log('===========================================');
+      // console.log('cardid', maybeField.card.id);
+      // console.log('maybeField', maybeFieldName);
+      // console.log('isUsed', maybeField.isUsed);
+      // console.log('usedFields', usedFields);
 
       return [[maybeFieldName, maybeField]];
     });

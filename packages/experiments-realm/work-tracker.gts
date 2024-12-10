@@ -6,6 +6,7 @@ import {
   field,
   BaseDef,
   CardDef,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -19,11 +20,16 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
-import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
+import {
+  LooseSingleCardDocument,
+  getCards,
+  relativeURL,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/catalog/app-card';
-import { TaskStatusField } from './productivity/task';
+import { TaskStatusField, Project } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
@@ -32,17 +38,17 @@ import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import User from '@cardstack/boxel-icons/user';
-import FolderGit from '@cardstack/boxel-icons/folder-git';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import type Owner from '@ember/owner';
 import {
   AnyFilter,
   CardTypeFilter,
   Query,
+  EqFilter,
 } from '@cardstack/runtime-common/query';
 
-type FilterType = 'status' | 'assignee' | 'project';
+type FilterType = 'status' | 'assignee';
 
 export interface SelectedItem {
   name?: string;
@@ -82,15 +88,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       },
       options: () => this.assigneeCards,
     },
-    project: {
-      searchKey: 'name',
-      label: 'Project',
-      codeRef: {
-        module: `${this.realmHref}productivity/task`,
-        name: 'Project',
-      },
-      options: () => this.projectCards,
-    },
   };
   selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
   constructor(owner: Owner, args: any) {
@@ -118,24 +115,11 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       this.realmHrefs,
     );
 
-    this.projectQuery = getCards(
-      {
-        filter: {
-          type: this.filters.project.codeRef,
-        },
-      },
-      this.realmHrefs,
-    );
-    await this.assigneeQuery.loaded;
-    await this.projectQuery.loaded;
+    // await this.assigneeQuery.loaded;
   });
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
-  }
-
-  get projectCards() {
-    return this.projectQuery.instances;
   }
 
   filterObject(filterType: FilterType) {
@@ -191,8 +175,21 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     };
   }
 
+  get currentProject() {
+    return this.args.model.project;
+  }
+
   get getTaskQuery(): Query {
-    let everyArr: (AnyFilter | CardTypeFilter)[] = [];
+    let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
+    if (!this.currentProject || !this.currentProject.id || !this.realmURL) {
+      throw new Error(`Missing card id or realm url`);
+    }
+    let relativeTo = getRelativeUrl(
+      this.currentProject.id,
+      this.assignedTaskCodeRef,
+      this.realmURL,
+    );
+    everyArr.push({ eq: { 'project.id': relativeTo } });
     this.filterTypes.forEach((filterType) => {
       let anyFilter = this.filterObject(filterType);
       if (anyFilter.length > 0) {
@@ -360,8 +357,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return RectangleEllipsis;
       case 'assignee':
         return User;
-      case 'project':
-        return FolderGit;
       default:
         return undefined;
     }
@@ -369,6 +364,11 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   <template>
     <div class='task-app'>
+      {{#if (not this.currentProject.id)}}
+        <div class='disabled'>
+          Link a project to continue
+        </div>
+      {{/if}}
       <div class='filter-section'>
         <div class='filter-dropdown-container'>
           {{#if this.selectedFilterConfig}}
@@ -484,8 +484,22 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         position: relative;
         flex-direction: column;
         font: var(--boxel-font);
-        margin-left: var(--boxel-sp);
         height: 100%;
+      }
+      .disabled {
+        position: absolute;
+        top: 0%;
+        left: 0%;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(38 38 38 / 50%);
+        z-index: 10; /*TODO: Resolve z-index with drag and drop. This has to be greater than --draggable-overlay-z-index + 1*/
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 500;
       }
       .filter-section {
         display: flex;
@@ -611,6 +625,7 @@ export class WorkTracker extends AppCard {
   static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
   static isolated = WorkTrackerIsolated;
+  @field project = linksTo(() => Project);
   @field title = contains(StringField, {
     computeVia: function (this: WorkTracker) {
       return 'Work Tracker';
@@ -624,4 +639,23 @@ function removeFileExtension(cardUrl: string) {
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
+}
+
+// all search docs point to a relative link
+// we must derive the relative link based upon the code ref and the current realm
+function getRelativeUrl(
+  absoluteUrl: string, // absolute link from card model, eg http://localhost:4201/experiments/Project/51ca069b-1c55-4648-8654-bd82bf162f9d
+  codeRefToQuery: ResolvedCodeRef, // code ref to query eg {module: 'http://localhost:4201/experiments/productivity/task', name: 'Task'}
+  realmURL: URL, // realm url eg http://localhost:4201/experiments
+) {
+  let instanceDirectoryUrl = realmURL.href + codeRefToQuery.name + '/';
+  let relativeTo = relativeURL(
+    new URL(absoluteUrl),
+    new URL(instanceDirectoryUrl),
+    realmURL,
+  );
+  if (!relativeTo) {
+    throw new Error(`Missing relative url`);
+  }
+  return relativeTo;
 }
