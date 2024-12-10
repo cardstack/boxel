@@ -7,6 +7,19 @@
         "https://boxel/alice",
         "https://boxel/dan"
       ],
+      "location": {
+        "addressLine1": "285 Fulton Street ",
+        "addressLine2": null,
+        "city": "New York City",
+        "state": "NY",
+        "postalCode": "10007",
+        "country": {
+          "name": "United States of America",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "website": "https://cardstack.com/",
       "email": "alice@email.com",
       "emails": [
         "alice@email.com",

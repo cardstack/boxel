@@ -6,7 +6,7 @@ interface AvatarGroupSignature {
   Args: {
     thumbnailURL?: string;
     name?: string;
-    userID: string;
+    userId?: string | null;
   };
   Blocks: { content: [] };
   Element: HTMLElement;
@@ -18,9 +18,9 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
   }
 
   <template>
-    <div class='avatar-group'>
+    <div class='avatar-group' ...attributes>
       <Avatar
-        @userID={{@userID}}
+        @userID={{@userId}}
         @displayName={{@name}}
         @thumbnailURL={{@thumbnailURL}}
         @isReady={{true}}

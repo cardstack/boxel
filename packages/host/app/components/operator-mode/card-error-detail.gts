@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
+import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -19,7 +19,7 @@ import type CommandService from '../../services/command-service';
 
 interface Signature {
   Args: {
-    error: CardError['errors'][0];
+    error: CardError;
     viewInCodeMode?: true;
     title?: string;
   };
@@ -44,14 +44,14 @@ export default class CardErrorDetail extends Component<Signature> {
   });
 
   <template>
-    <Accordion class='error-detail' as |A|>
+    <Accordion class='error-detail {{if this.showErrorDetail "open"}}' as |A|>
       <A.Item
         data-test-error-detail-toggle
         @onClick={{fn this.toggleDetail 'schema'}}
         @isOpen={{this.showErrorDetail}}
       >
         <:title>
-          <TriangleAlert />
+          <ExclamationCircle class='error-icon' />
           An error was encountered on this card:
           <span data-test-error-title>{{@title}}</span>
         </:title>
@@ -78,6 +78,7 @@ export default class CardErrorDetail extends Component<Signature> {
                 <div class='detail-title'>Stack trace:</div>
                 <pre
                   data-test-error-stack
+                  data-test-percy-hide
                 >
 {{@error.meta.stack}}
                 </pre>
@@ -90,7 +91,25 @@ export default class CardErrorDetail extends Component<Signature> {
 
     <style scoped>
       .error-detail {
-        flex: 1;
+        flex: 1.5;
+        overflow: auto;
+        margin-top: auto;
+        max-height: fit-content;
+      }
+      @media (min-height: 800px) {
+        .error-detail {
+          flex: 1;
+        }
+      }
+      .error-detail.open {
+        max-height: unset;
+      }
+      .error-detail :deep(.title) {
+        font: 600 var(--boxel-font-sm);
+        background-color: #ffe3e3;
+      }
+      .error-icon {
+        color: var(--boxel-error-300);
       }
       .actions {
         display: flex;
@@ -98,16 +117,16 @@ export default class CardErrorDetail extends Component<Signature> {
         margin-top: var(--boxel-sp-lg);
       }
       .detail {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
         padding: var(--boxel-sp);
       }
-      .detail-item {
-        margin-top: var(--boxel-sp);
-      }
       .detail-title {
-        font: 600 var(--boxel-font);
+        font: 600 var(--boxel-font-sm);
       }
       .detail-contents {
-        font: var(--boxel-font);
+        font: var(--boxel-font-sm);
       }
       pre {
         margin-top: 0;
