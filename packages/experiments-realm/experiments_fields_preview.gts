@@ -1,6 +1,9 @@
 import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
+import { PhoneField } from './phone';
 import { UrlField } from './url';
+import { LocationField } from './crm/account';
+import { WebsiteField } from './website';
 import {
   CardDef,
   field,
@@ -18,8 +21,11 @@ import { startCase } from 'lodash';
 export class ExperimentsFieldsPreview extends CardDef {
   @field url = contains(UrlField);
   @field urls = containsMany(UrlField);
+  @field location = contains(LocationField);
+  @field website = contains(WebsiteField);
   @field email = contains(EmailField);
   @field emails = containsMany(EmailField);
+  @field phone = contains(PhoneField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
   static displayName = 'Custom Fields ';
