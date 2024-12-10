@@ -1461,6 +1461,69 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.ok(content.includes(`${testRealmURL}Country/united-states`));
     });
 
+    test<TestContextWithSSE>('monaco editor live updates when index changes', async function (assert) {
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}Person/fadhlan`],
+          },
+        },
+      ];
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+      await waitForCodeEditor();
+      await waitUntil(() => getMonacoContent().includes('Fadhlan'));
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'FadhlanXXX',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      await waitUntil(() => getMonacoContent().includes('FadhlanXXX'));
+      assert.true(
+        getMonacoContent().includes('FadhlanXXX'),
+        'monaco editor updated from index event',
+      );
+    });
+
     test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
       let expectedEvents = [
         {
