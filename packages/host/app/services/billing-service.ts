@@ -26,7 +26,11 @@ interface SubscriptionData {
 interface StripeLink {
   type: string;
   url: string;
-  creditReloadAmount?: number;
+}
+
+interface ExtraCreditsPaymentLink extends StripeLink {
+  creditReloadAmount: number;
+  price: number;
 }
 
 export default class BillingService extends Service {
@@ -74,7 +78,21 @@ export default class BillingService extends Service {
   }
 
   get extraCreditsPaymentLinks() {
-    return this.stripeLinks.value?.extraCreditsPaymentLinks;
+    let links = this.stripeLinks.value
+      ?.extraCreditsPaymentLinks as ExtraCreditsPaymentLink[];
+
+    if (!links) {
+      return [];
+    }
+
+    return links
+      .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
+      .map((link) => ({
+        ...link,
+        amountFormatted: `${link.creditReloadAmount.toLocaleString(
+          'en-US',
+        )} credits for $${link.price.toLocaleString('en-US')}`,
+      }));
   }
 
   get fetchingStripePaymentLinks() {
@@ -104,7 +122,10 @@ export default class BillingService extends Service {
         type: string;
         attributes: {
           url: string;
-          metadata?: { creditReloadAmount: number };
+          metadata?: {
+            creditReloadAmount: number;
+            price: number;
+          };
         };
       }[];
     };
@@ -113,6 +134,7 @@ export default class BillingService extends Service {
       type: data.type,
       url: data.attributes.url,
       creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
+      price: data.attributes.metadata?.price,
     })) as StripeLink[];
 
     return {
