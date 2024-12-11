@@ -3,6 +3,7 @@ import { fetchRequestFromContext, setContextResponse } from '../middleware';
 import stripeWebhookHandler from '@cardstack/billing/stripe-webhook-handlers';
 import { CreateRoutesArgs } from '../routes';
 import { getUserByStripeId } from '@cardstack/billing/billing-queries';
+import { decodeWebSafeBase64 } from '@cardstack/runtime-common';
 
 export default function handleStripeWebhookRequest({
   dbAdapter,
@@ -14,10 +15,23 @@ export default function handleStripeWebhookRequest({
     let response = await stripeWebhookHandler(
       dbAdapter,
       request,
-      async (stripeUserId: string) => {
-        let user = await getUserByStripeId(dbAdapter, stripeUserId);
-        if (user) {
-          await sendEvent(user.matrixUserId, 'billing-notification');
+      async ({
+        stripeCustomerId,
+        encodedMatrixUserId,
+      }: {
+        stripeCustomerId?: string;
+        encodedMatrixUserId?: string;
+      }) => {
+        let matrixUserId = encodedMatrixUserId
+          ? decodeWebSafeBase64(encodedMatrixUserId)
+          : undefined;
+        if (stripeCustomerId) {
+          let user = await getUserByStripeId(dbAdapter, stripeCustomerId);
+          matrixUserId = user?.matrixUserId;
+        }
+
+        if (matrixUserId) {
+          await sendEvent(matrixUserId, 'billing-notification');
         }
       },
     );

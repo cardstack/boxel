@@ -102,7 +102,13 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
 export default async function stripeWebhookHandler(
   dbAdapter: DBAdapter,
   request: Request,
-  sendBillingNotification: (stripeUserId: string) => Promise<void>,
+  sendBillingNotification: ({
+    stripeCustomerId,
+    encodedMatrixUserId,
+  }: {
+    stripeCustomerId?: string;
+    encodedMatrixUserId?: string;
+  }) => Promise<void>,
 ): Promise<Response> {
   let signature = request.headers.get('stripe-signature');
 
@@ -130,27 +136,34 @@ export default async function stripeWebhookHandler(
 
   switch (type) {
     // These handlers should eventually become jobs which workers will process asynchronously
-    case 'invoice.payment_succeeded':
+    case 'invoice.payment_succeeded': {
       await handlePaymentSucceeded(
         dbAdapter,
         event as StripeInvoicePaymentSucceededWebhookEvent,
       );
-      sendBillingNotification(event.data.object.customer);
+      sendBillingNotification({ stripeCustomerId: event.data.object.customer });
       break;
-    case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure, or payment dispute
+    }
+    case 'customer.subscription.deleted': {
+      // canceled by the user, or expired due to payment failure, or payment dispute
       await handleSubscriptionDeleted(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
       );
-      sendBillingNotification(event.data.object.customer);
+      sendBillingNotification({ stripeCustomerId: event.data.object.customer });
       break;
-    case 'checkout.session.completed':
+    }
+    case 'checkout.session.completed': {
       await handleCheckoutSessionCompleted(
         dbAdapter,
         event as StripeCheckoutSessionCompletedWebhookEvent,
       );
-      sendBillingNotification(event.data.object.customer);
+      await sendBillingNotification({
+        stripeCustomerId: event.data.object.customer,
+        encodedMatrixUserId: event.data.object.client_reference_id,
+      });
       break;
+    }
   }
   return new Response('ok');
 }
