@@ -103,7 +103,7 @@ module('Integration | commands | commands-calling', function (hooks) {
     assert.strictEqual(output.outputField, 'Hello World!');
   });
 
-  test('type error when parameters are missing', async function (assert) {
+  test('can call a command with just some of the fields', async function (assert) {
     class CommandInput extends CardDef {
       @field inputField1 = contains(StringField);
       @field inputField2 = contains(StringField);
@@ -127,7 +127,6 @@ module('Integration | commands | commands-calling', function (hooks) {
     }
     let exampleCommand = new ExampleCommand(commandContext);
 
-    // @ts-expect-error: missing inputField2
     let output = await exampleCommand.execute({
       inputField1: 'World',
     });

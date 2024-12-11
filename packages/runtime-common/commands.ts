@@ -71,7 +71,7 @@ export abstract class Command<
 
   async execute(
     input: CardInputType extends CardDef | undefined
-      ? CardInputType | Omit<CardInputType, keyof CardDef>
+      ? CardInputType | Partial<Omit<CardInputType, keyof CardDef>>
       : never,
   ): Promise<CardResultType> {
     // internal bookkeeping
@@ -88,7 +88,9 @@ export abstract class Command<
       if (!InputType) {
         throw new Error('Input provided but no input type found');
       } else {
-        inputCard = new InputType(input) as CardInputType;
+        inputCard = new InputType(
+          input as Partial<CardInputType>,
+        ) as CardInputType;
       }
     }
     let invocation = new CommandInvocation<CardInputType, CardResultType>(
