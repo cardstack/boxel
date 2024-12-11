@@ -28,9 +28,10 @@ export function stringToColor(string: string | null) {
   return color;
 }
 
-export function cleanseString(value: string, separator = '_') {
+export function cleanseString(value: string) {
   return deburr(value.toLocaleLowerCase())
-    .replace(/[^a-z0-9-_]+/g, separator)
+    .replace(/'/g, '')
+    .replace(/[^a-z0-9-_]+/g, '-')
     .replace(/^[^a-z0-9]/, '')
     .replace(/[^a-z0-9]$/, '');
 }
