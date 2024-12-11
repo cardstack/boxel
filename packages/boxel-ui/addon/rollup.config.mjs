@@ -2,6 +2,7 @@ import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import copy from 'rollup-plugin-copy';
+import css from 'rollup-plugin-import-css';
 
 const addon = new Addon({
   srcDir: 'src',
@@ -14,7 +15,8 @@ export default {
   output: addon.output(),
 
   plugins: [
-    scopedCSS(),
+    scopedCSS('src'),
+    css(),
 
     // These are the modules that users should be able to import from your
     // addon. Anything not listed here may get optimized away.
@@ -44,7 +46,17 @@ export default {
 
     // addons are allowed to contain imports of .css files, which we want rollup
     // to leave alone and keep in the published output.
-    addon.keepAssets(['styles/*', '**/*.webp']),
+    addon.keepAssets(
+      [
+        'styles/**/*.css',
+        '**/*.css',
+        '**/*.otf',
+        '**/*.png',
+        '**/*.webp',
+        '**/*.woff2',
+      ],
+      'default',
+    ),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean({ runOnce: true }),
