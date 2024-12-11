@@ -10,6 +10,8 @@ import {
   encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 
+import { formatNumber } from '../helpers/format-number';
+
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
@@ -89,9 +91,9 @@ export default class BillingService extends Service {
       .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
       .map((link) => ({
         ...link,
-        amountFormatted: `${link.creditReloadAmount.toLocaleString(
-          'en-US',
-        )} credits for $${link.price.toLocaleString('en-US')}`,
+        amountFormatted: `${formatNumber(
+          link.creditReloadAmount,
+        )} credits for $${formatNumber(link.price)}`,
       }));
   }
 

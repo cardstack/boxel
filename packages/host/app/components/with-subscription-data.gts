@@ -12,6 +12,7 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import BillingService from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
+import { formatNumber } from '../helpers/format-number';
 
 interface ValueSignature {
   Args: {
@@ -102,7 +103,9 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
   private get monthlyCreditText() {
     return this.creditsAvailableInPlanAllowance != null &&
       this.creditsIncludedInPlanAllowance != null
-      ? `${this.creditsAvailableInPlanAllowance} of ${this.creditsIncludedInPlanAllowance} left`
+      ? `${formatNumber(
+          this.creditsAvailableInPlanAllowance,
+        )} of ${formatNumber(this.creditsIncludedInPlanAllowance)} left`
       : null;
   }
 
@@ -149,7 +152,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         additionalCredit=(component
           Value
           tag='additional-credit'
-          value=this.extraCreditsAvailableInBalance
+          value=(formatNumber this.extraCreditsAvailableInBalance)
           isLoading=this.isLoading
           isOutOfCredit=this.isOutOfCredit
           displayCreditIcon=true
