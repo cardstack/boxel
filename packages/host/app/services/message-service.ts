@@ -8,7 +8,7 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
-import { sessionLocalStorageKey } from '../utils/local-storage-keys';
+import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
 
@@ -62,7 +62,7 @@ function getPersistedTokenForRealm(realmURL: string) {
     return 'TEST_TOKEN';
   }
 
-  let sessionStr = window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
+  let sessionStr = window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
   let session = JSON.parse(sessionStr);
   return session[realmURL] as string | undefined;
 }

@@ -43,8 +43,8 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import {
-  currentRoomIdPersistenceKey,
-  newSessionIdPersistenceKey,
+  CurrentRoomIdPersistenceKey,
+  NewSessionIdPersistenceKey,
 } from '@cardstack/host/utils/local-storage-keys';
 
 import assistantIcon from './ai-assist-icon.webp';
@@ -382,7 +382,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private enterRoomInitially() {
     let persistedRoomId = window.localStorage.getItem(
-      currentRoomIdPersistenceKey,
+      CurrentRoomIdPersistenceKey,
     );
     if (
       persistedRoomId &&
@@ -411,9 +411,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private loadRoomsTask = restartableTask(async () => {
-    await this.matrixService.flushMembership;
-    await this.matrixService.flushTimeline;
-    await this.matrixService.flushRoomState;
+    await this.matrixService.flushAll;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
     this.enterRoomInitially();
   });
@@ -446,7 +444,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           skills: await this.matrixService.loadDefaultSkills(),
         }),
       );
-      window.localStorage.setItem(newSessionIdPersistenceKey, roomId);
+      window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
       this.enterRoom(roomId);
     } catch (e) {
       console.log(e);
@@ -456,7 +454,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   });
 
   private get newSessionId() {
-    let id = window.localStorage.getItem(newSessionIdPersistenceKey);
+    let id = window.localStorage.getItem(NewSessionIdPersistenceKey);
     if (
       id &&
       this.roomResources.has(id) &&
@@ -529,7 +527,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
-    window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
+    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
   }
 
   @action private setRoomToRename(room: SessionRoomData) {
@@ -575,11 +573,11 @@ export default class AiAssistantPanel extends Component<Signature> {
       this.matrixService.roomResourcesCache.delete(roomId);
 
       if (this.newSessionId === roomId) {
-        window.localStorage.removeItem(newSessionIdPersistenceKey);
+        window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
       if (this.currentRoomId === roomId) {
-        window.localStorage.removeItem(currentRoomIdPersistenceKey);
+        window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {

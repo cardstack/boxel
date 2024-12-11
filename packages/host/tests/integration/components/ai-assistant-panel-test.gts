@@ -22,7 +22,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { currentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
+import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CommandResultEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -973,9 +973,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   module('suspending global error hook', (hooks) => {
     let tmp: any;
+    let uncaughtException: any;
     hooks.before(() => {
       tmp = QUnit.onUncaughtException;
-      QUnit.onUncaughtException = () => {};
+      QUnit.onUncaughtException = (err) => {
+        uncaughtException = err;
+      };
     });
 
     hooks.after(() => {
@@ -1004,6 +1007,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
+      assert.strictEqual(uncaughtException.message, 'Intentional error thrown');
       await percySnapshot(
         'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
       );
@@ -1059,7 +1063,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
       await click('[data-test-close-ai-assistant]');
       window.localStorage.setItem(
-        currentRoomIdPersistenceKey,
+        CurrentRoomIdPersistenceKey,
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
       await click('[data-test-open-ai-assistant]');
@@ -1070,7 +1074,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           "test room 2 is the most recently created room and it's opened initially",
         );
     } finally {
-      window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+      window.localStorage.removeItem(CurrentRoomIdPersistenceKey); // Cleanup
     }
   });
 

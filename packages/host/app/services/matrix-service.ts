@@ -68,7 +68,7 @@ import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import { currentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
@@ -84,7 +84,6 @@ import type ResetService from './reset';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
-export const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
@@ -220,17 +219,32 @@ export default class MatrixService extends Service {
     return this.cardAPIModule.module as typeof CardAPI;
   }
 
-  get matrixSDK() {
+  private get matrixSDK() {
     if (!this.#matrixSDK) {
       throw new Error(`cannot use matrix SDK before it has loaded`);
     }
     return this.#matrixSDK;
   }
 
+  get privateChatPreset() {
+    return this.matrixSDK.Preset.PrivateChat;
+  }
+
+  get aiBotPowerLevel() {
+    return 50; // this is required to set the room name
+  }
+
+  get flushAll() {
+    return Promise.all([
+      this.flushMembership ?? Promise.resolve(),
+      this.flushTimeline ?? Promise.resolve(),
+      this.flushRoomState ?? Promise.resolve(),
+    ]);
+  }
+
   async logout() {
     try {
-      await this.flushMembership;
-      await this.flushTimeline;
+      await this.flushAll;
       clearAuth();
       this.postLoginCompleted = false;
       this.reset.resetAll();
@@ -616,7 +630,7 @@ export default class MatrixService extends Service {
   ) => {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
-      let currentSkillsConfig = await this.client.getStateEvent(
+      let currentSkillsConfig = await this.getStateEvent(
         roomId,
         SKILLS_STATE_EVENT_TYPE,
         '',
@@ -922,6 +936,23 @@ export default class MatrixService extends Service {
     return this.client.getStateEvent(roomId, eventType, stateKey);
   }
 
+  async getStateEventSafe(
+    roomId: string,
+    eventType: string,
+    stateKey: string = '',
+  ) {
+    try {
+      return await this.client.getStateEvent(roomId, eventType, stateKey);
+    } catch (e: unknown) {
+      if (e instanceof Error && 'errcode' in e && e.errcode === 'M_NOT_FOUND') {
+        // this is fine, it just means the state event doesn't exist yet
+        return undefined;
+      } else {
+        throw e;
+      }
+    }
+  }
+
   async sendStateEvent(
     roomId: string,
     eventType: string,
@@ -931,6 +962,31 @@ export default class MatrixService extends Service {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.sendStateEvent(roomId, eventType, content, stateKey);
+    });
+  }
+
+  async updateStateEvent(
+    roomId: string,
+    eventType: string,
+    stateKey: string = '',
+    transformContent: (
+      content: Record<string, any>,
+    ) => Promise<Record<string, any>>,
+  ) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      let currentContent = await this.getStateEventSafe(
+        roomId,
+        eventType,
+        stateKey,
+      );
+      let newContent = await transformContent(currentContent ?? {});
+      return this.client.sendStateEvent(
+        roomId,
+        eventType,
+        newContent,
+        stateKey,
+      );
     });
   }
 
@@ -1294,7 +1350,7 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   window.localStorage.removeItem('auth');
-  window.localStorage.removeItem(currentRoomIdPersistenceKey);
+  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {

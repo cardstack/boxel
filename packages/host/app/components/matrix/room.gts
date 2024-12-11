@@ -6,8 +6,15 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
+import {
+  enqueueTask,
+  restartableTask,
+  timeout,
+  all,
+  task,
+} from 'ember-concurrency';
 
+import perform from 'ember-concurrency/helpers/perform';
 import max from 'lodash/max';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -102,8 +109,8 @@ export default class Room extends Component<Signature> {
               <AiAssistantSkillMenu
                 class='skills'
                 @skills={{this.sortedSkills}}
-                @onChooseCard={{this.attachSkill}}
-                @onUpdateSkillIsActive={{this.updateSkillIsActiveTask}}
+                @onChooseCard={{perform this.attachSkillTask}}
+                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
                 data-test-skill-menu
               />
             {{/if}}
@@ -588,13 +595,15 @@ export default class Room extends Component<Signature> {
     return this.autoAttachmentResource.cards;
   }
 
-  updateSkillIsActiveTask = async (skillEventId: string, isActive: boolean) => {
-    await this.matrixService.updateSkillIsActive(
-      this.args.roomId,
-      skillEventId,
-      isActive,
-    );
-  };
+  updateSkillIsActiveTask = task(
+    async (skillEventId: string, isActive: boolean) => {
+      await this.matrixService.updateSkillIsActive(
+        this.args.roomId,
+        skillEventId,
+        isActive,
+      );
+    },
+  );
 
   private get canSend() {
     return (
@@ -622,7 +631,7 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  private attachSkill = async (card: SkillCard) => {
+  private attachSkillTask = task(async (card: SkillCard) => {
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandService.commandContext,
     );
@@ -632,7 +641,7 @@ export default class Room extends Component<Signature> {
         skills: [card],
       }),
     );
-  };
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

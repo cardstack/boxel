@@ -8,8 +8,6 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { AI_BOT_POWER_LEVEL } from '../services/matrix-service';
-
 import type MatrixService from '../services/matrix-service';
 
 export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
@@ -28,7 +26,7 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
     input: BaseCommandModule.CreateAIAssistantRoomInput,
   ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
     let { matrixService } = this;
-    let { matrixSDK, userId } = matrixService;
+    let { userId } = matrixService;
     if (!userId) {
       throw new Error(
         `bug: there is no userId associated with the matrix client`,
@@ -37,7 +35,7 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
     let server = userId!.split(':')[1];
     let aiBotFullId = `@${aiBotUsername}:${server}`;
     let { room_id: roomId } = await matrixService.createRoom({
-      preset: matrixSDK.Preset.PrivateChat,
+      preset: matrixService.privateChatPreset,
       invite: [aiBotFullId],
       name: input.name,
       topic: undefined,
@@ -51,7 +49,7 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
     await this.matrixService.setPowerLevel(
       roomId,
       aiBotFullId,
-      AI_BOT_POWER_LEVEL,
+      matrixService.aiBotPowerLevel,
     );
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomResult } = commandModule;

@@ -34,7 +34,7 @@ import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import { sessionLocalStorageKey } from '../utils/local-storage-keys';
+import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
@@ -202,7 +202,7 @@ class RealmResource {
     this.fetchInfoTask.cancelAll();
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
-    window.localStorage.removeItem(sessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
   private fetchingInfo: Promise<void> | undefined;
@@ -659,7 +659,7 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    let sessionsString = window.localStorage.getItem(sessionLocalStorageKey);
+    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
     if (sessionsString) {
       return JSON.parse(sessionsString);
     }
@@ -667,12 +667,12 @@ let SessionStorage = {
   },
   persist(realmURL: string, token: string | undefined) {
     let sessionStr =
-      window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
     let session = JSON.parse(sessionStr);
     if (session[realmURL] !== token) {
       session[realmURL] = token;
       window.localStorage.setItem(
-        sessionLocalStorageKey,
+        SessionLocalStorageKey,
         JSON.stringify(session),
       );
     }

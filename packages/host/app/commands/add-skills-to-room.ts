@@ -30,28 +30,21 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
       roomId,
       { includeComputeds: true, maybeRelativeURL: null },
     );
-    let skillEventIdsStateEvent: Record<string, any> = {};
-    try {
-      skillEventIdsStateEvent = await matrixService.getStateEvent(
-        roomId,
-        SKILLS_STATE_EVENT_TYPE,
-        '',
-      );
-    } catch (e: unknown) {
-      if (e instanceof Error && 'errcode' in e && e.errcode === 'M_NOT_FOUND') {
-        // this is fine, it just means the state event doesn't exist yet
-      } else {
-        throw e;
-      }
-    }
-    await matrixService.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
-      enabledEventIds: [
-        ...new Set([
-          ...(skillEventIdsStateEvent?.enabledEventIds || []),
-          ...roomSkillEventIds,
-        ]),
-      ],
-      disabledEventIds: [...(skillEventIdsStateEvent?.disabledEventIds || [])],
-    });
+    await matrixService.updateStateEvent(
+      roomId,
+      SKILLS_STATE_EVENT_TYPE,
+      '',
+      async (oldContent: Record<string, any>) => {
+        return {
+          enabledEventIds: [
+            ...new Set([
+              ...(oldContent.enabledEventIds || []),
+              ...roomSkillEventIds,
+            ]),
+          ],
+          disabledEventIds: [...(oldContent.disabledEventIds || [])],
+        };
+      },
+    );
   }
 }
