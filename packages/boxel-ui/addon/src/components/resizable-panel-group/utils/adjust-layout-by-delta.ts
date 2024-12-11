@@ -1,5 +1,5 @@
 import { fuzzyLayoutsEqual } from './fuzzy-layouts-equal.ts';
-import { fuzzyNumbersEqual } from './fuzzy-numbers.ts';
+import { fuzzyCompareNumbers, fuzzyNumbersEqual } from './fuzzy-numbers.ts';
 import { resizePanel } from './resize-panel.ts';
 import type { ResizablePanelConstraints } from './types.ts';
 
@@ -73,6 +73,39 @@ export function adjustLayoutByDelta({
 
     const minAbsDelta = Math.min(Math.abs(delta), Math.abs(maxAvailableDelta));
     delta = delta < 0 ? 0 - minAbsDelta : minAbsDelta;
+  }
+
+  {
+    // WORKAROUND: For a collapsed panel, we need to adjust the delta to the minimum size.
+    // TODO: Address the following inconsistent behaviors:
+    // - When dragging outward on a collapsed panel, it opens the panel, but dragging inward does not collapse it again.
+    //   The behavior should match that of dragging an opened panel where the cursor delta reaches the panel's minimum size.
+    // - When dragging an opened panel inward and the delta reaches the panel's minimum size, the panel collapses.
+    //   However, if you continue dragging outward, it does not reopen as it does in the first scenario.
+    const pivotIndex = delta < 0 ? secondPivotIndex : firstPivotIndex;
+
+    const initSize = initialLayout[pivotIndex];
+    if (initSize == null) {
+      throw new Error(
+        `Previous layout not found for panel index ${pivotIndex}`,
+      );
+    }
+
+    const prevSize = prevLayout[pivotIndex];
+    if (prevSize == null) {
+      throw new Error(
+        `Previous layout not found for panel index ${pivotIndex}`,
+      );
+    }
+
+    let minSize = panelConstraintsArray[pivotIndex]?.minSize;
+    if (
+      (initSize == 0 || prevSize == 0) &&
+      minSize != null &&
+      fuzzyCompareNumbers(Math.abs(delta), minSize) < 0
+    ) {
+      delta = delta >= 0 ? minSize : 0 - minSize;
+    }
   }
 
   {

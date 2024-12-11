@@ -356,18 +356,18 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assertPanels({
           assert,
           orientation: orientationProperties.orientation,
-          panelSizesInPixels: ['0px', '300px'],
+          panelSizesInPixels: ['120px', '180px'],
         });
 
         await moveResizePanelHandle({
           panelIndex: 0,
           orientation: orientationProperties.orientation,
-          moveDelta: 40,
+          moveDelta: 10,
         });
         assertPanels({
           assert,
           orientation: orientationProperties.orientation,
-          panelSizesInPixels: ['120px', '180px'],
+          panelSizesInPixels: ['150px', '150px'],
         });
 
         await doubleClick('[data-test-resize-handle]');
@@ -383,7 +383,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assertPanels({
           assert,
           orientation: orientationProperties.orientation,
-          panelSizesInPixels: ['120px', '180px'],
+          panelSizesInPixels: ['150px', '150px'],
         });
       });
 
