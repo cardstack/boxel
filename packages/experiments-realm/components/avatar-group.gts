@@ -40,7 +40,7 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
       .avatar-group {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-sm);
         min-width: 0;
       }
       .avatar-thumbnail {

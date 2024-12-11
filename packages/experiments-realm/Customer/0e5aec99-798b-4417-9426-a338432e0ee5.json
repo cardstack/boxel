@@ -2,30 +2,45 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Sophia Nguyen",
-      "primaryEmail": null,
-      "secondaryEmail": null,
+      "firstName": "Elma",
+      "lastName": "Odsey",
+      "position": "Head of Recruitment",
+      "department": "app",
+      "primaryEmail": "elma@gmail.com",
+      "secondaryEmail": "elmaodsey@gmail.com",
       "phoneMobile": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "mobile",
+        "country": 6,
+        "area": 10,
+        "number": 3810923
       },
       "phoneOffice": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "office",
+        "country": 615,
+        "area": 724,
+        "number": 3789
       },
       "status": {
-        "index": null,
-        "label": null
+        "index": 0,
+        "label": "Customer"
       },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "https://www.google.com/"
+        },
+        {
+          "label": "X",
+          "value": "https://www.google.com/"
+        }
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2"
     },
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
         }
       }
     },
