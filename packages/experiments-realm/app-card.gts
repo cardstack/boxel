@@ -346,7 +346,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
             ? {
                 ...doc,
                 meta: {
-                  ...doc.meta,
+                  ...doc.data.meta,
                   realmURL: this.args.currentRealm,
                 },
               }

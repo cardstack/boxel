@@ -22,8 +22,7 @@ import {
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-// @ts-expect-error path resolution issue
-import { AppCard, Tab } from '/catalog/app-card';
+import { AppCard, Tab } from './app-card';
 import {
   Query,
   CardError,
@@ -93,7 +92,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeFilter = filter;
   }
   //tabs
-  @tracked activeTabId: string = this.args.model.tabs[0].tabId;
+  @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
   @tracked private searchKey = '';
@@ -119,7 +118,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       attributes: { displayName: string; total: number };
     }[];
 
-    for (let tab of this.tabs) {
+    for (let tab of this.tabs ?? []) {
       let filters = this.filterMap.get(tab.tabId);
       if (filters) {
         for (let filter of filters) {
@@ -143,11 +142,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   });
 
   get filters() {
-    return this.filterMap.get(this.activeTabId)!;
+    return this.filterMap.get(this.activeTabId!)!;
   }
 
   @action setActiveFilter() {
-    this.activeFilter = this.filterMap.get(this.activeTabId)![0];
+    this.activeFilter = this.filterMap.get(this.activeTabId!)![0];
   }
 
   //Tabs
@@ -164,7 +163,8 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   }
   get activeTab() {
     return (
-      this.tabs.find((t: Tab) => t.tabId === this.activeTabId) ?? this.tabs[0]
+      this.tabs?.find((t: Tab) => t.tabId === this.activeTabId) ??
+      this.tabs?.[0]
     );
   }
 
