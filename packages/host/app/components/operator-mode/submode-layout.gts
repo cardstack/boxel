@@ -11,10 +11,11 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import {
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@cardstack/boxel-ui/components';
+import { modifier } from 'ember-modifier';
+
+import { TrackedObject } from 'tracked-built-ins';
+
+import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 
@@ -43,11 +44,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 const { APP } = ENV;
 
-type PanelWidths = {
-  submodePanel: number;
-  aiAssistantPanel: number;
-};
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -66,15 +62,35 @@ interface Signature {
   };
 }
 
+let handleWindowResizeModifier = modifier(
+  (element, [onWindowResize]: [(width: number) => void]) => {
+    let updateWindowWidth = () => {
+      let boundingClient = element.getBoundingClientRect();
+      onWindowResize(boundingClient.width);
+    };
+    updateWindowWidth();
+    window.addEventListener('resize', updateWindowWidth);
+
+    return () => {
+      window.removeEventListener('resize', updateWindowWidth);
+    };
+  },
+);
+
+type PanelWidths = {
+  defaultWidth: number | null;
+  minWidth: number | null;
+};
+
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private isAiAssistantVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
-  private panelWidths: PanelWidths = {
-    submodePanel: 500,
-    aiAssistantPanel: 200,
-  };
+  private aiPanelWidths: PanelWidths = new TrackedObject({
+    defaultWidth: 30,
+    minWidth: 25,
+  });
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
@@ -82,6 +98,17 @@ export default class SubmodeLayout extends Component<Signature> {
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
+
+  onWindowResize = (windowWidth: number) => {
+    let aiPanelDefaultWidthInPixels = 371;
+    if (windowWidth < aiPanelDefaultWidthInPixels) {
+      aiPanelDefaultWidthInPixels = windowWidth;
+    }
+    let aiPanelDefaultWidth = (aiPanelDefaultWidthInPixels / windowWidth) * 100;
+
+    this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
+    this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
+  };
 
   get operatorModeController(): IndexController {
     return this.operatorModeStateService.operatorModeController;
@@ -188,12 +215,6 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action
-  private onPanelResize(panels: ResizablePanel[]) {
-    this.panelWidths.submodePanel = panels[0]?.lengthPx;
-    this.panelWidths.aiAssistantPanel = panels[1]?.lengthPx;
-  }
-
-  @action
   private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
   }
@@ -226,19 +247,16 @@ export default class SubmodeLayout extends Component<Signature> {
   });
 
   <template>
-    <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
+    <div
+      {{handleWindowResizeModifier this.onWindowResize}}
+      class='submode-layout {{this.aiAssistantVisibilityClass}}'
+    >
       <ResizablePanelGroup
         @orientation='horizontal'
-        @onPanelChange={{this.onPanelResize}}
         class='columns'
         as |ResizablePanel ResizeHandle|
       >
-        <ResizablePanel
-          @defaultLengthFraction={{1}}
-          @minLengthPx={{371}}
-          @collapsible={{false}}
-          class='main-panel'
-        >
+        <ResizablePanel class='main-panel'>
           <div class='top-left-menu'>
             <IconButton
               @icon={{BoxelIcon}}
@@ -307,21 +325,24 @@ export default class SubmodeLayout extends Component<Signature> {
             />
           {{/if}}
         </ResizablePanel>
-        {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+        {{#if
+          (and
+            APP.experimentalAIEnabled
+            (not @hideAiAssistant)
+            this.isAiAssistantVisible
+          )
+        }}
           <ResizablePanel
-            @defaultLengthFraction={{0.3}}
-            @minLengthPx={{371}}
+            @defaultSize={{this.aiPanelWidths.defaultWidth}}
+            @minSize={{this.aiPanelWidths.minWidth}}
             @collapsible={{false}}
-            @isHidden={{not this.isAiAssistantVisible}}
           >
-            {{#if this.isAiAssistantVisible}}
-              <AiAssistantPanel
-                @onClose={{this.toggleChat}}
-                @resizeHandle={{ResizeHandle}}
-                class='ai-assistant-panel
-                  {{if this.workspaceChooserOpened "left-border"}}'
-              />
-            {{/if}}
+            <AiAssistantPanel
+              @onClose={{this.toggleChat}}
+              @resizeHandle={{ResizeHandle}}
+              class='ai-assistant-panel
+                {{if this.workspaceChooserOpened "left-border"}}'
+            />
           </ResizablePanel>
         {{/if}}
       </ResizablePanelGroup>

@@ -21,7 +21,6 @@ import window from 'ember-window-mock';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import type { ResizablePanel } from '@cardstack/boxel-ui/components';
 import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
@@ -97,22 +96,23 @@ type SelectedAccordionItem = 'schema-editor' | null;
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultLeftPanelWidth =
-  (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
-  (document.documentElement.clientWidth - 40 - 36);
+  ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
+    (document.documentElement.clientWidth - 40 - 36)) *
+  100;
 const defaultPanelWidths: PanelWidths = {
   // 14rem as a fraction of the layout width
   leftPanel: defaultLeftPanelWidth,
-  codeEditorPanel: (1 - defaultLeftPanelWidth) / 2,
-  rightPanel: (1 - defaultLeftPanelWidth) / 2,
-  emptyCodeModePanel: 1 - defaultLeftPanelWidth,
+  codeEditorPanel: (100 - defaultLeftPanelWidth) / 2,
+  rightPanel: (100 - defaultLeftPanelWidth) / 2,
+  emptyCodeModePanel: 100 - defaultLeftPanelWidth,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
-const ApproximateRecentPanelDefaultFraction =
-  (43 + 40 * 3.5) / (document.documentElement.clientHeight - 140); // room for about 3.5 recent files
+const ApproximateRecentPanelDefaultPercentage =
+  ((43 + 40 * 3.5) / (document.documentElement.clientHeight - 140)) * 100; // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
-  filePanel: 1 - ApproximateRecentPanelDefaultFraction,
-  recentPanel: ApproximateRecentPanelDefaultFraction,
+  filePanel: 100 - ApproximateRecentPanelDefaultPercentage,
+  recentPanel: ApproximateRecentPanelDefaultPercentage,
 };
 
 const waiter = buildWaiter('code-submode:waiter');
@@ -133,8 +133,8 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private itemToDelete: CardDef | URL | null | undefined;
 
   private hasUnsavedCardChanges = false;
-  private panelWidths: PanelWidths;
-  private panelHeights: PanelHeights;
+  private defaultPanelWidths: PanelWidths;
+  private defaultPanelHeights: PanelHeights;
   private updateCursorByName: ((name: string) => void) | undefined;
   #currentCard: CardDef | undefined;
 
@@ -165,15 +165,43 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
-    this.panelWidths = window.localStorage.getItem(CodeModePanelWidths)
+
+    let persistedDefaultPanelWidths = window.localStorage.getItem(
+      CodeModePanelWidths,
+    )
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(window.localStorage.getItem(CodeModePanelWidths))
-      : {};
-
-    this.panelHeights = window.localStorage.getItem(CodeModePanelHeights)
+      : null;
+    let persistedDefaultPanelHeights = window.localStorage.getItem(
+      CodeModePanelHeights,
+    )
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(window.localStorage.getItem(CodeModePanelHeights))
-      : {};
+      : null;
+    let sum = (obj: Record<string, number>) =>
+      Object.values(obj).reduce(
+        (sum, value) => sum + (value ? Number(value.toFixed(0)) : 0),
+        0,
+      );
+
+    this.defaultPanelWidths =
+      persistedDefaultPanelWidths &&
+      sum({
+        ...persistedDefaultPanelWidths,
+        emptyCodeModePanel: this.codePath
+          ? 0
+          : persistedDefaultPanelWidths.emptyCodeModePanel,
+        codeEditorPanel: !this.codePath
+          ? 0
+          : persistedDefaultPanelWidths.codeEditorPanel,
+        rightPanel: !this.codePath ? 0 : persistedDefaultPanelWidths.rightPanel,
+      }) <= 100
+        ? persistedDefaultPanelWidths
+        : defaultPanelWidths;
+    this.defaultPanelHeights =
+      persistedDefaultPanelHeights && sum(persistedDefaultPanelHeights) <= 100
+        ? persistedDefaultPanelHeights
+        : defaultPanelHeights;
 
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
@@ -506,25 +534,30 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private onHorizontalPanelChange(panels: ResizablePanel[]) {
-    this.panelWidths.leftPanel = panels[0]?.lengthPx;
-    this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
-    this.panelWidths.rightPanel = panels[2]?.lengthPx;
+  private onHorizontalLayoutChange(layout: number[]) {
+    if (layout.length > 2) {
+      this.defaultPanelWidths.leftPanel = layout[0];
+      this.defaultPanelWidths.codeEditorPanel = layout[1];
+      this.defaultPanelWidths.rightPanel = layout[2];
+    } else {
+      this.defaultPanelWidths.leftPanel = layout[0];
+      this.defaultPanelWidths.emptyCodeModePanel = layout[1];
+    }
 
     window.localStorage.setItem(
       CodeModePanelWidths,
-      JSON.stringify(this.panelWidths),
+      JSON.stringify(this.defaultPanelWidths),
     );
   }
 
   @action
-  private onVerticalPanelChange(panels: ResizablePanel[]) {
-    this.panelHeights.filePanel = panels[0]?.lengthPx;
-    this.panelHeights.recentPanel = panels[1]?.lengthPx;
+  private onVerticalLayoutChange(layout: number[]) {
+    this.defaultPanelHeights.filePanel = layout[0];
+    this.defaultPanelHeights.recentPanel = layout[1];
 
     window.localStorage.setItem(
       CodeModePanelHeights,
-      JSON.stringify(this.panelHeights),
+      JSON.stringify(this.defaultPanelHeights),
     );
   }
 
@@ -739,24 +772,20 @@ export default class CodeSubmode extends Component<Signature> {
         </div>
         <ResizablePanelGroup
           @orientation='horizontal'
-          @onPanelChange={{this.onHorizontalPanelChange}}
+          @onLayoutChange={{this.onHorizontalLayoutChange}}
           class='columns'
           as |ResizablePanel ResizeHandle|
         >
-          <ResizablePanel
-            @defaultLengthFraction={{defaultPanelWidths.leftPanel}}
-            @lengthPx={{this.panelWidths.leftPanel}}
-          >
+          <ResizablePanel @defaultSize={{this.defaultPanelWidths.leftPanel}}>
             <div class='column'>
               <ResizablePanelGroup
                 @orientation='vertical'
-                @onPanelChange={{this.onVerticalPanelChange}}
+                @onLayoutChange={{this.onVerticalLayoutChange}}
                 @reverseCollapse={{true}}
                 as |VerticallyResizablePanel VerticallyResizeHandle|
               >
                 <VerticallyResizablePanel
-                  @defaultLengthFraction={{defaultPanelHeights.filePanel}}
-                  @lengthPx={{this.panelHeights.filePanel}}
+                  @defaultSize={{this.defaultPanelHeights.filePanel}}
                 >
                   <CodeSubmodeLeftPanelToggle
                     @fileView={{this.fileView}}
@@ -786,9 +815,8 @@ export default class CodeSubmode extends Component<Signature> {
                 </VerticallyResizablePanel>
                 <VerticallyResizeHandle />
                 <VerticallyResizablePanel
-                  @defaultLengthFraction={{defaultPanelHeights.recentPanel}}
-                  @lengthPx={{this.panelHeights.recentPanel}}
-                  @minLengthPx={{100}}
+                  @defaultSize={{this.defaultPanelHeights.recentPanel}}
+                  @minSize={{20}}
                 >
                   <InnerContainer
                     class='recent-files-panel'
@@ -808,9 +836,8 @@ export default class CodeSubmode extends Component<Signature> {
           <ResizeHandle />
           {{#if this.codePath}}
             <ResizablePanel
-              @defaultLengthFraction={{defaultPanelWidths.codeEditorPanel}}
-              @lengthPx={{this.panelWidths.codeEditorPanel}}
-              @minLengthPx={{300}}
+              @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
+              @minSize={{20}}
             >
               <InnerContainer>
                 {{#if this.isReady}}
@@ -833,10 +860,7 @@ export default class CodeSubmode extends Component<Signature> {
               </InnerContainer>
             </ResizablePanel>
             <ResizeHandle />
-            <ResizablePanel
-              @defaultLengthFraction={{defaultPanelWidths.rightPanel}}
-              @lengthPx={{this.panelWidths.rightPanel}}
-            >
+            <ResizablePanel @defaultSize={{this.defaultPanelWidths.rightPanel}}>
               <InnerContainer>
                 {{#if this.isReady}}
                   {{#if this.isCardPreviewError}}
@@ -951,8 +975,7 @@ export default class CodeSubmode extends Component<Signature> {
             </ResizablePanel>
           {{else}}
             <ResizablePanel
-              @defaultLengthFraction={{defaultPanelWidths.emptyCodeModePanel}}
-              @lengthPx={{this.panelWidths.emptyCodeModePanel}}
+              @defaultLengthFraction={{this.defaultPanelWidths.emptyCodeModePanel}}
             >
               <InnerContainer class='empty-container' data-test-empty-code-mode>
                 <File width='40' height='40' role='presentation' />
@@ -1122,6 +1145,11 @@ export default class CodeSubmode extends Component<Signature> {
         border-radius: 0;
         box-shadow: none;
         overflow: auto;
+      }
+
+      :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {
+        box-shadow: var(--boxel-deep-box-shadow);
+        border-radius: var(--boxel-border-radius-xl);
       }
     </style>
   </template>
