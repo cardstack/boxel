@@ -635,12 +635,10 @@ export default class Room extends Component<Signature> {
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandService.commandContext,
     );
-    await addSkillsToRoomCommand.execute(
-      new (await addSkillsToRoomCommand.getInputType())({
-        roomId: this.args.roomId,
-        skills: [card],
-      }),
-    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.args.roomId,
+      skills: [card],
+    });
   });
 }
 

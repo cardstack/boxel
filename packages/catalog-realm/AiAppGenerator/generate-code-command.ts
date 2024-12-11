@@ -258,12 +258,10 @@ import { on } from '@ember/modifier';
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandContext,
     );
-    await addSkillsToRoomCommand.execute(
-      new (await addSkillsToRoomCommand.getInputType())({
-        roomId: input.roomId,
-        skills: [this.skillCard],
-      }),
-    );
+    await addSkillsToRoomCommand.execute({
+      roomId: input.roomId,
+      skills: [this.skillCard],
+    });
     await this.commandContext.sendAiAssistantMessage({
       roomId: input.roomId,
       show: false, // maybe? open the side panel

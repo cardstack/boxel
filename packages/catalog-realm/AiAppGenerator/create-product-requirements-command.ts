@@ -73,20 +73,16 @@ export default class CreateProductRequirementsInstance extends Command<
     let createRoomCommand = new CreateAIAssistantRoomCommand(
       this.commandContext,
     );
-    let { roomId } = await createRoomCommand.execute(
-      new (await createRoomCommand.getInputType())({
-        name: 'Product Requirements Doc Creation',
-      }),
-    );
+    let { roomId } = await createRoomCommand.execute({
+      name: 'Product Requirements Doc Creation',
+    });
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandContext,
     );
-    await addSkillsToRoomCommand.execute(
-      new (await addSkillsToRoomCommand.getInputType())({
-        roomId,
-        skills: [this.skillCard],
-      }),
-    );
+    await addSkillsToRoomCommand.execute({
+      roomId,
+      skills: [this.skillCard],
+    });
     await this.commandContext.sendAiAssistantMessage({
       roomId,
       show: false, // maybe? open the side panel

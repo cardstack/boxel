@@ -432,18 +432,15 @@ export default class AiAssistantPanel extends Component<Signature> {
       let createRoomCommand = new CreateAIAssistantRoomCommand(
         this.commandService.commandContext,
       );
-      let InputType = await createRoomCommand.getInputType();
-      let { roomId } = await createRoomCommand.execute(new InputType({ name }));
+      let { roomId } = await createRoomCommand.execute({ name });
 
       let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
         this.commandService.commandContext,
       );
-      await addSkillsToRoomCommand.execute(
-        new (await addSkillsToRoomCommand.getInputType())({
-          roomId,
-          skills: await this.matrixService.loadDefaultSkills(),
-        }),
-      );
+      await addSkillsToRoomCommand.execute({
+        roomId,
+        skills: await this.matrixService.loadDefaultSkills(),
+      });
       window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
       this.enterRoom(roomId);
     } catch (e) {

@@ -23,7 +23,6 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
 
 import GenerateCodeCommand from './AiAppGenerator/generate-code-command';
-import { GenerateCodeInput } from './AiAppGenerator/generate-code-command';
 import { restartableTask } from 'ember-concurrency';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
@@ -254,19 +253,14 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     this.errorMessage = '';
     try {
       let createRoomCommand = new CreateAIAssistantRoomCommand(commandContext);
-      let { roomId } = await createRoomCommand.execute(
-        new (await createRoomCommand.getInputType())({
-          name: 'AI Assistant Room',
-        }),
-      );
+      let { roomId } = await createRoomCommand.execute({
+        name: 'AI Assistant Room',
+      });
       let generateCodeCommand = new GenerateCodeCommand(commandContext);
-      let generateCodeInput = new GenerateCodeInput({
-        productRequirements: this.args.model,
+      let { code, appName } = await generateCodeCommand.execute({
+        productRequirements: this.args.model as ProductRequirementDocument,
         roomId,
       });
-
-      let { code, appName } =
-        await generateCodeCommand.execute(generateCodeInput);
 
       // Generate a unique name for the module using timestamp
       let timestamp = Date.now();
@@ -274,13 +268,12 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       let filePath = `${moduleName}.gts`;
       let moduleId = new URL(moduleName, this.currentRealm).href;
       let writeFileCommand = new WriteTextFileCommand(commandContext);
-      let writeFileInput = new (await writeFileCommand.getInputType())({
+
+      await writeFileCommand.execute({
         path: filePath,
         content: code,
-        realm: this.currentRealm,
+        realm: this.currentRealm?.href,
       });
-
-      await writeFileCommand.execute(writeFileInput);
       this.args.model.moduleURL = moduleId;
     } catch (e) {
       console.error(e);
@@ -325,23 +318,17 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       });
 
       let saveCardCommand = new SaveCardCommand(commandContext);
-      let SaveCardInputType = await saveCardCommand.getInputType();
-
-      let saveCardInput = new SaveCardInputType({
-        realm: this.currentRealm,
+      await saveCardCommand.execute({
+        realm: this.currentRealm.href,
         card: myAppCard,
       });
-      await saveCardCommand.execute(saveCardInput);
 
       // show the app card
 
       let showCardCommand = new ShowCardCommand(commandContext);
-      let ShowCardInput = await showCardCommand.getInputType();
-
-      let showAppCardInput = new ShowCardInput({
+      await showCardCommand.execute({
         cardToShow: myAppCard,
       });
-      await showCardCommand.execute(showAppCardInput);
 
       if (!myAppCard) {
         throw new Error('Could not create card');

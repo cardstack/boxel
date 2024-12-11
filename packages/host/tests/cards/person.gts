@@ -40,11 +40,9 @@ export class Person extends CardDef {
       let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
         commandContext,
       );
-      let { roomId } = await createAIAssistantRoomCommand.execute(
-        new (await createAIAssistantRoomCommand.getInputType())({
-          name: 'AI Assistant Room',
-        }),
-      );
+      let { roomId } = await createAIAssistantRoomCommand.execute({
+        name: 'AI Assistant Room',
+      });
       let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
       commandContext.sendAiAssistantMessage({
         roomId,

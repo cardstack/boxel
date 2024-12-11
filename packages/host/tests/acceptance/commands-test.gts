@@ -136,13 +136,10 @@ module('Acceptance | Commands tests', function (hooks) {
           participants: input.participants,
         });
         let saveCardCommand = new SaveCardCommand(this.commandContext);
-        const SaveCardInput = await saveCardCommand.getInputType();
-        await saveCardCommand.execute(
-          new SaveCardInput({
-            card: meeting,
-            realm: testRealmURL,
-          }),
-        );
+        await saveCardCommand.execute({
+          card: meeting,
+          realm: testRealmURL,
+        });
 
         // Mutate and save again
         let patchCardCommand = new PatchCardCommand(this.commandContext, {
@@ -152,11 +149,9 @@ module('Acceptance | Commands tests', function (hooks) {
         let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
           this.commandContext,
         );
-        let { roomId } = await createAIAssistantRoomCommand.execute(
-          new (await createAIAssistantRoomCommand.getInputType())({
-            name: 'AI Assistant Room',
-          }),
-        );
+        let { roomId } = await createAIAssistantRoomCommand.execute({
+          name: 'AI Assistant Room',
+        });
         await this.commandContext.sendAiAssistantMessage({
           roomId,
           prompt: `Change the topic of the meeting to "${input.topic}"`,
@@ -167,13 +162,9 @@ module('Acceptance | Commands tests', function (hooks) {
         await patchCardCommand.waitForNextCompletion();
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
-        const ShowCardInput = await showCardCommand.getInputType();
-        await showCardCommand.execute(
-          new ShowCardInput({
-            cardToShow: meeting,
-            placement: 'addToStack',
-          }),
-        );
+        await showCardCommand.execute({
+          cardToShow: meeting,
+        });
 
         return undefined;
       }
@@ -222,11 +213,9 @@ module('Acceptance | Commands tests', function (hooks) {
           let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
             commandContext,
           );
-          let { roomId } = await createAIAssistantRoomCommand.execute(
-            new (await createAIAssistantRoomCommand.getInputType())({
-              name: 'AI Assistant Room',
-            }),
-          );
+          let { roomId } = await createAIAssistantRoomCommand.execute({
+            name: 'AI Assistant Room',
+          });
           let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
           commandContext.sendAiAssistantMessage({
             roomId,
@@ -245,12 +234,10 @@ module('Acceptance | Commands tests', function (hooks) {
             undefined,
           );
           setOwner(scheduleMeeting, getOwner(this)!);
-          await scheduleMeeting.execute(
-            new ScheduleMeetingInput({
-              topic: 'Meeting with Hassan',
-              participants: [this.args.model],
-            }),
-          );
+          await scheduleMeeting.execute({
+            topic: 'Meeting with Hassan',
+            participants: [this.args.model as Person],
+          });
         };
         runDelayCommandViaAiAssistant = async () => {
           let commandContext = this.args.context?.commandContext;
