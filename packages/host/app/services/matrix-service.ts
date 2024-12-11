@@ -4,8 +4,6 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import format from 'date-fns/format';
-
 import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import {
@@ -23,7 +21,6 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   type LooseSingleCardDocument,
   markdownToHtml,
-  aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
   loaderFor,
@@ -40,7 +37,6 @@ import {
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
-import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import {
   type Submode,
   Submodes,
@@ -72,6 +68,8 @@ import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
+import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
@@ -86,11 +84,10 @@ import type ResetService from './reset';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
-const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
-const SKILLS_STATE_EVENT_TYPE = 'com.cardstack.boxel.room.skills';
+export const SKILLS_STATE_EVENT_TYPE = 'com.cardstack.boxel.room.skills';
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -111,7 +108,7 @@ export default class MatrixService extends Service {
   @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
 
-  profile = getMatrixProfile(this, () => this.client.getUserId());
+  profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
 
@@ -193,7 +190,7 @@ export default class MatrixService extends Service {
     return this.client.isLoggedIn() && this.postLoginCompleted;
   }
 
-  get client() {
+  private get client() {
     if (!this._client) {
       throw new Error(`cannot use matrix client before matrix SDK has loaded`);
     }
@@ -229,10 +226,25 @@ export default class MatrixService extends Service {
     return this.#matrixSDK;
   }
 
+  get privateChatPreset() {
+    return this.matrixSDK.Preset.PrivateChat;
+  }
+
+  get aiBotPowerLevel() {
+    return 50; // this is required to set the room name
+  }
+
+  get flushAll() {
+    return Promise.all([
+      this.flushMembership ?? Promise.resolve(),
+      this.flushTimeline ?? Promise.resolve(),
+      this.flushRoomState ?? Promise.resolve(),
+    ]);
+  }
+
   async logout() {
     try {
-      await this.flushMembership;
-      await this.flushTimeline;
+      await this.flushAll;
       clearAuth();
       this.postLoginCompleted = false;
       this.reset.resetAll();
@@ -438,49 +450,6 @@ export default class MatrixService extends Service {
     return this.client.createRealmSession(realmURL);
   }
 
-  async createRoom(
-    name: string,
-    invites: string[], // these can be local names
-    topic?: string,
-  ): Promise<string> {
-    let userId = this.client.getUserId();
-    if (!userId) {
-      throw new Error(
-        `bug: there is no userId associated with the matrix client`,
-      );
-    }
-    let invite = invites.map((i) =>
-      i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`,
-    );
-    let { room_id: roomId } = await this.client.createRoom({
-      preset: this.matrixSDK.Preset.PrivateChat,
-      invite,
-      name,
-      topic,
-      room_alias_name: encodeURIComponent(
-        `${name} - ${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
-          this.userId
-        }`,
-      ),
-    });
-    let roomData = this.ensureRoomData(roomId);
-    invites.map((i) => {
-      let fullId = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;
-      if (i === aiBotUsername) {
-        roomData.mutex.dispatch(async () => {
-          return this.client.setPowerLevel(
-            roomId,
-            fullId,
-            AI_BOT_POWER_LEVEL,
-            null,
-          );
-        });
-      }
-    });
-    this.addSkillCardsToRoom(roomId, await this.loadDefaultSkills());
-    return roomId;
-  }
-
   private async sendEvent(
     roomId: string,
     eventType: string,
@@ -553,12 +522,20 @@ export default class MatrixService extends Service {
     }
   }
 
-  private async getCardEventIds(
+  async addSkillCardsToRoomHistory(
+    skills: SkillCard[],
+    roomId: string,
+    opts?: CardAPI.SerializeOpts,
+  ): Promise<string[]> {
+    return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
+  }
+
+  async addCardsToRoom(
     cards: CardDef[],
     roomId: string,
     cardHashes: Map<string, string>,
     opts?: CardAPI.SerializeOpts,
-  ) {
+  ): Promise<string[]> {
     if (!cards.length) {
       return [];
     }
@@ -622,7 +599,7 @@ export default class MatrixService extends Service {
       }
     }
 
-    let attachedCardsEventIds = await this.getCardEventIds(
+    let attachedCardsEventIds = await this.addCardsToRoom(
       attachedCards,
       roomId,
       this.cardHashes,
@@ -646,46 +623,6 @@ export default class MatrixService extends Service {
     } as CardMessageContent);
   }
 
-  public async addSkillCardsToRoom(
-    roomId: string,
-    skillCards: SkillCard[],
-  ): Promise<void> {
-    let attachedSkillEventIds = await this.getCardEventIds(
-      skillCards,
-      roomId,
-      this.skillCardHashes,
-      { includeComputeds: true, maybeRelativeURL: null },
-    );
-    let skillEventIdsStateEvent: Record<string, any> = {};
-    try {
-      skillEventIdsStateEvent = await this.client.getStateEvent(
-        roomId,
-        SKILLS_STATE_EVENT_TYPE,
-        '',
-      );
-    } catch (e: unknown) {
-      if (e instanceof Error && 'errcode' in e && e.errcode === 'M_NOT_FOUND') {
-        // this is fine, it just means the state event doesn't exist yet
-      } else {
-        throw e;
-      }
-    }
-    let roomData = this.ensureRoomData(roomId);
-    await roomData.mutex.dispatch(async () => {
-      await this.client.sendStateEvent(roomId, SKILLS_STATE_EVENT_TYPE, {
-        enabledEventIds: [
-          ...new Set([
-            ...(skillEventIdsStateEvent?.enabledEventIds || []),
-            ...attachedSkillEventIds,
-          ]),
-        ],
-        disabledEventIds: [
-          ...(skillEventIdsStateEvent?.disabledEventIds || []),
-        ],
-      });
-    });
-  }
-
   public updateSkillIsActive = async (
     roomId: string,
     skillEventId: string,
@@ -693,7 +630,7 @@ export default class MatrixService extends Service {
   ) => {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
-      let currentSkillsConfig = await this.client.getStateEvent(
+      let currentSkillsConfig = await this.getStateEvent(
         roomId,
         SKILLS_STATE_EVENT_TYPE,
         '',
@@ -720,21 +657,13 @@ export default class MatrixService extends Service {
   };
 
   public async sendAiAssistantMessage(params: {
-    roomId?: string; // if falsy we create a new room
-    show?: boolean; // if truthy, ensure the side panel to the room
+    roomId: string;
+    show?: boolean; // if truthy, ensure the side panel is open to the room
     prompt: string;
     attachedCards?: CardDef[];
-    skillCards?: SkillCard[];
     commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
   }): Promise<{ roomId: string }> {
     let roomId = params.roomId;
-    if (!roomId) {
-      roomId = await this.createRoom('AI Assistant', [aiBotUsername]);
-    }
-    if (params.skillCards?.length) {
-      this.addSkillCardsToRoom(roomId, params.skillCards);
-    }
-
     let html = markdownToHtml(params.prompt);
     let mappings = await basicMappings(this.loaderService.loader);
     let tools = [];
@@ -760,7 +689,7 @@ export default class MatrixService extends Service {
       });
     }
 
-    let attachedCardsEventIds = await this.getCardEventIds(
+    let attachedCardsEventIds = await this.addCardsToRoom(
       params.attachedCards ?? [],
       roomId,
       this.cardHashes,
@@ -952,6 +881,10 @@ export default class MatrixService extends Service {
     }
   }
 
+  async createRoom(opts: MatrixSDK.ICreateRoomOpts) {
+    return this.client.createRoom(opts);
+  }
+
   async createCard<T extends typeof BaseDef>(
     codeRef: ResolvedCodeRef,
     attr: Record<string, any>,
@@ -970,6 +903,146 @@ export default class MatrixService extends Service {
       undefined,
     );
     return card;
+  }
+
+  async getProfileInfo(userId: string) {
+    return await this.client.getProfileInfo(userId);
+  }
+
+  async getThreePids() {
+    return await this.client.getThreePids();
+  }
+
+  async addThreePidOnly(data: MatrixSDK.IAddThreePidOnlyBody) {
+    return await this.client.addThreePidOnly(data);
+  }
+
+  async deleteThreePid(medium: string, address: string) {
+    return await this.client.deleteThreePid(medium, address);
+  }
+
+  async setPowerLevel(roomId: string, userId: string, powerLevel: number) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.setPowerLevel(roomId, userId, powerLevel);
+    });
+  }
+
+  async getStateEvent(
+    roomId: string,
+    eventType: string,
+    stateKey: string = '',
+  ) {
+    return this.client.getStateEvent(roomId, eventType, stateKey);
+  }
+
+  async getStateEventSafe(
+    roomId: string,
+    eventType: string,
+    stateKey: string = '',
+  ) {
+    try {
+      return await this.client.getStateEvent(roomId, eventType, stateKey);
+    } catch (e: unknown) {
+      if (e instanceof Error && 'errcode' in e && e.errcode === 'M_NOT_FOUND') {
+        // this is fine, it just means the state event doesn't exist yet
+        return undefined;
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async sendStateEvent(
+    roomId: string,
+    eventType: string,
+    content: Record<string, any>,
+    stateKey: string = '',
+  ) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.sendStateEvent(roomId, eventType, content, stateKey);
+    });
+  }
+
+  async updateStateEvent(
+    roomId: string,
+    eventType: string,
+    stateKey: string = '',
+    transformContent: (
+      content: Record<string, any>,
+    ) => Promise<Record<string, any>>,
+  ) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      let currentContent = await this.getStateEventSafe(
+        roomId,
+        eventType,
+        stateKey,
+      );
+      let newContent = await transformContent(currentContent ?? {});
+      return this.client.sendStateEvent(
+        roomId,
+        eventType,
+        newContent,
+        stateKey,
+      );
+    });
+  }
+
+  async leave(roomId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.leave(roomId);
+    });
+  }
+
+  async forget(roomId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.forget(roomId);
+    });
+  }
+
+  async setRoomName(roomId: string, name: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.setRoomName(roomId, name);
+    });
+  }
+
+  async requestPasswordEmailToken(
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+    nextLink?: string,
+  ) {
+    return await this.client.requestPasswordEmailToken(
+      email,
+      clientSecret,
+      sendAttempt,
+      nextLink,
+    );
+  }
+
+  async setPassword(
+    authDict: MatrixSDK.AuthDict,
+    newPassword: string,
+    logoutDevices?: boolean,
+  ) {
+    return await this.client.setPassword(authDict, newPassword, logoutDevices);
+  }
+
+  async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
+    return await this.client.registerRequest(data, kind);
+  }
+
+  async sendReadReceipt(matrixEvent: MatrixEvent) {
+    return await this.client.sendReadReceipt(matrixEvent);
+  }
+
+  async isUsernameAvailable(username: string) {
+    return await this.client.isUsernameAvailable(username);
   }
 
   private addRoomEvent(event: TempEvent, oldEventId?: string) {
@@ -1277,7 +1350,7 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   window.localStorage.removeItem('auth');
-  window.localStorage.removeItem(currentRoomIdPersistenceKey);
+  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {

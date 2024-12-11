@@ -56,13 +56,11 @@ module('Integration | commands | write-text-file', function (hooks) {
     let writeTextFileCommand = new WriteTextFileCommand(
       commandService.commandContext,
     );
-    const InputType = await writeTextFileCommand.getInputType();
-    let input = new InputType({
+    await writeTextFileCommand.execute({
       path: 'test.txt',
       content: 'Hello!',
       realm: testRealmURL,
     });
-    await writeTextFileCommand.execute(input);
     let response = await fetch(new URL('test.txt', testRealmURL));
     let content = await response.text();
     assert.strictEqual(content, 'Hello!');
@@ -73,21 +71,17 @@ module('Integration | commands | write-text-file', function (hooks) {
     let writeTextFileCommand = new WriteTextFileCommand(
       commandService.commandContext,
     );
-    const InputType = await writeTextFileCommand.getInputType();
-
-    let firstContents = new InputType({
+    await writeTextFileCommand.execute({
       path: 'test.txt',
       content: 'Hello!',
       realm: testRealmURL,
     });
-    await writeTextFileCommand.execute(firstContents);
-    let secondContents = new InputType({
-      path: 'test.txt',
-      content: 'Hello again!',
-      realm: testRealmURL,
-    });
     try {
-      await writeTextFileCommand.execute(secondContents);
+      await writeTextFileCommand.execute({
+        path: 'test.txt',
+        content: 'Hello again!',
+        realm: testRealmURL,
+      });
       assert.notOk(true, 'Should have thrown an error');
     } catch (error: any) {
       assert.ok(
@@ -105,21 +99,17 @@ module('Integration | commands | write-text-file', function (hooks) {
     let writeTextFileCommand = new WriteTextFileCommand(
       commandService.commandContext,
     );
-    const InputType = await writeTextFileCommand.getInputType();
-
-    let firstContents = new InputType({
+    await writeTextFileCommand.execute({
       path: 'test.txt',
       content: 'Hello!',
       realm: testRealmURL,
     });
-    await writeTextFileCommand.execute(firstContents);
-    let secondContents = new InputType({
+    await writeTextFileCommand.execute({
       path: 'test.txt',
       content: 'Hello again!',
       realm: testRealmURL,
       overwrite: true,
     });
-    await writeTextFileCommand.execute(secondContents);
     let response = await fetch(new URL('test.txt', testRealmURL));
     let content = await response.text();
     assert.strictEqual(content, 'Hello again!');

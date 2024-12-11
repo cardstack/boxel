@@ -2,7 +2,6 @@ import { isCardDef } from './code-ref';
 import { Deferred } from './deferred';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import {
   AttributesSchema,
   CardSchema,
@@ -11,11 +10,10 @@ import {
 
 export interface CommandContext {
   sendAiAssistantMessage: (params: {
-    roomId?: string; // if falsy we create a new room
+    roomId: string;
     show?: boolean; // if truthy, ensure the side panel to the room
     prompt: string;
     attachedCards?: CardDef[];
-    skillCards?: SkillCard[];
     commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
   }) => Promise<{ roomId: string }>;
 }

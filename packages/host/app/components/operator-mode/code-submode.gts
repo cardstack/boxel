@@ -57,6 +57,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import { htmlComponent } from '../../lib/html-component';
+import { CodeModePanelWidths } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
 import CardError from './card-error';
@@ -94,7 +95,6 @@ type PanelHeights = {
 
 type SelectedAccordionItem = 'schema-editor' | null;
 
-const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
     (document.documentElement.clientWidth - 40 - 36)) *

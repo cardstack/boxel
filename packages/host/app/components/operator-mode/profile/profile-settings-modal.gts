@@ -420,7 +420,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
           user: this.matrixService.userId,
         },
       } as IAuthData & { type: string };
-      await this.matrixService.client.setPassword(auth, this.newPassword);
+      await this.matrixService.setPassword(auth, this.newPassword);
       this.resetPasswordFields();
       this.submode = undefined;
     } catch (e: any) {

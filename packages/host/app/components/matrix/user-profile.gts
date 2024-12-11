@@ -88,8 +88,8 @@ export default class UserProfile extends Component {
 
   private loadProfile = restartableTask(async () => {
     let [profile, threePid] = await all([
-      this.matrixService.client.getProfileInfo(this.userId),
-      this.matrixService.client.getThreePids(),
+      this.matrixService.getProfileInfo(this.userId),
+      this.matrixService.getThreePids(),
     ]);
     let { displayname: displayName } = profile;
     let { threepids } = threePid;

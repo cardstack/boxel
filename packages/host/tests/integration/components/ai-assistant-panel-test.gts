@@ -16,12 +16,13 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CommandResultEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -970,41 +971,56 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test('it can handle an error during room creation', async function (assert) {
-    await setCardInOperatorModeState();
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-          <div class='invisible' data-test-throw-room-error />
-          <style scoped>
-            .invisible {
-              display: none;
-            }
-          </style>
-        </template>
-      },
-    );
+  module('suspending global error hook', (hooks) => {
+    let tmp: any;
+    let uncaughtException: any;
+    hooks.before(() => {
+      tmp = QUnit.onUncaughtException;
+      QUnit.onUncaughtException = (err) => {
+        uncaughtException = err;
+      };
+    });
 
-    await waitFor('[data-test-open-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-new-session]');
-    assert.dom('[data-test-room-error]').exists();
-    assert.dom('[data-test-room]').doesNotExist();
-    assert.dom('[data-test-past-sessions-button]').isDisabled();
-    await percySnapshot(
-      'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
-    );
+    hooks.after(() => {
+      QUnit.onUncaughtException = tmp;
+    });
+    test('it can handle an error during room creation', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+            <div class='invisible' data-test-throw-room-error />
+            <style scoped>
+              .invisible {
+                display: none;
+              }
+            </style>
+          </template>
+        },
+      );
 
-    document.querySelector('[data-test-throw-room-error]')?.remove();
-    await click('[data-test-room-error] > button');
-    await waitFor('[data-test-room]');
-    assert.dom('[data-test-room-error]').doesNotExist();
-    assert.dom('[data-test-past-sessions-button]').isEnabled();
-    await percySnapshot(
-      'Integration | ai-assistant-panel | it can handle an error during room creation | new room state',
-    );
+      await waitFor('[data-test-open-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-new-session]');
+      assert.dom('[data-test-room-error]').exists();
+      assert.dom('[data-test-room]').doesNotExist();
+      assert.dom('[data-test-past-sessions-button]').isDisabled();
+      assert.strictEqual(uncaughtException.message, 'Intentional error thrown');
+      await percySnapshot(
+        'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
+      );
+
+      document.querySelector('[data-test-throw-room-error]')?.remove();
+      await click('[data-test-room-error] > button');
+      await waitFor('[data-test-room]');
+      assert.dom('[data-test-room-error]').doesNotExist();
+      assert.dom('[data-test-past-sessions-button]').isEnabled();
+      await percySnapshot(
+        'Integration | ai-assistant-panel | it can handle an error during room creation | new room state',
+      );
+    });
   });
 
   test('when opening ai panel it opens the most recent room', async function (assert) {
@@ -1047,7 +1063,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
       await click('[data-test-close-ai-assistant]');
       window.localStorage.setItem(
-        currentRoomIdPersistenceKey,
+        CurrentRoomIdPersistenceKey,
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
       await click('[data-test-open-ai-assistant]');
@@ -1058,7 +1074,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           "test room 2 is the most recently created room and it's opened initially",
         );
     } finally {
-      window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+      window.localStorage.removeItem(CurrentRoomIdPersistenceKey); // Cleanup
     }
   });
 
