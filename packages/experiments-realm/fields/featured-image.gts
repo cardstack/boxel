@@ -40,6 +40,8 @@ function cssForFeaturedImage({
   }
   if (width) {
     css.push(`width: ${width}px`);
+  } else {
+    css.push(`width: 100%`);
   }
   return htmlSafe(css.join(' '));
 }

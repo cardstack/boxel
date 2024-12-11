@@ -452,7 +452,8 @@ export class BlogApp extends CardDef {
           }
           .fitted-blog :deep(.card-title) {
             -webkit-line-clamp: 2;
-            font-weight: 600;
+            font: 600 var(--boxel-font-sm);
+            letter-spacing: var(--boxel-lsp-xs);
           }
           .fitted-blog :deep(.card-display-name) {
             margin: 0;

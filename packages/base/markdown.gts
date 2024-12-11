@@ -67,8 +67,8 @@ class View extends Component<typeof MarkdownField> {
         font-family: inherit;
         font-size: inherit;
         font-weight: 400;
-        margin-top: var(--boxel-sp-sm);
-        margin-bottom: var(--boxel-sp-sm);
+        margin-top: var(--boxel-sp-lg);
+        margin-bottom: var(--boxel-sp);
       }
 
       /* Bold */
