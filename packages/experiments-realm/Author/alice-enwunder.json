@@ -4,14 +4,9 @@
     "attributes": {
       "firstName": "Alice",
       "lastName": "Enwunder",
-      "photo": {
-        "altText": null,
-        "size": "actual",
-        "height": null,
-        "width": null,
-        "base64": null
-      },
-      "body": "",
+      "bio": null,
+      "fullBio": null,
+      "quote": "Curiouser and curiouser",
       "contactLinks": [
         {
           "label": "X",
@@ -26,7 +21,25 @@
           "value": "alice@email.com"
         }
       ],
-      "thumbnailURL": "https://images.unsplash.com/photo-1561569912-9f202ecac634?q=80&w=3135&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+      "email": null,
+      "featuredImage": {
+        "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1509868918748-a554ad25f858.jpeg",
+        "credit": null,
+        "caption": null,
+        "altText": "Alice Enwunder",
+        "size": "actual",
+        "height": null,
+        "width": null
+      },
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1509868918748-a554ad25f858.jpeg"
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": null
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {

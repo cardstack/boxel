@@ -3,14 +3,29 @@
     "type": "card",
     "attributes": {
       "translation": "",
-      "title": null,
+      "headline": "",
       "slug": null,
       "body": "To quote wikipedia:\n\nMicroblogging is a form of blogging using short posts without titles known as microposts[1][2][3] (or status updates on a minority of websites like Meta Platforms'). Microblogs \"allow users to exchange small elements of content such as short sentences, individual images, or video links\",[1] which may be the major reason for their popularity.[4] Some popular social networks such as Twitter, Threads, Mastodon, Tumblr, Koo, and Instagram can be viewed as collections of microblogs.",
+      "publishDate": null,
+      "featuredImage": {
+        "imageUrl": null,
+        "credit": null,
+        "caption": null,
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "authorBio": {
+        "links": {
+          "self": null
+        }
+      },
+      "blog": {
         "links": {
           "self": null
         }
