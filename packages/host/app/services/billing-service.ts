@@ -10,6 +10,8 @@ import {
   encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 
+import { formatNumber } from '../helpers/format-number';
+
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
@@ -26,7 +28,11 @@ interface SubscriptionData {
 interface StripeLink {
   type: string;
   url: string;
-  creditReloadAmount?: number;
+}
+
+interface ExtraCreditsPaymentLink extends StripeLink {
+  creditReloadAmount: number;
+  price: number;
 }
 
 export default class BillingService extends Service {
@@ -74,7 +80,21 @@ export default class BillingService extends Service {
   }
 
   get extraCreditsPaymentLinks() {
-    return this.stripeLinks.value?.extraCreditsPaymentLinks;
+    let links = this.stripeLinks.value
+      ?.extraCreditsPaymentLinks as ExtraCreditsPaymentLink[];
+
+    if (!links) {
+      return [];
+    }
+
+    return links
+      .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
+      .map((link) => ({
+        ...link,
+        amountFormatted: `${formatNumber(
+          link.creditReloadAmount,
+        )} credits for $${formatNumber(link.price)}`,
+      }));
   }
 
   get fetchingStripePaymentLinks() {
@@ -104,7 +124,10 @@ export default class BillingService extends Service {
         type: string;
         attributes: {
           url: string;
-          metadata?: { creditReloadAmount: number };
+          metadata?: {
+            creditReloadAmount: number;
+            price: number;
+          };
         };
       }[];
     };
@@ -113,6 +136,7 @@ export default class BillingService extends Service {
       type: data.type,
       url: data.attributes.url,
       creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
+      price: data.attributes.metadata?.price,
     })) as StripeLink[];
 
     return {
