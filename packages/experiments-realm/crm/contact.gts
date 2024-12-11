@@ -170,17 +170,17 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
 
-      {{#if @model.status.label}}
-        {{#let (getStatusData @model.status.label) as |statusData|}}
+      {{#let (getStatusData @model.computedStatus) as |statusData|}}
+        {{#if statusData}}
           <StatusPill
-            @label={{@model.status.label}}
+            @label={{statusData.label}}
             @icon={{statusData.icon}}
             @iconDarkColor={{statusData.darkColor}}
             @iconLightColor={{statusData.lightColor}}
             class='status-pill'
           />
-        {{/let}}
-      {{/if}}
+        {{/if}}
+      {{/let}}
     </article>
 
     <style scoped>
@@ -226,6 +226,7 @@ class FittedTemplate extends Component<typeof Contact> {
 
   <template>
     <article class='fitted-contact-card'>
+      {{@model.computedStatus}}
       <AvatarGroup
         @userId={{@model.id}}
         @name={{@model.name}}
@@ -258,16 +259,17 @@ class FittedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
 
-      {{#if @model.status.label}}
-        {{#let (getStatusData @model.status.label) as |statusData|}}
+      {{#let (getStatusData @model.computedStatus) as |statusData|}}
+        {{#if statusData}}
           <StatusPill
-            @label={{@model.status.label}}
+            @label={{statusData.label}}
             @icon={{statusData.icon}}
             @iconDarkColor={{statusData.darkColor}}
             @iconLightColor={{statusData.lightColor}}
+            class='status-pill'
           />
-        {{/let}}
-      {{/if}}
+        {{/if}}
+      {{/let}}
     </article>
 
     <style scoped>
@@ -824,6 +826,17 @@ class AtomTemplate extends Component<typeof Contact> {
   </template>
 }
 
+function getComputedStatus(className: string) {
+  switch (className) {
+    case 'Lead':
+      return 'Lead';
+    case 'Customer':
+      return 'Customer';
+    default:
+      return 'No Status';
+  }
+}
+
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
   static icon = ContactIcon;
@@ -838,6 +851,11 @@ export class Contact extends CardDef {
   @field phoneMobile = contains(PhoneField);
   @field phoneOffice = contains(PhoneField);
   @field status = contains(StatusField);
+  @field computedStatus = contains(StringField, {
+    computeVia: function (this: Contact) {
+      return getComputedStatus(this.constructor.name);
+    },
+  });
   @field socialLinks = containsMany(SocialLinkField);
 
   @field name = contains(StringField, {
