@@ -9,10 +9,10 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
+import { formatNumber } from '../helpers/format-number';
 import BillingService from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
-import { formatNumber } from '../helpers/format-number';
 
 interface ValueSignature {
   Args: {
