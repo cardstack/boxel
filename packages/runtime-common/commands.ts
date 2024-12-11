@@ -1,3 +1,4 @@
+import { isCardDef } from './code-ref';
 import { Deferred } from './deferred';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -52,7 +53,7 @@ export abstract class Command<
 > {
   // Is this actually type checking ?
   abstract getInputType(): Promise<
-    { new (args: any): CardInputType } | undefined
+    { new (args?: Partial<CardInputType>): CardInputType } | undefined
   >; // TODO: can we do better than any here?
 
   invocations: CommandInvocation<CardInputType, CardResultType>[] = [];
@@ -80,17 +81,16 @@ export abstract class Command<
     let inputCard: CardInputType;
     if (input === undefined) {
       inputCard = undefined as CardInputType;
-    } else if ('isCardDef' in input && input.isCardDef) {
+    } else if (isCardDef(input.constructor)) {
       inputCard = input as CardInputType;
     } else {
       let InputType = await this.getInputType();
       if (!InputType) {
-        inputCard = undefined as CardInputType;
+        throw new Error('Input provided but no input type found');
       } else {
         inputCard = new InputType(input) as CardInputType;
       }
     }
-
     let invocation = new CommandInvocation<CardInputType, CardResultType>(
       inputCard,
     );
