@@ -24,7 +24,7 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
     input: BaseCommandModule.UpdateSkillActivationInput,
   ): Promise<undefined> {
     let { matrixService } = this;
-    let { roomId, skillEventId, value } = input;
+    let { roomId, skillEventId, isActive } = input;
     await matrixService.updateStateEvent(
       roomId,
       SKILLS_STATE_EVENT_TYPE,
@@ -34,7 +34,7 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
           enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
           disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
         };
-        if (value) {
+        if (isActive) {
           newSkillsConfig.enabledEventIds.push(skillEventId);
           newSkillsConfig.disabledEventIds =
             newSkillsConfig.disabledEventIds.filter(

@@ -603,7 +603,7 @@ export default class Room extends Component<Signature> {
       ).execute({
         roomId: this.args.roomId,
         skillEventId,
-        value: isActive,
+        isActive,
       });
     },
   );
