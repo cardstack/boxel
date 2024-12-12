@@ -3,7 +3,7 @@ import { EmailField } from './email';
 import { PhoneField } from './phone';
 import { UrlField } from './url';
 import { WebsiteField } from './website';
-import { Address as AddressField } from '../address';
+import { Address as AddressField } from './address';
 import {
   CardDef,
   field,
