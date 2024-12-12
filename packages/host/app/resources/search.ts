@@ -53,9 +53,6 @@ export class Search extends Resource<Args> {
     waitForPromise(this.loaded);
 
     if (isLive) {
-      // TODO this triggers a new search against all realms if any single realm
-      // updates. Make this more precise where we only search the updated realm
-      // instead of all realms.
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(
