@@ -32,6 +32,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import config from '@cardstack/host/config/environment';
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
@@ -236,6 +237,25 @@ export default class InteractSubmode extends Component<Signature> {
         await newItem.ready();
         here.addToStack(newItem);
         here.operatorModeStateService.workspaceChooserOpened = false;
+      },
+      copyURLToClipboard: async (
+        card: CardDef | URL | string,
+      ): Promise<void> => {
+        let copyableUrl;
+        if (typeof card === 'string') {
+          copyableUrl = card;
+        } else if (card instanceof URL) {
+          copyableUrl = card.href;
+        } else {
+          copyableUrl = card.id;
+        }
+        if (!copyableUrl) {
+          return;
+        }
+        if (config.environment === 'test') {
+          return; // navigator.clipboard is not available in test environment
+        }
+        await navigator.clipboard.writeText(copyableUrl);
       },
       editCard(card: CardDef): void {
         let item = here.findCardInStack(card, stackIndex);
