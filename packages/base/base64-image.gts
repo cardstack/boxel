@@ -197,7 +197,7 @@ class Edit extends Component<typeof Base64ImageField> {
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
 let groupNumber = 0;
-class ImageSizeField extends FieldDef {
+export class ImageSizeField extends FieldDef {
   static displayName = 'Image Size';
   static [primitive]: 'actual' | 'contain' | 'cover';
   static [useIndexBasedKey]: never;
