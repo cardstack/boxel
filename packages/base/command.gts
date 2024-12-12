@@ -90,3 +90,9 @@ export class AddSkillsToRoomInput extends CardDef {
   @field roomId = contains(StringField);
   @field skills = linksToMany(SkillCard);
 }
+
+export class UpdateSkillActivationInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field skillEventId = contains(StringField);
+  @field value = contains(BooleanField);
+}
