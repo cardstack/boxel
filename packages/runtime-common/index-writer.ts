@@ -31,16 +31,19 @@ import {
 } from './index-structure';
 
 export class IndexWriter {
-  constructor(private dbAdapter: DBAdapter) {}
+  #dbAdapter: DBAdapter;
+  constructor(dbAdapter: DBAdapter) {
+    this.#dbAdapter = dbAdapter;
+  }
 
   async createBatch(realmURL: URL) {
-    let batch = new Batch(this.dbAdapter, realmURL);
+    let batch = new Batch(this.#dbAdapter, realmURL);
     await batch.ready;
     return batch;
   }
 
   private query(expression: Expression) {
-    return query(this.dbAdapter, expression, coerceTypes);
+    return query(this.#dbAdapter, expression, coerceTypes);
   }
 
   async isNewIndex(realm: URL): Promise<boolean> {

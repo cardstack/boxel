@@ -162,10 +162,13 @@ export function isValidPrerenderedHtmlFormat(
 }
 
 export class IndexQueryEngine {
-  constructor(private dbAdapter: DBAdapter) {}
+  #dbAdapter: DBAdapter;
+  constructor(dbAdapter: DBAdapter) {
+    this.#dbAdapter = dbAdapter;
+  }
 
   private async query(expression: Expression) {
-    return await query(this.dbAdapter, expression, coerceTypes);
+    return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
   private async queryCards(query: CardExpression, loader: Loader) {
