@@ -6,6 +6,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
+import { cloneDeep } from 'lodash';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -80,8 +81,6 @@ import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
-
-import { cloneDeep } from 'lodash';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
