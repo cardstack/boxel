@@ -167,19 +167,19 @@ export class IndexQueryEngine {
     this.#dbAdapter = dbAdapter;
   }
 
-  private async query(expression: Expression) {
+  async #query(expression: Expression) {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  private async queryCards(query: CardExpression, loader: Loader) {
-    return this.query(await this.makeExpression(query, loader));
+  async #queryCards(query: CardExpression, loader: Loader) {
+    return this.#query(await this.makeExpression(query, loader));
   }
 
   async getModule(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedModuleOrError | undefined> {
-    let rows = (await this.query([
+    let rows = (await this.#query([
       `SELECT i.*
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -237,7 +237,7 @@ export class IndexQueryEngine {
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
-    let result = (await this.query([
+    let result = (await this.#query([
       `SELECT i.*, embedded_html, fitted_html`,
       `FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -396,8 +396,8 @@ export class IndexQueryEngine {
     ];
 
     let [results, totalResults] = await Promise.all([
-      this.queryCards(query, loader),
-      this.queryCards(queryCount, loader),
+      this.#queryCards(query, loader),
+      this.#queryCards(queryCount, loader),
     ]);
 
     return {
@@ -550,7 +550,7 @@ export class IndexQueryEngine {
   }
 
   async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
-    let results = (await this.query([
+    let results = (await this.#query([
       `SELECT value
        FROM realm_meta rm
        INNER JOIN realm_versions rv
@@ -563,7 +563,7 @@ export class IndexQueryEngine {
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {
-    let [{ current_version }] = (await this.query([
+    let [{ current_version }] = (await this.#query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
       param(realmURL.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];

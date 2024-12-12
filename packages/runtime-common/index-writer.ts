@@ -42,12 +42,12 @@ export class IndexWriter {
     return batch;
   }
 
-  private query(expression: Expression) {
+  #query(expression: Expression) {
     return query(this.#dbAdapter, expression, coerceTypes);
   }
 
   async isNewIndex(realm: URL): Promise<boolean> {
-    let [row] = (await this.query([
+    let [row] = (await this.#query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
       param(realm.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];
