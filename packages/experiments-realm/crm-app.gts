@@ -440,6 +440,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       .view-menu {
         margin-left: auto;
       }
+      /* Cards grid crm */
+      .crm-app :where(.card-view-container) {
+        grid-template-columns: 1fr;
+      }
+      .crm-app :where(.grid-view) {
+        --grid-card-min-width: 300px;
+      }
     </style>
   </template>
 }
