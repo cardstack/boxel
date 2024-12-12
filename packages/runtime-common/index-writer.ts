@@ -95,13 +95,15 @@ interface ModuleEntry {
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  #dbAdapter: DBAdapter;
   private isNewGeneration = false;
   private declare realmVersion: number;
 
   constructor(
-    private dbAdapter: DBAdapter,
+    dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
   ) {
+    this.#dbAdapter = dbAdapter;
     this.ready = this.setNextRealmVersion();
   }
 
@@ -238,7 +240,7 @@ export class Batch {
   }
 
   #query(expression: Expression) {
-    return query(this.dbAdapter, expression, coerceTypes);
+    return query(this.#dbAdapter, expression, coerceTypes);
   }
 
   private async getProductionVersion(url: URL) {
