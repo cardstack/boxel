@@ -1,9 +1,10 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import { DBAdapter, decodeWebSafeBase64 } from '@cardstack/runtime-common';
 import { handlePaymentSucceeded } from './payment-succeeded';
 import { handleCheckoutSessionCompleted } from './checkout-session-completed';
 
 import Stripe from 'stripe';
 import { handleSubscriptionDeleted } from './subscription-deleted';
+import { getUserByStripeId } from '../billing-queries';
 
 export type StripeEvent = {
   id: string;
@@ -99,17 +100,15 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
 // Invoice immediately (when prorating): CHECKED
 // When switching to a cheaper subscription -> WAIT UNTIL END OF BILLING PERIOD TO UPDATE
 
-export default async function stripeWebhookHandler(
-  dbAdapter: DBAdapter,
-  request: Request,
-  sendBillingNotification: ({
-    stripeCustomerId,
-    encodedMatrixUserId,
-  }: {
-    stripeCustomerId?: string;
-    encodedMatrixUserId?: string;
-  }) => Promise<void>,
-): Promise<Response> {
+export default async function stripeWebhookHandler({
+  dbAdapter,
+  request,
+  sendMatrixEvent,
+}: {
+  dbAdapter: DBAdapter;
+  request: Request;
+  sendMatrixEvent: (matrixUserId: string, eventType: string) => Promise<void>;
+}): Promise<Response> {
   let signature = request.headers.get('stripe-signature');
 
   if (!signature) {
@@ -141,7 +140,11 @@ export default async function stripeWebhookHandler(
         dbAdapter,
         event as StripeInvoicePaymentSucceededWebhookEvent,
       );
-      sendBillingNotification({ stripeCustomerId: event.data.object.customer });
+      sendBillingNotification({
+        dbAdapter,
+        sendMatrixEvent,
+        stripeEvent: event,
+      });
       break;
     }
     case 'customer.subscription.deleted': {
@@ -150,7 +153,11 @@ export default async function stripeWebhookHandler(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
       );
-      sendBillingNotification({ stripeCustomerId: event.data.object.customer });
+      sendBillingNotification({
+        dbAdapter,
+        sendMatrixEvent,
+        stripeEvent: event,
+      });
       break;
     }
     case 'checkout.session.completed': {
@@ -158,12 +165,43 @@ export default async function stripeWebhookHandler(
         dbAdapter,
         event as StripeCheckoutSessionCompletedWebhookEvent,
       );
-      await sendBillingNotification({
-        stripeCustomerId: event.data.object.customer,
-        encodedMatrixUserId: event.data.object.client_reference_id,
+      sendBillingNotification({
+        dbAdapter,
+        sendMatrixEvent,
+        stripeEvent: event,
       });
       break;
     }
   }
   return new Response('ok');
+}
+
+async function sendBillingNotification({
+  dbAdapter,
+  sendMatrixEvent,
+  stripeEvent,
+}: {
+  dbAdapter: DBAdapter;
+  sendMatrixEvent: (matrixUserId: string, eventType: string) => Promise<void>;
+  stripeEvent: StripeEvent;
+}) {
+  let matrixUserId = await extractMatrixUserId(dbAdapter, stripeEvent);
+  if (!matrixUserId) {
+    throw new Error('Failed to extract matrix user id from stripe event');
+  }
+  await sendMatrixEvent(matrixUserId, 'billing-notification');
+}
+
+async function extractMatrixUserId(dbAdapter: DBAdapter, event: StripeEvent) {
+  let encodedMatrixUserId = event.data.object.client_reference_id;
+  let matrixUserId = encodedMatrixUserId
+    ? decodeWebSafeBase64(encodedMatrixUserId)
+    : undefined;
+
+  if (event.data.object.customer) {
+    let user = await getUserByStripeId(dbAdapter, event.data.object.customer);
+    matrixUserId = user?.matrixUserId;
+  }
+
+  return matrixUserId;
 }

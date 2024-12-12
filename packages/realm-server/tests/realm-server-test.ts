@@ -4338,6 +4338,7 @@ module('Realm Server', function (hooks) {
             cancellation_details: {
               reason: 'payment_failure',
             },
+            customer: 'cus_123',
           },
         },
       };
@@ -4488,6 +4489,7 @@ module('Realm Server', function (hooks) {
             cancellation_details: {
               reason: 'payment_failure',
             },
+            customer: 'cus_123',
           },
         },
       };
