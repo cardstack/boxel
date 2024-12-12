@@ -196,10 +196,6 @@ export function getSearchResults(
   query: Query,
   realms?: string[],
   opts?: {
-    // A new search is triggered whenever the index updates. Consumers of this
-    // function that render their cards using {{#each}} should make sure to use the
-    // "key" field: {{#each #this.results.instances key="id" as |instance|}} in
-    // order to keep the results stable between refreshes.
     isLive?: true;
     // it is probably desirable that dynamic context action `doWithStableScroll()`
     // is used here. For example:
