@@ -659,6 +659,7 @@ export class BlogPost extends CardDef {
       <style scoped>
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
         article {
+          --markdown-font-size: 1rem;
           --markdown-font-family: var(--blog-post-font-family, 'Lora', serif);
           --markdown-heading-font-family: var(
             --blog-post-heading-font-family,
