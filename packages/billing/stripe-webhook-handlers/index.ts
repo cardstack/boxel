@@ -186,9 +186,6 @@ async function sendBillingNotification({
   stripeEvent: StripeEvent;
 }) {
   let matrixUserId = await extractMatrixUserId(dbAdapter, stripeEvent);
-  if (!matrixUserId) {
-    throw new Error('Failed to extract matrix user id from stripe event');
-  }
   await sendMatrixEvent(matrixUserId, 'billing-notification');
 }
 
@@ -201,6 +198,10 @@ async function extractMatrixUserId(dbAdapter: DBAdapter, event: StripeEvent) {
   if (event.data.object.customer) {
     let user = await getUserByStripeId(dbAdapter, event.data.object.customer);
     matrixUserId = user?.matrixUserId;
+  }
+
+  if (!matrixUserId) {
+    throw new Error('Failed to extract matrix user id from stripe event');
   }
 
   return matrixUserId;
