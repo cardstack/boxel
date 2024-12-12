@@ -273,8 +273,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     test('filename is auto-populated from display name', async function (assert) {
       await visitOperatorMode();
       await openNewFileModal('Card Definition');
-      await fillIn('[data-test-display-name-field]', 'Très test card 😀');
-      assert.dom('[data-test-file-name-field]').hasValue('tres_test_card');
+      await fillIn('[data-test-display-name-field]', `Très test's card 😀`);
+      assert.dom('[data-test-file-name-field]').hasValue('tres-tests-card');
     });
 
     test('filename stops auto-populating after user edits it', async function (assert) {

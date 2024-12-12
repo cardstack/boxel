@@ -22,6 +22,8 @@ import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import NewSession from '@cardstack/host/components/ai-assistant/new-session';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
 import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
@@ -35,9 +37,15 @@ import {
   eventDebounceMs,
 } from '@cardstack/host/lib/matrix-utils';
 
+import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+
+import {
+  CurrentRoomIdPersistenceKey,
+  NewSessionIdPersistenceKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -59,10 +67,6 @@ export interface SessionRoomData {
   created: Date;
   lastActiveTimestamp: number;
 }
-
-// Local storage keys
-export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
-let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
   get hasOtherActiveSessions() {
@@ -360,6 +364,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
   @service private declare router: RouterService;
+  @service private declare commandService: CommandService;
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
@@ -377,7 +382,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private enterRoomInitially() {
     let persistedRoomId = window.localStorage.getItem(
-      currentRoomIdPersistenceKey,
+      CurrentRoomIdPersistenceKey,
     );
     if (
       persistedRoomId &&
@@ -406,8 +411,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private loadRoomsTask = restartableTask(async () => {
-    await this.matrixService.flushMembership;
-    await this.matrixService.flushTimeline;
+    await this.matrixService.flushAll;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
     this.enterRoomInitially();
   });
@@ -420,25 +424,34 @@ export default class AiAssistantPanel extends Component<Signature> {
       return;
     }
     let newRoomName = 'New AI Assistant Chat';
-    this.doCreateRoom.perform(newRoomName, [aiBotUsername]);
+    this.doCreateRoom.perform(newRoomName);
   }
 
-  private doCreateRoom = restartableTask(
-    async (name: string, invites: string[]) => {
-      try {
-        let newRoomId = await this.matrixService.createRoom(name, invites);
-        window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
-        this.enterRoom(newRoomId);
-      } catch (e) {
-        console.log(e);
-        this.displayRoomError = true;
-        this.currentRoomId = undefined;
-      }
-    },
-  );
+  private doCreateRoom = restartableTask(async (name: string) => {
+    try {
+      let createRoomCommand = new CreateAIAssistantRoomCommand(
+        this.commandService.commandContext,
+      );
+      let { roomId } = await createRoomCommand.execute({ name });
+
+      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+        this.commandService.commandContext,
+      );
+      await addSkillsToRoomCommand.execute({
+        roomId,
+        skills: await this.matrixService.loadDefaultSkills(),
+      });
+      window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
+      this.enterRoom(roomId);
+    } catch (e) {
+      console.log(e);
+      this.displayRoomError = true;
+      this.currentRoomId = undefined;
+    }
+  });
 
   private get newSessionId() {
-    let id = window.localStorage.getItem(newSessionIdPersistenceKey);
+    let id = window.localStorage.getItem(NewSessionIdPersistenceKey);
     if (
       id &&
       this.roomResources.has(id) &&
@@ -511,7 +524,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
-    window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
+    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
   }
 
   @action private setRoomToRename(room: SessionRoomData) {
@@ -551,17 +564,17 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
-      await this.matrixService.client.leave(roomId);
-      await this.matrixService.client.forget(roomId);
+      await this.matrixService.leave(roomId);
+      await this.matrixService.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       this.matrixService.roomResourcesCache.delete(roomId);
 
       if (this.newSessionId === roomId) {
-        window.localStorage.removeItem(newSessionIdPersistenceKey);
+        window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
       if (this.currentRoomId === roomId) {
-        window.localStorage.removeItem(currentRoomIdPersistenceKey);
+        window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {

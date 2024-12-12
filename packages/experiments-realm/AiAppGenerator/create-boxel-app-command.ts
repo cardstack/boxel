@@ -6,7 +6,6 @@ import CreateProductRequirementsInstance, {
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
 import GenerateCodeCommand from './generate-code-command';
-import { GenerateCodeInput } from './generate-code-command';
 import { AppCard } from '../app-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
@@ -27,21 +26,13 @@ export default class CreateBoxelApp extends Command<
       await createPRDCommand.execute(input);
 
     let showCardCommand = new ShowCardCommand(this.commandContext);
-    let ShowCardInput = await showCardCommand.getInputType();
-
-    let showPRDCardInput = new ShowCardInput();
-    showPRDCardInput.cardToShow = prdCard;
-    await showCardCommand.execute(showPRDCardInput);
+    await showCardCommand.execute({ cardToShow: prdCard });
 
     let generateCodeCommand = new GenerateCodeCommand(this.commandContext);
-    let generateCodeInput = new GenerateCodeInput({
+    let { code, appName } = await generateCodeCommand.execute({
       roomId,
       productRequirements: prdCard,
     });
-
-    let { code, appName } = await generateCodeCommand.execute(
-      generateCodeInput,
-    );
 
     // Generate a unique name for the module using timestamp
     let timestamp = Date.now();
@@ -49,13 +40,11 @@ export default class CreateBoxelApp extends Command<
     let filePath = `${moduleName}.gts`;
     let moduleId = new URL(moduleName, input.realm).href;
     let writeFileCommand = new WriteTextFileCommand(this.commandContext);
-    let writeFileInput = new (await writeFileCommand.getInputType())({
+    await writeFileCommand.execute({
       path: filePath,
       content: code,
       realm: input.realm,
     });
-
-    await writeFileCommand.execute(writeFileInput);
 
     // get the app card def from the module
     let loader = (import.meta as any).loader;
@@ -77,18 +66,13 @@ export default class CreateBoxelApp extends Command<
 
     // save card
     let saveCardCommand = new SaveCardCommand(this.commandContext);
-    let SaveCardInputType = await saveCardCommand.getInputType();
-
-    let saveCardInput = new SaveCardInputType({
+    await saveCardCommand.execute({
       realm: input.realm,
       card: myAppCard,
     });
-    await saveCardCommand.execute(saveCardInput);
 
     // show the app card
-    let showAppCardInput = new ShowCardInput();
-    showAppCardInput.cardToShow = myAppCard;
-    await showCardCommand.execute(showAppCardInput);
+    await showCardCommand.execute({ cardToShow: myAppCard });
 
     return myAppCard;
   }

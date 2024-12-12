@@ -35,12 +35,10 @@ export default class CardErrorDetail extends Component<Signature> {
     let switchSubmodeCommand = new SwitchSubmodeCommand(
       this.commandService.commandContext,
     );
-    const InputType = await switchSubmodeCommand.getInputType();
-    let input = new InputType({
+    await switchSubmodeCommand.execute({
       submode: 'code',
       codePath: `${this.args.error.id}.json`,
     });
-    await switchSubmodeCommand.execute(input);
   });
 
   <template>
