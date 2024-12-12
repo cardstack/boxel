@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
-import IconComponent from '@cardstack/boxel-icons/captions';
+import { CardorFieldTypeIcon } from '@cardstack/base/card-api';
 import QuestionMark from '@cardstack/boxel-icons/question-mark';
 
 interface StatusPillSignature {
@@ -10,7 +10,7 @@ interface StatusPillSignature {
     label: string;
     iconDarkColor: string | undefined;
     iconLightColor: string | undefined;
-    icon?: typeof IconComponent;
+    icon?: typeof CardorFieldTypeIcon;
   };
   Element: HTMLDivElement;
 }

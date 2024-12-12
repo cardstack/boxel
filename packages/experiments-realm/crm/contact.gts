@@ -18,8 +18,7 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
-import { type LooseyGooseyData } from '../loosey-goosey';
-import type IconComponent from '@cardstack/boxel-icons/captions';
+import { LooseGooseyField } from '../loosey-goosey';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -78,10 +77,10 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
 
-      {{#if @model.statusTag}}
+      {{#if @model.statusTag.label}}
         <StatusPill
           @label={{@model.statusTag.label}}
-          @icon={{@model.statusTag.icon}}
+          @icon={{@model.constructor.icon}}
           @iconDarkColor={{@model.statusTag.darkColor}}
           @iconLightColor={{@model.statusTag.lightColor}}
           class='status-pill'
@@ -163,10 +162,10 @@ class FittedTemplate extends Component<typeof Contact> {
           <@fields.socialLinks @format='atom' />
         </div>
       {{/if}}
-      {{#if @model.statusTag}}
+      {{#if @model.statusTag.label}}
         <StatusPill
           @label={{@model.statusTag.label}}
-          @icon={{@model.statusTag.icon}}
+          @icon={{@model.constructor.icon}}
           @iconDarkColor={{@model.statusTag.darkColor}}
           @iconLightColor={{@model.statusTag.lightColor}}
           class='status-pill'
@@ -729,16 +728,15 @@ class AtomTemplate extends Component<typeof Contact> {
   </template>
 }
 
-interface StatusTag extends LooseyGooseyData {
-  lightColor: string;
-  darkColor: string;
-  icon: typeof IconComponent;
+export class StatusTagField extends LooseGooseyField {
+  static icon = ContactIcon;
+  @field lightColor = contains(StringField);
+  @field darkColor = contains(StringField);
 }
 
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
   static icon = ContactIcon;
-  statusTag: StatusTag | undefined = undefined;
 
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
@@ -750,6 +748,7 @@ export class Contact extends CardDef {
   @field phoneMobile = contains(PhoneField);
   @field phoneOffice = contains(PhoneField);
   @field socialLinks = containsMany(SocialLinkField);
+  @field statusTag = contains(StatusTagField); //this is an empty field that gets computed in subclasses
 
   @field name = contains(StringField, {
     computeVia: function (this: Contact) {

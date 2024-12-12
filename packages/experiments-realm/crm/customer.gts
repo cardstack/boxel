@@ -1,22 +1,19 @@
-import {
-  field,
-  contains,
-  StringField,
-} from 'https://cardstack.com/base/card-api';
+import { field, contains } from 'https://cardstack.com/base/card-api';
 import { Contact } from './contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
+import { StatusTagField } from './contact';
 
 export class Customer extends Contact {
   static displayName = 'CRM Customer';
-  @field _computeStatusTag = contains(StringField, {
+  static icon = HeartHandshakeIcon;
+  @field statusTag = contains(StatusTagField, {
     computeVia: function (this: Customer) {
-      this.statusTag = {
+      return new StatusTagField({
         index: 0,
         label: 'Customer',
-        icon: HeartHandshakeIcon,
         lightColor: '#8bff98',
         darkColor: '#01d818',
-      };
+      });
     },
   });
 }
