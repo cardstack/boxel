@@ -354,11 +354,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @selectedView={{this.selectedView}}
             @context={{@context}}
             @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
+            class='crm-app-grid'
           />
         {{/if}}
       </:grid>
     </Layout>
-    <style scoped>
+    <style
+      scoped
+    >
       /* hide overlay button visibility during scroll */
       .crm-app-header {
         position: relative;
@@ -439,6 +442,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       }
       .view-menu {
         margin-left: auto;
+      }
+      /* Cards grid crm */
+      .crm-app  {
+        --grid
+      }
+      }
+      .crm-app :where(.grid-view) {
+        --grid-card-min-width: 300px;
       }
     </style>
   </template>
