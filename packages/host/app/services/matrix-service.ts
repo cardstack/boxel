@@ -81,6 +81,7 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
+import { cloneDeep } from 'lodash';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
@@ -1207,6 +1208,21 @@ export default class MatrixService extends Service {
     debounce(this, this.drainTimeline, 100);
   };
 
+  private buildEventForProcessing(event: MatrixEvent) {
+    // Restructure the event, ensuring keys exist
+    let restructuredEvent = {
+      ...event.event,
+      status: event.status,
+      content: event.getContent() || undefined,
+      error: event.error ?? undefined,
+    };
+    // Make a deep copy of the event to avoid mutating the original Matrix SDK event
+    // This is necessary because the event returned is one we pass in, and this function
+    // may run before the event itself is sent.
+    // To avoid hard to track down bugs, we make a deep copy of the event here.
+    return cloneDeep(restructuredEvent);
+  }
+
   private async drainTimeline() {
     await this.flushTimeline;
 
@@ -1217,12 +1233,7 @@ export default class MatrixService extends Service {
     for (let { event, oldEventId } of events) {
       await this.client?.decryptEventIfNeeded(event);
       await this.processDecryptedEvent(
-        {
-          ...event.event,
-          status: event.status,
-          content: event.getContent() || undefined,
-          error: event.error ?? undefined,
-        },
+        this.buildEventForProcessing(event),
         oldEventId,
       );
     }
