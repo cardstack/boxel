@@ -117,7 +117,7 @@ export class Batch {
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
-    let results = (await this.query([
+    let results = (await this.#query([
       `SELECT i.url, i.type, i.last_modified
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -218,7 +218,7 @@ export class Batch {
         .map(([column]) => column),
     });
 
-    await this.query([
+    await this.#query([
       ...upsert(
         'boxel_index',
         'boxel_index_pkey',
@@ -237,12 +237,12 @@ export class Batch {
     return { totalIndexEntries };
   }
 
-  private query(expression: Expression) {
+  #query(expression: Expression) {
     return query(this.dbAdapter, expression, coerceTypes);
   }
 
   private async getProductionVersion(url: URL) {
-    let [entry] = (await this.query([
+    let [entry] = (await this.#query([
       `SELECT i.*`,
       `FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -276,7 +276,7 @@ export class Batch {
   }
 
   private async numberOfIndexEntries() {
-    let [{ total }] = (await this.query([
+    let [{ total }] = (await this.#query([
       `SELECT count(i.url) as total
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -292,7 +292,7 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let results = await this.query([
+    let results = await this.#query([
       `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -323,7 +323,7 @@ export class Batch {
       },
     );
 
-    await this.query([
+    await this.#query([
       ...upsert(
         'realm_meta',
         'realm_meta_pkey',
@@ -338,7 +338,7 @@ export class Batch {
       realm_url: this.realmURL.href,
       current_version: this.realmVersion,
     } as RealmVersionsTable);
-    await this.query([
+    await this.#query([
       ...upsert(
         'realm_versions',
         'realm_versions_pkey',
@@ -349,7 +349,7 @@ export class Batch {
   }
 
   private async pruneObsoleteEntries() {
-    await this.query([
+    await this.#query([
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
@@ -359,7 +359,7 @@ export class Batch {
     ] as Expression);
 
     if (this.isNewGeneration) {
-      await this.query([
+      await this.#query([
         `DELETE FROM boxel_index`,
         'WHERE',
         ...every([
@@ -371,7 +371,7 @@ export class Batch {
   }
 
   private async setNextRealmVersion() {
-    let [row] = (await this.query([
+    let [row] = (await this.#query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
       param(this.realmURL.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];
@@ -381,7 +381,7 @@ export class Batch {
         current_version: 0,
       } as RealmVersionsTable);
       // Make the batch updates live
-      await this.query([
+      await this.#query([
         ...upsert(
           'realm_versions',
           'realm_versions_pkey',
@@ -431,7 +431,7 @@ export class Batch {
     );
 
     let names = flattenDeep(columns);
-    await this.query([
+    await this.#query([
       'INSERT INTO boxel_index',
       ...addExplicitParens(separatedByCommas(columns)),
       'VALUES',
@@ -465,7 +465,7 @@ export class Batch {
       // the API for using cursors cannot be serialized over the postMessage
       // boundary. so we use a handcrafted paging approach that leverages
       // realm_version to keep the result set stable across pages
-      rows = (await this.query([
+      rows = (await this.#query([
         'SELECT i.url, i.file_alias, i.type',
         'FROM boxel_index as i',
         'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
