@@ -82,6 +82,7 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import { cloneDeep } from 'lodash';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
