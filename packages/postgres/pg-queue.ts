@@ -106,15 +106,18 @@ class WorkLoop {
 
 export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
+  #pgClient: PgAdapter;
 
   private pollInterval = 10000;
   private notifiers: Map<number, Deferred<any>> = new Map();
   private notificationRunner: WorkLoop | undefined;
 
-  constructor(private pgClient: PgAdapter) {}
+  constructor(pgClient: PgAdapter) {
+    this.#pgClient = pgClient;
+  }
 
-  private async query(expression: Expression) {
-    return await query(this.pgClient, expression);
+  async #query(expression: Expression) {
+    return await query(this.#pgClient, expression);
   }
 
   private addNotifier(id: number, n: Deferred<any>) {
@@ -124,7 +127,7 @@ export class PgQueuePublisher implements QueuePublisher {
         this.pollInterval,
       );
       this.notificationRunner.run(async (loop) => {
-        await this.pgClient.listen(
+        await this.#pgClient.listen(
           'jobs_finished',
           loop.wake.bind(loop),
           async () => {
@@ -143,7 +146,7 @@ export class PgQueuePublisher implements QueuePublisher {
     while (!loop.shuttingDown) {
       let waitingIds = [...this.notifiers.keys()];
       log.debug('jobs waiting for notification: %s', waitingIds);
-      let result = (await this.query([
+      let result = (await this.#query([
         `SELECT id, status, result FROM jobs WHERE status != 'unfulfilled' AND (`,
         ...any(waitingIds.map((id) => [`id=`, param(id)])),
         `)`,
@@ -186,7 +189,7 @@ export class PgQueuePublisher implements QueuePublisher {
       JobsTable,
       'args' | 'job_type' | 'concurrency_group' | 'timeout'
     >);
-    let [{ id: jobId }] = (await this.query([
+    let [{ id: jobId }] = (await this.#query([
       'INSERT INTO JOBS',
       ...addExplicitParens(separatedByCommas(nameExpressions)),
       'VALUES',
@@ -194,7 +197,7 @@ export class PgQueuePublisher implements QueuePublisher {
       'RETURNING id',
     ] as Expression)) as Pick<JobsTable, 'id'>[];
     log.debug(`%s created, notify jobs`, jobId);
-    await this.query([`NOTIFY jobs`]);
+    await this.#query([`NOTIFY jobs`]);
     let notifier = new Deferred<T>();
     let job = new Job(jobId, notifier);
     this.addNotifier(jobId, notifier);

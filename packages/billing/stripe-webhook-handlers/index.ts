@@ -1,9 +1,10 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import { DBAdapter, decodeWebSafeBase64 } from '@cardstack/runtime-common';
 import { handlePaymentSucceeded } from './payment-succeeded';
 import { handleCheckoutSessionCompleted } from './checkout-session-completed';
 
 import Stripe from 'stripe';
 import { handleSubscriptionDeleted } from './subscription-deleted';
+import { getUserByStripeId } from '../billing-queries';
 
 export type StripeEvent = {
   id: string;
@@ -99,11 +100,15 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
 // Invoice immediately (when prorating): CHECKED
 // When switching to a cheaper subscription -> WAIT UNTIL END OF BILLING PERIOD TO UPDATE
 
-export default async function stripeWebhookHandler(
-  dbAdapter: DBAdapter,
-  request: Request,
-  sendBillingNotification: (stripeUserId: string) => Promise<void>,
-): Promise<Response> {
+export default async function stripeWebhookHandler({
+  dbAdapter,
+  request,
+  sendMatrixEvent,
+}: {
+  dbAdapter: DBAdapter;
+  request: Request;
+  sendMatrixEvent: (matrixUserId: string, eventType: string) => Promise<void>;
+}): Promise<Response> {
   let signature = request.headers.get('stripe-signature');
 
   if (!signature) {
@@ -130,27 +135,78 @@ export default async function stripeWebhookHandler(
 
   switch (type) {
     // These handlers should eventually become jobs which workers will process asynchronously
-    case 'invoice.payment_succeeded':
+    case 'invoice.payment_succeeded': {
       await handlePaymentSucceeded(
         dbAdapter,
         event as StripeInvoicePaymentSucceededWebhookEvent,
       );
-      sendBillingNotification(event.data.object.customer);
+      sendBillingNotification({
+        dbAdapter,
+        sendMatrixEvent,
+        stripeEvent: event,
+      });
       break;
-    case 'customer.subscription.deleted': // canceled by the user, or expired due to payment failure, or payment dispute
+    }
+    case 'customer.subscription.deleted': {
+      // canceled by the user, or expired due to payment failure, or payment dispute
       await handleSubscriptionDeleted(
         dbAdapter,
         event as StripeSubscriptionDeletedWebhookEvent,
       );
-      sendBillingNotification(event.data.object.customer);
+      sendBillingNotification({
+        dbAdapter,
+        sendMatrixEvent,
+        stripeEvent: event,
+      });
       break;
-    case 'checkout.session.completed':
+    }
+    case 'checkout.session.completed': {
       await handleCheckoutSessionCompleted(
         dbAdapter,
         event as StripeCheckoutSessionCompletedWebhookEvent,
       );
-      sendBillingNotification(event.data.object.customer);
+      sendBillingNotification({
+        dbAdapter,
+        sendMatrixEvent,
+        stripeEvent: event,
+      });
       break;
+    }
   }
   return new Response('ok');
+}
+
+async function sendBillingNotification({
+  dbAdapter,
+  sendMatrixEvent,
+  stripeEvent,
+}: {
+  dbAdapter: DBAdapter;
+  sendMatrixEvent: (matrixUserId: string, eventType: string) => Promise<void>;
+  stripeEvent: StripeEvent;
+}) {
+  let matrixUserId = await extractMatrixUserId(dbAdapter, stripeEvent);
+  await sendMatrixEvent(matrixUserId, 'billing-notification');
+}
+
+// Stripe events will have a `customer` (stripe customer id) field in the "invoice.payment_succeeded" event
+// but not in the "checkout.session.completed" event. In the latter case, we need to look up the user by
+// the `client_reference_id` field, which is a url parameter with the value of an encoded matrix user id
+// (these are the payment links for subscribing to the free plan, and buying extra credits)
+async function extractMatrixUserId(dbAdapter: DBAdapter, event: StripeEvent) {
+  let encodedMatrixUserId = event.data.object.client_reference_id;
+  let matrixUserId = encodedMatrixUserId
+    ? decodeWebSafeBase64(encodedMatrixUserId)
+    : undefined;
+
+  if (!matrixUserId && event.data.object.customer) {
+    let user = await getUserByStripeId(dbAdapter, event.data.object.customer);
+    matrixUserId = user?.matrixUserId;
+  }
+
+  if (!matrixUserId) {
+    throw new Error('Failed to extract matrix user id from stripe event');
+  }
+
+  return matrixUserId;
 }

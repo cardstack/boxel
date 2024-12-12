@@ -2,10 +2,19 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Mad As a Hatter",
+      "headline": "Mad As a Hatter",
       "slug": "mad-as-a-hatter",
       "body": "## Where it all begins\n\nThis is a story of a man named [Brady](https://eightiesforbrady.com), who was bringing up three very lovely girls under the rule of the Queen of Hearts.",
       "publishDate": "2034-11-20T18:00:00.000Z",
+      "featuredImage": {
+        "imageUrl": "https://images.unsplash.com/photo-1551422788-18e2a1f5bb88?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+        "credit": null,
+        "caption": "We're all mad here.",
+        "altText": "",
+        "size": "contain",
+        "height": 400,
+        "width": null
+      },
       "description": null,
       "thumbnailURL": "https://images.unsplash.com/photo-1551422788-18e2a1f5bb88?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
@@ -13,6 +22,11 @@
       "authorBio": {
         "links": {
           "self": "../Author/alice-enwunder"
+        }
+      },
+      "blog": {
+        "links": {
+          "self": null
         }
       }
     },
