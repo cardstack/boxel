@@ -22,10 +22,9 @@ import {
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import {
-  tokenRefreshPeriodSec,
-  sessionLocalStorageKey,
-} from '@cardstack/host/services/realm';
+import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
+
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -808,14 +807,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
+      let originalToken = window.localStorage.getItem(SessionLocalStorageKey);
       await waitUntil(
         () =>
-          window.localStorage.getItem(sessionLocalStorageKey) !== originalToken,
+          window.localStorage.getItem(SessionLocalStorageKey) !== originalToken,
         { timeout: refreshInSec * 3 * 1000 },
       );
 
-      let newToken = window.localStorage.getItem(sessionLocalStorageKey);
+      let newToken = window.localStorage.getItem(SessionLocalStorageKey);
       assert.ok(newToken, 'new session token obtained');
       assert.notEqual(
         originalToken,

@@ -20,9 +20,9 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
-import assistantIcon from './ai-assist-icon.webp';
+import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
-import { currentRoomIdPersistenceKey } from './panel';
+import assistantIcon from './ai-assist-icon.webp';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -222,7 +222,7 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @action
   private viewInChat() {
-    window.localStorage.setItem(currentRoomIdPersistenceKey, this.roomId);
+    window.localStorage.setItem(CurrentRoomIdPersistenceKey, this.roomId);
     this.args.onViewInChatClick();
   }
 }

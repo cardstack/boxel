@@ -163,7 +163,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     await click('[data-test-generate-app]');
     await click('[data-test-past-sessions-button]');
     let newRoomButton = findAll('[data-test-enter-room]').filter((el) =>
-      el.textContent?.includes('AI Assistant'),
+      el.textContent?.includes('AI Assistant Room'),
     )[0];
 
     assert.ok(newRoomButton, 'new room button exists');
@@ -173,21 +173,25 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     await click(`[data-test-enter-room="${roomId}"]`);
 
     assert
-      .dom(`[data-test-room-name="AI Assistant"] [data-test-message-idx="0"]`)
+      .dom(
+        `[data-test-room-name="AI Assistant Room"] [data-test-message-idx="0"]`,
+      )
       .containsText('Generate code');
     let events = getRoomEvents(roomId);
     let lastEvContent = events[events.length - 1].content as CardMessageContent;
     assert.strictEqual(
       lastEvContent.body,
       'Generate code for the application given the product requirements, you do not need to strictly follow the schema if it does not seem appropriate for the application.',
+      'Event content is correct',
     );
     assert.strictEqual(
       getRoomState(roomId, 'com.cardstack.boxel.room.skills').enabledEventIds
         .length,
-      2,
+      1,
+      'Only added skill is present',
     );
     let skillEventId = getRoomState(roomId, 'com.cardstack.boxel.room.skills')
-      .enabledEventIds[1];
+      .enabledEventIds[0];
     let skillEventData = JSON.parse(
       (
         events.find((e) => e.event_id === skillEventId)

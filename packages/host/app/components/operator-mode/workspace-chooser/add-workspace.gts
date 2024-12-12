@@ -51,7 +51,7 @@ export default class AddWorkspace extends Component<Signature> {
     this.displayName = value;
     // if the user starts typing in the endpoint field, then stop helping them
     if (!this.hasUserEditedEndpoint) {
-      this.endpoint = cleanseString(value, '-');
+      this.endpoint = cleanseString(value);
     }
   };
   private closeModal = () => {
