@@ -18,6 +18,7 @@ import {
   apiFor,
   hasExecutableExtension,
   isCardInstance,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import type MessageService from '@cardstack/host/services/message-service';
@@ -54,7 +55,7 @@ interface Args {
   named: {
     // using string type here so that URL's that have the same href but are
     // different instances don't result in re-running the resource
-    url: string | undefined;
+    urlOrDoc: string | SingleCardDocument | undefined;
     isLive: boolean;
     // this is not always constructed within a container so we pass in our services
     cardService: CardService;
@@ -146,7 +147,7 @@ export class CardResource extends Resource<Args> {
     }
 
     let {
-      url,
+      urlOrDoc,
       isLive,
       onCardInstanceChange,
       messageService,
@@ -155,14 +156,14 @@ export class CardResource extends Resource<Args> {
     } = named;
     this.messageService = messageService;
     this.cardService = cardService;
-    this.url = url?.replace(/\.json$/, '');
+    this.url = urlOrDoc ? asURL(urlOrDoc) : undefined;
     this.onCardInstanceChange = onCardInstanceChange;
     this.cardError = undefined;
     this.resetLoader = resetLoader;
-    if (isLive && this.url) {
-      this.loaded = this.loadLiveModel.perform(new URL(this.url));
-    } else if (this.url) {
-      this.loaded = this.loadStaticModel.perform(new URL(this.url));
+    if (isLive && urlOrDoc) {
+      this.loaded = this.loadLiveModel.perform(urlOrDoc);
+    } else if (urlOrDoc) {
+      this.loaded = this.loadStaticModel.perform(urlOrDoc);
     }
 
     registerDestructor(this, () => {
@@ -189,22 +190,26 @@ export class CardResource extends Resource<Args> {
     return this._api;
   }
 
-  private loadStaticModel = restartableTask(async (url: URL) => {
-    let cardOrError = await this.getCard(url);
-    await this.updateCardInstance(cardOrError);
-  });
+  private loadStaticModel = restartableTask(
+    async (urlOrDoc: string | SingleCardDocument) => {
+      let cardOrError = await this.getCard(urlOrDoc);
+      await this.updateCardInstance(cardOrError);
+    },
+  );
 
-  private loadLiveModel = restartableTask(async (url: URL) => {
-    let cardOrError = await this.getCard(url, liveCardIdentityContext);
-    await this.updateCardInstance(cardOrError);
-    if (isCardInstance(cardOrError)) {
-      let subscribers = liveCardIdentityContext.subscribers(cardOrError.id)!;
-      subscribers.add(this);
-    } else {
-      console.warn(`cannot load card ${cardOrError.id}`, cardOrError);
-      this.subscribeToRealm(url.href);
-    }
-  });
+  private loadLiveModel = restartableTask(
+    async (urlOrDoc: string | SingleCardDocument) => {
+      let cardOrError = await this.getCard(urlOrDoc, liveCardIdentityContext);
+      await this.updateCardInstance(cardOrError);
+      if (isCardInstance(cardOrError)) {
+        let subscribers = liveCardIdentityContext.subscribers(cardOrError.id)!;
+        subscribers.add(this);
+      } else {
+        console.warn(`cannot load card ${cardOrError.id}`, cardOrError);
+        this.subscribeToRealm(asURL(urlOrDoc));
+      }
+    },
+  );
 
   private subscribeToRealm(cardOrId: CardDef | string) {
     let card: CardDef | undefined;
@@ -258,7 +263,7 @@ export class CardResource extends Resource<Args> {
               }
               // we've already established a subscription--we're in it, just
               // load the updated instance
-              this.loadStaticModel.perform(new URL(this.url));
+              this.loadStaticModel.perform(this.url);
             }
             return;
           }
@@ -276,7 +281,7 @@ export class CardResource extends Resource<Args> {
                 this.resetLoader();
                 let subscribers = liveCardIdentityContext.subscribers(card.id);
                 liveCardIdentityContext.delete(card.id);
-                this.loadStaticModel.perform(new URL(card.id));
+                this.loadStaticModel.perform(card.id);
                 liveCardIdentityContext.update(
                   card.id,
                   this._card,
@@ -292,41 +297,46 @@ export class CardResource extends Resource<Args> {
     });
   }
 
-  private async getCard(url: URL, identityContext?: LiveCardIdentityContext) {
-    if (typeof url === 'string') {
-      url = new URL(url);
-    }
+  private async getCard(
+    urlOrDoc: string | SingleCardDocument,
+    identityContext?: LiveCardIdentityContext,
+  ) {
+    let url = asURL(urlOrDoc);
     // createFromSerialized would also do this de-duplication, but we want to
     // also avoid the fetchJSON when we already have the stable card.
-    let existingCard = identityContext?.get(url.href);
+    let existingCard = identityContext?.get(url);
     if (existingCard) {
       return existingCard;
     }
     try {
-      let json = await this.cardService.fetchJSON(url);
-      if (!isSingleCardDocument(json)) {
-        throw new Error(
-          `bug: server returned a non card document for ${url}:
+      let doc = typeof urlOrDoc !== 'string' ? urlOrDoc : undefined;
+      if (!doc) {
+        let json = await this.cardService.fetchJSON(url);
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
-        );
+          );
+        }
+        doc = json;
       }
       let card = await this.cardService.createFromSerialized(
-        json.data,
-        json,
-        new URL(json.data.id),
+        doc.data,
+        doc,
+        new URL(doc.data.id),
         {
           identityContext,
         },
       );
-      if (identityContext && identityContext.hasError(url.href)) {
-        liveCardIdentityContext.update(url.href, card);
+      if (identityContext && identityContext.hasError(url)) {
+        liveCardIdentityContext.update(url, card);
       }
       return card;
     } catch (error: any) {
       if (identityContext) {
-        liveCardIdentityContext.update(url.href, undefined);
+        liveCardIdentityContext.update(url, undefined);
       }
-      let errorResponse = processCardError(url, error);
+      let errorResponse = processCardError(new URL(url), error);
       return errorResponse.errors[0];
     }
   }
@@ -409,7 +419,7 @@ export class CardResource extends Resource<Args> {
 
 export function getCard(
   parent: object,
-  url: () => string | undefined,
+  urlOrDoc: () => string | SingleCardDocument | undefined,
   opts?: {
     isLive?: () => boolean;
     onCardInstanceChange?: () => (
@@ -423,7 +433,7 @@ export function getCard(
   ) as LoaderService;
   return CardResource.from(parent, () => ({
     named: {
-      url: url(),
+      urlOrDoc: urlOrDoc(),
       isLive: opts?.isLive ? opts.isLive() : true,
       onCardInstanceChange: opts?.onCardInstanceChange
         ? opts.onCardInstanceChange()
@@ -484,4 +494,10 @@ function processCardError(url: URL, error: any): CardErrors {
         };
     }
   }
+}
+
+export function asURL(urlOrDoc: string | SingleCardDocument) {
+  return typeof urlOrDoc === 'string'
+    ? urlOrDoc.replace(/\.json$/, '')
+    : urlOrDoc.data.id;
 }

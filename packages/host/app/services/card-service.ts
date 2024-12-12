@@ -449,30 +449,40 @@ export default class CardService extends Service {
     try {
       console.time('search deserialization');
       return (
-        await Promise.all(
-          collectionDoc.data.map(async (doc) => {
-            try {
-              return await this.createFromSerialized(
-                doc,
-                collectionDoc,
-                new URL(doc.id),
-              );
-            } catch (e) {
-              console.warn(
-                `Skipping ${
-                  doc.id
-                }. Encountered error deserializing from search result for query ${JSON.stringify(
-                  query,
-                  null,
-                  2,
-                )} against realm ${realmURL}`,
-                e,
-              );
-              return undefined;
-            }
-          }),
+        // use Promise.allSettled so that if one particular realm is
+        // misbehaving it doesn't effect results from other realms
+        (
+          (
+            await Promise.allSettled(
+              collectionDoc.data.map(async (doc) => {
+                try {
+                  return await this.createFromSerialized(
+                    doc,
+                    collectionDoc,
+                    new URL(doc.id),
+                  );
+                } catch (e) {
+                  console.warn(
+                    `Skipping ${
+                      doc.id
+                    }. Encountered error deserializing from search result for query ${JSON.stringify(
+                      query,
+                      null,
+                      2,
+                    )} against realm ${realmURL}`,
+                    e,
+                  );
+                  return undefined;
+                }
+              }),
+            )
+          ).filter(
+            (p) => p.status === 'fulfilled',
+          ) as PromiseFulfilledResult<CardDef>[]
         )
-      ).filter(Boolean) as CardDef[];
+          .map((p) => p.value)
+          .filter(Boolean) as CardDef[]
+      );
     } finally {
       if (environment !== 'test') {
         console.timeEnd('search deserialization');
