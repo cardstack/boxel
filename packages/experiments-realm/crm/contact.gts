@@ -1,32 +1,25 @@
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
 import { PhoneField } from '../phone';
 import { EmailField } from '../email';
 import { ContactLinkField } from '../fields/contact-link';
 import {
   Component,
   CardDef,
-  FieldDef,
   field,
   contains,
   linksTo,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { fn } from '@ember/helper';
-import { RadioInput } from '@cardstack/boxel-ui/components';
-import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
-import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import AvatarGroup from '../components/avatar-group';
 import { Company } from './company';
 import { Avatar } from '@cardstack/boxel-ui/components';
 import { StatusPill } from '../components/status-pill';
-import type IconComponent from '@cardstack/boxel-icons/captions';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
+import { type LooseyGooseyData } from '../loosey-goosey';
+import type IconComponent from '@cardstack/boxel-icons/captions';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -51,91 +44,6 @@ export class SocialLinkField extends ContactLinkField {
       cta: 'Contact',
     },
   ];
-}
-
-const getStatusData = (
-  label: string | undefined,
-): LooseyGooseyData | undefined => {
-  return StatusField.values.find((status) => status.label === label);
-};
-
-export interface LooseyGooseyData {
-  index: number;
-  label: string;
-  icon: typeof IconComponent;
-  lightColor: string;
-  darkColor: string;
-}
-
-export class LooseGooseyField extends FieldDef {
-  @field index = contains(NumberField); //sorting order
-  @field label = contains(StringField);
-  static values: LooseyGooseyData[] = []; //help with the types
-}
-
-class EditContactStatusTemplate extends Component<typeof StatusField> {
-  @tracked label = this.args.model.label;
-
-  get statuses() {
-    return StatusField.values;
-  }
-
-  get selectedStatus() {
-    return this.statuses?.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  @action handleStatusChange(status: LooseyGooseyData): void {
-    this.label = status.label;
-    this.args.model.label = this.selectedStatus?.label;
-    this.args.model.index = this.selectedStatus?.index;
-  }
-
-  <template>
-    <RadioInput
-      @groupDescription='Select Status'
-      @items={{this.statuses}}
-      @checkedId={{this.selectedStatus.label}}
-      @orientation='horizontal'
-      @spacing='default'
-      @keyName='label'
-      as |item|
-    >
-      <item.component @onChange={{fn this.handleStatusChange item.data}}>
-        {{item.data.label}}
-      </item.component>
-    </RadioInput>
-  </template>
-}
-
-export class StatusField extends LooseGooseyField {
-  // loosey goosey pattern
-  static displayName = 'status';
-
-  static values = [
-    {
-      index: 0,
-      label: 'Customer',
-      icon: HeartHandshakeIcon,
-      lightColor: '#8bff98',
-      darkColor: '#01d818',
-    },
-    {
-      index: 1,
-      label: 'Lead',
-      icon: TargetArrowIcon,
-      lightColor: '#E6F4FF',
-      darkColor: '#0090FF',
-    },
-  ];
-
-  static edit = EditContactStatusTemplate;
-  static embedded = class Embedded extends Component<typeof StatusField> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
 }
 
 class EmbeddedTemplate extends Component<typeof Contact> {
@@ -170,16 +78,14 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
 
-      {{#if @model.status.label}}
-        {{#let (getStatusData @model.status.label) as |statusData|}}
-          <StatusPill
-            @label={{@model.status.label}}
-            @icon={{statusData.icon}}
-            @iconDarkColor={{statusData.darkColor}}
-            @iconLightColor={{statusData.lightColor}}
-            class='status-pill'
-          />
-        {{/let}}
+      {{#if @model.statusTag}}
+        <StatusPill
+          @label={{@model.statusTag.label}}
+          @icon={{@model.statusTag.icon}}
+          @iconDarkColor={{@model.statusTag.darkColor}}
+          @iconLightColor={{@model.statusTag.lightColor}}
+          class='status-pill'
+        />
       {{/if}}
     </article>
 
@@ -257,17 +163,16 @@ class FittedTemplate extends Component<typeof Contact> {
           <@fields.socialLinks @format='atom' />
         </div>
       {{/if}}
-
-      {{#if @model.status.label}}
-        {{#let (getStatusData @model.status.label) as |statusData|}}
-          <StatusPill
-            @label={{@model.status.label}}
-            @icon={{statusData.icon}}
-            @iconDarkColor={{statusData.darkColor}}
-            @iconLightColor={{statusData.lightColor}}
-          />
-        {{/let}}
+      {{#if @model.statusTag}}
+        <StatusPill
+          @label={{@model.statusTag.label}}
+          @icon={{@model.statusTag.icon}}
+          @iconDarkColor={{@model.statusTag.darkColor}}
+          @iconLightColor={{@model.statusTag.lightColor}}
+          class='status-pill'
+        />
       {{/if}}
+
     </article>
 
     <style scoped>
@@ -824,9 +729,16 @@ class AtomTemplate extends Component<typeof Contact> {
   </template>
 }
 
+interface StatusTag extends LooseyGooseyData {
+  lightColor: string;
+  darkColor: string;
+  icon: typeof IconComponent;
+}
+
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
   static icon = ContactIcon;
+  statusTag: StatusTag | undefined = undefined;
 
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
@@ -837,7 +749,6 @@ export class Contact extends CardDef {
   @field secondaryEmail = contains(EmailField);
   @field phoneMobile = contains(PhoneField);
   @field phoneOffice = contains(PhoneField);
-  @field status = contains(StatusField);
   @field socialLinks = containsMany(SocialLinkField);
 
   @field name = contains(StringField, {
