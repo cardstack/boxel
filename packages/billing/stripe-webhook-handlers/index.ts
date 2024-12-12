@@ -195,7 +195,7 @@ async function extractMatrixUserId(dbAdapter: DBAdapter, event: StripeEvent) {
     ? decodeWebSafeBase64(encodedMatrixUserId)
     : undefined;
 
-  if (event.data.object.customer) {
+  if (!matrixUserId && event.data.object.customer) {
     let user = await getUserByStripeId(dbAdapter, event.data.object.customer);
     matrixUserId = user?.matrixUserId;
   }
