@@ -14,7 +14,6 @@ import {
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import { SkillCard } from './skill-card';
-import { Command } from '@cardstack/runtime-common';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -96,7 +95,7 @@ export class AddSkillsToRoomInput extends CardDef {
 export class UpdateSkillActivationInput extends CardDef {
   @field roomId = contains(StringField);
   @field skillEventId = contains(StringField);
-  @field value = contains(BooleanField);
+  @field isActive = contains(BooleanField);
 }
 
 export class SendAiAssistantMessageInput extends CardDef {

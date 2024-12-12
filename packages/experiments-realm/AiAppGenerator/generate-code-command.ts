@@ -74,7 +74,7 @@ function constructModule(input: ConstructApplicationCodeInput) {
   import TextAreaField from 'https://cardstack.com/base/text-area';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
-import { AppCard } from '/catalog/app-card';
+import { AppCard } from '/experiments/app-card';
 import {
   CardDef,
   field,
