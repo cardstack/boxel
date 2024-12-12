@@ -9,13 +9,11 @@ export class WebsiteField extends UrlField {
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      {{#if @model}}
-        <EntityDisplay @name={{@model}}>
-          <:thumbnail>
-            <WorldWwwIcon class='icon' />
-          </:thumbnail>
-        </EntityDisplay>
-      {{/if}}
+      <EntityDisplay @name={{@model}}>
+        <:thumbnail>
+          <WorldWwwIcon class='icon' />
+        </:thumbnail>
+      </EntityDisplay>
     </template>
   };
 }

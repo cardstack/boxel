@@ -2,18 +2,6 @@
   "data": {
     "type": "card",
     "attributes": {
-      "address": {
-        "addressLine1": null,
-        "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
-        "country": {
-          "name": null,
-          "code": null
-        },
-        "poBoxNumber": null
-      },
       "shippingAddress": {
         "addressLine1": null,
         "addressLine2": null,
@@ -38,7 +26,6 @@
         },
         "poBoxNumber": null
       },
-      "website": "",
       "description": null,
       "thumbnailURL": null
     },
