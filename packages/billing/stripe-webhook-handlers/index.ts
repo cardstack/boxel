@@ -189,6 +189,10 @@ async function sendBillingNotification({
   await sendMatrixEvent(matrixUserId, 'billing-notification');
 }
 
+// Stripe events will have a `customer` (stripe customer id) field in the "invoice.payment_succeeded" event
+// but not in the "checkout.session.completed" event. In the latter case, we need to look up the user by
+// the `client_reference_id` field, which is a url parameter with the value of an encoded matrix user id
+// (these are the payment links for subscribing to the free plan, and buying extra credits)
 async function extractMatrixUserId(dbAdapter: DBAdapter, event: StripeEvent) {
   let encodedMatrixUserId = event.data.object.client_reference_id;
   let matrixUserId = encodedMatrixUserId
