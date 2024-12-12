@@ -82,11 +82,17 @@ export default class CommandService extends Service {
       // Get the input type and validate/construct the payload
       let InputType = await command.getInputType();
 
-      // Construct a new instance of the input type with the payload
-      let typedInput = new InputType({
-        ...toolCall.arguments.attributes,
-        ...toolCall.arguments.relationships,
-      });
+      // Construct a new instance of the input type with the
+      // The input is undefined if the command has no input type
+      let typedInput;
+      if (InputType) {
+        typedInput = new InputType({
+          ...toolCall.arguments.attributes,
+          ...toolCall.arguments.relationships,
+        });
+      } else {
+        typedInput = undefined;
+      }
       let res = await command.execute(typedInput);
       await this.matrixService.sendReactionEvent(
         event.room_id!,
@@ -131,10 +137,16 @@ export default class CommandService extends Service {
         // Get the input type and validate/construct the payload
         let InputType = await commandToRun.getInputType();
         // Construct a new instance of the input type with the payload
-        let typedInput = new InputType({
-          ...payload.attributes,
-          ...payload.relationships,
-        });
+        // The input is undefined if the command has no input type
+        let typedInput;
+        if (InputType) {
+          typedInput = new InputType({
+            ...payload.attributes,
+            ...payload.relationships,
+          });
+        } else {
+          typedInput = undefined;
+        }
         [res] = await all([
           await commandToRun.execute(typedInput),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown

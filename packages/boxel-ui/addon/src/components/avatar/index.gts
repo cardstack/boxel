@@ -10,7 +10,7 @@ interface Signature {
     displayName?: string;
     isReady: boolean;
     thumbnailURL?: string;
-    userId: string;
+    userId?: string | null;
   };
   Element: HTMLDivElement;
 }
@@ -73,7 +73,7 @@ export default class Avatar extends Component<Signature> {
     }
     let name = this.args.displayName?.length
       ? this.args.displayName
-      : this.args.userId.replace(/^@/, '');
+      : this.args.userId?.replace(/^@/, '') ?? '';
     return name.slice(0, 1).toUpperCase();
   }
 }

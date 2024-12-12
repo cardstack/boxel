@@ -16,6 +16,7 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
+import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
@@ -135,20 +136,24 @@ module('Acceptance | Commands tests', function (hooks) {
           participants: input.participants,
         });
         let saveCardCommand = new SaveCardCommand(this.commandContext);
-        const SaveCardInput = await saveCardCommand.getInputType();
-        await saveCardCommand.execute(
-          new SaveCardInput({
-            card: meeting,
-            realm: testRealmURL,
-          }),
-        );
+        await saveCardCommand.execute({
+          card: meeting,
+          realm: testRealmURL,
+        });
 
         // Mutate and save again
         let patchCardCommand = new PatchCardCommand(this.commandContext, {
           cardType: Meeting,
         });
 
+        let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+          this.commandContext,
+        );
+        let { roomId } = await createAIAssistantRoomCommand.execute({
+          name: 'AI Assistant Room',
+        });
         await this.commandContext.sendAiAssistantMessage({
+          roomId,
           prompt: `Change the topic of the meeting to "${input.topic}"`,
           attachedCards: [meeting],
           commands: [{ command: patchCardCommand, autoExecute: true }],
@@ -157,13 +162,9 @@ module('Acceptance | Commands tests', function (hooks) {
         await patchCardCommand.waitForNextCompletion();
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
-        const ShowCardInput = await showCardCommand.getInputType();
-        await showCardCommand.execute(
-          new ShowCardInput({
-            cardToShow: meeting,
-            placement: 'addToStack',
-          }),
-        );
+        await showCardCommand.execute({
+          cardToShow: meeting,
+        });
 
         return undefined;
       }
@@ -201,14 +202,23 @@ module('Acceptance | Commands tests', function (hooks) {
       });
 
       static isolated = class Isolated extends Component<typeof this> {
-        runSwitchToCodeModeCommandViaAiAssistant = (autoExecute: boolean) => {
+        runSwitchToCodeModeCommandViaAiAssistant = async (
+          autoExecute: boolean,
+        ) => {
           let commandContext = this.args.context?.commandContext;
           if (!commandContext) {
             console.error('No command context found');
             return;
           }
+          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+            commandContext,
+          );
+          let { roomId } = await createAIAssistantRoomCommand.execute({
+            name: 'AI Assistant Room',
+          });
           let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
           commandContext.sendAiAssistantMessage({
+            roomId,
             prompt: 'Switch to code mode',
             commands: [{ command: switchSubmodeCommand, autoExecute }],
           });
@@ -224,12 +234,10 @@ module('Acceptance | Commands tests', function (hooks) {
             undefined,
           );
           setOwner(scheduleMeeting, getOwner(this)!);
-          await scheduleMeeting.execute(
-            new ScheduleMeetingInput({
-              topic: 'Meeting with Hassan',
-              participants: [this.args.model],
-            }),
-          );
+          await scheduleMeeting.execute({
+            topic: 'Meeting with Hassan',
+            participants: [this.args.model as Person],
+          });
         };
         runDelayCommandViaAiAssistant = async () => {
           let commandContext = this.args.context?.commandContext;
