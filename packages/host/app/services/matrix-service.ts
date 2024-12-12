@@ -26,7 +26,6 @@ import {
   loaderFor,
   LooseCardResource,
   ResolvedCodeRef,
-  Command,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -450,7 +449,7 @@ export default class MatrixService extends Service {
     return this.client.createRealmSession(realmURL);
   }
 
-  private async sendEvent(
+  async sendEvent(
     roomId: string,
     eventType: string,
     content:
@@ -533,8 +532,8 @@ export default class MatrixService extends Service {
   async addCardsToRoom(
     cards: CardDef[],
     roomId: string,
-    cardHashes: Map<string, string>,
-    opts?: CardAPI.SerializeOpts,
+    cardHashes: Map<string, string> = this.cardHashes,
+    opts: CardAPI.SerializeOpts = { maybeRelativeURL: null },
   ): Promise<string[]> {
     if (!cards.length) {
       return [];
@@ -602,8 +601,6 @@ export default class MatrixService extends Service {
     let attachedCardsEventIds = await this.addCardsToRoom(
       attachedCards,
       roomId,
-      this.cardHashes,
-      { maybeRelativeURL: null },
     );
 
     await this.sendEvent(roomId, 'm.room.message', {
@@ -621,64 +618,6 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
-  }
-
-  public async sendAiAssistantMessage(params: {
-    roomId: string;
-    show?: boolean; // if truthy, ensure the side panel is open to the room
-    prompt: string;
-    attachedCards?: CardDef[];
-    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
-  }): Promise<{ roomId: string }> {
-    let roomId = params.roomId;
-    let html = markdownToHtml(params.prompt);
-    let mappings = await basicMappings(this.loaderService.loader);
-    let tools = [];
-    for (let { command, autoExecute } of params.commands ?? []) {
-      // get a registered name for the command
-      let name = this.commandService.registerCommand(command, autoExecute);
-      tools.push({
-        type: 'function',
-        function: {
-          name,
-          description: command.description,
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
-            },
-            required: ['attributes', 'description'],
-          },
-        },
-      });
-    }
-
-    let attachedCardsEventIds = await this.addCardsToRoom(
-      params.attachedCards ?? [],
-      roomId,
-      this.cardHashes,
-      { maybeRelativeURL: null },
-    );
-
-    let clientGeneratedId = uuidv4();
-
-    await this.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.message',
-      body: params.prompt || '',
-      format: 'org.matrix.custom.html',
-      formatted_body: html,
-      clientGeneratedId,
-      data: {
-        attachedCardsEventIds,
-        context: {
-          tools,
-        },
-      },
-    } as CardMessageContent);
-    return { roomId };
   }
 
   private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {

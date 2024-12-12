@@ -3,6 +3,8 @@ import { on } from '@ember/modifier';
 import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+
 import {
   contains,
   field,
@@ -44,7 +46,10 @@ export class Person extends CardDef {
         name: 'AI Assistant Room',
       });
       let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
-      commandContext.sendAiAssistantMessage({
+      let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+        commandContext,
+      );
+      await sendAiAssistantMessageCommand.execute({
         roomId,
         prompt: 'Switch to code mode',
         commands: [{ command: switchSubmodeCommand, autoExecute: true }],

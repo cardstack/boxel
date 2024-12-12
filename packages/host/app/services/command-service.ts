@@ -112,11 +112,7 @@ export default class CommandService extends Service {
   }
 
   get commandContext(): CommandContext {
-    let result = {
-      sendAiAssistantMessage: (
-        ...args: Parameters<MatrixService['sendAiAssistantMessage']>
-      ) => this.matrixService.sendAiAssistantMessage(...args),
-    };
+    let result = {};
     setOwner(result, getOwner(this)!);
 
     return result;
