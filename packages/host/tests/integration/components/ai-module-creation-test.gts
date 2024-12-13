@@ -193,10 +193,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     let skillEventId = getRoomState(roomId, 'com.cardstack.boxel.room.skills')
       .enabledEventIds[0];
     let skillEventData = JSON.parse(
-      (
-        events.find((e) => e.event_id === skillEventId)
-          ?.content as CardFragmentContent
-      ).data.cardFragment,
+      JSON.parse(events.find((e) => e.event_id === skillEventId)?.content.data)
+        .cardFragment,
     );
     assert.strictEqual(
       skillEventData.data.id,
