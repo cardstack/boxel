@@ -11,10 +11,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type {
-  CardMessageContent,
-  CardFragmentContent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { CardMessageContentt } from 'https://cardstack.com/base/matrix-event';
 
 import {
   testRealmURL,
