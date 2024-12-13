@@ -17,6 +17,7 @@ import {
   type PatchData,
   baseRealm,
   CommandContext,
+  CommandContextStamp,
 } from '@cardstack/runtime-common';
 import {
   type CardTypeFilter,
@@ -112,7 +113,9 @@ export default class CommandService extends Service {
   }
 
   get commandContext(): CommandContext {
-    let result = {};
+    let result = {
+      [CommandContextStamp]: true,
+    };
     setOwner(result, getOwner(this)!);
 
     return result;

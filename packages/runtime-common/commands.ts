@@ -7,9 +7,11 @@ import {
   CardSchema,
   generateJsonSchemaForCardType,
 } from './helpers/ai';
-import Owner from '@ember/owner';
 
-export type CommandContext = Owner;
+export const CommandContextStamp = Symbol.for('CommandContext');
+export interface CommandContext {
+  [CommandContextStamp]: boolean;
+}
 
 export class CommandInvocation<
   CardInputType extends CardDef | undefined,

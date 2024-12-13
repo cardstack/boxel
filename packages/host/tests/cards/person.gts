@@ -1,9 +1,8 @@
 import { on } from '@ember/modifier';
 
 import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
-
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 
 import {
   contains,
