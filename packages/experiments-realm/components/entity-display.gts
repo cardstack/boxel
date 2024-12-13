@@ -13,22 +13,25 @@ interface EntityDisplayArgs {
 }
 
 export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
-  get entityDisplayPositionClass() {
-    const center = this.args.center ? 'center' : '';
-    return ['entity-display', center].filter(Boolean).join(' ');
+  get shouldAlignCenter() {
+    return this.args.center;
   }
 
-  get entityNameTextClass() {
-    const underline = this.args.underline ? 'underline' : '';
-    return ['entity-name', underline].filter(Boolean).join(' ');
+  get shouldUnderlineText() {
+    return this.args.underline;
   }
 
   <template>
-    <div class={{this.entityDisplayPositionClass}} ...attributes>
+    <div
+      class='entity-display
+        {{if this.shouldAlignCenter "center"}}
+        ...attributes >'
+      ...attributes
+    >
       <div class='entity-thumbnail'>{{yield to='thumbnail'}}</div>
 
       <div class='entity-name-tag'>
-        <span class={{this.entityNameTextClass}}>
+        <span class='entity-name {{if this.shouldUnderlineText "underline"}}'>
           {{@name}}
         </span>
 
