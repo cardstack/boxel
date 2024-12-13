@@ -47,10 +47,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
           <:content>
             <EntityDisplay
               @name={{this.primaryContactwithPosition}}
+              @center={{true}}
               @underline={{true}}
             >
               <:thumbnail>
-                <UserSquare class='user-icon' width='20px' height='20px' />
+                <UserSquare class='user-icon' />
               </:thumbnail>
             </EntityDisplay>
 
@@ -137,9 +138,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
             <footer class='next-steps'>
               <div class='next-steps-row'>
-                <EntityDisplay @name='Next Steps'>
+                <EntityDisplay @name='Next Steps' @center={{true}}>
                   <:thumbnail>
-                    <Info class='info-icon' width='20px' height='20px' />
+                    <Info />
                   </:thumbnail>
                 </EntityDisplay>
 
@@ -266,9 +267,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         font: 600 var(--boxel-font-lg);
       }
       .user-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
         margin-left: auto;
       }
       .tag-container {

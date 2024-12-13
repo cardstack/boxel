@@ -74,12 +74,8 @@ export class EmailField extends StringField {
           </:thumbnail>
         </EntityDisplay>
       {{/if}}
-
       <style scoped>
         .icon {
-          width: var(--boxel-icon-sm);
-          height: var(--boxel-icon-sm);
-          flex-shrink: 0;
           color: var(--boxel-400);
         }
       </style>

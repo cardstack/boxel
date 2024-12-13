@@ -292,6 +292,14 @@ class FittedTemplate extends Component<typeof Contact> {
       .avatar-group-container {
         grid-area: avatar-group-container;
       }
+      .avatar-group-container
+        :where(.avatar-info .company-group .entity-name-tag) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+      }
       .contact-info {
         grid-area: contact-info;
         display: flex;

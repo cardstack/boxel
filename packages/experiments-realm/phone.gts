@@ -97,7 +97,7 @@ export class PhoneField extends FieldDef {
       {{#if @model.phoneNumber}}
         <EntityDisplay @name={{@model.phoneNumber}} @underline={{false}}>
           <:thumbnail>
-            <PhoneIcon class='icon gray' />
+            <PhoneIcon class='icon' />
           </:thumbnail>
           <:tag>
             <Pill class='pill-gray'>
@@ -107,7 +107,7 @@ export class PhoneField extends FieldDef {
         </EntityDisplay>
       {{/if}}
       <style scoped>
-        .icon.gray {
+        .icon {
           color: var(--boxel-400);
         }
         .pill-gray {
