@@ -25,6 +25,7 @@
         "alice@email.com",
         "dan@email.com"
       ],
+      "percentage": 100.159393,
       "contactLink": {
         "label": "Email",
         "value": "alice@email.com"

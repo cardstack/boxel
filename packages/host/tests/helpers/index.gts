@@ -824,6 +824,7 @@ export function setupRealmServerEndpoints(
                   url: 'https://extra-credits-payment-link-1250',
                   metadata: {
                     creditReloadAmount: 1250,
+                    price: 5,
                   },
                 },
               },
@@ -834,6 +835,7 @@ export function setupRealmServerEndpoints(
                   url: 'https://extra-credits-payment-link-15000',
                   metadata: {
                     creditReloadAmount: 15000,
+                    price: 30,
                   },
                 },
               },
@@ -844,6 +846,7 @@ export function setupRealmServerEndpoints(
                   url: 'https://extra-credits-payment-link-80000',
                   metadata: {
                     creditReloadAmount: 80000,
+                    price: 100,
                   },
                 },
               },
