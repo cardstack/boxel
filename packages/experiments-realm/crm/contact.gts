@@ -177,7 +177,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
             @icon={{statusData.icon}}
             @iconDarkColor={{statusData.darkColor}}
             @iconLightColor={{statusData.lightColor}}
-            class='status-pill'
+            class='crm-status-pill'
           />
         {{/let}}
       {{/if}}
@@ -210,7 +210,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-xxxs);
         flex-wrap: wrap;
       }
-      .status-pill {
+      .crm-status-pill {
         width: fit-content;
       }
     </style>
@@ -265,6 +265,7 @@ class FittedTemplate extends Component<typeof Contact> {
             @icon={{statusData.icon}}
             @iconDarkColor={{statusData.darkColor}}
             @iconLightColor={{statusData.lightColor}}
+            class='crm-status-pill'
           />
         {{/let}}
       {{/if}}
@@ -303,7 +304,7 @@ class FittedTemplate extends Component<typeof Contact> {
       .links {
         grid-area: links;
       }
-      .status-pill {
+      .crm-status-pill {
         grid-area: status;
         width: fit-content;
       }
@@ -566,7 +567,7 @@ class FittedTemplate extends Component<typeof Contact> {
         }
         .contact-info,
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -590,7 +591,7 @@ class FittedTemplate extends Component<typeof Contact> {
         .links {
           display: none;
         }
-        .status-pill {
+        .crm-status-pill {
           margin-left: auto;
           margin-top: 0;
           align-self: center;
@@ -612,7 +613,7 @@ class FittedTemplate extends Component<typeof Contact> {
           font-size: var(--boxel-font-size-sm);
         }
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -632,7 +633,7 @@ class FittedTemplate extends Component<typeof Contact> {
           font-size: var(--boxel-font-size-sm);
         }
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -648,7 +649,7 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-thumbnail),
         .avatar-group-container :where(.company-group),
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
         .avatar-group-container :where(.avatar-info .name) {
