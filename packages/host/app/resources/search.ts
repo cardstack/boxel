@@ -56,7 +56,7 @@ export class Search extends Resource<Args> {
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(
-          `${realm}_message`,
+          realm,
           ({ type, data }: { type: string; data: string }) => {
             let eventData = JSON.parse(data);
             // we are only interested in incremental index events
