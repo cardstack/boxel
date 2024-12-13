@@ -41,7 +41,7 @@ import {
   type CardDocument,
   type CardResource,
   type Actions,
-  type RealmInfo,
+  type CardResourceMeta,
   CodeRef,
   CommandContext,
 } from '@cardstack/runtime-common';
@@ -74,6 +74,7 @@ export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const realmURL = Symbol.for('cardstack-realm-url');
+export const meta = Symbol.for('cardstack-meta');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
@@ -1868,8 +1869,7 @@ export class MaybeBase64Field extends StringField {
 
 export class CardDef extends BaseDef {
   [isSavedInstance] = false;
-  [realmInfo]: RealmInfo | undefined = undefined;
-  [realmURL]: URL | undefined = undefined;
+  [meta]: CardResourceMeta | undefined = undefined;
   @field id = contains(ReadOnlyField);
   @field title = contains(StringField);
   @field description = contains(StringField);
@@ -1909,6 +1909,15 @@ export class CardDef extends BaseDef {
 
   static prefersWideFormat = false; // whether the card is full-width in the stack
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
+
+  get [realmInfo]() {
+    return getCardMeta(this, 'realmInfo');
+  }
+
+  get [realmURL]() {
+    let realmURLString = getCardMeta(this, 'realmURL');
+    return realmURLString ? new URL(realmURLString) : undefined;
+  }
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2324,7 +2333,11 @@ export function serializeCard(
             if (!modelRelativeTo) {
               return url.href;
             }
-            return maybeRelativeURL(url, modelRelativeTo, model[realmURL]);
+            const realmURLString = getCardMeta(model, 'realmURL');
+            const realmURL = realmURLString
+              ? new URL(realmURLString)
+              : undefined;
+            return maybeRelativeURL(url, modelRelativeTo, realmURL);
           },
         }
       : {}),
@@ -2431,11 +2444,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   }
 
   if (isCardInstance(instance)) {
-    if (!instance[realmInfo] && doc.data.meta.realmInfo) {
-      instance[realmInfo] = doc.data.meta.realmInfo;
-    }
-    if (!instance[realmURL] && doc.data.meta.realmURL) {
-      instance[realmURL] = new URL(doc.data.meta.realmURL);
+    if (!instance[meta] && doc.data.meta) {
+      instance[meta] = doc.data.meta;
     }
   }
   return await _updateFromSerialized(instance, doc.data, doc, identityContext);
@@ -2480,10 +2490,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
     instance = new card({ id: resource.id }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
     if (isCardInstance(instance)) {
-      instance[realmInfo] = data?.meta?.realmInfo;
-      instance[realmURL] = data?.meta?.realmURL
-        ? new URL(data.meta.realmURL)
-        : undefined;
+      instance[meta] = data?.meta;
     }
   }
   identityContexts.set(instance, identityContext);
@@ -3131,4 +3138,11 @@ function myLoader(): Loader {
   // this file is always loaded through our loader and always has access to import.meta.
   // @ts-ignore
   return (import.meta as any).loader;
+}
+
+export function getCardMeta<K extends keyof CardResourceMeta>(
+  card: CardDef,
+  metaKey: K,
+): CardResourceMeta[K] | undefined {
+  return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }

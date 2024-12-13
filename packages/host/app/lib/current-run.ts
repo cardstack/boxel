@@ -451,6 +451,7 @@ export class CurrentRun {
         meta: {
           realmInfo: this.#realmInfo,
           realmURL: this.realmURL,
+          lastModified,
         },
       });
       card = await api.createFromSerialized<typeof CardDef>(
