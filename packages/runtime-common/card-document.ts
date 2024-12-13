@@ -34,7 +34,7 @@ export type CardResourceMeta = Meta & {
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: string;
-}
+};
 
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;

@@ -560,7 +560,6 @@ export class BlogPost extends CardDef {
   });
   @field blog = linksTo(BlogAppCard, { isUsed: true });
   @field featuredImage = contains(FeaturedImageField);
-  @field blog = linksTo(BlogAppCard);
   @field lastUpdated = contains(DatetimeField, {
     computeVia: function (this: BlogPost) {
       let lastModified = getCardMeta(this, 'lastModified');
