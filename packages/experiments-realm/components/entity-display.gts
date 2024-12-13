@@ -23,9 +23,7 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
 
   <template>
     <div
-      class='entity-display
-        {{if this.shouldAlignCenter "center"}}
-        ...attributes >'
+      class='entity-display {{if this.shouldAlignCenter "center"}}'
       ...attributes
     >
       <div class='entity-thumbnail'>{{yield to='thumbnail'}}</div>
