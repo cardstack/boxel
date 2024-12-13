@@ -87,7 +87,7 @@ export default class ProfileSubscription extends Component<Signature> {
                 }}
                   <div class='payment-link' data-test-payment-link={{index}}>
                     <span><IconHexagon width='16px' height='16px' />
-                      {{paymentLink.creditReloadAmount}}</span>
+                      {{paymentLink.amountFormatted}}</span>
                     <BoxelButton
                       @as='anchor'
                       @kind='secondary-light'
@@ -95,7 +95,7 @@ export default class ProfileSubscription extends Component<Signature> {
                       @href={{this.urlWithClientReferenceId paymentLink.url}}
                       target='_blank'
                       data-test-pay-button={{index}}
-                    >Pay</BoxelButton>
+                    >Buy</BoxelButton>
                   </div>
                 {{/each}}
               {{/if}}
