@@ -1,19 +1,24 @@
 import {
-  CardDef,
   Component,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
-// import { BlogPost } from './blog-post';
+import { BlogPost } from './blog-post';
 import { RatingsSummary } from './ratings-summary';
 
-export class Review extends CardDef {
+// @ts-expect-error using own template
+export class Review extends BlogPost {
   static displayName = 'Review';
   @field rating = contains(RatingsSummary);
+  @field userRating = contains(RatingsSummary);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>
-        <@fields.rating class='rating' @format='atom' />
+        <@fields.rating class='rating' />
+        <BlogPost.isolated @model={{@model}} @fields={{@fields}} />
+
+        <div class='rate'>Rate this movie
+          <@fields.userRating class='user-rating' /></div>
       </article>
       <style scoped>
         article {
@@ -29,6 +34,14 @@ export class Review extends CardDef {
           height: 20px;
           font: 600 var(--boxel-font-sm);
           letter-spacing: var(--boxel-font-xs);
+        }
+        .rate {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .user-rating :deep(.rating) {
+          display: none;
         }
       </style>
     </template>

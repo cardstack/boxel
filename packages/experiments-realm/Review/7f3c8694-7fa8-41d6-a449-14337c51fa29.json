@@ -4,7 +4,13 @@
     "attributes": {
       "rating": {
         "average": 4.5,
-        "count": null
+        "count": null,
+        "isEditable": false
+      },
+      "userRating": {
+        "average": 4,
+        "count": null,
+        "isEditable": true
       },
       "headline": "Avengers: Quantum Convergence - A Mind-Bending Marvel Masterpiece",
       "slug": null,

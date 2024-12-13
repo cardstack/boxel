@@ -9,9 +9,10 @@ import {
   Component,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 
-import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { Star, StarHalfFill, StarFilled } from '@cardstack/boxel-ui/icons';
 
 const numberFormatter = new Intl.NumberFormat('en-US');
@@ -35,23 +36,27 @@ const StarIcon: TemplateOnlyComponent<StarIconSignature> = <template>
   {{/if}}
 </template>;
 
+interface StarItem {
+  rating: number;
+  type: StarType;
+}
+
 interface StarRatingSignature {
   Args: {
     value: number | undefined;
     isEditable?: boolean;
+    set: (value: RatingsSummary) => void;
   };
   Element: HTMLElement;
 }
 export class StarRating extends GlimmerComponent<StarRatingSignature> {
   maxRating = 5;
-  fullClassNames = 'star-button-full';
-  emptyClassNames = 'star-button-empty';
-  halfFullClassNames = 'star-button-half-full';
 
   get rating() {
     return this.args.value ?? 0;
   }
-  get stars() {
+
+  get stars(): StarItem[] {
     let starsArray = [];
     for (let i = 1; i <= this.maxRating; i++) {
       let type: StarType;
@@ -69,7 +74,7 @@ export class StarRating extends GlimmerComponent<StarRatingSignature> {
 
   <template>
     <span
-      class='star-rating'
+      class={{cn 'star-rating' editable=@isEditable}}
       aria-label='Rating is {{this.rating}} out of {{this.maxRating}}'
       ...attributes
     >
@@ -78,15 +83,12 @@ export class StarRating extends GlimmerComponent<StarRatingSignature> {
           <button
             class={{cn
               'star-button'
-              (if star.full this.fullClassNames)
-              (if star.halfFull this.halfFullClassNames)
-              (if
-                (and (not star.full) (not star.halfFull)) this.emptyClassNames
-              )
+              star-button-full=(eq star.type 'full')
+              star-button-empty=(eq star.type 'empty')
             }}
-            {{on 'click' (fn this.toggleStar star)}}
+            {{on 'click' (fn this.changeRating star)}}
           >
-            <StarIcon @type={{star.type}} />
+            <StarIcon class='star-icon' @type={{star.type}} />
           </button>
         {{else}}
           <StarIcon class='star-icon' @type={{star.type}} />
@@ -99,25 +101,66 @@ export class StarRating extends GlimmerComponent<StarRatingSignature> {
         align-items: center;
         gap: var(--boxel-sp-4xs);
       }
+      .star-rating.editable {
+        gap: 0;
+      }
+      .star-button:first-child {
+        padding-left: 0;
+      }
+      .star-button:last-child {
+        padding-right: 0;
+      }
       .star-button {
         color: currentColor;
         border: 0;
         background: none;
-        padding: 0;
+        padding: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .star-icon {
         min-width: 12px;
       }
+      .star-button-empty {
+        color: gray;
+      }
+      .star-button-empty:hover {
+        color: black;
+      }
+      .star-rating:has(.star-button-empty:hover) {
+        --icon-stroke-color: black;
+      }
+      .star-button-empty:hover ~ .star-button {
+        --icon-fill-color: none;
+        --icon-stroke-color: gray;
+      }
+      .star-button-full {
+        color: black;
+      }
+      .star-button-full:hover ~ .star-button-full {
+        --icon-fill-color: none;
+        --icon-stroke-color: black;
+      }
     </style>
   </template>
 
-  @action toggleStar(star: Star) {
-    /* can only toggle full or empty */
-    if (star.type === 'full' || star.type === 'half') {
-      star.type = 'empty';
-    } else {
-      star.type = 'full';
+  @action changeRating(star: StarItem) {
+    if (star.type === 'full' && star.rating === this.rating) {
+      this.args.set(
+        new RatingsSummary({ average: 0, count: null, isEditable: true }),
+      );
+      return;
     }
+
+    /* can only set full values */
+    this.args.set(
+      new RatingsSummary({
+        average: star.rating,
+        count: null,
+        isEditable: true,
+      }),
+    );
   }
 }
 
@@ -125,11 +168,16 @@ export class RatingsSummary extends FieldDef {
   static displayName = 'Ratings Summary';
   @field average = contains(NumberField);
   @field count = contains(NumberField);
+  @field isEditable = contains(BooleanField);
 
   static atom = class Atom extends Component<typeof this> {
     <template>
       <span class='rating-summary'>
-        <StarRating @value={{@model.average}} />
+        <StarRating
+          @value={{@model.average}}
+          @isEditable={{@model.isEditable}}
+          @set={{@set}}
+        />
         {{#if @model.average}}
           <span class='rating'>
             <@fields.average />
