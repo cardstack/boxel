@@ -449,9 +449,10 @@ export class CurrentRun {
       //Example: catalog-entry-card
       merge(adjustedResource, {
         meta: {
-          realmInfo: this.#realmInfo,
-          realmURL: this.realmURL,
           lastModified,
+          resourceCreatedAt,
+          realmInfo: this.#realmInfo,
+          realmURL: this.realmURL.href,
         },
       });
       card = await api.createFromSerialized<typeof CardDef>(
