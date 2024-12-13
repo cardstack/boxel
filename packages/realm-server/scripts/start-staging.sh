@@ -1,8 +1,8 @@
 #! /bin/sh
-# pnpm setup:base-in-deployment
-# pnpm setup:experiments-in-deployment
-# pnpm setup:seed-in-deployment
-# pnpm setup:catalog-in-deployment
+pnpm setup:base-in-deployment
+pnpm setup:experiments-in-deployment
+pnpm setup:seed-in-deployment
+pnpm setup:catalog-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='perf=debug' \
   MATRIX_URL=https://matrix-staging.stack.cards \
