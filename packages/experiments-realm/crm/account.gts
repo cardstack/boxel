@@ -18,38 +18,10 @@ import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/captions';
 import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
-import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import { Avatar, Pill } from '@cardstack/boxel-ui/components';
 import { EntityDisplay } from '../components/entity-display';
 
 // Perhaps, can be address?
-export class LocationField extends AddressField {
-  static icon = MapPinIcon;
-  static displayName = 'Location';
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{#if @model.country.name}}
-        <div class='row'>
-          <MapPinIcon class='icon' />
-          <span>{{@model.city}}, {{@model.country.code}}</span>
-        </div>
-      {{/if}}
-      <style scoped>
-        .row {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
-        .icon {
-          width: var(--boxel-icon-sm);
-          height: var(--boxel-icon-sm);
-          flex-shrink: 0;
-        }
-      </style>
-    </template>
-  };
-}
-
 interface ContactRowArgs {
   Args: {
     userID: string;
@@ -103,7 +75,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   }
 
   get hasCompanyInfo() {
-    return this.args.model.website || this.args.model.address?.country?.name;
+    return this.args.model?.website || this.args.model?.headquartersAddress;
   }
 
   get hasContacts() {
@@ -142,14 +114,14 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              {{#if this.hasCompanyInfo}}
-                <div class='description'>
+              <div class='description'>
+                {{#if this.hasCompanyInfo}}
+                  <@fields.headquartersAddress @format='atom' />
                   <@fields.website @format='atom' />
-                  <@fields.address @format='atom' />
-                </div>
-              {{else}}
-                Missing Company Info
-              {{/if}}
+                {{else}}
+                  Missing Company Info
+                {{/if}}
+              </div>
             </:content>
           </SummaryCard>
 
@@ -268,10 +240,21 @@ export class Account extends CardDef {
   @field company = linksTo(Company);
   @field primaryContact = linksTo(Contact);
   @field contacts = linksToMany(Contact);
-  @field address = contains(LocationField);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
-  @field website = contains(WebsiteField);
+  //From linked Company
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field headquartersAddress = contains(AddressField, {
+    computeVia: function (this: Account) {
+      return this.company?.headquartersAddress;
+    },
+  });
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field website = contains(WebsiteField, {
+    computeVia: function (this: Account) {
+      return this.company?.website;
+    },
+  });
 
   @field title = contains(StringField, {
     computeVia: function (this: Account) {

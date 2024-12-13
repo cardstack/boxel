@@ -1,12 +1,21 @@
+import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Loader, Query, baseRealm } from '@cardstack/runtime-common';
+import {
+  Loader,
+  Query,
+  baseRealm,
+  type Realm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import { Search } from '@cardstack/host/resources/search';
 
 import LoaderService from '@cardstack/host/services/loader-service';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import {
   CardDocFiles,
@@ -14,23 +23,34 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupServerSentEvents,
+  type TestContextWithSSE,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
+class StubRealmService extends RealmService {
+  realmOfURL(_url: URL) {
+    return new URL(testRealmURL);
+  }
+}
+
 module(`Integration | search resource`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
+  let realm: Realm;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
   let string: typeof import('https://cardstack.com/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
+    getOwner(this)!.register('service:realm', StubRealmService);
     loaderService = lookupLoaderService();
     loader = loaderService.loader;
   });
 
   setupLocalIndexing(hooks);
+  setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -245,7 +265,7 @@ module(`Integration | search resource`, function (hooks) {
       },
     };
 
-    await setupIntegrationTestRealm({
+    ({ realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
         'article.gts': { Article },
@@ -254,7 +274,7 @@ module(`Integration | search resource`, function (hooks) {
         'post.gts': { Post },
         ...sampleCards,
       },
-    });
+    }));
   });
 
   test(`can search for card instances by using the 'eq' filter`, async function (assert) {
@@ -278,5 +298,161 @@ module(`Integration | search resource`, function (hooks) {
     await search.loaded;
     assert.strictEqual(search.instances[0].id, `${testRealmURL}card-2`);
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
+  });
+
+  test<TestContextWithSSE>(`can perform a live search for cards`, async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.lastName': 'Abdel-Rahman',
+        },
+      },
+    };
+    let search = Search.from(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: true,
+      },
+    })) as Search;
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 2);
+    assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
+    assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
+
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}book/3`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}book/3`],
+        },
+      },
+    ];
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await realm.write(
+          'books/3.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                author: {
+                  firstName: 'Paper',
+                  lastName: 'Abdel-Rahman',
+                },
+                editions: 0,
+                pubDate: '2023-08-01',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}book`,
+                  name: 'Book',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    });
+
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 3);
+    assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
+    assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
+    assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
+  });
+
+  test<TestContextWithSSE>(`cards in search results live update`, async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.lastName': 'Abdel-Rahman',
+        },
+      },
+    };
+    let search = Search.from(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: true,
+      },
+    })) as Search;
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 2);
+    assert.strictEqual((search.instances[0] as any).author.firstName, `Mango`);
+
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}book/1`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}book/1`],
+        },
+      },
+    ];
+
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await realm.write(
+          'books/1.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                author: {
+                  firstName: 'Mang Mang',
+                  lastName: 'Abdel-Rahman',
+                },
+                editions: 0,
+                pubDate: '2023-08-01',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}book`,
+                  name: 'Book',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    });
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 2);
+    assert.strictEqual(
+      (search.instances[0] as any).author.firstName,
+      `Mang Mang`,
+    );
   });
 });

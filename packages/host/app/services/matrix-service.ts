@@ -624,39 +624,6 @@ export default class MatrixService extends Service {
     } as CardMessageContent);
   }
 
-  public updateSkillIsActive = async (
-    roomId: string,
-    skillEventId: string,
-    isActive: boolean,
-  ) => {
-    let roomData = this.ensureRoomData(roomId);
-    await roomData.mutex.dispatch(async () => {
-      let currentSkillsConfig = await this.getStateEvent(
-        roomId,
-        SKILLS_STATE_EVENT_TYPE,
-        '',
-      );
-      let newSkillsConfig = {
-        enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
-        disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
-      };
-      if (isActive) {
-        newSkillsConfig.enabledEventIds.push(skillEventId);
-        newSkillsConfig.disabledEventIds =
-          newSkillsConfig.disabledEventIds.filter((id) => id !== skillEventId);
-      } else {
-        newSkillsConfig.disabledEventIds.push(skillEventId);
-        newSkillsConfig.enabledEventIds =
-          newSkillsConfig.enabledEventIds.filter((id) => id !== skillEventId);
-      }
-      await this.client.sendStateEvent(
-        roomId,
-        SKILLS_STATE_EVENT_TYPE,
-        newSkillsConfig,
-      );
-    });
-  };
-
   public async sendAiAssistantMessage(params: {
     roomId: string;
     show?: boolean; // if truthy, ensure the side panel is open to the room

@@ -2,12 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "AppCard",
-      "description": "Catalog entry for AppCard",
-      "isField": false,
+      "title": "Featured Image Field",
+      "isField": true,
       "ref": {
-        "module": "../app-card",
-        "name": "AppCard"
+        "module": "../../fields/featured-image",
+        "name": "FeaturedImageField"
       }
     },
     "meta": {
