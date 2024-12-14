@@ -1,9 +1,11 @@
+import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
 import { PhoneField } from './phone';
 import { UrlField } from './url';
-import { LocationField } from './crm/account';
 import { WebsiteField } from './website';
+import { Address as AddressField } from './address';
+import { PercentageField } from './percentage';
 import {
   CardDef,
   field,
@@ -21,13 +23,16 @@ import { startCase } from 'lodash';
 export class ExperimentsFieldsPreview extends CardDef {
   @field url = contains(UrlField);
   @field urls = containsMany(UrlField);
-  @field location = contains(LocationField);
+  @field address = contains(AddressField);
   @field website = contains(WebsiteField);
   @field email = contains(EmailField);
   @field emails = containsMany(EmailField);
   @field phone = contains(PhoneField);
+  @field percentage = contains(PercentageField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
+  @field featuredImage = contains(FeaturedImageField);
+  @field images = containsMany(FeaturedImageField);
   static displayName = 'Custom Fields ';
   static isolated = class Isolated extends Component<typeof this> {
     <template>

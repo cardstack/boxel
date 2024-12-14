@@ -4338,6 +4338,7 @@ module('Realm Server', function (hooks) {
             cancellation_details: {
               reason: 'payment_failure',
             },
+            customer: 'cus_123',
           },
         },
       };
@@ -4488,6 +4489,7 @@ module('Realm Server', function (hooks) {
             cancellation_details: {
               reason: 'payment_failure',
             },
+            customer: 'cus_123',
           },
         },
       };
@@ -4615,7 +4617,7 @@ module('Realm Server', function (hooks) {
             id: 'cs_test_1234567890',
             object: 'checkout.session',
             client_reference_id: encodeWebSafeBase64(userId),
-            customer: 'cus_123',
+            customer: undefined,
             metadata: {},
           },
         },

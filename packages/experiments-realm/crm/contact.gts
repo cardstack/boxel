@@ -83,7 +83,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
           @icon={{@model.constructor.icon}}
           @iconDarkColor={{@model.statusTag.darkColor}}
           @iconLightColor={{@model.statusTag.lightColor}}
-          class='status-pill'
+          class='crm-status-pill'
         />
       {{/if}}
     </article>
@@ -115,7 +115,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-xxxs);
         flex-wrap: wrap;
       }
-      .status-pill {
+      .crm-status-pill {
         width: fit-content;
       }
     </style>
@@ -168,7 +168,7 @@ class FittedTemplate extends Component<typeof Contact> {
           @icon={{@model.constructor.icon}}
           @iconDarkColor={{@model.statusTag.darkColor}}
           @iconLightColor={{@model.statusTag.lightColor}}
-          class='status-pill'
+          class='crm-status-pill'
         />
       {{/if}}
 
@@ -197,17 +197,20 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .contact-info {
         grid-area: contact-info;
-        display: grid;
-        gap: var(--boxel-sp-xxxs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-sm);
+        color: var(--boxel-dark);
+        word-break: break-word;
       }
       .links {
         grid-area: links;
       }
-      .status-pill {
+      .crm-status-pill {
         grid-area: status;
         width: fit-content;
       }
-      .contact-info,
       .links {
         font-size: var(--boxel-font-xs);
         align-self: normal;
@@ -217,23 +220,15 @@ class FittedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-xxxs);
         flex-wrap: wrap;
       }
-      .contact-info :where(.entity-display .row .name) {
-        word-break: break-all;
-      }
 
       @container fitted-card ((aspect-ratio <= 1.0) and (224px <= height <= 226px)) {
         .fitted-contact-card {
           grid-template:
             'avatar-group-container'
-            'contact-info'
             'links'
             'status';
-          grid-template-rows: max-content max-content max-content auto;
+          grid-template-rows: max-content max-content auto;
           gap: var(--boxel-sp-xs);
-        }
-        .secondary-email,
-        .phone-mobile {
-          display: none;
         }
         .avatar-group-container {
           gap: var(--boxel-sp-xs);
@@ -244,15 +239,8 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size);
         }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: var(--icon-size);
-          height: var(--icon-size);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-sm);
+        .contact-info {
+          display: none;
         }
       }
 
@@ -260,15 +248,12 @@ class FittedTemplate extends Component<typeof Contact> {
         .fitted-contact-card {
           grid-template:
             'avatar-group-container'
-            'contact-info'
+            'links'
             'status';
-          grid-template-rows: auto auto auto;
+          grid-template-rows: max-content max-content auto;
           gap: var(--boxel-sp-xs);
         }
-        .secondary-email,
-        .phone-mobile,
-        .phone-office,
-        .links {
+        .contact-info {
           display: none;
         }
         .avatar-group-container {
@@ -280,30 +265,17 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size);
         }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: var(--icon-size);
-          height: var(--icon-size);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
       }
 
       @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
         .fitted-contact-card {
           grid-template:
             'avatar-group-container'
-            'contact-info'
             'status';
-          grid-template-rows: auto auto auto;
+          grid-template-rows: max-content auto;
           gap: var(--boxel-sp-xs);
         }
-        .secondary-email,
-        .phone-mobile,
-        .phone-office,
+        .contact-info,
         .links {
           display: none;
         }
@@ -315,16 +287,6 @@ class FittedTemplate extends Component<typeof Contact> {
         }
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size-sm);
-        }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: calc(var(--icon-size) - 2px);
-          height: calc(var(--icon-size) - 2px);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-xs);
         }
       }
 
@@ -332,14 +294,11 @@ class FittedTemplate extends Component<typeof Contact> {
         .fitted-contact-card {
           grid-template:
             'avatar-group-container'
-            'contact-info'
             'status';
-          grid-template-rows: auto auto auto;
+          grid-template-rows: max-content auto;
           gap: var(--boxel-sp-xs);
         }
-        .secondary-email,
-        .phone-mobile,
-        .phone-office,
+        .contact-info,
         .links {
           display: none;
         }
@@ -351,16 +310,6 @@ class FittedTemplate extends Component<typeof Contact> {
         }
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size-sm);
-        }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: calc(var(--icon-size) - 2px);
-          height: calc(var(--icon-size) - 2px);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-xs);
         }
       }
 
@@ -369,7 +318,7 @@ class FittedTemplate extends Component<typeof Contact> {
           grid-template:
             'avatar-group-container'
             'status';
-          grid-template-rows: auto auto;
+          grid-template-rows: max-content auto;
           gap: var(--boxel-sp-xs);
         }
         .contact-info,
@@ -392,13 +341,8 @@ class FittedTemplate extends Component<typeof Contact> {
           grid-template:
             'avatar-group-container'
             'status';
-          grid-template-rows: auto auto;
+          grid-template-rows: max-content auto;
           gap: var(--boxel-sp-xs);
-        }
-        .contact-info,
-        .contact-info:where(.entity-display .pill-gray),
-        .links {
-          display: none;
         }
         .avatar-group-container {
           gap: var(--boxel-sp-xxs);
@@ -418,27 +362,10 @@ class FittedTemplate extends Component<typeof Contact> {
             'contact-info'
             'links'
             'status';
-          grid-template-rows: auto auto auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
+          grid-template-rows: max-content max-content max-content auto;
         }
         .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 40px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size);
-        }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: calc(var(--icon-size) - 2px);
-          height: calc(var(--icon-size) - 2px);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size);
+          --profile-avatar-icon-size: 55px;
         }
       }
 
@@ -449,27 +376,10 @@ class FittedTemplate extends Component<typeof Contact> {
             'contact-info'
             'links'
             'status';
-          grid-template-rows: auto auto auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xs);
+          grid-template-rows: max-content max-content max-content auto;
         }
         .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 40px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size);
-        }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: calc(var(--icon-size) - 2px);
-          height: calc(var(--icon-size) - 2px);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-sm);
+          --profile-avatar-icon-size: 55px;
         }
       }
 
@@ -478,15 +388,12 @@ class FittedTemplate extends Component<typeof Contact> {
         .fitted-contact-card {
           grid-template:
             'avatar-group-container'
-            'contact-info'
+            'links'
             'status';
-          grid-template-rows: auto auto auto;
+          grid-template-rows: max-content max-content auto;
           gap: var(--boxel-sp-xs);
         }
-        .secondary-email,
-        .phone-mobile,
-        .phone-office,
-        .links {
+        .contact-info {
           display: none;
         }
         .avatar-group-container {
@@ -498,30 +405,17 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size);
         }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: var(--icon-size);
-          height: var(--icon-size);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (151px <= height < 180px)) {
         .fitted-contact-card {
           grid-template:
             'avatar-group-container'
-            'contact-info'
             'status';
-          grid-template-rows: auto auto auto;
+          grid-template-rows: max-content auto;
           gap: var(--boxel-sp-xs);
         }
-        .secondary-email,
-        .phone-mobile,
-        .phone-office,
+        .contact-info,
         .links {
           display: none;
         }
@@ -534,16 +428,6 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size);
         }
-        .contact-info :where(.entity-display .row) {
-          gap: var(--boxel-sp-xxs);
-        }
-        .contact-info :where(.entity-display .row .icon) {
-          width: var(--icon-size);
-          height: var(--icon-size);
-        }
-        .contact-info :where(.entity-display .row .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (115px <= height <= 150px)) {
@@ -551,9 +435,8 @@ class FittedTemplate extends Component<typeof Contact> {
           grid-template:
             'avatar-group-container'
             'status';
-          grid-template-rows: auto auto auto;
+          grid-template-rows: max-content auto;
           gap: var(--boxel-sp-xs);
-          align-content: center;
         }
         .avatar-group-container {
           gap: var(--boxel-sp-xxs);
@@ -573,9 +456,8 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
-          grid-template-rows: auto;
+          grid-template-rows: max-content;
           gap: var(--boxel-sp-xs);
-          align-content: center;
         }
         .avatar-group-container {
           gap: var(--boxel-sp-xxs);
@@ -588,7 +470,7 @@ class FittedTemplate extends Component<typeof Contact> {
         }
         .contact-info,
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -596,10 +478,8 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container status';
-          grid-template-rows: auto;
-          grid-template-columns: auto max-content;
+          grid-template-columns: max-content auto;
           gap: var(--boxel-sp-xs);
-          align-content: center;
         }
         .avatar-group-container {
           gap: var(--boxel-sp-xxs);
@@ -614,15 +494,16 @@ class FittedTemplate extends Component<typeof Contact> {
         .links {
           display: none;
         }
-        .status-pill {
+        .crm-status-pill {
           margin-left: auto;
+          margin-top: 0;
+          align-self: center;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
-          grid-template-rows: auto;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -634,9 +515,8 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size-sm);
         }
-        .contact-info,
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -644,9 +524,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
-          grid-template-rows: auto;
           gap: var(--boxel-sp-xs);
-          align-content: center;
         }
         .avatar-group-container {
           gap: var(--boxel-sp-xxs);
@@ -657,9 +535,8 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-info .name) {
           font-size: var(--boxel-font-size-sm);
         }
-        .contact-info,
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -674,9 +551,8 @@ class FittedTemplate extends Component<typeof Contact> {
         }
         .avatar-group-container :where(.avatar-thumbnail),
         .avatar-group-container :where(.company-group),
-        .contact-info,
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
         .avatar-group-container :where(.avatar-info .name) {
