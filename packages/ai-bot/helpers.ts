@@ -3,9 +3,10 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import { getSearchTool } from '@cardstack/runtime-common/helpers/ai';
+import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
+  CardMessageEvent,
   CardFragmentContent,
   CommandEvent,
   CommandResultEvent,
@@ -51,7 +52,7 @@ export interface PromptParts {
   messages: OpenAIPromptMessage[];
   model: string;
   history: DiscreteMatrixEvent[];
-  toolChoice: 'auto' | 'none';
+  toolChoice: ToolChoice;
 }
 
 export type Message = CommandMessage | TextMessage;
@@ -75,13 +76,14 @@ export function getPromptParts(
   );
   let skills = getEnabledSkills(eventList, cardFragments);
   let tools = getTools(history, aiBotUserId);
+  let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
   return {
     tools,
     messages,
     model: 'openai/gpt-4o',
     history,
-    toolChoice: 'auto',
+    toolChoice: toolChoice,
   };
 }
 
@@ -293,31 +295,46 @@ export function getRelevantCards(
   };
 }
 
-export function getTools(
+function getLastUserMessage(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): Tool[] {
-  // TODO: there should be no default tools defined in the ai-bot, tools must be determined by the host
-  let searchTool = getSearchTool();
-  let tools = [searchTool as Tool];
-  // Just get the users messages
+): CardMessageEvent | undefined {
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
   if (userMessages.length === 0) {
-    // If the user has sent no messages, return tools that are available by default
-    return tools;
+    // If the user has sent no messages, return undefined
+    return undefined;
   }
   const lastMessage = userMessages[userMessages.length - 1];
   if (
     lastMessage.type === 'm.room.message' &&
-    lastMessage.content.msgtype === 'org.boxel.message' &&
-    lastMessage.content.data?.context?.tools?.length
+    lastMessage.content.msgtype === 'org.boxel.message'
   ) {
-    return lastMessage.content.data.context.tools;
-  } else {
-    // If it's a different message type, or there are no tools, return tools that are available by default
-    return tools;
+    return lastMessage as CardMessageEvent;
   }
+  return undefined;
+}
+
+export function getTools(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): Tool[] {
+  const lastMessage = getLastUserMessage(history, aiBotUserId);
+  if (lastMessage && lastMessage.content.data?.context?.tools?.length) {
+    return lastMessage.content.data.context.tools;
+  }
+  return [];
+}
+
+export function getToolChoice(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): ToolChoice {
+  let lastMessage = getLastUserMessage(history, aiBotUserId);
+  if (lastMessage && lastMessage.content.data?.context?.toolChoice) {
+    return lastMessage.content.data.context.toolChoice;
+  }
+  return 'auto';
 }
 
 export function isCommandResultEvent(
@@ -489,7 +506,7 @@ export function getModifyPrompt(
 
   if (tools.length == 0) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached. However, you are allowed to search for cards.';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [
