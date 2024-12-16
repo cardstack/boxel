@@ -1,9 +1,18 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  contains,
+  linksTo,
+  StringField,
+  field,
+  linksToMany,
+  containsMany,
+  FieldDef,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
+import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import BuildingIcon from '@cardstack/boxel-icons/captions';
 import UserSquare from '@cardstack/boxel-icons/user-square';
 import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
@@ -12,22 +21,25 @@ import CrmProgressBar from '../components/crm-progress-bar';
 import { EntityDisplay } from '../components/entity-display';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
+import { LooseGooseyField, LooseyGooseyData } from '../loosey-goosey';
+import { Account } from './account';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { Tag } from '../tag';
+import { PercentageField } from '../percentage';
+import { MonetaryAmount } from '../monetary-amount';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import { Address as AddressField } from '../address';
+import { WebsiteField } from '../website';
+import { Contact } from './contact';
+import { ContactRow } from '../components/contact-row';
+import Users from '@cardstack/boxel-icons/users';
+import World from '@cardstack/boxel-icons/world';
 
 class IsolatedTemplate extends Component<typeof Deal> {
-  //Mock Data:
-  get logoURL() {
-    return 'https://picsum.photos/id/500/200/300';
-  }
-
   get companyName() {
-    return 'TechNova Solutions';
-  }
-
-  get primaryContactwithPosition() {
-    const contactName = 'Olivia';
-    const contactPosition = 'Head of Partnerships';
-
-    return `${contactName} - ${contactPosition}`;
+    return this.args.model.account?.name ?? 'No Company Name';
   }
 
   get pillsData() {
@@ -35,6 +47,36 @@ class IsolatedTemplate extends Component<typeof Deal> {
       { label: 'Proposal', backgroundColor: 'var(--boxel-lilac)' },
       { label: 'High Priority', backgroundColor: 'var(--boxel-yellow)' },
     ];
+  }
+
+  get logoURL() {
+    return (
+      this.args.model.thumbnailURL ??
+      this.args.model.account?.thumbnailURL ??
+      this.args.model.account?.company?.thumbnailURL ??
+      'https://picsum.photos/id/237/200/300'
+    );
+  }
+
+  get primaryContactName() {
+    return this.args.model.account?.primaryContact?.name;
+  }
+
+  get primaryContactIcon() {
+    return this.args.model.account?.primaryContact?.thumbnailURL;
+  }
+  get hasCompanyInfo() {
+    return (
+      this.args.model?.account?.website ||
+      this.args.model?.account?.headquartersAddress
+    );
+  }
+
+  get hasStakeholders() {
+    return (
+      this.args.model.primaryStakeholder ||
+      (this.args.model.stakeholders?.length ?? 0) > 0 //stakeholders is a proxy array
+    );
   }
 
   <template>
@@ -45,26 +87,27 @@ class IsolatedTemplate extends Component<typeof Deal> {
             <h1 class='account-name'>{{this.companyName}}</h1>
           </:name>
           <:content>
-            <EntityDisplay @center={{true}} @underline={{true}}>
-              <:title>
-                {{this.primaryContactwithPosition}}
-              </:title>
+            <EntityDisplay
+              @name={{this.primaryContactName}}
+              @underline={{true}}
+            >
               <:thumbnail>
+
                 <UserSquare class='user-icon' />
               </:thumbnail>
             </EntityDisplay>
 
             <div class='tag-container'>
-              {{#each this.pillsData as |pill|}}
+              {{#each @model.tags as |tag|}}
                 <Pill
                   style={{htmlSafe
                     (concat
                       'background-color: '
-                      pill.backgroundColor
+                      tag.color
                       '; border-color: transparent;'
                     )
                   }}
-                >{{pill.label}}</Pill>
+                >{{tag.name}}</Pill>
               {{/each}}
             </div>
           </:content>
@@ -77,31 +120,40 @@ class IsolatedTemplate extends Component<typeof Deal> {
             <h2 class='summary-title'>Deal Value</h2>
           </:title>
           <:icon>
-            <div class='progress-container'>
-              <label class='progress-label'>85% Health Score</label>
-              <CrmProgressBar
-                @value={{85}}
-                @max={{100}}
-                @color='var(--boxel-green)'
-              />
-            </div>
+            {{#if @model.healthScore}}
+              <div class='progress-container'>
+                <label class='progress-label'>{{@model.healthScore}}% Health
+                  Score</label>
+                <CrmProgressBar
+                  @value={{@model.healthScore}}
+                  @max={{100}}
+                  @color='var(--boxel-green)'
+                />
+              </div>
+            {{/if}}
           </:icon>
           <:content>
             <article class='dashboard-cards'>
               <div class='block'>
                 <label>Current Value:</label>
-                <span class='highlight-value'>$250,000</span>
+                <@fields.computedValue class='highlight-value' @format='atom' />
                 <p class='description success-value'>Description</p>
               </div>
               <div class='block'>
                 <label>Predicted Revenue:</label>
-                <span class='highlight-value'>$275,000</span>
-                <p class='description secondary-value'>Description</p>
+                <@fields.predictedRevenue
+                  class='highlight-value'
+                  @format='atom'
+                />
+                <p class='description secondary-value'>Based on similar events</p>
               </div>
               <div class='block'>
                 <label>Profit Margin:</label>
-                <span class='highlight-value'>22%</span>
-                <p class='description secondary-value'>Description</p>
+                {{! TODO: compound fields have divs that wrap them. Seems a bit inconsistent.}}
+                <div class='highlight-value'>
+                  <@fields.profitMargin @format='atom' />
+                </div>
+                <p class='description secondary-value'>Estimated</p>
               </div>
             </article>
 
@@ -113,22 +165,16 @@ class IsolatedTemplate extends Component<typeof Deal> {
               </header>
               <table class='breakdown-table'>
                 <tbody>
-                  <tr>
-                    <td class='item-name'>Venue Rental:</td>
-                    <td class='item-value'>$100,000</td>
-                  </tr>
-                  <tr>
-                    <td class='item-name'>Catering:</td>
-                    <td class='item-value'>$75,000</td>
-                  </tr>
-                  <tr>
-                    <td class='item-name'>AV Equipment:</td>
-                    <td class='item-value'>$50,000</td>
-                  </tr>
-                  <tr>
-                    <td class='item-name'>Staff and Management:</td>
-                    <td class='item-value'>$25,000</td>
-                  </tr>
+                  {{#each @fields.valueBreakdown as |item|}}
+                    <tr>
+                      <td class='item-name'>
+                        <item.name />
+                      </td>
+                      <td class='item-value'>
+                        <item.value />
+                      </td>
+                    </tr>
+                  {{/each}}
                 </tbody>
               </table>
             </article>
@@ -142,7 +188,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     Next Steps
                   </:title>
                   <:thumbnail>
-                    <Info />
+                    <Info class='info-icon' />
                   </:thumbnail>
                 </EntityDisplay>
 
@@ -155,8 +201,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   View Proposal
                 </BoxelButton>
               </div>
-              <p class='descriptio mt-5'>Finalize venue contract and confirm
-                catering options to lock in current pricing.</p>
+              <@fields.notes />
             </footer>
 
           </:content>
@@ -170,52 +215,47 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <label>Company Info</label>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <World class='header-icon' />
             </:icon>
             <:content>
-              <p class='description'>Description</p>
-              <p class='description'>Description</p>
+              {{#if this.hasCompanyInfo}}
+                <@fields.headquartersAddress @format='atom' />
+                <@fields.website @format='atom' />
+              {{else}}
+                Missing Company Info
+              {{/if}}
             </:content>
           </SummaryCard>
 
           <SummaryCard>
             <:title>
-              <label>Contacts</label>
+              <label>Stakeholders</label>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <Users class='header-icon' />
             </:icon>
             <:content>
-              <p class='description'>Description</p>
-              <p class='description'>Description</p>
+              {{#if this.hasStakeholders}}
+                {{#if @model.primaryStakeholder}}
+                  <ContactRow
+                    @userID={{@model.primaryStakeholder.id}}
+                    @name={{@model.primaryStakeholder.name}}
+                    @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
+                    @tagLabel='primary'
+                  />
+                {{/if}}
+                {{#each @model.stakeholders as |stakeholder|}}
+                  <ContactRow
+                    @userID={{stakeholder.id}}
+                    @name={{stakeholder.name}}
+                    @thumbnailURL={{stakeholder.thumbnailURL}}
+                    @tagLabel={{stakeholder.position}}
+                  />
+                {{/each}}
+              {{/if}}
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
-            <:title>
-              <label>Lifetime Value</label>
-            </:title>
-            <:icon>
-              <BuildingIcon class='header-icon' />
-            </:icon>
-            <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
-            </:content>
-          </SummaryCard>
-
-          <SummaryCard>
-            <:title>
-              <label>Active Deals</label>
-            </:title>
-            <:icon>
-              <BuildingIcon class='header-icon' />
-            </:icon>
-            <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
-            </:content>
-          </SummaryCard>
         </SummaryGridContainer>
       </:summary>
     </DealPageLayout>
@@ -271,6 +311,12 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .user-icon {
         margin-left: auto;
       }
+      .info-icon {
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
+        flex-shrink: 0;
+        margin-left: auto;
+      }
       .tag-container {
         display: flex;
         flex-wrap: wrap;
@@ -300,8 +346,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .progress-label {
         color: var(--boxel-500);
       }
-
-      /* table */
       .breakdown-table {
         width: 90%;
         margin-left: auto;
@@ -323,6 +367,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         justify-content: space-between;
         align-items: center;
         gap: var(--boxel-sp-sm);
+        font-weight: 600;
       }
       .view-proposal-btn {
         font-weight: 600;
@@ -343,9 +388,140 @@ class IsolatedTemplate extends Component<typeof Deal> {
   </template>
 }
 
+class EditDealStatusTemplate extends Component<typeof DealStatus> {
+  @tracked label: string | undefined = this.args.model.label;
+
+  get statuses() {
+    return (this.args.model.constructor as any).values as LooseyGooseyData[];
+  }
+  get selectedStatus() {
+    return this.statuses.find((status) => {
+      return status.label === this.label;
+    });
+  }
+
+  @action onSelectStatus(status: LooseyGooseyData): void {
+    this.label = status.label;
+    this.args.model.label = this.selectedStatus?.label;
+    this.args.model.index = this.selectedStatus?.index;
+  }
+
+  get placeholder() {
+    return 'Fill in';
+  }
+
+  <template>
+    <BoxelSelect
+      @placeholder={{this.placeholder}}
+      @options={{this.statuses}}
+      @selected={{this.selectedStatus}}
+      @onChange={{this.onSelectStatus}}
+      as |item|
+    >
+      <div> {{item.label}}</div>
+    </BoxelSelect>
+  </template>
+}
+
+class DealStatus extends LooseGooseyField {
+  static displayName = 'Deal Status';
+  static values = [
+    {
+      index: 0,
+      label: 'Discovery',
+    },
+    {
+      index: 1,
+      label: 'Proposal',
+    },
+    {
+      index: 2,
+      label: 'Negotiation',
+    },
+    {
+      index: 3,
+      label: 'Closed Won',
+    },
+    {
+      index: 4,
+      label: 'Closed Lost',
+    },
+  ];
+
+  static edit = EditDealStatusTemplate;
+}
+
+class Proposal extends CardDef {
+  static displayName = 'CRM Proposal';
+}
+
+class Value extends MonetaryAmount {
+  static displayName = 'CRM Value Amount';
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model.formattedAmount}}
+    </template>
+  };
+}
+
+export class MonetaryLineItem extends FieldDef {
+  static displayName = 'CRM Monetary Line Item';
+  @field name = contains(StringField);
+  @field value = contains(Value);
+
+  static embedded = class Embedded extends Component<typeof MonetaryLineItem> {
+    <template>
+      <@fields.name /> <@fields.value />
+    </template>
+  };
+}
+
 export class Deal extends CardDef {
   static displayName = 'CRM Deal';
-
+  @field name = contains(StringField);
+  @field account = linksTo(() => Account);
+  @field status = contains(DealStatus);
+  @field closeDate = contains(DateField);
+  @field currentValue = contains(MonetaryAmount);
+  @field computedValue = contains(MonetaryAmount, {
+    computeVia: function (this: Deal) {
+      let total = this.valueBreakdown?.reduce((acc, item) => {
+        return acc + item.value.amount;
+      }, 0);
+      let result = new MonetaryAmount();
+      result.amount = total;
+      result.currency = this.currentValue?.currency;
+      return result;
+    },
+  });
+  @field predictedRevenue = contains(MonetaryAmount);
+  @field tags = linksToMany(() => Tag);
+  @field profitMargin = contains(PercentageField, {
+    computeVia: function (this: Deal) {
+      if (!this.currentValue?.amount || !this.predictedRevenue?.amount) {
+        return null;
+      }
+      return (this.currentValue?.amount / this.predictedRevenue?.amount) * 100;
+    },
+  });
+  @field healthScore = contains(PercentageField);
+  @field notes = contains(MarkdownField);
+  @field proposal = linksTo(() => Proposal);
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field headquartersAddress = contains(AddressField, {
+    computeVia: function (this: Deal) {
+      return this.account?.headquartersAddress;
+    },
+  });
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field website = contains(WebsiteField, {
+    computeVia: function (this: Deal) {
+      return this.account?.website;
+    },
+  });
+  @field primaryStakeholder = linksTo(() => Contact);
+  @field stakeholders = linksToMany(() => Contact);
+  @field valueBreakdown = containsMany(MonetaryLineItem);
   static isolated = IsolatedTemplate;
 }
 

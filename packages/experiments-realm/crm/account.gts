@@ -20,56 +20,7 @@ import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
 import { Avatar, Pill } from '@cardstack/boxel-ui/components';
 import { EntityDisplay } from '../components/entity-display';
-
-// Perhaps, can be address?
-interface ContactRowArgs {
-  Args: {
-    userID: string;
-    name: string;
-    thumbnailURL: string;
-    isPrimary: boolean;
-  };
-  Blocks: {};
-  Element: HTMLElement;
-}
-
-class ContactRow extends GlimmerComponent<ContactRowArgs> {
-  <template>
-    <EntityDisplay>
-      <:title>
-        {{@name}}
-      </:title>
-      <:thumbnail>
-        <Avatar
-          @userID={{@userID}}
-          @displayName={{@name}}
-          @thumbnailURL={{@thumbnailURL}}
-          @isReady={{true}}
-          class='avatar'
-        />
-      </:thumbnail>
-      <:tag>
-        {{#if @isPrimary}}
-          <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-            Primary
-          </Pill>
-        {{/if}}
-      </:tag>
-    </EntityDisplay>
-    <style scoped>
-      .avatar {
-        --profile-avatar-icon-size: 30px;
-        flex-shrink: 0;
-      }
-      .primary-tag {
-        --pill-font-weight: 400;
-        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-6xs);
-        --pill-font: 400 var(--boxel-font-sm);
-        --pill-border: none;
-      }
-    </style>
-  </template>
-}
+import { ContactRow } from '../components/contact-row';
 
 class IsolatedTemplate extends Component<typeof Account> {
   //Mock Data:
@@ -143,7 +94,7 @@ class IsolatedTemplate extends Component<typeof Account> {
                       @userID={{@model.primaryContact.id}}
                       @name={{@model.primaryContact.name}}
                       @thumbnailURL={{@model.primaryContact.thumbnailURL}}
-                      @isPrimary={{true}}
+                      @tagLabel='primary'
                     />
                   {{/if}}
                   {{#each @model.contacts as |contact|}}
@@ -152,7 +103,7 @@ class IsolatedTemplate extends Component<typeof Account> {
                         @userID={{contact.id}}
                         @name={{contact.name}}
                         @thumbnailURL={{contact.thumbnailURL}}
-                        @isPrimary={{false}}
+                        @tagLabel={{contact.role}}
                       />
                     {{/if}}
                   {{/each}}
