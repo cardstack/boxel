@@ -49,8 +49,6 @@ import {
   CommandContext,
 } from '@cardstack/runtime-common';
 
-import config from '@cardstack/host/config/environment';
-
 import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import type {

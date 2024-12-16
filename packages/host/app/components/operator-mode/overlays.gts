@@ -460,7 +460,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     switch (type) {
       case 'view':
       case 'copy-card-url':
-        return !this.isField(renderedCard);
+        return true;
       case 'delete':
         return (
           !this.isField(renderedCard) &&
