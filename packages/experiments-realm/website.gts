@@ -3,17 +3,32 @@ import { UrlField } from './url';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { EntityDisplay } from './components/entity-display';
 
+const domainWithPath = (urlString: string | null) => {
+  if (!urlString) {
+    return '';
+  }
+
+  const url = new URL(urlString);
+  return `${url.hostname}${url.pathname === '/' ? '' : url.pathname}`;
+};
+
 export class WebsiteField extends UrlField {
   static icon = WorldWwwIcon;
   static displayName = 'Website';
 
-  static atom = class Atom extends Component<typeof this> {
+  static atom = class Atom extends Component<typeof WebsiteField> {
     <template>
-      <EntityDisplay @name={{@model}}>
+      <EntityDisplay @name={{domainWithPath @model}}>
         <:thumbnail>
           <WorldWwwIcon />
         </:thumbnail>
       </EntityDisplay>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof WebsiteField> {
+    <template>
+      {{domainWithPath @model}}
     </template>
   };
 }
