@@ -17,22 +17,10 @@ class ViewCompanyTemplate extends Component<typeof Company> {
     <div class='company-group'>
       <EntityDisplay @name={{@model.name}} @underline={{true}}>
         <:thumbnail>
-          <BuildingIcon class='icon' />
+          <BuildingIcon />
         </:thumbnail>
       </EntityDisplay>
     </div>
-    <style scoped>
-      .icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        flex-shrink: 0;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-    </style>
   </template>
 }
 

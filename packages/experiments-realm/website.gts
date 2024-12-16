@@ -11,7 +11,7 @@ export class WebsiteField extends UrlField {
     <template>
       <EntityDisplay @name={{@model}}>
         <:thumbnail>
-          <WorldWwwIcon class='icon' />
+          <WorldWwwIcon />
         </:thumbnail>
       </EntityDisplay>
     </template>

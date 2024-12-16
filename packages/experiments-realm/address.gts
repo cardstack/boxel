@@ -41,7 +41,7 @@ class Atom extends Component<typeof Address> {
   <template>
     <EntityDisplay @name={{this.label}}>
       <:thumbnail>
-        <MapPinIcon class='icon' />
+        <MapPinIcon />
       </:thumbnail>
     </EntityDisplay>
   </template>
