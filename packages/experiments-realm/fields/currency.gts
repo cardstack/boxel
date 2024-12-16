@@ -71,6 +71,7 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
         @onChange={{this.onSelectCurrency}}
         @searchEnabled={{true}}
         @searchField='code'
+        class='currency-field-edit'
         as |currency|
       >
         {{currency.code}}
@@ -84,24 +85,20 @@ export class CurrencyField extends FieldDef {
   @field code = contains(StringField);
   static edit = CurrencyFieldEdit;
 
-  static atom = class Atom extends Component<typeof this> {
-    get symbol() {
-      return currencyCodeSymbolMapping[this.args.model.code];
-    }
+  get symbol() {
+    return currencyCodeSymbolMapping[this.code];
+  }
 
+  static atom = class Atom extends Component<typeof this> {
     <template>
-      {{this.symbol}}
+      {{@model.symbol}}
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get symbol() {
-      return currencyCodeSymbolMapping[this.args.model.code];
-    }
-
     <template>
       {{#if @model.code}}
-        {{this.symbol}}
+        {{@model.symbol}}
       {{else}}
         Please select a currency
       {{/if}}

@@ -7,15 +7,15 @@
         "https://boxel/alice",
         "https://boxel/dan"
       ],
-      "location": {
-        "addressLine1": "285 Fulton Street ",
+      "address": {
+        "addressLine1": null,
         "addressLine2": null,
-        "city": "New York City",
-        "state": "NY",
-        "postalCode": "10007",
+        "city": null,
+        "state": null,
+        "postalCode": null,
         "country": {
-          "name": "United States of America",
-          "code": "US"
+          "name": null,
+          "code": null
         },
         "poBoxNumber": null
       },
@@ -25,7 +25,22 @@
         "alice@email.com",
         "dan@email.com"
       ],
+      "phone": {
+        "type": null,
+        "country": null,
+        "area": null,
+        "number": null
+      },
       "percentage": 100.159393,
+      "currency": {
+        "code": "EUR"
+      },
+      "amountWithCurrency": {
+        "amount": 20000000,
+        "currency": {
+          "code": "JPY"
+        }
+      },
       "contactLink": {
         "label": "Email",
         "value": "alice@email.com"
@@ -73,9 +88,6 @@
           "width": null
         }
       ],
-      "currency": {
-        "code": "CDF"
-      },
       "title": "Custom Field Preview",
       "description": null,
       "thumbnailURL": null
