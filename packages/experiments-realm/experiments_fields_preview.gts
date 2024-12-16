@@ -8,6 +8,7 @@ import { Address as AddressField } from './address';
 import { PercentageField } from './percentage';
 import { CurrencyField } from './fields/currency';
 import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
+import { StatusTagField } from './crm/contact';
 import {
   CardDef,
   field,
@@ -35,6 +36,7 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field amountWithCurrency = contains(AmountWithCurrencyField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
+  @field statusTag = contains(StatusTagField);
   @field featuredImage = contains(FeaturedImageField);
   @field images = containsMany(FeaturedImageField);
 
