@@ -8,14 +8,14 @@
         "https://boxel/dan"
       ],
       "address": {
-        "addressLine1": null,
+        "addressLine1": "285 Fulton Street ",
         "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
+        "city": "New York City",
+        "state": "NY",
+        "postalCode": "10007",
         "country": {
-          "name": null,
-          "code": null
+          "name": "United States of America",
+          "code": "US"
         },
         "poBoxNumber": null
       },

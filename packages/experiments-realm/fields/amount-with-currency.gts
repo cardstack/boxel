@@ -64,7 +64,7 @@ class Edit extends Component<typeof AmountWithCurrency> {
       </:before>
       <:after>
         <div class='input-selectable-currency'>
-          <@fields.currency style='height: 100%;' />
+          <@fields.currency />
         </div>
       </:after>
     </BoxelInputGroup>
@@ -87,8 +87,13 @@ class Edit extends Component<typeof AmountWithCurrency> {
         max-height: 18em;
       }
 
+      .input-selectable-currency > div {
+        height: 100%;
+      }
+
       :deep(.currency-field-edit) {
         min-width: 100px;
+        height: 100%;
         font-size: var(--boxel-font-size-sm);
       }
 
