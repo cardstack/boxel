@@ -33,6 +33,7 @@ import {
   basicMappings,
   generateJsonSchemaForCardType,
   getSearchTool,
+  type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
@@ -629,15 +630,34 @@ export default class MatrixService extends Service {
     show?: boolean; // if truthy, ensure the side panel is open to the room
     prompt: string;
     attachedCards?: CardDef[];
-    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
+    commands?: {
+      command: Command<any, any, any>;
+      autoExecute: boolean;
+      force?: boolean;
+    }[];
   }): Promise<{ roomId: string }> {
     let roomId = params.roomId;
     let html = markdownToHtml(params.prompt);
     let mappings = await basicMappings(this.loaderService.loader);
     let tools = [];
-    for (let { command, autoExecute } of params.commands ?? []) {
+    let toolChoice: ToolChoice = 'auto';
+    for (let { command, autoExecute, force } of params.commands ?? []) {
       // get a registered name for the command
       let name = this.commandService.registerCommand(command, autoExecute);
+      // If we want to force the LLM to call a specific command, we need to set the toolChoice to the name of the command
+      // We can only force one command at a time. While some models support lists, OpenRouter currently only allows one.
+      if (force) {
+        // If we already have set it to something specific we should error out when a second is set
+        if (toolChoice !== 'auto') {
+          throw new Error(`Cannot force multiple commands in a single message`);
+        }
+        toolChoice = {
+          type: 'function',
+          function: {
+            name,
+          },
+        };
+      }
       tools.push({
         type: 'function',
         function: {
@@ -676,6 +696,7 @@ export default class MatrixService extends Service {
         attachedCardsEventIds,
         context: {
           tools,
+          toolChoice,
         },
       },
     } as CardMessageContent);
