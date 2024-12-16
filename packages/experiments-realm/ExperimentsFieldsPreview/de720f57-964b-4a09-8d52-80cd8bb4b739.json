@@ -73,6 +73,9 @@
           "width": null
         }
       ],
+      "currency": {
+        "code": "CDF"
+      },
       "title": "Custom Field Preview",
       "description": null,
       "thumbnailURL": null
