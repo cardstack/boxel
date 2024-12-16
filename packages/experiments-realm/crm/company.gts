@@ -15,7 +15,10 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
     <div class='company-group'>
-      <EntityDisplay @name={{@model.name}} @underline={{true}}>
+      <EntityDisplay @underline={{true}}>
+        <:title>
+          {{@model.name}}
+        </:title>
         <:thumbnail>
           <BuildingIcon />
         </:thumbnail>

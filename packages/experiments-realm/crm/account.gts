@@ -35,7 +35,10 @@ interface ContactRowArgs {
 
 class ContactRow extends GlimmerComponent<ContactRowArgs> {
   <template>
-    <EntityDisplay @name={{@name}}>
+    <EntityDisplay>
+      <:title>
+        {{@name}}
+      </:title>
       <:thumbnail>
         <Avatar
           @userID={{@userID}}
