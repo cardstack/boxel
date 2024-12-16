@@ -238,6 +238,23 @@ class FittedTemplate extends Component<typeof Contact> {
         }
       }
 
+      /* Catch all because contact info is too dense*/
+      @container fitted-card (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'links'
+            'status';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
+      }
+
       @container fitted-card ((aspect-ratio <= 1.0) and (224px <= height <= 226px)) {
         .fitted-contact-card {
           grid-template:
