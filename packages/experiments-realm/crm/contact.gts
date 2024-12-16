@@ -78,13 +78,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       {{/if}}
 
       {{#if @model.statusTag.label}}
-        <StatusPill
-          @label={{@model.statusTag.label}}
-          @icon={{@model.constructor.icon}}
-          @iconDarkColor={{@model.statusTag.darkColor}}
-          @iconLightColor={{@model.statusTag.lightColor}}
-          class='crm-status-pill'
-        />
+        <@fields.statusTag @format='atom' class='crm-status-pill' />
       {{/if}}
     </article>
 
@@ -163,13 +157,14 @@ class FittedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
       {{#if @model.statusTag.label}}
-        <StatusPill
+        {{!-- <StatusPill
           @label={{@model.statusTag.label}}
           @icon={{@model.constructor.icon}}
           @iconDarkColor={{@model.statusTag.darkColor}}
           @iconLightColor={{@model.statusTag.lightColor}}
           class='crm-status-pill'
-        />
+        /> --}}
+        <@fields.statusTag @format='atom' class='crm-status-pill' />
       {{/if}}
 
     </article>
@@ -190,7 +185,7 @@ class FittedTemplate extends Component<typeof Contact> {
           'contact-info'
           'links'
           'status';
-        grid-template-rows: max-content max-content max-content auto;
+        grid-template-rows: max-content max-content max-content min-content;
       }
       .avatar-group-container {
         grid-area: avatar-group-container;
@@ -608,6 +603,32 @@ export class StatusTagField extends LooseGooseyField {
   static icon = ContactIcon;
   @field lightColor = contains(StringField);
   @field darkColor = contains(StringField);
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.darkColor}}
+          @iconLightColor={{@model.lightColor}}
+        />
+      {{/if}}
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.darkColor}}
+          @iconLightColor={{@model.lightColor}}
+        />
+      {{/if}}
+    </template>
+  };
 }
 
 export class Contact extends CardDef {
