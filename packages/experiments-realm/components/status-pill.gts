@@ -2,15 +2,14 @@ import GlimmerComponent from '@glimmer/component';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
-import IconComponent from '@cardstack/boxel-icons/captions';
-import QuestionMark from '@cardstack/boxel-icons/question-mark';
+import { CardorFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 
 interface StatusPillSignature {
   Args: {
     label: string;
     iconDarkColor: string | undefined;
     iconLightColor: string | undefined;
-    icon?: typeof IconComponent;
+    icon?: CardorFieldTypeIcon;
   };
   Element: HTMLDivElement;
 }
@@ -18,18 +17,16 @@ interface StatusPillSignature {
 //This component is needed bcos of the additional styling of the pill component
 //It makes 2 sections, 1 for the icon and 1 for the text
 export class StatusPill extends GlimmerComponent<StatusPillSignature> {
-  get icon() {
-    return this.args.icon ?? QuestionMark;
-  }
-
   <template>
     <div class='status-pill-group' ...attributes>
-      <div
-        class='status-icon'
-        style={{htmlSafe (concat 'background-color: ' @iconDarkColor ';')}}
-      >
-        <this.icon />
-      </div>
+      {{#if @icon}}
+        <div
+          class='status-icon'
+          style={{htmlSafe (concat 'background-color: ' @iconDarkColor ';')}}
+        >
+          <@icon />
+        </div>
+      {{/if}}
       <Pill
         class='status-pill'
         data-test-selected-type={{@label}}
