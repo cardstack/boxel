@@ -68,7 +68,10 @@ export class EmailField extends StringField {
   static atom = class Atom extends Component<typeof EmailField> {
     <template>
       {{#if @model}}
-        <EntityDisplay @name={{@model}} @underline={{false}}>
+        <EntityDisplay @underline={{false}}>
+          <:title>
+            {{@model}}
+          </:title>
           <:thumbnail>
             <MailIcon class='icon' />
           </:thumbnail>

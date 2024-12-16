@@ -1,13 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
 interface EntityDisplayArgs {
   Args: {
-    name?: string | null;
     center?: boolean;
     underline?: boolean;
   };
   Blocks: {
+    title: [];
     thumbnail: [];
     tag: [];
+    content: [];
   };
   Element: HTMLElement;
 }
@@ -30,41 +31,55 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
 
       <div class='entity-name-tag'>
         <span class='entity-name {{if this.shouldUnderlineText "underline"}}'>
-          {{@name}}
+          {{yield to='title'}}
         </span>
 
         {{yield to='tag'}}
+      </div>
+
+      <div class='entity-content'>
+        {{yield to='content'}}
       </div>
     </div>
     <style scoped>
       .entity-display {
         display: inline-flex;
         align-items: start;
-        gap: var(--boxel-sp-xs);
+        gap: var(--entity-display-gap, var(--boxel-sp-xs));
       }
       .entity-display.center {
         align-items: center;
       }
       .entity-thumbnail {
-        width: var(--boxel-icon-sm);
-        height: calc(var(--boxel-icon-sm) - 2px);
+        width: var(--entity-display-thumbnail-size, var(--boxel-icon-sm));
+        height: calc(
+          var(--entity-display-thumbnail-size, var(--boxel-icon-sm)) - 2px
+        );
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        color: var(--boxel-600);
+        color: var(--entity-display-thumbnail-color, var(--boxel-600));
       }
       .entity-name-tag {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--entity-display-name-tag-gap, var(--boxel-sp-xxxs));
       }
       .entity-name {
         word-break: break-word;
       }
       .entity-name.underline {
         text-decoration: underline;
+      }
+      .entity-content {
+        margin: 0;
+        font-size: var(
+          --entity-display-content-font-size,
+          var(--boxel-font-size-sm)
+        );
+        color: var(--entity-display-content-color, var(--boxel-400));
       }
     </style>
   </template>

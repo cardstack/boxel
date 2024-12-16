@@ -45,11 +45,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
             <h1 class='account-name'>{{this.companyName}}</h1>
           </:name>
           <:content>
-            <EntityDisplay
-              @name={{this.primaryContactwithPosition}}
-              @center={{true}}
-              @underline={{true}}
-            >
+            <EntityDisplay @center={{true}} @underline={{true}}>
+              <:title>
+                {{this.primaryContactwithPosition}}
+              </:title>
               <:thumbnail>
                 <UserSquare class='user-icon' />
               </:thumbnail>
@@ -138,7 +137,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
             <footer class='next-steps'>
               <div class='next-steps-row'>
-                <EntityDisplay @name='Next Steps' @center={{true}}>
+                <EntityDisplay @center={{true}}>
+                  <:title>
+                    Next Steps
+                  </:title>
                   <:thumbnail>
                     <Info />
                   </:thumbnail>

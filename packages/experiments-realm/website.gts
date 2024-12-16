@@ -18,7 +18,10 @@ export class WebsiteField extends UrlField {
 
   static atom = class Atom extends Component<typeof WebsiteField> {
     <template>
-      <EntityDisplay @name={{domainWithPath @model}}>
+      <EntityDisplay>
+        <:title>
+          {{domainWithPath @model}}
+        </:title>
         <:thumbnail>
           <WorldWwwIcon />
         </:thumbnail>
