@@ -326,6 +326,7 @@ class FittedTemplate extends Component<typeof Contact> {
         flex-wrap: wrap;
       }
 
+      /* Catch all because contact info is too dense*/
       @container fitted-card (height < 300px) {
         .fitted-contact-card {
           grid-template:
