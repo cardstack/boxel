@@ -326,6 +326,22 @@ class FittedTemplate extends Component<typeof Contact> {
         flex-wrap: wrap;
       }
 
+      @container fitted-card (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'links'
+            'status';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
+      }
+
       @container fitted-card ((aspect-ratio <= 1.0) and (224px <= height <= 226px)) {
         .fitted-contact-card {
           grid-template:
@@ -561,6 +577,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           grid-template-rows: max-content;
           gap: var(--boxel-sp-xs);
         }
@@ -609,6 +626,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -629,6 +647,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -649,6 +668,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
