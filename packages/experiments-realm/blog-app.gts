@@ -399,6 +399,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         },
         meta: {
           adoptsFrom: ref,
+          realmURL: currentRealm.href,
         },
       },
     };
