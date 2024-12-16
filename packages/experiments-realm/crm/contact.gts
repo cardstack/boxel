@@ -111,6 +111,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       }
       .crm-status-pill {
         width: fit-content;
+        margin-top: auto;
       }
     </style>
   </template>
@@ -157,13 +158,6 @@ class FittedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
       {{#if @model.statusTag.label}}
-        {{!-- <StatusPill
-          @label={{@model.statusTag.label}}
-          @icon={{@model.constructor.icon}}
-          @iconDarkColor={{@model.statusTag.darkColor}}
-          @iconLightColor={{@model.statusTag.lightColor}}
-          class='crm-status-pill'
-        /> --}}
         <@fields.statusTag @format='atom' class='crm-status-pill' />
       {{/if}}
 
@@ -185,7 +179,7 @@ class FittedTemplate extends Component<typeof Contact> {
           'contact-info'
           'links'
           'status';
-        grid-template-rows: max-content max-content max-content min-content;
+        grid-template-rows: max-content max-content max-content auto;
       }
       .avatar-group-container {
         grid-area: avatar-group-container;
@@ -213,6 +207,7 @@ class FittedTemplate extends Component<typeof Contact> {
       .crm-status-pill {
         grid-area: status;
         width: fit-content;
+        margin-top: auto;
       }
       .links {
         font-size: var(--boxel-font-xs);
@@ -222,6 +217,25 @@ class FittedTemplate extends Component<typeof Contact> {
         display: flex;
         gap: var(--boxel-sp-xxxs);
         flex-wrap: wrap;
+      }
+      .avatar-group-container :where(.avatar-thumbnail) {
+        --profile-avatar-icon-size: 55px;
+      }
+
+      @container fitted-card (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'links'
+            'status';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
       }
 
       @container fitted-card ((aspect-ratio <= 1.0) and (224px <= height <= 226px)) {
@@ -358,6 +372,22 @@ class FittedTemplate extends Component<typeof Contact> {
         }
       }
 
+      @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'status'
+            'links';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
+      }
+
       @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
         .fitted-contact-card {
           grid-template:
@@ -459,6 +489,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           grid-template-rows: max-content;
           gap: var(--boxel-sp-xs);
         }
@@ -507,6 +538,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -527,6 +559,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -547,6 +580,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
