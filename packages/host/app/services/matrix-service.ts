@@ -6,6 +6,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
+import { cloneDeep } from 'lodash';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -1113,6 +1114,21 @@ export default class MatrixService extends Service {
     debounce(this, this.drainTimeline, 100);
   };
 
+  private buildEventForProcessing(event: MatrixEvent) {
+    // Restructure the event, ensuring keys exist
+    let restructuredEvent = {
+      ...event.event,
+      status: event.status,
+      content: event.getContent() || undefined,
+      error: event.error ?? undefined,
+    };
+    // Make a deep copy of the event to avoid mutating the original Matrix SDK event
+    // This is necessary because the event returned is one we pass in, and this function
+    // may run before the event itself is sent.
+    // To avoid hard to track down bugs, we make a deep copy of the event here.
+    return cloneDeep(restructuredEvent);
+  }
+
   private async drainTimeline() {
     await this.flushTimeline;
 
@@ -1123,12 +1139,7 @@ export default class MatrixService extends Service {
     for (let { event, oldEventId } of events) {
       await this.client?.decryptEventIfNeeded(event);
       await this.processDecryptedEvent(
-        {
-          ...event.event,
-          status: event.status,
-          content: event.getContent() || undefined,
-          error: event.error ?? undefined,
-        },
+        this.buildEventForProcessing(event),
         oldEventId,
       );
     }

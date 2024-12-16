@@ -95,9 +95,12 @@ export class PhoneField extends FieldDef {
   static atom = class Atom extends Component<typeof this> {
     <template>
       {{#if @model.phoneNumber}}
-        <EntityDisplay @name={{@model.phoneNumber}} @underline={{false}}>
+        <EntityDisplay @underline={{false}}>
+          <:title>
+            {{@model.phoneNumber}}
+          </:title>
           <:thumbnail>
-            <PhoneIcon class='icon gray' />
+            <PhoneIcon class='icon' />
           </:thumbnail>
           <:tag>
             <Pill class='pill-gray'>
@@ -107,10 +110,11 @@ export class PhoneField extends FieldDef {
         </EntityDisplay>
       {{/if}}
       <style scoped>
-        .icon.gray {
+        .icon {
           color: var(--boxel-400);
         }
         .pill-gray {
+          --default-pill-padding: 0 var(--boxel-sp-xxxs);
           background-color: var(--boxel-200);
           border-color: transparent;
         }

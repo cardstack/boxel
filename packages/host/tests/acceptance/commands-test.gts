@@ -352,7 +352,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
@@ -460,7 +460,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitUntil(() => getRoomIds().includes('mock_room_1'));
     let roomId = 'mock_room_1';
     let message = getRoomEvents(roomId).pop()!;
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     let toolName = boxelMessageData.context.tools[0].function.name;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Delaying 1 second',
@@ -530,7 +530,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
@@ -653,15 +653,16 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
     let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
-    let cardFragment = getRoomEvents(roomId).find(
-      (event) => event.event_id === meetingCardEventId,
-    )!.content.data.cardFragment;
-
+    let cardFragment = JSON.parse(
+      getRoomEvents(roomId).find(
+        (event) => event.event_id === meetingCardEventId,
+      )!.content.data,
+    ).cardFragment;
     let parsedCard = JSON.parse(cardFragment);
     let meetingCardId = parsedCard.data.id;
 

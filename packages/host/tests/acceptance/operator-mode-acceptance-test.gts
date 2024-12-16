@@ -993,7 +993,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('1000 of 1000 left');
+        .hasText('1,000 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasNoClass('out-of-credit');
@@ -1022,7 +1022,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('1000 of 1000 left');
+        .hasText('1,000 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasNoClass('out-of-credit');
@@ -1081,7 +1081,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('0 of 1000 left');
+        .hasText('0 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasClass('out-of-credit');
@@ -1104,7 +1104,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('0 of 1000 left');
+        .hasText('0 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasClass('out-of-credit');
@@ -1127,7 +1127,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('1000 of 1000 left');
+        .hasText('1,000 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasNoClass('out-of-credit');

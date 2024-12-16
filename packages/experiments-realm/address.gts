@@ -39,9 +39,12 @@ class Atom extends Component<typeof Address> {
     );
   }
   <template>
-    <EntityDisplay @name={{this.label}}>
+    <EntityDisplay>
+      <:title>
+        {{this.label}}
+      </:title>
       <:thumbnail>
-        <MapPinIcon class='icon' />
+        <MapPinIcon />
       </:thumbnail>
     </EntityDisplay>
   </template>

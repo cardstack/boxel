@@ -61,7 +61,7 @@ interface CardorFieldTypeIconSignature {
   Element: Element;
 }
 
-type CardorFieldTypeIcon = ComponentLike<CardorFieldTypeIconSignature>;
+export type CardorFieldTypeIcon = ComponentLike<CardorFieldTypeIconSignature>;
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');

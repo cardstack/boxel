@@ -11,10 +11,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type {
-  CardMessageContent,
-  CardFragmentContent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   testRealmURL,
@@ -194,10 +191,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     let skillEventId = getRoomState(roomId, 'com.cardstack.boxel.room.skills')
       .enabledEventIds[0];
     let skillEventData = JSON.parse(
-      (
-        events.find((e) => e.event_id === skillEventId)
-          ?.content as CardFragmentContent
-      ).data.cardFragment,
+      JSON.parse(events.find((e) => e.event_id === skillEventId)?.content.data)
+        .cardFragment,
     );
     assert.strictEqual(
       skillEventData.data.id,
