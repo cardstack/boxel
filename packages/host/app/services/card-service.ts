@@ -437,6 +437,11 @@ export default class CardService extends Service {
     await this.fetchJSON(card.id, { method: 'DELETE' });
   }
 
+  // TODO consider retiring this.  i don't think it really does what we want
+  // since it is not live, and the cards that it returns are not live and does
+  // not leverage the identity map from CardResource, so it may create
+  // duplicative instances of cards when it deserializes the results. instead of
+  // using this please use the SearchResource.
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {

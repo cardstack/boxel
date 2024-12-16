@@ -223,6 +223,10 @@ export interface CardSearch {
   getCards(
     query: Query,
     realms?: string[],
+    opts?: {
+      isLive?: true;
+      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    },
   ): {
     instances: CardDef[];
     loaded: Promise<void>;
@@ -242,10 +246,17 @@ export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
 }
 
-export function getCards(query: Query, realms?: string[]) {
+export function getCards(
+  query: Query,
+  realms?: string[],
+  opts?: {
+    isLive?: true;
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+  },
+) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(query, realms);
+  return finder?.getCards(query, realms, opts);
 }
 
 export function getCard<T extends CardDef>(

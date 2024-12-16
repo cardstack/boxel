@@ -70,8 +70,15 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // public API
   @action
-  getCards(query: Query, realms?: string[]): Search {
-    return getSearchResults(this, query, realms);
+  getCards(
+    query: Query,
+    realms?: string[],
+    opts?: {
+      isLive?: true;
+      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    },
+  ): Search {
+    return getSearchResults(this, query, realms, opts);
   }
 
   // public API
