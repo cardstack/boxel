@@ -13,6 +13,7 @@ export default class MessageCommand {
     public payload: any, //arguments of toolCall. Its not called arguments due to lint
     public eventId: string,
     private commandStatus: CommandStatus,
+    public commandResultCardId: string | undefined,
     owner: Owner,
   ) {
     setOwner(this, owner);

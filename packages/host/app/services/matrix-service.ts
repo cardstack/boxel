@@ -24,7 +24,6 @@ import {
   markdownToHtml,
   splitStringIntoChunks,
   baseRealm,
-  loaderFor,
   LooseCardResource,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -50,12 +49,14 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CommandReactionEventContent,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/matrix-event';
 import type {
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
-  CommandResultContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -450,11 +451,7 @@ export default class MatrixService extends Service {
   async sendEvent(
     roomId: string,
     eventType: string,
-    content:
-      | CardMessageContent
-      | CardFragmentContent
-      | ReactionEventContent
-      | CommandResultContent,
+    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
   ) {
     let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -470,49 +467,31 @@ export default class MatrixService extends Service {
     });
   }
 
-  async sendReactionEvent(roomId: string, eventId: string, status: string) {
-    let content: ReactionEventContent = {
+  async sendCommandResultEvent(
+    roomId: string,
+    invokedToolFromEventId: string,
+    resultCard?: CardDef,
+  ) {
+    let resultCardEventId: string | undefined;
+    if (resultCard) {
+      [resultCardEventId] = await this.addCardsToRoom([resultCard], roomId);
+    }
+    let content: CommandReactionEventContent = {
+      msgtype: 'org.boxel.command_result',
       'm.relates_to': {
-        event_id: eventId,
-        key: status,
+        event_id: invokedToolFromEventId,
+        key: 'applied',
         rel_type: 'm.annotation',
+      },
+      data: {
+        card_event_id: resultCardEventId ?? null,
       },
     };
     try {
       return await this.sendEvent(roomId, 'm.reaction', content);
     } catch (e) {
       throw new Error(
-        `Error sending reaction event: ${
-          'message' in (e as Error) ? (e as Error).message : e
-        }`,
-      );
-    }
-  }
-
-  async sendCommandResultMessage(
-    roomId: string,
-    eventId: string,
-    result: Record<string, any>,
-  ) {
-    let body = `Command Results from command event ${eventId}`;
-    let html = markdownToHtml(body);
-    let jsonStringResult = JSON.stringify(result);
-    let content: CommandResultContent = {
-      'm.relates_to': {
-        event_id: eventId,
-        rel_type: 'm.annotation',
-        key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
-      },
-      body,
-      formatted_body: html,
-      msgtype: 'org.boxel.commandResult',
-      result: jsonStringResult,
-    };
-    try {
-      return await this.sendEvent(roomId, 'm.room.message', content);
-    } catch (e) {
-      throw new Error(
-        `Error sending reaction event: ${
+        `Error sending command result reaction event: ${
           'message' in (e as Error) ? (e as Error).message : e
         }`,
       );
@@ -538,7 +517,7 @@ export default class MatrixService extends Service {
     }
     let serializedCards = await Promise.all(
       cards.map(async (card) => {
-        let { Base64ImageField } = await loaderFor(card).import<{
+        let { Base64ImageField } = await this.loaderService.loader.import<{
           Base64ImageField: typeof Base64ImageFieldType;
         }>(`${baseRealm.url}base64-image`);
         return await this.cardService.serializeCard(card, {
@@ -971,7 +950,7 @@ export default class MatrixService extends Service {
   private async ensureRoomData(roomId: string) {
     let roomData = this.getRoomData(roomId);
     if (!roomData) {
-      roomData = new Room();
+      roomData = new Room(roomId);
       let rs = await this.getRoomState(roomId);
       if (rs) {
         roomData.notifyRoomStateUpdated(rs);
@@ -1146,6 +1125,53 @@ export default class MatrixService extends Service {
     eventsDrained!();
   }
 
+  private async ensureCardFragmentsLoaded(cardEventId: string, roomData: Room) {
+    let currentFragmentId: string | undefined = cardEventId;
+    do {
+      let fragmentEvent = roomData.events.find(
+        (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
+      );
+      let fragmentData: CardFragmentContent['data'];
+      if (!fragmentEvent) {
+        fragmentEvent = (await this.client?.fetchRoomEvent(
+          roomData.roomId,
+          currentFragmentId ?? '',
+        )) as DiscreteMatrixEvent;
+        if (
+          fragmentEvent.type !== 'm.room.message' ||
+          fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+        ) {
+          throw new Error(
+            `Expected event ${currentFragmentId} to be 'org.boxel.card' but was ${JSON.stringify(
+              fragmentEvent,
+            )}`,
+          );
+        }
+        await this.addRoomEvent({
+          ...fragmentEvent,
+        });
+        fragmentData = (
+          typeof fragmentEvent.content.data === 'string'
+            ? JSON.parse((fragmentEvent.content as any).data)
+            : fragmentEvent.content.data
+        ) as CardFragmentContent['data'];
+      } else {
+        if (
+          fragmentEvent.type !== 'm.room.message' ||
+          fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+        ) {
+          throw new Error(
+            `Expected event to be 'org.boxel.cardFragment' but was ${JSON.stringify(
+              fragmentEvent,
+            )}`,
+          );
+        }
+        fragmentData = fragmentEvent.content.data;
+      }
+      currentFragmentId = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
+    } while (currentFragmentId);
+  }
+
   private async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
     let { room_id: roomId } = event;
     if (!roomId) {
@@ -1193,51 +1219,21 @@ export default class MatrixService extends Service {
         Array.isArray(data.attachedCardsEventIds)
       ) {
         for (let attachedCardEventId of data.attachedCardsEventIds) {
-          let currentFragmentId: string | undefined = attachedCardEventId;
-          do {
-            let fragmentEvent = roomData.events.find(
-              (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
-            );
-            let fragmentData: CardFragmentContent['data'];
-            if (!fragmentEvent) {
-              fragmentEvent = (await this.client?.fetchRoomEvent(
-                roomId,
-                currentFragmentId ?? '',
-              )) as DiscreteMatrixEvent;
-              if (
-                fragmentEvent.type !== 'm.room.message' ||
-                fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
-              ) {
-                throw new Error(
-                  `Expected event ${currentFragmentId} to be 'org.boxel.card' but was ${JSON.stringify(
-                    fragmentEvent,
-                  )}`,
-                );
-              }
-              await this.addRoomEvent({
-                ...fragmentEvent,
-              });
-              fragmentData = (
-                typeof fragmentEvent.content.data === 'string'
-                  ? JSON.parse((fragmentEvent.content as any).data)
-                  : fragmentEvent.content.data
-              ) as CardFragmentContent['data'];
-            } else {
-              if (
-                fragmentEvent.type !== 'm.room.message' ||
-                fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
-              ) {
-                throw new Error(
-                  `Expected event to be 'org.boxel.cardFragment' but was ${JSON.stringify(
-                    fragmentEvent,
-                  )}`,
-                );
-              }
-              fragmentData = fragmentEvent.content.data;
-            }
-            currentFragmentId = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
-          } while (currentFragmentId);
+          this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
         }
+      }
+    } else if (
+      roomData &&
+      event.type === 'm.reaction' &&
+      event.content?.msgtype === 'org.boxel.command_result'
+    ) {
+      let data = (
+        typeof event.content.data === 'string'
+          ? JSON.parse(event.content.data)
+          : event.content.data
+      ) as CommandReactionEventContent['data'];
+      if (data.card_event_id) {
+        this.ensureCardFragmentsLoaded(data.card_event_id, roomData);
       }
     } else if (
       event.type === 'm.room.message' &&
