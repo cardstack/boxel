@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Application",
+      "name": "App",
       "color": "",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../productivity/task",
+        "module": "../tag",
         "name": "Tag"
       }
     }

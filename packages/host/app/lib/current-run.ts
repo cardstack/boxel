@@ -45,13 +45,13 @@ import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
-import {
-  CardDef,
-  type IdentityContext as IdentityContextType,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { type RenderCard } from '../services/render-service';
+import {
+  type RenderCard,
+  IdentityContextWithErrors,
+} from '../services/render-service';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -274,7 +274,7 @@ export class CurrentRun {
 
   private async visitFile(
     url: URL,
-    identityContext?: IdentityContextType,
+    identityContext?: IdentityContextWithErrors,
   ): Promise<void> {
     if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
       return;
@@ -308,11 +308,7 @@ export class CurrentRun {
       await this.indexModule(url, fileRef);
     } else {
       if (!identityContext) {
-        let api = await this.loaderService.loader.import<typeof CardAPI>(
-          `${baseRealm.url}card-api`,
-        );
-        let { IdentityContext } = api;
-        identityContext = new IdentityContext();
+        identityContext = new IdentityContextWithErrors();
       }
 
       if (url.href.endsWith('.json')) {
@@ -362,7 +358,7 @@ export class CurrentRun {
         type: 'error',
         error: {
           status: 500,
-          detail: `encountered error loading module "${url.href}": ${err.message}`,
+          message: `encountered error loading module "${url.href}": ${err.message}`,
           additionalErrors: null,
           deps,
         },
@@ -406,7 +402,7 @@ export class CurrentRun {
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
-    identityContext: IdentityContextType;
+    identityContext: IdentityContextWithErrors;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
@@ -537,6 +533,23 @@ export class CurrentRun {
       }
     } catch (err: any) {
       uncaughtError = err;
+
+      // even when there is an error, do our best to try loading card type
+      // directly, this will help better populate the index card with error
+      // instances when there is no last known good state
+      if (!typesMaybeError) {
+        try {
+          let cardType = (await loadCard(resource.meta.adoptsFrom, {
+            loader: this.loaderService.loader,
+            relativeTo: instanceURL,
+          })) as typeof CardDef;
+          typesMaybeError = await this.getTypes(cardType);
+          searchData = searchData ?? {};
+          searchData._cardType = getDisplayName(cardType);
+        } catch (cardTypeErr: any) {
+          // the enclosing exception above should have captured this error already
+        }
+      }
     }
 
     if (searchData && doc && typesMaybeError?.type === 'types') {
@@ -566,10 +579,15 @@ export class CurrentRun {
       if (uncaughtError) {
         error = {
           type: 'error',
+          searchData,
+          types:
+            typesMaybeError?.type != 'error'
+              ? typesMaybeError?.types.map(({ refURL }) => refURL)
+              : undefined,
           error:
             uncaughtError instanceof CardError
               ? serializableError(uncaughtError)
-              : { detail: `${uncaughtError.message}` },
+              : { message: `${uncaughtError.message}` },
         };
         error.error.deps = [
           moduleURL,
@@ -585,7 +603,7 @@ export class CurrentRun {
         throw err;
       }
       log.warn(
-        `encountered error indexing card instance ${path}: ${error.error.detail}`,
+        `encountered error indexing card instance ${path}: ${error.error.message}`,
       );
       await this.updateEntry(instanceURL, error);
     }
@@ -596,7 +614,7 @@ export class CurrentRun {
     card: CardDef,
     types: CardType[],
     format: 'embedded' | 'fitted',
-    identityContext: IdentityContextType,
+    identityContext: IdentityContextWithErrors,
   ): Promise<{ [refURL: string]: string }> {
     let result: { [refURL: string]: string } = {};
     for (let { codeRef: componentCodeRef, refURL } of types) {

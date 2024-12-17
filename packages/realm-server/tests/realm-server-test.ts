@@ -31,7 +31,7 @@ import {
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
-  encodeToAlphanumeric,
+  encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
@@ -71,6 +71,7 @@ import {
   addToCreditsLedger,
   insertSubscriptionCycle,
   insertSubscription,
+  getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
   createJWT as createRealmServerJWT,
@@ -662,6 +663,7 @@ module('Realm Server', function (hooks) {
           status: 404,
           title: 'Not Found',
           message: `missing file ${testRealmHref}does-not-exist.json`,
+          realm: testRealmHref,
           meta: {
             lastKnownGoodHtml: null,
             scopedCssUrls: [],
@@ -2196,7 +2198,7 @@ module('Realm Server', function (hooks) {
           assert.strictEqual(response.status, 400, 'HTTP 200 status');
 
           assert.ok(
-            response.body.errors[0].detail.includes(
+            response.body.errors[0].message.includes(
               "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
             ),
           );
@@ -2760,7 +2762,7 @@ module('Realm Server', function (hooks) {
       john: ['read', 'write'],
     });
 
-    test('user is not found', async function (assert) {
+    test('responds with 404 if user is not found', async function (assert) {
       let response = await request
         .get(`/_user`)
         .set('Accept', 'application/vnd.api+json')
@@ -2771,8 +2773,13 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
     });
 
-    test('subscription is not found', async function (assert) {
-      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+    test('responds with 200 and null subscription values if user is not subscribed', async function (assert) {
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
       let response = await request
         .get(`/_user`)
         .set('Accept', 'application/vnd.api+json')
@@ -2791,6 +2798,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
+              stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: null,
@@ -2805,8 +2813,20 @@ module('Realm Server', function (hooks) {
       );
     });
 
-    test('user subscibes to a plan and has extra credit', async function (assert) {
-      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+    test('response has correct values for subscribed user who has some extra credits', async function (assert) {
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
+      let someOtherUser = await insertUser(
+        dbAdapter,
+        'some-other-user@test',
+        'cus_1234',
+        'other@test.com',
+      ); // For the purposes of testing that we don't return the wrong user's subscription's data
+
       let plan = await insertPlan(
         dbAdapter,
         'Creator',
@@ -2814,6 +2834,7 @@ module('Realm Server', function (hooks) {
         2500,
         'prod_creator',
       );
+
       let subscription = await insertSubscription(dbAdapter, {
         user_id: user.id,
         plan_id: plan.id,
@@ -2821,23 +2842,51 @@ module('Realm Server', function (hooks) {
         status: 'active',
         stripe_subscription_id: 'sub_1234567890',
       });
+
       let subscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
         subscriptionId: subscription.id,
         periodStart: 1,
         periodEnd: 2,
       });
+
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,
         creditAmount: 100,
         creditType: 'extra_credit',
         subscriptionCycleId: subscriptionCycle.id,
       });
+
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,
         creditAmount: 2500,
         creditType: 'plan_allowance',
         subscriptionCycleId: subscriptionCycle.id,
       });
+
+      // Set up other user's subscription
+      let otherUserSubscription = await insertSubscription(dbAdapter, {
+        user_id: someOtherUser.id,
+        plan_id: plan.id,
+        started_at: 1,
+        status: 'active',
+        stripe_subscription_id: 'sub_1234567891',
+      });
+
+      let otherUserSubscriptionCycle = await insertSubscriptionCycle(
+        dbAdapter,
+        {
+          subscriptionId: otherUserSubscription.id,
+          periodStart: 1,
+          periodEnd: 2,
+        },
+      );
+
+      await addToCreditsLedger(dbAdapter, {
+        userId: someOtherUser.id,
+        creditAmount: 100,
+        creditType: 'extra_credit',
+        subscriptionCycleId: otherUserSubscriptionCycle.id,
+      }); // this is to test that this extra credit amount does not influence the original user's credit calculation
 
       let response = await request
         .get(`/_user`)
@@ -2857,6 +2906,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
+              stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: 2500,
               creditsIncludedInPlanAllowance: 2500,
               extraCreditsAvailableInBalance: 100,
@@ -3628,6 +3678,52 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
     });
 
+    test('can create a user', async function (assert) {
+      let ownerUserId = '@mango:boxel.ai';
+      let response = await request2
+        .post('/_user')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            secretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'user',
+            attributes: {
+              registrationToken: 'reg_token_123',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.text, 'ok', 'response body is correct');
+
+      let user = await getUserByMatrixUserId(dbAdapter, ownerUserId);
+      if (!user) {
+        throw new Error('user does not exist in db');
+      }
+      assert.strictEqual(
+        user.matrixUserId,
+        ownerUserId,
+        'matrix user ID is correct',
+      );
+      assert.strictEqual(
+        user.matrixRegistrationToken,
+        'reg_token_123',
+        'registration token is correct',
+      );
+    });
+
+    test('can not create a user without a jwt', async function (assert) {
+      let response = await request2.post('/_user').send({});
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+    });
+
     test('can dynamically load a card definition from own realm', async function (assert) {
       let ref = {
         module: `${testRealmHref}person`,
@@ -4049,7 +4145,12 @@ module('Realm Server', function (hooks) {
 
     test('subscribes user back to free plan when the current subscription is expired', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let user = await insertUser(dbAdapter, userId, 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        userId,
+        'cus_123',
+        'user@test.com',
+      );
       let freePlan = await insertPlan(
         dbAdapter,
         'Free plan',
@@ -4237,6 +4338,7 @@ module('Realm Server', function (hooks) {
             cancellation_details: {
               reason: 'payment_failure',
             },
+            customer: 'cus_123',
           },
         },
       };
@@ -4270,7 +4372,12 @@ module('Realm Server', function (hooks) {
 
     test('ensures the current subscription expires when free plan subscription fails', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let user = await insertUser(dbAdapter, userId, 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        userId,
+        'cus_123',
+        'user@test.com',
+      );
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       let creatorPlan = await insertPlan(
         dbAdapter,
@@ -4382,6 +4489,7 @@ module('Realm Server', function (hooks) {
             cancellation_details: {
               reason: 'payment_failure',
             },
+            customer: 'cus_123',
           },
         },
       };
@@ -4429,6 +4537,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               matrixUserId: user.matrixUserId,
               stripeCustomerId: user.stripeCustomerId,
+              stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: null,
@@ -4445,7 +4554,7 @@ module('Realm Server', function (hooks) {
 
     test('sends billing notification on invoice payment succeeded event', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -4495,7 +4604,7 @@ module('Realm Server', function (hooks) {
 
     test('sends billing notification on checkout session completed event', async function (assert) {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      await insertUser(dbAdapter, userId!, 'cus_123');
+      await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
       await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
       if (!secret) {
         throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -4507,8 +4616,8 @@ module('Realm Server', function (hooks) {
           object: {
             id: 'cs_test_1234567890',
             object: 'checkout.session',
-            client_reference_id: encodeToAlphanumeric(userId),
-            customer: 'cus_123',
+            client_reference_id: encodeWebSafeBase64(userId),
+            customer: undefined,
             metadata: {},
           },
         },

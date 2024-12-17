@@ -76,10 +76,10 @@
     "start:pg": "./scripts/start-pg.sh",
     "stop:pg": "./scripts/stop-pg.sh",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.card%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
-    "setup:base-in-deployment": "mkdir -p /persistent/base && cp --verbose --update --recursive ../base/. /persistent/base/",
-    "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && cp --verbose --update --recursive ../experiments-realm/. /persistent/experiments/",
-    "setup:seed-in-deployment": "mkdir -p /persistent/seed && cp --verbose --update --recursive ../seed-realm/. /persistent/seed/",
-    "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && cp --verbose --update --recursive ../catalog-realm/. /persistent/catalog/",
+    "setup:base-in-deployment": "mkdir -p /persistent/base && rsync --dry-run --itemize-changes --size-only --recursive ../base/. /persistent/base/ && rsync --size-only --recursive ../base/. /persistent/base/",
+    "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --size-only --recursive ../experiments-realm/. /persistent/experiments/ && rsync --size-only --recursive ../experiments-realm/. /persistent/experiments/",
+    "setup:seed-in-deployment": "mkdir -p /persistent/seed && rsync --dry-run --itemize-changes --size-only --recursive ../seed-realm/. /persistent/seed/ && rsync --size-only --recursive ../seed-realm/. /persistent/seed/",
+    "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --size-only --recursive ../catalog-realm/. /persistent/catalog/ && rsync --size-only --recursive ../catalog-realm/. /persistent/catalog/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh",
     "start:test-realms": "./scripts/start-test-realms.sh",
@@ -97,7 +97,7 @@
     "lint:glint": "glint",
     "full-reset": "./scripts/full-reset.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
-    "stripe": "docker run --rm -it stripe/stripe-cli:latest"
+    "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },
   "volta": {
     "extends": "../../package.json"

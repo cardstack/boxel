@@ -108,6 +108,7 @@ export default function handleStripeLinksRequest(): (
             url: link.url,
             metadata: {
               creditReloadAmount: parseInt(link.metadata.credit_reload_amount),
+              price: parseFloat(link.metadata.price),
             },
           },
         })),

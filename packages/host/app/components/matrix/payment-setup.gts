@@ -35,7 +35,6 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 interface Signature {
   Args: {
     flow: 'register' | 'logged-in';
-    matrixUserId: string;
   };
 }
 
@@ -47,7 +46,10 @@ export default class PaymentSetup extends Component<Signature> {
   @tracked private profileSummaryOpened = false;
 
   get stripePaymentLink() {
-    return this.billingService.getStripePaymentLink(this.args.matrixUserId);
+    return this.billingService.getStripePaymentLink(
+      this.matrixService.userId || '',
+      this.matrixService.profile.email || '',
+    );
   }
 
   @action private toggleProfileSettings() {
@@ -83,7 +85,7 @@ export default class PaymentSetup extends Component<Signature> {
           {{else}}
             <div class='success-banner' data-test-setup-payment-message>
               <InfoCircleIcon class='info-icon' />
-              Setup your payment method now to enjoy Boxel
+              Set up your payment method now to enjoy Boxel
             </div>
           {{/if}}
 
@@ -124,6 +126,7 @@ export default class PaymentSetup extends Component<Signature> {
             <BoxelButton
               @as='anchor'
               @kind='primary'
+              @disabled={{this.billingService.fetchingStripePaymentLinks}}
               @href={{this.stripePaymentLink}}
               data-test-setup-payment
               class='setup-button'

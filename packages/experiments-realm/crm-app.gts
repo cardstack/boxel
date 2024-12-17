@@ -5,6 +5,7 @@ import {
   type SortOption,
   sortByCardTitleAsc,
 } from './components/sort';
+import { SearchInput } from './components/search-input';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -18,12 +19,10 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   TabbedHeader,
-  BoxelInput,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-// @ts-expect-error path resolution issue
-import { AppCard, Tab } from '/catalog/app-card';
+import { AppCard, Tab } from './app-card';
 import {
   Query,
   CardError,
@@ -71,6 +70,14 @@ const DEAL_FILTERS: LayoutFilter[] = [
     createNewButtonText: 'Create Deal',
   },
 ];
+const ACCOUNT_FILTERS: LayoutFilter[] = [
+  {
+    displayName: 'All Accounts',
+    icon: ContactIcon,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
@@ -78,15 +85,17 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   filterMap: TrackedMap<string, LayoutFilter[]> = new TrackedMap([
     ['Contact', CONTACT_FILTERS],
     ['Deal', DEAL_FILTERS],
+    ['Account', ACCOUNT_FILTERS],
   ]);
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
   }
   //tabs
-  @tracked activeTabId: string = this.args.model.tabs[0].tabId;
+  @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
+  @tracked private searchKey = '';
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -109,7 +118,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       attributes: { displayName: string; total: number };
     }[];
 
-    for (let tab of this.tabs) {
+    for (let tab of this.tabs ?? []) {
       let filters = this.filterMap.get(tab.tabId);
       if (filters) {
         for (let filter of filters) {
@@ -133,16 +142,17 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   });
 
   get filters() {
-    return this.filterMap.get(this.activeTabId)!;
+    return this.filterMap.get(this.activeTabId!)!;
   }
 
   @action setActiveFilter() {
-    this.activeFilter = this.filterMap.get(this.activeTabId)![0];
+    this.activeFilter = this.filterMap.get(this.activeTabId!)![0];
   }
 
   //Tabs
   @action setActiveTab(id: string) {
     this.activeTabId = id;
+    this.searchKey = '';
     this.setActiveFilter();
   }
   get headerColor() {
@@ -153,7 +163,8 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   }
   get activeTab() {
     return (
-      this.tabs.find((t: Tab) => t.tabId === this.activeTabId) ?? this.tabs[0]
+      this.tabs?.find((t: Tab) => t.tabId === this.activeTabId) ??
+      this.tabs?.[0]
     );
   }
 
@@ -206,12 +217,44 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
       return {
         filter: {
-          type: this.activeFilter.cardRef,
+          on: this.activeFilter.cardRef,
+          every: [
+            { type: this.activeFilter.cardRef },
+            ...(this.searchKey !== ''
+              ? [
+                  {
+                    any: [
+                      {
+                        on: this.activeFilter.cardRef,
+                        contains: {
+                          name: this.searchKey,
+                        },
+                      },
+                      {
+                        on: this.activeFilter.cardRef,
+                        contains: {
+                          'company.name': this.searchKey,
+                        },
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ],
         },
         sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
       } as Query;
     }
     return;
+  }
+
+  get searchPlaceholder() {
+    return `Search ${this.activeFilter.displayName}`;
+  }
+
+  @action
+  private setSearchKey(searchKey: string) {
+    this.searchKey = searchKey;
   }
 
   @action private onChangeView(id: ViewOption) {
@@ -281,7 +324,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           </BoxelButton>
         {{/if}}
         <div class='search-bar content-header-row-2'>
-          <BoxelInput @type='search' />
+          <SearchInput
+            @placeholder={{this.searchPlaceholder}}
+            @value={{this.searchKey}}
+            @setSearchKey={{this.setSearchKey}}
+          />
         </div>
         <ViewSelector
           class='view-menu content-header-row-2'
@@ -307,6 +354,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @selectedView={{this.selectedView}}
             @context={{@context}}
             @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
+            class='crm-app-grid'
           />
         {{/if}}
       </:grid>
@@ -392,6 +440,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       }
       .view-menu {
         margin-left: auto;
+      }
+      /* Cards grid crm */
+      .crm-app :where(.card-view-container) {
+        grid-template-columns: 1fr;
+      }
+      .crm-app :where(.grid-view) {
+        --grid-card-min-width: 300px;
       }
     </style>
   </template>

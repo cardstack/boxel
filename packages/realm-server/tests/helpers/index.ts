@@ -421,10 +421,12 @@ export async function insertUser(
   dbAdapter: PgAdapter,
   matrixUserId: string,
   stripeCustomerId: string,
+  stripeCustomerEmail: string | null,
 ): Promise<User> {
   let { valueExpressions, nameExpressions } = asExpressions({
     matrix_user_id: matrixUserId,
     stripe_customer_id: stripeCustomerId,
+    stripe_customer_email: stripeCustomerEmail,
   });
   let result = await query(
     dbAdapter,
@@ -435,6 +437,7 @@ export async function insertUser(
     id: result[0].id,
     matrixUserId: result[0].matrix_user_id,
     stripeCustomerId: result[0].stripe_customer_id,
+    stripeCustomerEmail: result[0].stripe_customer_email,
   } as User;
 }
 
@@ -458,7 +461,7 @@ export async function insertPlan(
   return {
     id: result[0].id,
     name: result[0].name,
-    monthlyPrice: result[0].monthly_price,
+    monthlyPrice: parseFloat(result[0].monthly_price as string),
     creditsIncluded: result[0].credits_included,
     stripePlanId: result[0].stripe_plan_id,
   } as Plan;

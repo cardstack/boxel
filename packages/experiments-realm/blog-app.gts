@@ -10,12 +10,17 @@ import {
   CardDef,
   Component,
   realmURL,
+  field,
+  contains,
+  StringField,
 } from 'https://cardstack.com/base/card-api';
 
 import {
   CardError,
   getCard,
   SupportedMimeType,
+  type LooseSingleCardDocument,
+  relativeURL,
 } from '@cardstack/runtime-common';
 import {
   type SortOption,
@@ -26,6 +31,7 @@ import { type ViewOption, CardsGrid } from './components/grid';
 import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
+  BasicFitted,
   BoxelButton,
   FieldContainer,
   Pill,
@@ -81,7 +87,7 @@ const FILTERS: LayoutFilter[] = [
   {
     displayName: 'Author Bios',
     icon: AuthorIcon,
-    cardTypeName: 'Author Bio',
+    cardTypeName: 'Author',
     createNewButtonText: 'Author',
   },
   {
@@ -333,7 +339,28 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         name: summary.id.substring(lastIndex + 1),
       };
       filter.cardRef = cardRef;
-      filter.query = { filter: { type: cardRef } };
+
+      let realmUrl = this.args.model[realmURL];
+      if (!this.args.model.id || !realmUrl?.href) {
+        throw new Error(`Missing card id or realm url`);
+      }
+      let relativeTo = relativeURL(
+        new URL(this.args.model.id),
+        new URL(`${cardRef.module}/${cardRef.name}`),
+        realmUrl,
+      );
+      if (!relativeTo) {
+        throw new Error(`Missing relative url`);
+      }
+      filter.query = {
+        filter: {
+          on: cardRef,
+          any: [
+            { eq: { 'blog.id': this.args.model.id } },
+            { eq: { 'blog.id': relativeTo } },
+          ],
+        },
+      };
     }
   });
 
@@ -360,8 +387,24 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       return;
     }
     let currentRealm = this.realms[0];
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        relationships: {
+          blog: {
+            links: {
+              self: this.args.model.id!,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: ref,
+        },
+      },
+    };
     await this.args.context?.actions?.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
+      doc,
     });
   });
 }
@@ -370,9 +413,54 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 // Using type CardDef instead of AppCard from catalog because of
 // the many type issues resulting from the lack types from catalog realm
 export class BlogApp extends CardDef {
+  @field website = contains(StringField);
   static displayName = 'Blog App';
   static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
   static isolated = BlogAppTemplate;
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <BasicFitted
+        class='fitted-blog'
+        @thumbnailURL={{@model.thumbnailURL}}
+        @primary={{@model.title}}
+        @secondary={{@model.website}}
+      />
+      <style scoped>
+        .fitted-blog :deep(.card-description) {
+          display: none;
+        }
+
+        @container fitted-card ((2.0 < aspect-ratio) and (400px <= width ) and (height < 115px)) {
+          .fitted-blog {
+            padding: var(--boxel-sp-xxxs);
+            align-items: center;
+          }
+          .fitted-blog :deep(.card-thumbnail) {
+            border: 1px solid var(--boxel-450);
+            border-radius: var(--boxel-border-radius-lg);
+            width: 40px;
+            height: 40px;
+            overflow: hidden;
+          }
+          .fitted-blog :deep(.info-section) {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--boxel-sp-xs);
+          }
+          .fitted-blog :deep(.card-title) {
+            -webkit-line-clamp: 2;
+            font: 600 var(--boxel-font-sm);
+            letter-spacing: var(--boxel-lsp-xs);
+          }
+          .fitted-blog :deep(.card-display-name) {
+            margin: 0;
+            overflow: hidden;
+          }
+        }
+      </style>
+    </template>
+  };
 }

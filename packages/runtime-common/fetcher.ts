@@ -81,7 +81,7 @@ function responseWithWaiters(response: Response): Response {
       }
       if (typeof key === 'string' && asyncMethods.includes(key)) {
         return async (...args: unknown[]) => {
-          return waitForPromise(value(...args), 'fetcher-body');
+          return waitForPromise(value(...args), `fetcher-body:${key}`);
         };
       }
       return value;

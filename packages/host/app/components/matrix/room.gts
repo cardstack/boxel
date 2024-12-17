@@ -6,8 +6,15 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
+import {
+  enqueueTask,
+  restartableTask,
+  timeout,
+  all,
+  task,
+} from 'ember-concurrency';
 
+import perform from 'ember-concurrency/helpers/perform';
 import max from 'lodash/max';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -23,12 +30,15 @@ import { not } from '@cardstack/boxel-ui/helpers';
 
 import { unixTime } from '@cardstack/runtime-common';
 
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -44,7 +54,7 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
-import type RoomState from '../../lib/matrix-classes/room-state';
+import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
@@ -99,8 +109,9 @@ export default class Room extends Component<Signature> {
             {{else}}
               <AiAssistantSkillMenu
                 class='skills'
-                @skills={{this.skills}}
-                @onChooseCard={{this.attachSkill}}
+                @skills={{this.sortedSkills}}
+                @onChooseCard={{perform this.attachSkillTask}}
+                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
                 data-test-skill-menu
               />
             {{/if}}
@@ -167,13 +178,14 @@ export default class Room extends Component<Signature> {
   </template>
 
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private roomResource = getRoom(
     this,
     () => this.args.roomId,
-    () => this.matrixService.getRoomState(this.args.roomId)?.events,
+    () => this.matrixService.getRoomData(this.args.roomId)?.events,
   );
   private autoAttachmentResource = getAutoAttachment(
     this,
@@ -184,7 +196,7 @@ export default class Room extends Component<Signature> {
   @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private roomScrollState: WeakMap<
-    RoomState,
+    RoomData,
     {
       messageElemements: WeakMap<HTMLElement, number>;
       messageScrollers: Map<number, Element['scrollIntoView']>;
@@ -198,7 +210,6 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
-    this.loadRoomSkills.perform();
   }
 
   private scrollState() {
@@ -255,14 +266,6 @@ export default class Room extends Component<Signature> {
   private get messageVisibilityObserver() {
     return this.scrollState().messageVisibilityObserver;
   }
-
-  private loadRoomSkills = restartableTask(async () => {
-    await this.roomResource.loading;
-    let defaultSkills = await this.matrixService.loadDefaultSkills();
-    if (this.roomResource.roomState) {
-      this.roomResource.roomState.skills = defaultSkills;
-    }
-  });
 
   private registerMessageScroller = ({
     index,
@@ -405,7 +408,7 @@ export default class Room extends Component<Signature> {
     // update value, but it had already been used previously in the same
     // computation" error
     schedule('afterRender', () => {
-      this.matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+      this.matrixService.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }
 
@@ -442,8 +445,14 @@ export default class Room extends Component<Signature> {
     return this.roomResource.skills;
   }
 
+  private get sortedSkills(): Skill[] {
+    return [...this.skills].sort((a, b) => {
+      return a.card.title.localeCompare(b.card.title);
+    });
+  }
+
   private get room() {
-    let room = this.roomResource.roomState;
+    let room = this.roomResource.matrixRoom;
     return room;
   }
 
@@ -565,15 +574,11 @@ export default class Room extends Component<Signature> {
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
-      let activeSkillCards = this.skills
-        .filter((skill) => skill.isActive)
-        .map((c) => c.card);
       try {
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
-          activeSkillCards,
           clientGeneratedId,
           context,
         );
@@ -590,6 +595,18 @@ export default class Room extends Component<Signature> {
   private get autoAttachedCards() {
     return this.autoAttachmentResource.cards;
   }
+
+  updateSkillIsActiveTask = task(
+    async (skillEventId: string, isActive: boolean) => {
+      await new UpdateSkillActivationCommand(
+        this.commandService.commandContext,
+      ).execute({
+        roomId: this.args.roomId,
+        skillEventId,
+        value: isActive,
+      });
+    },
+  );
 
   private get canSend() {
     return (
@@ -617,9 +634,15 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  @action private attachSkill(card: SkillCard) {
-    this.roomResource?.addSkill(card);
-  }
+  private attachSkillTask = task(async (card: SkillCard) => {
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.args.roomId,
+      skills: [card],
+    });
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

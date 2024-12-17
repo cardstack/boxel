@@ -32,8 +32,8 @@ export class MatrixProfileResource extends Resource<Args> {
   load = restartableTask(async () => {
     if (this.userId) {
       let [rawProfile, threePid] = await all([
-        this.matrixService.client.getProfileInfo(this.userId),
-        this.matrixService.client.getThreePids(),
+        this.matrixService.getProfileInfo(this.userId),
+        this.matrixService.getThreePids(),
       ]);
 
       if (rawProfile) {

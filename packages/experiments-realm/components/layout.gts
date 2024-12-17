@@ -46,9 +46,9 @@ export const setBackgroundImage = (
 
 interface TitleGroupSignature {
   Args: {
-    title: string;
-    tagline: string;
-    thumbnailURL: string;
+    title?: string;
+    tagline?: string;
+    thumbnailURL?: string;
     element?: keyof HTMLElementTagNameMap;
   };
   Element: HTMLElement;
@@ -75,7 +75,7 @@ export const TitleGroup: TemplateOnlyComponent<TitleGroupSignature> = <template>
       border: 1px solid var(--boxel-450);
       border-radius: var(--boxel-border-radius-xl);
       background-position: center;
-      background-repeat: none;
+      background-repeat: no-repeat;
       background-size: cover;
     }
     .title {

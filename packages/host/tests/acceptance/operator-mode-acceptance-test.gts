@@ -13,13 +13,18 @@ import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, primitive } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  encodeWebSafeBase64,
+  primitive,
+  type Realm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import {
-  tokenRefreshPeriodSec,
-  sessionLocalStorageKey,
-} from '@cardstack/host/services/realm';
+import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
+
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -41,6 +46,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
 module('Acceptance | operator mode tests', function (hooks) {
+  let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -274,7 +280,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
-    await setupAcceptanceTestRealm({
+    ({ realm: testRealm } = await setupAcceptanceTestRealm({
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
@@ -331,7 +337,6 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           },
         },
-
         'Person/fadhlan.json': {
           data: {
             attributes: {
@@ -349,6 +354,26 @@ module('Acceptance | operator mode tests', function (hooks) {
               pet: {
                 links: {
                   self: `${testRealmURL}Pet/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/error.json': {
+          data: {
+            attributes: {
+              firstName: 'Error',
+            },
+            relationships: {
+              pet: {
+                links: {
+                  self: './missing-link',
                 },
               },
             },
@@ -404,7 +429,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    });
+    }));
   });
 
   test('visiting operator mode', async function (assert) {
@@ -468,6 +493,85 @@ module('Acceptance | operator mode tests', function (hooks) {
       submode: Submodes.Interact,
     });
     assert.strictEqual(getPageTitle(), 'Mango');
+  });
+
+  test('index card shows last known good state for instances that have an error', async function (assert) {
+    await testRealm.write(
+      'Person/fadhlan.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            pet: {
+              links: {
+                self: './missing-link',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error]`,
+      )
+      .exists('the instance with an error is displayed');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error] [data-test-card-title]`,
+      )
+      .containsText(
+        'Fadhlan',
+        'the last known good state of the instance is displayed',
+      );
+
+    await percySnapshot(assert);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+
+    assert.dom(`[data-test-card-error]`).exists();
+    assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
+  });
+
+  test('index card shows default error tile for instances that have an error and no last known good state', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,
+      )
+      .exists('the instance with an error is displayed');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error] [data-test-instance-error-name]`,
+      )
+      .containsText('Person/error');
+  });
+
+  test('can visit a card in error state via canonical URL', async function (assert) {
+    await visit('/test/Person/error');
+
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
+      )
+      .exists('the error state of the card is displayed');
+    assert.dom('[data-test-error-title]').includesText('Link Not Found');
+    await click('[data-test-error-detail-toggle] button');
+    assert
+      .dom('[data-test-error-detail]')
+      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {
@@ -703,14 +807,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
+      let originalToken = window.localStorage.getItem(SessionLocalStorageKey);
       await waitUntil(
         () =>
-          window.localStorage.getItem(sessionLocalStorageKey) !== originalToken,
+          window.localStorage.getItem(SessionLocalStorageKey) !== originalToken,
         { timeout: refreshInSec * 3 * 1000 },
       );
 
-      let newToken = window.localStorage.getItem(sessionLocalStorageKey);
+      let newToken = window.localStorage.getItem(SessionLocalStorageKey);
       assert.ok(newToken, 'new session token obtained');
       assert.notEqual(
         originalToken,
@@ -886,29 +990,82 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-profile-icon-button]');
 
       assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('100');
-      assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1,000 of 1,000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
       assert.dom('[data-test-upgrade-plan-button]').exists();
       assert.dom('[data-test-buy-more-credits]').exists();
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
-
-      await click('[data-test-upgrade-plan-button]');
-      assert.dom('[data-test-profile-popover]').doesNotExist();
       assert
-        .dom('[data-test-boxel-card-container]')
-        .hasClass('profile-settings');
+        .dom('[data-test-upgrade-plan-button]')
+        .hasAttribute('href', 'https://customer-portal-link');
+      assert
+        .dom('[data-test-upgrade-plan-button]')
+        .hasAttribute('target', '_blank');
 
-      await click('[aria-label="close modal"]');
-      await click('[data-test-profile-icon-button]');
       assert.dom('[data-test-profile-popover]').exists();
       await click('[data-test-buy-more-credits] button');
       assert.dom('[data-test-profile-popover]').doesNotExist();
       assert
         .dom('[data-test-boxel-card-container]')
         .hasClass('profile-settings');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1,000 of 1,000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-manage-plan-button]')
+        .hasAttribute('href', 'https://customer-portal-link');
+      assert
+        .dom('[data-test-manage-plan-button]')
+        .hasAttribute('target', '_blank');
+      assert.dom('[data-test-payment-link]').exists({ count: 3 });
+      assert
+        .dom('[data-test-pay-button="0"]')
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
+      assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
+      assert
+        .dom('[data-test-pay-button="1"]')
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
+      assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
+      assert
+        .dom('[data-test-pay-button="2"]')
+        .hasAttribute(
+          'href',
+          `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
+            '@testuser:staging',
+          )}`,
+        );
+      assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
 
       // out of credit
       await click('[aria-label="close modal"]');
@@ -921,11 +1078,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
 
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('100');
-      assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('0 of 1,000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('100');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
       await click('[data-test-profile-icon-button]');
 
@@ -936,11 +1101,19 @@ module('Acceptance | operator mode tests', function (hooks) {
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('0 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('0');
-      assert.dom('[data-test-additional-credit]').hasClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('0 of 1,000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('0');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasClass('out-of-credit');
       await click('[data-test-profile-icon-button]');
 
@@ -951,11 +1124,19 @@ module('Acceptance | operator mode tests', function (hooks) {
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-membership-tier]').hasText('Free');
-      assert.dom('[data-test-monthly-credit]').hasText('1000 of 1000 left');
-      assert.dom('[data-test-monthly-credit]').hasNoClass('out-of-credit');
-      assert.dom('[data-test-additional-credit]').hasText('0');
-      assert.dom('[data-test-additional-credit]').hasNoClass('out-of-credit');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasText('1,000 of 1,000 left');
+      assert
+        .dom('[data-test-subscription-data="monthly-credit"]')
+        .hasNoClass('out-of-credit');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasText('0');
+      assert
+        .dom('[data-test-subscription-data="additional-credit"]')
+        .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
     });
   });

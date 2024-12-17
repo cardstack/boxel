@@ -121,6 +121,7 @@ export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
   htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  includeErrors?: true;
   cardUrls?: string[];
 }
 
@@ -130,7 +131,8 @@ interface WIPOptions {
 
 export interface PrerenderedCard {
   url: string;
-  html: string;
+  html: string | null;
+  isError?: true;
 }
 
 export interface QueryResultsMeta {
@@ -160,21 +162,24 @@ export function isValidPrerenderedHtmlFormat(
 }
 
 export class IndexQueryEngine {
-  constructor(private dbAdapter: DBAdapter) {}
-
-  private async query(expression: Expression) {
-    return await query(this.dbAdapter, expression, coerceTypes);
+  #dbAdapter: DBAdapter;
+  constructor(dbAdapter: DBAdapter) {
+    this.#dbAdapter = dbAdapter;
   }
 
-  private async queryCards(query: CardExpression, loader: Loader) {
-    return this.query(await this.makeExpression(query, loader));
+  async #query(expression: Expression) {
+    return await query(this.#dbAdapter, expression, coerceTypes);
+  }
+
+  async #queryCards(query: CardExpression, loader: Loader) {
+    return this.#query(await this.makeExpression(query, loader));
   }
 
   async getModule(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedModuleOrError | undefined> {
-    let rows = (await this.query([
+    let rows = (await this.#query([
       `SELECT i.*
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -210,7 +215,7 @@ export class IndexQueryEngine {
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
     } = moduleEntry;
-    if (!executableCode) {
+    if (executableCode === null) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
@@ -232,7 +237,7 @@ export class IndexQueryEngine {
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
-    let result = (await this.query([
+    let result = (await this.#query([
       `SELECT i.*, embedded_html, fitted_html`,
       `FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -340,10 +345,23 @@ export class IndexQueryEngine {
     }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
-      ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
+
+    if (opts.includeErrors) {
+      conditions.push(
+        any([
+          ['i.type =', param('instance')],
+          every([
+            ['i.type =', param('error')],
+            ['i.url ILIKE', param('%.json')],
+          ]),
+        ]),
+      );
+    } else {
+      conditions.push(['i.type =', param('instance')]);
+    }
 
     if (opts.cardUrls && opts.cardUrls.length > 0) {
       conditions.push([
@@ -378,8 +396,8 @@ export class IndexQueryEngine {
     ];
 
     let [results, totalResults] = await Promise.all([
-      this.queryCards(query, loader),
-      this.queryCards(queryCount, loader),
+      this.#queryCards(query, loader),
+      this.#queryCards(queryCount, loader),
     ]);
 
     return {
@@ -452,7 +470,7 @@ export class IndexQueryEngine {
     realmURL: URL,
     { filter, sort, page }: Query,
     loader: Loader,
-    opts: QueryOptions = {},
+    opts: QueryOptions = { includeErrors: true },
   ): Promise<{
     prerenderedCards: PrerenderedCard[];
     scopedCssUrls: string[];
@@ -498,13 +516,13 @@ export class IndexQueryEngine {
       loader,
       opts,
       [
-        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
         ...htmlColumnExpression,
         ') as html, ANY_VALUE(deps) as deps',
       ],
     )) as {
       meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & { html: string })[];
+      results: (Partial<BoxelIndexTable> & { html: string | null })[];
     };
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
@@ -524,6 +542,7 @@ export class IndexQueryEngine {
       return {
         url: card.url!,
         html: card.html,
+        ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });
 
@@ -531,7 +550,7 @@ export class IndexQueryEngine {
   }
 
   async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
-    let results = (await this.query([
+    let results = (await this.#query([
       `SELECT value
        FROM realm_meta rm
        INNER JOIN realm_versions rv
@@ -544,7 +563,7 @@ export class IndexQueryEngine {
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {
-    let [{ current_version }] = (await this.query([
+    let [{ current_version }] = (await this.#query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
       param(realmURL.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];

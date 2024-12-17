@@ -56,12 +56,10 @@ module('Integration | commands | switch-submode', function (hooks) {
     let switchSubmodeCommand = new SwitchSubmodeCommand(
       commandService.commandContext,
     );
-    const InputType = await switchSubmodeCommand.getInputType();
-    let input = new InputType({
+    assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
+    await switchSubmodeCommand.execute({
       submode: 'code',
     });
-    assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
-    await switchSubmodeCommand.execute(input);
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
   });
 });

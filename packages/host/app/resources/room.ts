@@ -1,21 +1,19 @@
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
-  CardMessageContent,
   CommandEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
-  ReactionEvent,
   RoomCreateEvent,
   RoomNameEvent,
   InviteEvent,
@@ -25,20 +23,28 @@ import type {
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import { Skill } from '../components/ai-assistant/skill-menu';
 import {
   RoomMember,
   type RoomMemberInterface,
 } from '../lib/matrix-classes/member';
 import { Message } from '../lib/matrix-classes/message';
 
-import type { Skill } from '../components/ai-assistant/skill-menu';
-import type RoomState from '../lib/matrix-classes/room-state';
+import MessageBuilder from '../lib/matrix-classes/message-builder';
+
+import type Room from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+
+interface SkillId {
+  skillCardId: string;
+  skillEventId: string;
+  isActive: boolean;
+}
 
 interface Args {
   named: {
@@ -47,20 +53,18 @@ interface Args {
   };
 }
 
-const ErrorMessage: Record<string, string> = {
-  ['M_TOO_LARGE']: 'Message is too large',
-};
-
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
+  private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
+  private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
-  @tracked roomState: RoomState | undefined;
+  @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
@@ -81,19 +85,21 @@ export class RoomResource extends Resource<Args> {
   }
 
   private resetCache() {
+    this._messageCreateTimesCache = new Map();
     this._messageCache = new TrackedMap();
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
     this._nameEventsCache = new TrackedMap();
+    this._skillCardsCache = new TrackedMap();
     this._createEvent = undefined;
   }
 
   private load = restartableTask(async (roomId: string) => {
     try {
-      this.roomState = roomId
-        ? await this.matrixService.getRoomState(roomId)
+      this.matrixRoom = roomId
+        ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.roomState) {
+      if (this.matrixRoom) {
         await this.loadFromEvents(roomId);
       }
     } catch (e) {
@@ -120,11 +126,60 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get events() {
-    return this.roomState?.events ?? [];
+    return this.matrixRoom?.events ?? [];
+  }
+
+  get skillIds(): SkillId[] {
+    let skillsConfig = this.matrixRoom?.skillsConfig;
+    if (!skillsConfig) {
+      return [];
+    }
+    let result: SkillId[] = [];
+    for (let eventId of [
+      ...skillsConfig.enabledEventIds,
+      ...skillsConfig.disabledEventIds,
+    ]) {
+      let cardDoc;
+      try {
+        cardDoc = this.serializedCardFromFragments(eventId);
+      } catch {
+        // the skill card fragments might not be loaded yet
+        continue;
+      }
+      if (!cardDoc.data.id) {
+        continue;
+      }
+      let cardId = cardDoc.data.id;
+      if (!this._skillCardsCache.has(cardId)) {
+        this.cardService
+          .createFromSerialized(cardDoc.data, cardDoc)
+          .then((skillsCard) => {
+            this._skillCardsCache.set(cardId, skillsCard as SkillCard);
+          });
+      }
+      result.push({
+        skillCardId: cardDoc.data.id,
+        skillEventId: eventId,
+        isActive: skillsConfig.enabledEventIds.includes(eventId),
+      });
+    }
+    return result;
   }
 
   get skills(): Skill[] {
-    return this.roomState?.skills ?? [];
+    return this.skillIds
+      .map(({ skillCardId, skillEventId, isActive }) => {
+        let card = this._skillCardsCache.get(skillCardId);
+        if (card) {
+          return {
+            card,
+            skillEventId,
+            isActive,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean) as Skill[];
   }
 
   get roomId() {
@@ -141,13 +196,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   get name() {
-    let events = Array.from(this._nameEventsCache.values()).sort(
-      (a, b) => a.origin_server_ts - b.origin_server_ts,
-    ) as RoomNameEvent[];
-    if (events.length > 0) {
-      return events.pop()!.content.name;
-    }
-    return;
+    return this.matrixRoom?.name;
   }
 
   get lastActiveTimestamp() {
@@ -200,163 +249,84 @@ export class RoomResource extends Resource<Args> {
     event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
     index: number,
   ) {
-    let event_id = event.event_id;
+    let effectiveEventId = event.event_id;
     let update = false;
     if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
       // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
       // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
-      // TOOD: Refactor having many if conditions to some variant of a strategy pattern
       update = true;
     } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      effectiveEventId = event.content['m.relates_to'].event_id;
       if (
         'isStreamingFinished' in event.content &&
         !event.content.isStreamingFinished
       ) {
+        // we don't need to process this event if it's not finished streaming,
+        // but we do need to note it's creation time so that we can capture the earliest one
+        let earliestKnownCreateTime =
+          this._messageCreateTimesCache.get(effectiveEventId);
+        if (
+          !earliestKnownCreateTime ||
+          earliestKnownCreateTime > event.origin_server_ts
+        ) {
+          this._messageCreateTimesCache.set(
+            effectiveEventId,
+            event.origin_server_ts,
+          );
+          let alreadyProcessedMessage =
+            this._messageCache.get(effectiveEventId);
+          if (alreadyProcessedMessage) {
+            alreadyProcessedMessage.created = new Date(event.origin_server_ts);
+          }
+        }
         return;
       }
-      event_id = event.content['m.relates_to'].event_id;
       update = true;
     }
-    if (this._messageCache.has(event_id) && !update) {
+    if (this._messageCache.has(effectiveEventId) && !update) {
       return;
     }
+    if (event.content.msgtype === 'org.boxel.cardFragment') {
+      if (!this._fragmentCache.has(effectiveEventId)) {
+        this._fragmentCache.set(effectiveEventId, event.content);
+      }
+      return;
+    }
+    if (event.content.msgtype === 'org.boxel.commandResult') {
+      //don't display command result in the room as a message
+      return;
+    }
+
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
     });
-    let messageArgs = new Message({
+    let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+      effectiveEventId,
       author,
-      created: new Date(event.origin_server_ts),
-      updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-      message: event.content.body,
-      formattedMessage: event.content.formatted_body,
-      // These are not guaranteed to exist in the event
-      transactionId: event.unsigned?.transaction_id || null,
-      attachedCardIds: null,
-      attachedSkillCardIds: null,
-      command: null,
-      commandResult: null,
-      status: event.status,
-      eventId: event.event_id,
       index,
+      serializedCardFromFragments: this.serializedCardFromFragments,
+      events: this.events,
     });
-    if (event.status === 'cancelled' || event.status === 'not_sent') {
-      (messageArgs as any).errorMessage =
-        event.error?.data.errcode &&
-        Object.keys(ErrorMessage).includes(event.error?.data.errcode)
-          ? ErrorMessage[event.error?.data.errcode]
-          : 'Failed to send';
-    }
-    if ('errorMessage' in event.content) {
-      (messageArgs as any).errorMessage = event.content.errorMessage;
-    }
-    let messageField = undefined;
 
-    if (event.content.msgtype === 'org.boxel.cardFragment') {
-      if (!this._fragmentCache.has(event_id)) {
-        this._fragmentCache.set(event_id, event.content);
-      }
-    } else if (event.content.msgtype === 'org.boxel.commandResult') {
-      //don't display command result in the room as a message
-      // TOOD: Refactor having many if conditions to some variant of a strategy pattern
-    } else if (event.content.msgtype === 'org.boxel.message') {
-      // Safely skip over cases that don't have attached cards or a data type
-      let cardDocs = event.content.data?.attachedCardsEventIds
-        ? event.content.data.attachedCardsEventIds.map((eventId) =>
-            this.serializedCardFromFragments(eventId),
-          )
-        : [];
-      let attachedCardIds: string[] = [];
-      cardDocs.map((c) => {
-        if (c.data.id) {
-          attachedCardIds.push(c.data.id);
-        }
-      });
-      if (attachedCardIds.length < cardDocs.length) {
-        throw new Error(`cannot handle cards in room without an ID`);
-      }
-      messageArgs.clientGeneratedId = event.content.clientGeneratedId;
-      messageField = new Message({
-        ...messageArgs,
-        attachedCardIds,
-      });
-    } else if (
-      event.content.msgtype === 'org.boxel.command' &&
-      event.content.data.toolCall
-    ) {
-      // We only handle patches for now
-      let commandEvent = event as CommandEvent;
-      let command = event.content.data.toolCall;
-      let annotation = this.events.find(
-        (e) =>
-          e.type === 'm.reaction' &&
-          e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-          e.content['m.relates_to']?.event_id ===
-            // If the message is a replacement message, eventId in command payload will be undefined.
-            // Because it will not refer to any other events, so we can use event_id of the message itself.
-            (commandEvent.content.data.eventId ?? event_id),
-      ) as ReactionEvent | undefined;
-
-      let commandResultEvent = this.events.find(
-        (e) =>
-          e.type === 'm.room.message' &&
-          e.content.msgtype === 'org.boxel.commandResult' &&
-          e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-          e.content['m.relates_to'].event_id ===
-            commandEvent.content.data.eventId,
-      ) as CommandResultEvent;
-      let r = commandResultEvent?.content?.result
-        ? await this.commandService.createCommandResultArgs(
-            commandEvent,
-            commandResultEvent,
-          )
-        : undefined;
-
-      let status: CommandStatus =
-        annotation?.content['m.relates_to'].key === 'applied'
-          ? annotation?.content['m.relates_to'].key
-          : 'ready';
-
-      let commandCardArgs = {
-        toolCallId: command.id,
-        eventId: event_id,
-        name: command.name,
-        payload: command.arguments,
-        status,
-      };
-      let commandCard = await this.commandService.createCommand(
-        commandCardArgs,
-      );
-      let commandResult = r
-        ? await this.commandService.createCommandResult(r)
-        : undefined;
-
-      messageField = new Message({
-        ...messageArgs,
-        formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
-        command: commandCard,
-        commandResult,
-        isStreamingFinished: true,
-      });
-    } else {
-      // Text from the AI bot
-      if (event.content.msgtype === 'm.text') {
-        messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
-      }
-      messageField = new Message({ ...messageArgs });
-    }
-
-    if (messageField) {
+    let messageObject = await messageBuilder.buildMessage();
+    if (messageObject) {
       // if the message is a replacement for other messages,
       // use `created` from the oldest one.
-      if (this._messageCache.has(event_id)) {
-        let d1 = this._messageCache.get(event_id)!.created!;
-        let d2 = messageField.created!;
-        messageField.created = d1 < d2 ? d1 : d2;
+      if (this._messageCache.has(effectiveEventId)) {
+        messageObject.created = new Date(
+          Math.min(
+            ...[
+              +this._messageCache.get(effectiveEventId)!.created!,
+              +messageObject.created!,
+              this._messageCreateTimesCache.get(effectiveEventId) ?? +Infinity,
+            ],
+          ),
+        );
       }
       this._messageCache.set(
-        (event.content as CardMessageContent).clientGeneratedId ?? event_id,
-        messageField as any,
+        messageObject.clientGeneratedId ?? effectiveEventId,
+        messageObject as any,
       );
     }
   }
@@ -392,29 +362,26 @@ export class RoomResource extends Resource<Args> {
       return member;
     }
     if (!member) {
-      let member = new RoomMember({ userId, roomId });
-      if (displayName) {
-        member.displayName = displayName;
-      }
-      if (membership) {
-        member.membership = membership;
-      }
-      if (membershipDateTime != null) {
-        member.membershipDateTime = new Date(membershipDateTime);
-      }
-      if (membershipInitiator) {
-        member.membershipInitiator = membershipInitiator;
-      }
-
-      this._memberCache.set(userId, member);
-      return member;
+      member = new RoomMember({ userId, roomId });
     }
+    if (displayName) {
+      member.displayName = displayName;
+    }
+    if (membership) {
+      member.membership = membership;
+    }
+    if (membershipDateTime != null) {
+      member.membershipDateTime = new Date(membershipDateTime);
+    }
+    if (membershipInitiator) {
+      member.membershipInitiator = membershipInitiator;
+    }
+
+    this._memberCache.set(userId, member);
     return member;
   }
 
-  private serializedCardFromFragments(
-    eventId: string,
-  ): LooseSingleCardDocument {
+  private serializedCardFromFragments = (eventId: string) => {
     let fragments: CardFragmentContent[] = [];
     let currentFragment: string | undefined = eventId;
     do {
@@ -439,17 +406,7 @@ export class RoomResource extends Resource<Args> {
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
     return cardDoc;
-  }
-
-  addSkill(card: SkillCard) {
-    if (!this.roomState) {
-      return;
-    }
-    this.roomState.skills = [
-      ...this.roomState.skills,
-      new TrackedObject({ card, isActive: true }),
-    ];
-  }
+  };
 }
 
 export function getRoom(

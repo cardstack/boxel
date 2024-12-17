@@ -1,4 +1,9 @@
-import { encodeToAlphanumeric, param, query } from '@cardstack/runtime-common';
+import {
+  decodeWebSafeBase64,
+  encodeWebSafeBase64,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -81,6 +86,19 @@ async function fetchCreditsLedgerByUser(
   );
 }
 
+module('billing utils', function () {
+  test('encoding client_reference_id to be web safe in payment links', function (assert) {
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@mike_1:cardstack.com')),
+      '@mike_1:cardstack.com',
+    );
+    assert.strictEqual(
+      decodeWebSafeBase64(encodeWebSafeBase64('@hans.müller:matrix.de')),
+      '@hans.müller:matrix.de',
+    );
+  });
+});
+
 module('billing', function (hooks) {
   let dbAdapter: PgAdapter;
 
@@ -96,7 +114,12 @@ module('billing', function (hooks) {
   module('invoice payment succeeded', function () {
     module('new subscription without any previous subscription', function () {
       test('creates a new subscription and adds plan allowance in credits', async function (assert) {
-        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
         let plan = await insertPlan(
           dbAdapter,
           'Free plan',
@@ -202,7 +225,12 @@ module('billing', function (hooks) {
 
     module('subscription update', function () {
       test('updates the subscription and prorates credits', async function (assert) {
-        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
         let freePlan = await insertPlan(
           dbAdapter,
           'Free plan',
@@ -322,8 +350,8 @@ module('billing', function (hooks) {
 
         subscriptionCycle = subscriptionCycles[0];
 
-        // User received 5000 credits from the creator plan, plus 500 from the plan allowance they had left from the free plan
-        assert.strictEqual(creditsBalance, 5500);
+        // User received 5000 credits from the creator plan, but the 500 credits from the plan allowance they had left from the free plan were expired
+        assert.strictEqual(creditsBalance, 5000);
 
         // User spent 2000 credits from the plan allowance
         await addToCreditsLedger(dbAdapter, {
@@ -333,11 +361,11 @@ module('billing', function (hooks) {
           subscriptionCycleId: subscriptionCycle.id,
         });
 
-        // Assert that the user now has 3500 credits left
+        // Assert that the user now has 3000 credits left
         creditsBalance = await sumUpCreditsLedger(dbAdapter, {
           userId: user.id,
         });
-        assert.strictEqual(creditsBalance, 3500);
+        assert.strictEqual(creditsBalance, 3000);
 
         // Now, user upgrades to power user plan ($49 monthly) in the middle of the month:
 
@@ -559,7 +587,12 @@ module('billing', function (hooks) {
 
     module('subscription cycle', function () {
       test('renews the subscription', async function (assert) {
-        let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
         let plan = await insertPlan(
           dbAdapter,
           'Creator',
@@ -671,7 +704,12 @@ module('billing', function (hooks) {
 
   module('subscription deleted', function () {
     test('handles subscription cancellation', async function (assert) {
-      let user = await insertUser(dbAdapter, 'user@test', 'cus_123');
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
       let plan = await insertPlan(
         dbAdapter,
         'Creator',
@@ -741,7 +779,7 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 customer: 'cus_123',
                 metadata: {},
               },
@@ -776,7 +814,12 @@ module('billing', function (hooks) {
       'with entry in users table before webhook arrival',
       function (hooks) {
         hooks.beforeEach(async function () {
-          user = await insertUser(dbAdapter, matrixUserId, 'cus_123');
+          user = await insertUser(
+            dbAdapter,
+            matrixUserId,
+            'cus_123',
+            'user@test.com',
+          );
         });
 
         test('updates user stripe customer id on checkout session completed', async function (assert) {
@@ -787,7 +830,7 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeToAlphanumeric(matrixUserId),
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 customer: 'cus_123',
                 metadata: {},
               },
@@ -843,7 +886,8 @@ module('billing', function (hooks) {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                customer: 'cus_123',
+                customer: null,
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 metadata: {
                   credit_reload_amount: '25000',
                 },
@@ -874,7 +918,12 @@ module('billing', function (hooks) {
     let subscriptionCycle: SubscriptionCycle;
 
     hooks.beforeEach(async function () {
-      user = await insertUser(dbAdapter, 'testuser', 'cus_123');
+      user = await insertUser(
+        dbAdapter,
+        'testuser',
+        'cus_123',
+        'user@test.com',
+      );
       creatorPlan = await insertPlan(
         dbAdapter,
         'Creator',

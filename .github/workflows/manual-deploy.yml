@@ -87,7 +87,10 @@ jobs:
       dockerfile: "packages/postgres/Dockerfile"
 
   migrate-db:
-    needs: [build-pg-migration]
+    # use "deploy-host" and "build-realm-server" as deps so we can run
+    # migrations at last possible moment in order to reduce the amount of time
+    # that old code is pointing to new schema
+    needs: [build-pg-migration, build-realm-server, deploy-host]
     name: Deploy and run DB migrations
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit

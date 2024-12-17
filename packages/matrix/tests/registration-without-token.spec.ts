@@ -15,10 +15,10 @@ import {
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
-  assertPaymentSetup,
+  assertPaymentLink,
   setupPayment,
   registerRealmUsers,
-  encodeToAlphanumeric,
+  encodeWebSafeBase64,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
@@ -68,11 +68,14 @@ test.describe('User Registration w/o Token', () => {
     await expect(page.locator('[data-test-email-validated]')).toContainText(
       'Success! Your email has been validated',
     );
+    await assertPaymentLink(page, {
+      username: '@user1:localhost',
+      email: 'user1@example.com',
+    });
 
     // base 64 encode the matrix user id
-    const matrixUserId = encodeToAlphanumeric('@user1:localhost');
+    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
 
-    await assertPaymentSetup(page, matrixUserId);
     await setupPayment(matrixUserId, realmServer, page);
     await assertLoggedIn(page);
   });

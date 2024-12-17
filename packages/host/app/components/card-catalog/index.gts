@@ -18,11 +18,11 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import type { RealmInfo, CodeRef } from '@cardstack/runtime-common';
 
-import { HTMLComponent } from '@cardstack/host/lib/html-component';
-
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import type RealmService from '@cardstack/host/services/realm';
+
+import { type PrerenderedCard } from '../prerendered-card-search';
 
 import { removeFileExtension } from '../search-sheet/utils';
 
@@ -32,13 +32,6 @@ export interface NewCardArgs {
   ref: CodeRef;
   relativeTo: string | undefined;
   realmURL: string;
-}
-
-interface PrerenderedCard {
-  component: HTMLComponent;
-  url: string;
-  realmUrl: string;
-  realmInfo?: RealmInfo;
 }
 
 interface ButtonSignature {
@@ -364,6 +357,10 @@ export default class CardCatalog extends Component<Signature> {
 
     let groupedCards = cards.reduce(
       (acc, card) => {
+        // don't show instances in an error state in the card chooser
+        if (card.isError) {
+          return acc;
+        }
         let realmUrl = card.realmUrl;
         if (!acc[realmUrl]) {
           acc[realmUrl] = {
