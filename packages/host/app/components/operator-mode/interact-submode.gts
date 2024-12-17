@@ -192,6 +192,11 @@ export default class InteractSubmode extends Component<Signature> {
             },
           },
         };
+
+        if (opts?.realmURL && !doc.data.meta.realmURL) {
+          doc.data.meta.realmURL = opts.realmURL.href;
+        }
+
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
