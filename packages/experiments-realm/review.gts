@@ -120,9 +120,7 @@ export class Review extends BlogPost {
             @displayContainer={{false}}
           />
         {{/if}}
-        {{#if @model.featuredImage.imageUrl}}
-          <@fields.featuredImage class='featured-image' />
-        {{/if}}
+        <@fields.featuredImage class='featured-image' />
         <div class='content'>
           <div class='rating-group'>
             {{! TODO: replace with category field }}
@@ -176,6 +174,7 @@ export class Review extends BlogPost {
             'Playfair Display',
             serif
           );
+          --banner-height: 70px;
           position: relative;
           height: max-content;
           min-height: 100%;
@@ -185,7 +184,7 @@ export class Review extends BlogPost {
         .blog.fitted-format {
           position: absolute;
           top: 0;
-          min-height: 70px;
+          min-height: var(--banner-height);
           background-color: rgba(0 0 0 / 70%);
           color: var(--boxel-light);
           border-radius: 0;
@@ -195,6 +194,9 @@ export class Review extends BlogPost {
           grid-template-columns: max-content 1fr;
           gap: var(--boxel-sp-sm);
           padding: var(--boxel-sp) var(--boxel-sp-lg);
+        }
+        .featured-image {
+          min-height: var(--banner-height);
         }
         .content {
           width: 80%;

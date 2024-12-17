@@ -1,4 +1,5 @@
 import CategoriesIcon from '@cardstack/boxel-icons/hierarchy-3';
+import MovieIcon from '@cardstack/boxel-icons/movie';
 import BlogPostIcon from '@cardstack/boxel-icons/newspaper';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
@@ -31,5 +32,6 @@ const FILTERS: LayoutFilter[] = [
 
 export class ReviewBlog extends BlogApp {
   static displayName = 'Review Blog';
+  static icon = MovieIcon;
   filters = FILTERS;
 }
