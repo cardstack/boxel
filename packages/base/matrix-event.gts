@@ -3,6 +3,7 @@ import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import {
   FunctionToolCall,
   type AttributesSchema,
+  type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 
 interface BaseMatrixEvent {
@@ -196,6 +197,7 @@ export interface CardMessageContent {
     context: {
       openCardIds?: string[];
       tools: Tool[];
+      toolChoice?: ToolChoice;
       submode?: string;
     };
   };
