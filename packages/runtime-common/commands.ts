@@ -8,14 +8,9 @@ import {
   generateJsonSchemaForCardType,
 } from './helpers/ai';
 
+export const CommandContextStamp = Symbol.for('CommandContext');
 export interface CommandContext {
-  sendAiAssistantMessage: (params: {
-    roomId: string;
-    show?: boolean; // if truthy, ensure the side panel to the room
-    prompt: string;
-    attachedCards?: CardDef[];
-    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
-  }) => Promise<{ roomId: string }>;
+  [CommandContextStamp]: boolean;
 }
 
 export class CommandInvocation<

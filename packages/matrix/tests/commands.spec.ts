@@ -319,7 +319,7 @@ test.describe('Commands', () => {
     }).toPass();
   });
 
-  test('a command sent via sendAiAssistantMessage becomes an available tool', async ({
+  test('a command sent via SendAiAssistantMessageCommand becomes an available tool', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });

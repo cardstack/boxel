@@ -3483,6 +3483,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
+        'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
