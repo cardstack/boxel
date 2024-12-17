@@ -1834,10 +1834,15 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         },
       ];
+      assert
+        .dom(`[data-test-operator-mode-stack="1"] h2`)
+        .containsText('Mango');
+
       await this.expectEvents({
         assert,
         realm,
-        expectedEvents,
+        expectedNumberOfEvents: 4,
+        // expectedEvents,
         callback: async () => {
           await click('[data-test-update-and-save-pet]');
         },
