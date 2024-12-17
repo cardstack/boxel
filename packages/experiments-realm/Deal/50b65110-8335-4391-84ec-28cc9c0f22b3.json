@@ -23,10 +23,16 @@
       },
       "closeDate": null,
       "currentValue": {
-        "amount": null
+        "amount": 100000,
+        "currency": {
+          "code": "USD"
+        }
       },
       "predictedRevenue": {
-        "amount": null
+        "amount": null,
+        "currency": {
+          "code": null
+        }
       },
       "healthScore": null,
       "notes": "lkjlj",
@@ -34,7 +40,10 @@
         {
           "name": "Car show",
           "value": {
-            "amount": null
+            "amount": null,
+            "currency": {
+              "code": null
+            }
           }
         }
       ],
@@ -44,21 +53,6 @@
     },
     "relationships": {
       "account": {
-        "links": {
-          "self": null
-        }
-      },
-      "currentValue.currency": {
-        "links": {
-          "self": null
-        }
-      },
-      "predictedRevenue.currency": {
-        "links": {
-          "self": null
-        }
-      },
-      "tags": {
         "links": {
           "self": null
         }
@@ -74,11 +68,6 @@
         }
       },
       "stakeholders": {
-        "links": {
-          "self": null
-        }
-      },
-      "valueBreakdown.0.value.currency": {
         "links": {
           "self": null
         }

@@ -7,6 +7,7 @@ import {
   linksToMany,
   containsMany,
   FieldDef,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import DateField from 'https://cardstack.com/base/date';
@@ -35,6 +36,15 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { Document } from './document';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import { getCards } from '@cardstack/runtime-common';
+import { Query } from '@cardstack/runtime-common/query';
+
+interface DealSizeSummary {
+  summary: string;
+  percentDiff: number;
+  positive: boolean;
+}
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get companyName() {
@@ -67,6 +77,63 @@ class IsolatedTemplate extends Component<typeof Deal> {
       this.args.model.primaryStakeholder ||
       (this.args.model.stakeholders?.length ?? 0) > 0 //stakeholders is a proxy array
     );
+  }
+
+  get realmURL(): URL {
+    return this.args.model[realmURL]!;
+  }
+
+  get realmHref() {
+    return this.realmURL.href;
+  }
+
+  get realmHrefs() {
+    return [this.realmURL?.href];
+  }
+
+  get dealQuery(): Query {
+    return {
+      filter: {
+        type: {
+          module: `${this.realmHref}crm/deal`,
+          name: 'Deal',
+        },
+      },
+    };
+  }
+
+  query = getCards(this.dealQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  @action dealSizeSummary(deals: CardDef[]): DealSizeSummary | null {
+    //currently only assumes everything works in USD
+    let nonZeroDeals = (deals as Deal[]).filter(
+      (deal) => deal.computedValue.amount && deal.computedValue.amount > 0,
+    );
+    let totalDealRevenue = nonZeroDeals.reduce(
+      (acc, deal: Deal) => acc + deal.computedValue.amount,
+      0,
+    );
+    nonZeroDeals.map((d) => console.log(d.computedValue.amount));
+    console.log('totalDealRevenue', totalDealRevenue);
+    let avgDealSize = totalDealRevenue / nonZeroDeals.length;
+    console.log('avgDealSize', avgDealSize);
+    if (this.args.model.computedValue?.amount) {
+      let percentDiff =
+        (this.args.model.computedValue?.amount - avgDealSize) / avgDealSize;
+      console.log('percentDiff', percentDiff);
+      let positive = percentDiff >= 0 ? true : false;
+      let summary = `${percentDiff.toFixed(2)}% ${
+        positive ? 'above' : 'below'
+      } the average deal size.`;
+      return {
+        percentDiff,
+        summary,
+        positive,
+      };
+    }
+    return null;
   }
 
   @action
@@ -145,7 +212,26 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <div class='block'>
                 <label>Current Value:</label>
                 <@fields.computedValue class='highlight-value' @format='atom' />
-                <p class='description success-value'>Description</p>
+                {{#if this.query.isLoading}}
+                  Loading...
+                {{else if this.query.instances}}
+                  {{#let
+                    (this.dealSizeSummary this.query.instances)
+                    as |dealSizeSummary|
+                  }}
+                    <p
+                      class='description
+                        {{if
+                          dealSizeSummary.positive
+                          "success-value"
+                          "danger-value"
+                        }}'
+                    >
+                      {{dealSizeSummary.summary}}
+                    </p>
+                  {{/let}}
+                {{/if}}
+
               </div>
               <div class='block'>
                 <label>Predicted Revenue:</label>
@@ -212,7 +298,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   </BoxelButton>
                 {{/if}}
               </div>
-              <@fields.notes />
+              {{#if @model.notes}}
+                <@fields.notes />
+              {{else}}
+                No Notes Found
+              {{/if}}
             </footer>
 
           </:content>
@@ -306,6 +396,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .success-value {
         font: 300 var(--boxel-font-sm);
         color: var(--boxel-dark-green);
+      }
+      .danger-value {
+        font: 300 var(--boxel-font-sm);
+        color: var(--boxel-orange);
       }
       .block {
         display: flex;
@@ -507,9 +601,11 @@ export class Deal extends CardDef {
   @field currentValue = contains(AmountWithCurrencyField);
   @field computedValue = contains(AmountWithCurrencyField, {
     computeVia: function (this: Deal) {
-      let total = this.valueBreakdown?.reduce((acc, item) => {
-        return acc + item.value.amount;
-      }, 0);
+      let total =
+        this.currentValue?.amount ??
+        this.valueBreakdown?.reduce((acc, item) => {
+          return acc + item.value.amount;
+        }, 0);
       let result = new AmountWithCurrencyField();
       result.amount = total;
       result.currency = this.currentValue?.currency;
@@ -531,6 +627,14 @@ export class Deal extends CardDef {
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
   @field valueBreakdown = containsMany(ValueLineItem);
+  @field isActive = contains(BooleanField, {
+    computeVia: function (this: Deal) {
+      return (
+        this.status.label === 'Closed Won' ||
+        this.status.label === 'Closed Lost'
+      );
+    },
+  });
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
     computeVia: function (this: Deal) {
