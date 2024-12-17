@@ -12,13 +12,19 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
-import { Contact } from './contact';
+import { Contact, StatusTagField } from './contact';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import BuildingIcon from '@cardstack/boxel-icons/captions';
+import BuildingIcon from '@cardstack/boxel-icons/building';
+import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
 import { ContactRow } from '../components/contact-row';
+import TrendingUp from '@cardstack/boxel-icons/trending-up';
+import ContactIcon from '@cardstack/boxel-icons/contact';
+import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import { LooseGooseyField } from '../loosey-goosey';
+import { StatusPill } from '../components/status-pill';
 
 class IsolatedTemplate extends Component<typeof Account> {
   get logoURL() {
@@ -47,11 +53,17 @@ class IsolatedTemplate extends Component<typeof Account> {
           </:name>
           <:content>
             <div class='description'>
-              <@fields.primaryContact
-                @format='atom'
-                @displayContainer={{false}}
-                class='primary-contact'
-              />
+              {{#if @model.primaryContact}}
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                  class='primary-contact'
+                />
+                <div class='tag-container'>
+                  <@fields.statusTag @format='atom' />
+                  <@fields.urgencyTag @format='atom' />
+                </div>
+              {{/if}}
             </div>
           </:content>
         </AccountHeader>
@@ -83,7 +95,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <h3 class='summary-title'>Contacts</h3>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <ContactIcon class='header-icon' />
             </:icon>
             <:content>
               <div class='description'>
@@ -118,7 +130,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <h3 class='summary-title'>Lifetime Value</h3>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <ChartBarPopular class='header-icon' />
             </:icon>
             <:content>
               <h3 class='summary-highlight'>Desc</h3>
@@ -131,7 +143,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <h3 class='summary-title'>Active Deals</h3>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <TrendingUp class='header-icon' />
             </:icon>
             <:content>
               <h3 class='summary-highlight'>Desc</h3>
@@ -178,8 +190,98 @@ class IsolatedTemplate extends Component<typeof Account> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
+      .tag-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
     </style>
   </template>
+}
+
+class UrgencyTag extends LooseGooseyField {
+  static icon = CalendarExclamation;
+  static displayName = 'CRM Urgency Tag';
+  static values = [
+    {
+      index: 0,
+      label: 'Overdue for Renewal',
+      colorScheme: {
+        foregroundColor: '#D32F2F', // Dark Red
+        backgroundColor: '#FFEBEE', // Light Red
+      },
+    },
+    {
+      index: 1,
+      label: 'Renewal Due Soon',
+      colorScheme: {
+        foregroundColor: '#F57C00', // Dark Orange
+        backgroundColor: '#FFF3E0', // Light Orange
+      },
+    },
+    {
+      index: 2,
+      label: 'Recently Renewed',
+      colorScheme: {
+        foregroundColor: '#388E3C', // Dark Green
+        backgroundColor: '#E8F5E9', // Light Green
+      },
+    },
+    {
+      index: 3,
+      label: 'Expiring Soon',
+      colorScheme: {
+        foregroundColor: '#FBC02D', // Dark Yellow
+        backgroundColor: '#FFF9C4', // Light Yellow
+      },
+    },
+    {
+      index: 4,
+      label: 'Inactive for X Days',
+      colorScheme: {
+        foregroundColor: '#757575', // Dark Grey
+        backgroundColor: '#E0E0E0', // Light Grey
+      },
+    },
+    {
+      index: 5,
+      label: 'Follow-Up Required',
+      colorScheme: {
+        foregroundColor: '#1976D2', // Dark Blue
+        backgroundColor: '#E3F2FD', // Light Blue
+      },
+    },
+    {
+      index: 6,
+      label: 'Pending Contract',
+      colorScheme: {
+        foregroundColor: '#512DA8', // Dark Purple
+        backgroundColor: '#EDE7F6', // Light Purple
+      },
+    },
+    {
+      index: 7,
+      label: 'Next Review Scheduled',
+      colorScheme: {
+        foregroundColor: '#558B2F', // Dark Olive Green
+        backgroundColor: '#F1F8E9', // Light Olive Green
+      },
+    },
+  ];
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.colorScheme.foregroundColor}}
+          @iconLightColor={{@model.colorScheme.backgroundColor}}
+        />
+      {{/if}}
+    </template>
+  };
 }
 
 export class Account extends CardDef {
@@ -195,6 +297,7 @@ export class Account extends CardDef {
   @field contacts = linksToMany(Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
+  @field urgencyTag = contains(UrgencyTag);
   //From linked Company
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
@@ -206,6 +309,12 @@ export class Account extends CardDef {
   @field website = contains(WebsiteField, {
     computeVia: function (this: Account) {
       return this.company?.website;
+    },
+  });
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field statusTag = contains(StatusTagField, {
+    computeVia: function (this: Account) {
+      return this.primaryContact?.statusTag;
     },
   });
 

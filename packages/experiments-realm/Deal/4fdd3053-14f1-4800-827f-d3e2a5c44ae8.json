@@ -21,12 +21,18 @@
           "backgroundColor": "#FFF3E0"
         }
       },
-      "closeDate": null,
+      "closeDate": "2024-12-18",
       "currentValue": {
-        "amount": 20000
+        "amount": 20000,
+        "currency": {
+          "code": "USD"
+        }
       },
       "predictedRevenue": {
-        "amount": 300000
+        "amount": 300000,
+        "currency": {
+          "code": null
+        }
       },
       "healthScore": 80,
       "notes": "Finalize venue contract and confirm catering options to lock in current pricing",
@@ -34,25 +40,37 @@
         {
           "name": "Venue Rental",
           "value": {
-            "amount": 100000
+            "amount": 100000,
+            "currency": {
+              "code": null
+            }
           }
         },
         {
           "name": "Catering",
           "value": {
-            "amount": 75000
+            "amount": 75000,
+            "currency": {
+              "code": "USD"
+            }
           }
         },
         {
           "name": "AV Equiipment",
           "value": {
-            "amount": 50000
+            "amount": 50000,
+            "currency": {
+              "code": null
+            }
           }
         },
         {
           "name": "Staff and Management",
           "value": {
-            "amount": 25000
+            "amount": 25000,
+            "currency": {
+              "code": null
+            }
           }
         }
       ],
@@ -64,26 +82,6 @@
       "account": {
         "links": {
           "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
-        }
-      },
-      "currentValue.currency": {
-        "links": {
-          "self": "http://localhost:4201/experiments/Currency/1"
-        }
-      },
-      "predictedRevenue.currency": {
-        "links": {
-          "self": "http://localhost:4201/experiments/Currency/1"
-        }
-      },
-      "tags.0": {
-        "links": {
-          "self": "../Tag/8a14f671-4daf-4195-aca5-85dc143d15b8"
-        }
-      },
-      "tags.1": {
-        "links": {
-          "self": "../Tag/6d80a75f-71bb-474f-979d-ef4bc571ad63"
         }
       },
       "document": {
@@ -99,26 +97,6 @@
       "stakeholders.0": {
         "links": {
           "self": "../Customer/0e5aec99-798b-4417-9426-a338432e0ee5"
-        }
-      },
-      "valueBreakdown.0.value.currency": {
-        "links": {
-          "self": "http://localhost:4201/experiments/Currency/1"
-        }
-      },
-      "valueBreakdown.1.value.currency": {
-        "links": {
-          "self": "http://localhost:4201/experiments/Currency/1"
-        }
-      },
-      "valueBreakdown.2.value.currency": {
-        "links": {
-          "self": "http://localhost:4201/experiments/Currency/1"
-        }
-      },
-      "valueBreakdown.3.value.currency": {
-        "links": {
-          "self": "http://localhost:4201/experiments/Currency/1"
         }
       }
     },

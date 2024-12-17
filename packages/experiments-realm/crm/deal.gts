@@ -13,7 +13,6 @@ import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import UserSquare from '@cardstack/boxel-icons/user-square';
 import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
@@ -24,9 +23,7 @@ import { concat } from '@ember/helper';
 import { LooseGooseyField } from '../loosey-goosey';
 import { Account } from './account';
 import { action } from '@ember/object';
-import { Tag } from '../tag';
 import { PercentageField } from '../percentage';
-import { MonetaryAmount } from '../monetary-amount';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Address as AddressField } from '../address';
 import { WebsiteField } from '../website';
@@ -37,6 +34,7 @@ import World from '@cardstack/boxel-icons/world';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { Document } from './document';
+import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get companyName() {
@@ -88,35 +86,37 @@ class IsolatedTemplate extends Component<typeof Deal> {
             <h1 class='account-name'>{{this.companyName}}</h1>
           </:name>
           <:content>
-            <@fields.primaryContact
-              @format='atom'
-              @displayContainer={{false}}
-              class='primary-contact'
-            />
+            <div class='description'>
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+                class='primary-contact'
+              />
 
-            <div class='tag-container'>
-              {{#if @model.status}}
-                <Pill
-                  style={{htmlSafe
-                    (concat
-                      'background-color: '
-                      @model.status.colorScheme.backgroundColor
-                      '; border-color: transparent;'
-                    )
-                  }}
-                >{{@model.status.label}}</Pill>
-              {{/if}}
-              {{#if @model.priority}}
-                <Pill
-                  style={{htmlSafe
-                    (concat
-                      'background-color: '
-                      @model.priority.colorScheme.backgroundColor
-                      '; border-color: transparent;'
-                    )
-                  }}
-                >{{@model.priority.label}}</Pill>
-              {{/if}}
+              <div class='tag-container'>
+                {{#if @model.status}}
+                  <Pill
+                    style={{htmlSafe
+                      (concat
+                        'background-color: '
+                        @model.status.colorScheme.backgroundColor
+                        '; border-color: transparent;'
+                      )
+                    }}
+                  >{{@model.status.label}}</Pill>
+                {{/if}}
+                {{#if @model.priority}}
+                  <Pill
+                    style={{htmlSafe
+                      (concat
+                        'background-color: '
+                        @model.priority.colorScheme.backgroundColor
+                        '; border-color: transparent;'
+                      )
+                    }}
+                  >{{@model.priority.label}}</Pill>
+                {{/if}}
+              </div>
             </div>
           </:content>
         </AccountHeader>
@@ -179,7 +179,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                         <item.name />
                       </td>
                       <td class='item-value'>
-                        <item.value />
+                        <item.value @format='atom' />
                       </td>
                     </tr>
                   {{/each}}
@@ -193,7 +193,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <div class='next-steps-row'>
                 <EntityDisplay @center={{true}}>
                   <:title>
-                    Next Steps
+                    Notes
                   </:title>
                   <:thumbnail>
                     <Info class='info-icon' />
@@ -208,7 +208,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     class='view-document-btn'
                     {{on 'click' (fn this.viewDocument @model.document.id)}}
                   >
-                    View Document
+                    View Attachment
                   </BoxelButton>
                 {{/if}}
               </div>
@@ -266,7 +266,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
                       @tagLabel={{stakeholder.position}}
                     />
                   {{/each}}
+                {{else}}
+                  No Stakeholders
                 {{/if}}
+
               </div>
             </:content>
           </SummaryCard>
@@ -335,7 +338,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        margin-top: var(--boxel-sp-xxs);
       }
       .summary-title {
         font: 600 var(--boxel-font-sm);
@@ -403,6 +405,12 @@ class IsolatedTemplate extends Component<typeof Deal> {
         width: fit-content;
         display: inline-block;
       }
+      .header-icon {
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
+        flex-shrink: 0;
+        margin-left: auto;
+      }
     </style>
   </template>
 }
@@ -458,7 +466,7 @@ export class DealPriority extends LooseGooseyField {
   static values = [
     {
       index: 0,
-      label: 'Low',
+      label: 'Low Priority',
       colorScheme: {
         foregroundColor: '#000000',
         backgroundColor: '#E3F2FD',
@@ -466,7 +474,7 @@ export class DealPriority extends LooseGooseyField {
     },
     {
       index: 1,
-      label: 'Medium',
+      label: 'Medium Priority',
       colorScheme: {
         foregroundColor: '#000000',
         backgroundColor: '#FFF0B3',
@@ -474,7 +482,7 @@ export class DealPriority extends LooseGooseyField {
     },
     {
       index: 2,
-      label: 'High',
+      label: 'High Priority',
       colorScheme: {
         foregroundColor: '#000000',
         backgroundColor: 'var(--boxel-yellow)',
@@ -483,25 +491,10 @@ export class DealPriority extends LooseGooseyField {
   ];
 }
 
-class Value extends MonetaryAmount {
-  static displayName = 'CRM Value Amount';
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{@model.formattedAmount}}
-    </template>
-  };
-}
-
-export class MonetaryLineItem extends FieldDef {
-  static displayName = 'CRM Monetary Line Item';
+export class ValueLineItem extends FieldDef {
+  static displayName = 'CRM Value Line Item';
   @field name = contains(StringField);
-  @field value = contains(Value);
-
-  static embedded = class Embedded extends Component<typeof MonetaryLineItem> {
-    <template>
-      <@fields.name /> <@fields.value />
-    </template>
-  };
+  @field value = contains(AmountWithCurrencyField);
 }
 
 export class Deal extends CardDef {
@@ -511,20 +504,19 @@ export class Deal extends CardDef {
   @field status = contains(DealStatus);
   @field priority = contains(DealPriority);
   @field closeDate = contains(DateField);
-  @field currentValue = contains(MonetaryAmount);
-  @field computedValue = contains(MonetaryAmount, {
+  @field currentValue = contains(AmountWithCurrencyField);
+  @field computedValue = contains(AmountWithCurrencyField, {
     computeVia: function (this: Deal) {
       let total = this.valueBreakdown?.reduce((acc, item) => {
         return acc + item.value.amount;
       }, 0);
-      let result = new MonetaryAmount();
+      let result = new AmountWithCurrencyField();
       result.amount = total;
       result.currency = this.currentValue?.currency;
       return result;
     },
   });
-  @field predictedRevenue = contains(MonetaryAmount);
-  @field tags = linksToMany(() => Tag);
+  @field predictedRevenue = contains(AmountWithCurrencyField);
   @field profitMargin = contains(PercentageField, {
     computeVia: function (this: Deal) {
       if (!this.currentValue?.amount || !this.predictedRevenue?.amount) {
@@ -538,7 +530,7 @@ export class Deal extends CardDef {
   @field document = linksTo(() => Document);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
-  @field valueBreakdown = containsMany(MonetaryLineItem);
+  @field valueBreakdown = containsMany(ValueLineItem);
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
     computeVia: function (this: Deal) {
@@ -551,6 +543,7 @@ export class Deal extends CardDef {
       return this.account?.website;
     },
   });
+  //TODO: Fix after CS-7670. Maybe no fix needed
   @field primaryContact = linksTo(Contact, {
     computeVia: function (this: Deal) {
       return this.account?.primaryContact;

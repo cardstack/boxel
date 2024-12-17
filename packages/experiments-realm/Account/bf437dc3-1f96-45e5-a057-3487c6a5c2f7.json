@@ -26,6 +26,15 @@
         },
         "poBoxNumber": null
       },
+      "urgencyTag": {
+        "index": 1,
+        "label": "Renewal Due Soon",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "#FFF3E0"
+        }
+      },
       "description": null,
       "thumbnailURL": null
     },
