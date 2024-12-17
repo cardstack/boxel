@@ -305,7 +305,7 @@ export class MockClient implements ExtendedClient {
       unsigned: { age: 0 },
       sender: this.loggedInAs || 'unknown_user',
       user_id: this.loggedInAs || 'unknown_user',
-      state_key: this.loggedInAs!,
+      state_key: roomEvent.type === 'm.room.member' ? this.loggedInAs! : '',
     };
     let localEvent = new MatrixEvent(localEventData);
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
@@ -334,6 +334,33 @@ export class MockClient implements ExtendedClient {
 
     this.emitLocalEchoUpdated(matrixEvent, localEventId);
     return { event_id: eventId };
+  }
+
+  getStateEvent(
+    roomId: string,
+    eventType: string,
+    stateKey: string,
+  ): Promise<Record<string, any>> {
+    return Promise.resolve(
+      this.serverState.getRoomState(roomId, eventType, stateKey),
+    );
+  }
+
+  sendStateEvent(
+    roomId: string,
+    eventType: string,
+    content: MatrixSDK.IContent,
+    stateKey?: string | undefined,
+    _opts?: MatrixSDK.IRequestOpts | undefined,
+  ): Promise<MatrixSDK.ISendEventResponse> {
+    let eventId = this.serverState.setRoomState(
+      this.loggedInAs || 'unknown_user',
+      roomId,
+      eventType,
+      content,
+      stateKey,
+    );
+    return Promise.resolve({ event_id: eventId });
   }
 
   makeTxnId(): string {
@@ -374,6 +401,7 @@ export class MockClient implements ExtendedClient {
     switch (type) {
       case 'com.cardstack.boxel.realms':
         return this.sdk.ClientEvent.AccountData;
+      case 'com.cardstack.boxel.room.skills':
       case 'm.reaction':
       case 'm.room.create':
       case 'm.room.message':
@@ -402,6 +430,17 @@ export class MockClient implements ExtendedClient {
               } as any);
             }
           }
+          if (typeof event.event.state_key === 'string') {
+            let handlers = this.listeners[this.sdk.RoomStateEvent.Update];
+            if (handlers) {
+              let roomState = this.serverState.getRoomStateUpdatePayload(
+                event.event.room_id!,
+              );
+              for (let handler of handlers) {
+                handler(roomState);
+              }
+            }
+          }
         }
         break;
       case this.sdk.RoomEvent.Receipt:
@@ -425,6 +464,8 @@ export class MockClient implements ExtendedClient {
             }
           }
         }
+        break;
+      case null:
         break;
       default:
         throw assertNever(eventType);

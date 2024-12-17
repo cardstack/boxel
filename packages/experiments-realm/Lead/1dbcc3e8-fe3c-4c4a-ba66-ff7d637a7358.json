@@ -2,34 +2,41 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
-      "primaryEmail": null,
-      "secondaryEmail": null,
+      "firstName": "Ethan",
+      "lastName": "Smith",
+      "position": "Software Engineer",
+      "department": "app",
+      "primaryEmail": "ethan@gmail.com",
+      "secondaryEmail": "ethanSmith@gmail.com",
       "phoneMobile": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "mobile",
+        "country": 1,
+        "area": 510,
+        "number": 123456
       },
       "phoneOffice": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "office",
+        "country": 1,
+        "area": 510,
+        "number": 2442322
       },
-      "socialLinks": {
-        "twitterURL": null,
-        "linkedInURL": null
-      },
-      "status": {
-        "index": null,
-        "label": null
-      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "https://www.google.com/"
+        },
+        {
+          "label": "X",
+          "value": "https://www.google.com/"
+        }
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2"
     },
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../Company/e1856419-27b0-4ce3-98fe-759d21c7144f"
         }
       }
     },

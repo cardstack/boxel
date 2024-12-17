@@ -38,9 +38,6 @@ module.exports = function (environment) {
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
-    stripePaymentLink:
-      process.env.STRIPE_PAYMENT_LINK ||
-      'https://buy.stripe.com/test_4gw01WfWb2c1dBm7sv',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
@@ -103,7 +100,7 @@ function getLatestSchemaFile() {
     ['development', 'test'].includes(process.env.EMBER_ENV)
   ) {
     throw new Error(
-      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the realm server`,
+      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the postgres package`,
     );
   }
   return path.join(schemaDir, latestSchemaFile);

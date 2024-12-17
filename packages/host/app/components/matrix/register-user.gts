@@ -513,8 +513,9 @@ export default class RegisterUser extends Component<Signature> {
       return;
     }
 
-    this.isUsernameAvailable =
-      await this.matrixService.client.isUsernameAvailable(this.username);
+    this.isUsernameAvailable = await this.matrixService.isUsernameAvailable(
+      this.username,
+    );
     if (!this.isUsernameAvailable) {
       this.usernameError = 'Username is already taken';
     }
@@ -673,8 +674,9 @@ export default class RegisterUser extends Component<Signature> {
       );
     }
     let auth: RegisterResponse;
+
     try {
-      auth = await this.matrixService.client.registerRequest({
+      auth = await this.matrixService.registerRequest({
         username: this.state.username,
         password: this.state.password,
         auth: {
@@ -713,12 +715,18 @@ export default class RegisterUser extends Component<Signature> {
 
       throw e;
     }
+
     // If access_token and device_id are present, RegisterResponse matches LoginResponse
     // except for the optional well_known field
-    if (auth.access_token && auth.device_id) {
+    if (
+      auth.access_token &&
+      auth.device_id &&
+      this.state.type === 'waitForEmailValidation' // In our setup, waiting for email validation is the last step of matrix registration - this condition is to satisfy the type check where token is only defined in sendToken and waitForEmailValidation states
+    ) {
       await this.matrixService.initializeNewUser(
         auth as LoginResponse,
         this.state.name,
+        this.state.token,
       );
     }
   });
@@ -744,6 +752,7 @@ export default class RegisterUser extends Component<Signature> {
         if (this.state.type === 'waitForEmailValidation') {
           await timeout(1000);
         }
+
         this.state = {
           ...this.state,
           type: 'waitForEmailValidation',

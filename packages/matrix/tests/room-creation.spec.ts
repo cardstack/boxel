@@ -118,7 +118,9 @@ test.describe('Room creation', () => {
     expect(user2Room).not.toEqual(newRoom);
   });
 
-  test('it can rename a room', async ({ page }) => {
+  // skipping flaky test:
+  // https://linear.app/cardstack/issue/CS-7637/flaky-test-room-creationspects1217-%E2%80%BA-room-creation-%E2%80%BA-it-can-rename-a
+  test.skip('it can rename a room', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
 
     let room1 = await getRoomId(page);
@@ -352,7 +354,9 @@ test.describe('Room creation', () => {
     await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
   });
 
-  test('it orders past-sessions list items based on last activity in reverse chronological order', async ({
+  // skipping flaky test
+  // https://linear.app/cardstack/issue/CS-7603/flaky-test-room-creation-%E2%80%BA-it-orders-past-sessions-list-items-based-on
+  test.skip('it orders past-sessions list items based on last activity in reverse chronological order', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });

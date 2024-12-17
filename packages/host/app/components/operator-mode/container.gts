@@ -20,7 +20,7 @@ import Auth from '@cardstack/host/components/matrix/auth';
 import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 import {
   getSearchResults,
@@ -70,8 +70,15 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // public API
   @action
-  getCards(query: Query, realms?: string[]): Search {
-    return getSearchResults(this, query, realms);
+  getCards(
+    query: Query,
+    realms?: string[],
+    opts?: {
+      isLive?: true;
+      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    },
+  ): Search {
+    return getSearchResults(this, query, realms, opts);
   }
 
   // public API
@@ -81,12 +88,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
       ...(opts?.loader ? { loader: () => opts.loader! } : {}),
     });
-  }
-
-  // public API
-  @action
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL) {
-    return trackCard(owner, card, realmURL);
   }
 
   private saveSource = task(async (url: URL, content: string) => {
@@ -101,7 +102,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // at the same time
   private saveCard = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(this, card);
+      return await this.cardService.saveModel(card);
     });
   });
 
@@ -132,17 +133,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (isTesting()) {
       return true;
     }
-    if (this.isUserInfoLoading) {
-      return false;
-    }
     return (
       !!this.billingService.subscriptionData?.stripeCustomerId &&
       !!this.billingService.subscriptionData?.plan
     );
-  }
-
-  private get matrixUserId() {
-    return this.matrixService.userId || '';
   }
 
   <template>
@@ -171,7 +165,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         </div>
       {{else if (not this.isUserSubscribed)}}
         <PaymentSetup
-          @matrixUserId={{this.matrixUserId}}
           @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
         />
       {{else if this.isCodeMode}}

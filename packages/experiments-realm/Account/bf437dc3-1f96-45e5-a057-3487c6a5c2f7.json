@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shippingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
+        }
+      },
+      "primaryContact": {
+        "links": {
+          "self": null
+        }
+      },
+      "contacts": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/account",
+        "name": "Account"
+      }
+    }
+  }
+}

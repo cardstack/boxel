@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Innovative Tech Solutions",
+      "industry": "Technology",
+      "headquartersAddress": {
+        "addressLine1": "123 Innovation Drive",
+        "addressLine2": "Suite 400",
+        "city": "San Francisco",
+        "state": "California",
+        "postalCode": "94105",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "phone": "+14155552671",
+      "website": "https://innovativetechsolutions.com/",
+      "stockSymbol": "ITS",
+      "description": "A leading provider of cutting-edge AI and cloud solutions for enterprises worldwide.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/company",
+        "name": "Company"
+      }
+    }
+  }
+}

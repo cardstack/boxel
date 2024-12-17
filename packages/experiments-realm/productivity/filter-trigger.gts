@@ -10,7 +10,7 @@ export class FilterTrigger extends GlimmerComponent<TriggerSignature> {
   <template>
     <div class='filter-trigger'>
       <IconButton @icon={{ListFilter}} width='13px' height='13px' />
-      Filter
+      <span class='filter-trigger-text'>Filter</span>
     </div>
 
     <style scoped>
@@ -18,6 +18,15 @@ export class FilterTrigger extends GlimmerComponent<TriggerSignature> {
         display: flex;
         align-items: center;
         font: 600 var(--boxel-font-sm);
+        transition: background-color 0.5s ease-in-out;
+        overflow: hidden;
+      }
+      .filter-trigger-text {
+        padding-right: var(--boxel-sp-sm);
+      }
+      .filter-trigger:hover {
+        cursor: pointer;
+        background-color: var(--boxel-100);
       }
     </style>
     {{! template-lint-disable require-scoped-style }}

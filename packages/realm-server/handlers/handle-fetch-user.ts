@@ -24,6 +24,7 @@ type FetchUserResponse = {
     attributes: {
       matrixUserId: string;
       stripeCustomerId: string;
+      stripeCustomerEmail: string;
       creditsAvailableInPlanAllowance: number;
       creditsIncludedInPlanAllowance: number;
       extraCreditsAvailableInBalance: number;
@@ -118,6 +119,7 @@ export default function handleFetchUserRequest({
         }),
         sumUpCreditsLedger(dbAdapter, {
           creditType: ['extra_credit', 'extra_credit_used'],
+          userId: user.id,
         }),
       ]);
     }
@@ -129,6 +131,7 @@ export default function handleFetchUserRequest({
         attributes: {
           matrixUserId: user.matrixUserId,
           stripeCustomerId: user.stripeCustomerId,
+          stripeCustomerEmail: user.stripeCustomerEmail,
           creditsAvailableInPlanAllowance,
           creditsIncludedInPlanAllowance,
           extraCreditsAvailableInBalance,

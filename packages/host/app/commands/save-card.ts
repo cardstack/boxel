@@ -22,6 +22,6 @@ export default class SaveCardCommand extends HostBaseCommand<
     input: BaseCommandModule.SaveCardInput,
   ): Promise<undefined> {
     // TODO: handle case where card is already saved and a different input.realm is provided
-    await this.cardService.saveModel(this, input.card, input.realm);
+    await this.cardService.saveModel(input.card, input.realm);
   }
 }

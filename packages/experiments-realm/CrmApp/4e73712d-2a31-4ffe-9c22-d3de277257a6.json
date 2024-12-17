@@ -20,6 +20,15 @@
             "module": "crm/deal"
           },
           "isTable": false
+        },
+        {
+          "displayName": "Accounts",
+          "tabId": "Account",
+          "ref": {
+            "name": "Account",
+            "module": "crm/account"
+          },
+          "isTable": false
         }
       ],
       "headerIcon": {
@@ -29,6 +38,7 @@
         "width": null,
         "base64": null
       },
+      "moduleId": null,
       "title": "Vibeverse",
       "description": "Feel the moment",
       "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"

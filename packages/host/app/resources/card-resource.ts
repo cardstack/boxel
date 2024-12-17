@@ -4,42 +4,58 @@
 
 import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
+import status from 'statuses';
+
 import {
-  Loader,
   isSingleCardDocument,
   apiFor,
-  loaderFor,
   hasExecutableExtension,
+  isCardInstance,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
-
-import { ErrorDetails } from '@cardstack/runtime-common/error';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  IdentityContext,
+} from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
+import type RealmService from '../services/realm';
 
-interface CardError {
-  id: string;
-  error: ErrorDetails;
+interface CardErrors {
+  errors: {
+    id?: string; // 404 errors won't necessarily have an id
+    status: number;
+    title: string;
+    message: string;
+    realm: string | undefined;
+    meta: {
+      lastKnownGoodHtml: string | null;
+      scopedCssUrls: string[];
+      stack: string | null;
+    };
+  }[];
 }
+
+export type CardError = CardErrors['errors'][0];
 
 interface Args {
   named: {
     // using string type here so that URL's that have the same href but are
     // different instances don't result in re-running the resource
-    url: string | undefined;
-    loader: Loader;
+    urlOrDoc: string | SingleCardDocument | undefined;
     isLive: boolean;
     // this is not always constructed within a container so we pass in our services
     cardService: CardService;
@@ -52,26 +68,66 @@ interface Args {
   };
 }
 
-const liveCards: WeakMap<
-  Loader,
-  Map<
+class LiveCardIdentityContext implements IdentityContext {
+  #cards = new Map<
     string,
     {
-      card: CardDef;
-      realmURL: URL;
+      card: CardDef | undefined; // undefined means that the card is in an error state
       subscribers: Set<object>;
     }
-  >
-> = new WeakMap();
-const realmSubscriptions: Map<
+  >();
+
+  get(url: string): CardDef | undefined {
+    return this.#cards.get(url)?.card;
+  }
+  set(url: string, instance: CardDef): void {
+    this.#cards.set(url, { card: instance, subscribers: new Set() });
+  }
+  delete(url: string): void {
+    this.#cards.delete(url);
+  }
+  update(
+    url: string,
+    instance: CardDef | undefined,
+    subscribers?: Set<object>,
+  ) {
+    let entry = this.#cards.get(url);
+    if (!entry) {
+      entry = { card: instance, subscribers: new Set() };
+      this.#cards.set(url, entry);
+    } else {
+      entry.card = instance;
+    }
+    if (subscribers) {
+      for (let subscriber of subscribers) {
+        entry.subscribers.add(subscriber);
+      }
+    }
+  }
+  hasError(url: string) {
+    return this.#cards.has(url) && !this.#cards.get(url)?.card;
+  }
+  subscribers(url: string): Set<object> | undefined {
+    return this.#cards.get(url)?.subscribers;
+  }
+}
+
+let liveCardIdentityContext = new LiveCardIdentityContext();
+let realmSubscriptions: Map<
   string,
   WeakMap<CardResource, { unsubscribe: () => void }>
 > = new Map();
+
+export function testOnlyResetLiveCardState() {
+  liveCardIdentityContext = new LiveCardIdentityContext();
+  realmSubscriptions = new Map();
+}
 
 export class CardResource extends Resource<Args> {
   url: string | undefined;
   @tracked loaded: Promise<void> | undefined;
   @tracked cardError: CardError | undefined;
+  @service private declare realm: RealmService;
   @tracked private _card: CardDef | undefined;
   @tracked private _api: typeof CardAPI | undefined;
   @tracked private staleCard: CardDef | undefined;
@@ -79,7 +135,6 @@ export class CardResource extends Resource<Args> {
   private declare messageService: MessageService;
   private declare loaderService: LoaderService;
   private declare resetLoader: () => void;
-  private _loader: Loader | undefined;
   private onCardInstanceChange?: (
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
@@ -92,8 +147,7 @@ export class CardResource extends Resource<Args> {
     }
 
     let {
-      url,
-      loader,
+      urlOrDoc,
       isLive,
       onCardInstanceChange,
       messageService,
@@ -102,20 +156,19 @@ export class CardResource extends Resource<Args> {
     } = named;
     this.messageService = messageService;
     this.cardService = cardService;
-    this.url = url;
-    this._loader = loader;
+    this.url = urlOrDoc ? asURL(urlOrDoc) : undefined;
     this.onCardInstanceChange = onCardInstanceChange;
     this.cardError = undefined;
     this.resetLoader = resetLoader;
-    if (isLive && this.url) {
-      this.loaded = this.loadLiveModel.perform(new URL(this.url));
-    } else if (this.url) {
-      this.loaded = this.loadStaticModel.perform(new URL(this.url));
+    if (isLive && urlOrDoc) {
+      this.loaded = this.loadLiveModel.perform(urlOrDoc);
+    } else if (urlOrDoc) {
+      this.loaded = this.loadStaticModel.perform(urlOrDoc);
     }
 
     registerDestructor(this, () => {
-      if (this.card) {
-        this.removeLiveCardEntry(this.card);
+      if (this.url) {
+        this.removeLiveCardEntry(this.url);
       }
       this.unsubscribeFromRealm();
     });
@@ -137,60 +190,44 @@ export class CardResource extends Resource<Args> {
     return this._api;
   }
 
-  private get loader() {
-    if (!this._loader) {
-      throw new Error(
-        `bug: should never get here, loader is obtained via owner`,
-      );
-    }
-    return this._loader;
-  }
+  private loadStaticModel = restartableTask(
+    async (urlOrDoc: string | SingleCardDocument) => {
+      let cardOrError = await this.getCard(urlOrDoc);
+      await this.updateCardInstance(cardOrError);
+    },
+  );
 
-  private loadStaticModel = restartableTask(async (url: URL) => {
-    let card = await this.getCard(url);
-    await this.updateCardInstance(card);
-  });
-
-  private loadLiveModel = restartableTask(async (url: URL) => {
-    let cardsForLoader = liveCards.get(this.loader);
-    if (!cardsForLoader) {
-      cardsForLoader = new Map();
-      liveCards.set(this.loader, cardsForLoader);
-    }
-    let entry = cardsForLoader.get(url.href);
-    if (entry) {
-      entry.subscribers.add(this);
-      await this.updateCardInstance(entry.card);
-      return;
-    }
-
-    let card = await this.getCard(url);
-    if (!card) {
-      if (this.cardError) {
-        console.warn(
-          `cannot load card ${this.cardError.id}`,
-          this.cardError.error,
-        );
+  private loadLiveModel = restartableTask(
+    async (urlOrDoc: string | SingleCardDocument) => {
+      let cardOrError = await this.getCard(urlOrDoc, liveCardIdentityContext);
+      await this.updateCardInstance(cardOrError);
+      if (isCardInstance(cardOrError)) {
+        let subscribers = liveCardIdentityContext.subscribers(cardOrError.id)!;
+        subscribers.add(this);
+      } else {
+        console.warn(`cannot load card ${cardOrError.id}`, cardOrError);
+        this.subscribeToRealm(asURL(urlOrDoc));
       }
-      this.clearCardInstance();
-      return;
-    }
-    let realmURL = await this.cardService.getRealmURL(card);
-    if (!realmURL) {
-      throw new Error(`Could not determine the realm for card "${card.id}"`);
-    }
-    cardsForLoader.set(card.id, {
-      card,
-      realmURL,
-      subscribers: new Set([this]),
-    });
-    await this.updateCardInstance(card);
-  });
+    },
+  );
 
-  private subscribeToRealm(card: CardDef) {
-    let realmURL = card[this.api.realmURL];
+  private subscribeToRealm(cardOrId: CardDef | string) {
+    let card: CardDef | undefined;
+    let id: string;
+    let realmURL: URL | undefined;
+    if (typeof cardOrId === 'string') {
+      id = cardOrId;
+      realmURL = this.realm.realmOfURL(new URL(id));
+    } else {
+      card = cardOrId;
+      id = card.id;
+      realmURL = card[this.api.realmURL];
+    }
     if (!realmURL) {
-      throw new Error(`could not determine realm for card ${card.id}`);
+      console.warn(
+        `could not determine realm for card ${id} when trying to subscribe to realm`,
+      );
+      return;
     }
     let realmSubscribers = realmSubscriptions.get(realmURL.href);
     if (!realmSubscribers) {
@@ -213,13 +250,21 @@ export class CardResource extends Resource<Args> {
           }
           let invalidations = data.invalidations as string[];
           let card = this.url
-            ? liveCards.get(this.loader)?.get(this.url)?.card
+            ? liveCardIdentityContext.get(this.url)
             : undefined;
 
           if (!card) {
-            // the initial card static load has not actually completed yet
-            // (perhaps the loader just changed). in this case we ignore this
-            // message.
+            if (this.url && liveCardIdentityContext.hasError(this.url)) {
+              if (invalidations.find((i) => hasExecutableExtension(i))) {
+                // the invalidation included code changes too. in this case we
+                // need to flush the loader so that we can pick up any updated
+                // code before re-running the card
+                this.resetLoader();
+              }
+              // we've already established a subscription--we're in it, just
+              // load the updated instance
+              this.loadStaticModel.perform(this.url);
+            }
             return;
           }
 
@@ -231,10 +276,20 @@ export class CardResource extends Resource<Args> {
               if (invalidations.find((i) => hasExecutableExtension(i))) {
                 // the invalidation included code changes too. in this case we
                 // need to flush the loader so that we can pick up any updated
-                // code before re-running the card
+                // code before re-running the card as well as clear out the
+                // identity context as the card has a new implementation
                 this.resetLoader();
+                let subscribers = liveCardIdentityContext.subscribers(card.id);
+                liveCardIdentityContext.delete(card.id);
+                this.loadStaticModel.perform(card.id);
+                liveCardIdentityContext.update(
+                  card.id,
+                  this._card,
+                  subscribers,
+                );
+              } else {
+                this.reload.perform(card);
               }
-              this.reload.perform(card);
             }
           }
         },
@@ -242,40 +297,60 @@ export class CardResource extends Resource<Args> {
     });
   }
 
-  private async getCard(url: URL): Promise<CardDef | undefined> {
-    if (typeof url === 'string') {
-      url = new URL(url);
+  private async getCard(
+    urlOrDoc: string | SingleCardDocument,
+    identityContext?: LiveCardIdentityContext,
+  ) {
+    let url = asURL(urlOrDoc);
+    // createFromSerialized would also do this de-duplication, but we want to
+    // also avoid the fetchJSON when we already have the stable card.
+    let existingCard = identityContext?.get(url);
+    if (existingCard) {
+      return existingCard;
     }
-    this.cardError = undefined;
     try {
-      let json = await this.cardService.fetchJSON(url);
-      if (!isSingleCardDocument(json)) {
-        throw new Error(
-          `bug: server returned a non card document for ${url}:
+      let doc = typeof urlOrDoc !== 'string' ? urlOrDoc : undefined;
+      if (!doc) {
+        let json = await this.cardService.fetchJSON(url);
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
-        );
+          );
+        }
+        doc = json;
       }
       let card = await this.cardService.createFromSerialized(
-        json.data,
-        json,
-        new URL(json.data.id),
+        doc.data,
+        doc,
+        new URL(doc.data.id),
+        {
+          identityContext,
+        },
       );
+      if (identityContext && identityContext.hasError(url)) {
+        liveCardIdentityContext.update(url, card);
+      }
       return card;
     } catch (error: any) {
-      this.cardError = {
-        id: url.href,
-        error,
-      };
-      return;
+      if (identityContext) {
+        liveCardIdentityContext.update(url, undefined);
+      }
+      let errorResponse = processCardError(new URL(url), error);
+      return errorResponse.errors[0];
     }
   }
 
   private reload = task(async (card: CardDef) => {
     try {
       await this.cardService.reloadCard(card);
+      this.setCardOrError(card);
     } catch (err: any) {
       if (err.status !== 404) {
-        throw err;
+        liveCardIdentityContext.update(card.id, undefined);
+        let errorResponse = processCardError(new URL(card.id), err);
+        this.setCardOrError(errorResponse.errors[0]);
+        return;
       }
       // in this case the document was invalidated in the index because the
       // file was deleted
@@ -295,39 +370,40 @@ export class CardResource extends Resource<Args> {
     }
   };
 
-  private async updateCardInstance(maybeCard: CardDef | undefined) {
-    if (maybeCard) {
+  private async updateCardInstance(maybeCard: CardDef | CardError) {
+    let instance: CardDef | undefined;
+    if (isCardInstance(maybeCard)) {
+      instance = maybeCard;
       this._api = await apiFor(maybeCard);
-    } else {
-      this._api = undefined;
     }
     if (this.onCardInstanceChange) {
-      this.onCardInstanceChange(this._card, maybeCard);
+      this.onCardInstanceChange(this._card, instance);
     }
-    if (maybeCard) {
-      this.subscribeToRealm(maybeCard);
+    if (maybeCard.id) {
+      this.subscribeToRealm(maybeCard.id);
     }
-
-    // clean up the live card entry if the new card is undefined or if it's
-    // using a different loader
-    if (
-      this._card &&
-      (!maybeCard || loaderFor(maybeCard) !== loaderFor(this._card))
-    ) {
-      this.removeLiveCardEntry(this._card);
-    }
-    this._card = maybeCard;
-    this.staleCard = maybeCard;
+    this.setCardOrError(maybeCard);
   }
 
-  private removeLiveCardEntry(card: CardDef) {
-    let loader = loaderFor(card);
-    let liveCardEntry = liveCards.get(loader)?.get(card.id);
-    if (liveCardEntry && liveCardEntry.subscribers.has(this)) {
-      liveCardEntry.subscribers.delete(this);
+  private setCardOrError(cardOrError: CardDef | CardError) {
+    if (isCardInstance(cardOrError)) {
+      this._card = cardOrError;
+      this.staleCard = cardOrError;
+      this.cardError = undefined;
+    } else {
+      this.cardError = cardOrError;
+      this._card = undefined;
+      this.staleCard = undefined;
     }
-    if (liveCardEntry?.subscribers.size === 0) {
-      liveCards.get(loader)!.delete(card.id);
+  }
+
+  private removeLiveCardEntry(id: string) {
+    let subscribers = liveCardIdentityContext.subscribers(id);
+    if (subscribers && subscribers.has(this)) {
+      subscribers.delete(this);
+    }
+    if (subscribers && subscribers.size === 0) {
+      liveCardIdentityContext.delete(id);
     }
   }
 
@@ -343,7 +419,7 @@ export class CardResource extends Resource<Args> {
 
 export function getCard(
   parent: object,
-  url: () => string | undefined,
+  urlOrDoc: () => string | SingleCardDocument | undefined,
   opts?: {
     isLive?: () => boolean;
     onCardInstanceChange?: () => (
@@ -357,12 +433,11 @@ export function getCard(
   ) as LoaderService;
   return CardResource.from(parent, () => ({
     named: {
-      url: url(),
+      urlOrDoc: urlOrDoc(),
       isLive: opts?.isLive ? opts.isLive() : true,
       onCardInstanceChange: opts?.onCardInstanceChange
         ? opts.onCardInstanceChange()
         : undefined,
-      loader: loaderService.loader,
       resetLoader: loaderService.reset.bind(loaderService),
       messageService: (getOwner(parent) as any).lookup(
         'service:message-service',
@@ -374,31 +449,55 @@ export function getCard(
   }));
 }
 
-export function trackCard<T extends Object>(
-  owner: T,
-  card: CardDef,
-  realmURL: URL,
-): CardDef {
-  if (!card.id) {
-    throw new Error(`cannot set live card model on an unsaved card`);
+function processCardError(url: URL, error: any): CardErrors {
+  try {
+    let errorResponse = JSON.parse(error.responseText) as CardErrors;
+    return errorResponse;
+  } catch (parseError) {
+    switch (error.status) {
+      // tailor HTTP responses as necessary for better user feedback
+      case 404:
+        return {
+          errors: [
+            {
+              id: url.href,
+              status: 404,
+              title: 'Card Not Found',
+              message: `The card ${url.href} does not exist`,
+              realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+              meta: {
+                lastKnownGoodHtml: null,
+                scopedCssUrls: [],
+                stack: null,
+              },
+            },
+          ],
+        };
+      default:
+        return {
+          errors: [
+            {
+              id: url.href,
+              status: error.status,
+              title: status.message[error.status] ?? `HTTP ${error.status}`,
+              message: `Received HTTP ${error.status} from server ${
+                error.responseText ?? ''
+              }`.trim(),
+              realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+              meta: {
+                lastKnownGoodHtml: null,
+                scopedCssUrls: [],
+                stack: null,
+              },
+            },
+          ],
+        };
+    }
   }
-  let loader = loaderFor(card);
-  let cardsForLoader = liveCards.get(loader);
-  if (!cardsForLoader) {
-    cardsForLoader = new Map();
-    liveCards.set(loader, cardsForLoader);
-  }
-  let alreadyTracked = cardsForLoader.get(card.id);
-  if (alreadyTracked) {
-    return alreadyTracked.card;
-  }
-  if (!realmURL) {
-    throw new Error(`bug: cannot determine realm for card ${card.id}`);
-  }
-  cardsForLoader.set(card.id, {
-    card,
-    realmURL,
-    subscribers: new Set([owner]),
-  });
-  return card;
+}
+
+export function asURL(urlOrDoc: string | SingleCardDocument) {
+  return typeof urlOrDoc === 'string'
+    ? urlOrDoc.replace(/\.json$/, '')
+    : urlOrDoc.data.id;
 }

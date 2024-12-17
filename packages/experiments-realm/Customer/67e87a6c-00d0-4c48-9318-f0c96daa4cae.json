@@ -2,34 +2,41 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
-      "primaryEmail": null,
-      "secondaryEmail": null,
+      "firstName": "Sophia",
+      "lastName": "Nguyen",
+      "position": "Sale Manager",
+      "department": "app",
+      "primaryEmail": "sophia@gmail.com",
+      "secondaryEmail": "sophiaNguyen@gmail.com",
       "phoneMobile": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "mobile",
+        "country": 1,
+        "area": 510,
+        "number": 5550145
       },
       "phoneOffice": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "office",
+        "country": 1,
+        "area": 510,
+        "number": 5552345
       },
-      "socialLinks": {
-        "twitterURL": null,
-        "linkedInURL": null
-      },
-      "status": {
-        "index": null,
-        "label": null
-      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "https://www.google.com/"
+        },
+        {
+          "label": "X",
+          "value": "https://www.google.com/"
+        }
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://images.pexels.com/photos/4974417/pexels-photo-4974417.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2"
     },
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
         }
       }
     },

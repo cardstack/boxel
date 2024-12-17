@@ -227,7 +227,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       );
       if (mango?.type === 'error') {
         assert.deepEqual(
-          mango.error.errorDetail.detail,
+          mango.error.errorDetail.message,
           `missing file ${testRealmURL}Person/owner.json`,
         );
         assert.deepEqual(mango.error.errorDetail.deps, [
@@ -297,7 +297,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       } else {
         assert.ok(
           false,
-          `search entry was an error: ${mango?.error.errorDetail.detail}`,
+          `search entry was an error: ${mango?.error.errorDetail.message}`,
         );
       }
     }
@@ -379,7 +379,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${entry?.error.errorDetail.detail}`,
+        `search entry was an error: ${entry?.error.errorDetail.message}`,
       );
     }
     {
@@ -423,7 +423,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       } else {
         assert.ok(
           false,
-          `search entry was an error: ${entry?.error.errorDetail.detail}`,
+          `search entry was an error: ${entry?.error.errorDetail.message}`,
         );
       }
     }
@@ -512,7 +512,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${mango?.error.errorDetail.detail}`,
+        `search entry was an error: ${mango?.error.errorDetail.message}`,
       );
     }
   });
@@ -598,7 +598,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${mango?.error.errorDetail.detail}`,
+        `search entry was an error: ${mango?.error.errorDetail.message}`,
       );
     }
   });
@@ -674,7 +674,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${entry?.error.errorDetail.detail}`,
+        `search entry was an error: ${entry?.error.errorDetail.message}`,
       );
     }
   });
@@ -753,7 +753,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         );
         if (entry?.type === 'error') {
           assert.strictEqual(
-            entry.error.errorDetail.detail,
+            entry.error.errorDetail.message,
             'Encountered error rendering HTML for card: intentional error',
           );
           assert.deepEqual(entry.error.errorDetail.deps, [
@@ -794,7 +794,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         } else {
           assert.ok(
             false,
-            `expected search entry to be a document but was: ${entry?.error.errorDetail.detail}`,
+            `expected search entry to be a document but was: ${entry?.error.errorDetail.message}`,
           );
         }
       }
@@ -831,7 +831,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         } else {
           assert.ok(
             false,
-            `expected search entry to be a document but was: ${entry?.error.errorDetail.detail}`,
+            `expected search entry to be a document but was: ${entry?.error.errorDetail.message}`,
           );
         }
       }
@@ -922,7 +922,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     let entry = await indexer.cardDocument(new URL(`${testRealmURL}vangogh`));
     if (entry?.type === 'error') {
       assert.strictEqual(
-        entry.error.errorDetail.detail,
+        entry.error.errorDetail.message,
         'Encountered error rendering HTML for card: intentional error',
       );
     } else {
@@ -963,7 +963,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `expected search entry to be a document but was: ${entry?.error.errorDetail.detail}`,
+        `expected search entry to be a document but was: ${entry?.error.errorDetail.message}`,
       );
     }
   });
@@ -1058,7 +1058,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     let entry = await indexer.cardDocument(new URL(`${testRealmURL}vangogh`));
     if (entry?.type === 'error') {
       assert.strictEqual(
-        entry.error.errorDetail.detail,
+        entry.error.errorDetail.message,
         'Encountered error rendering HTML for card: intentional error',
       );
     } else {
@@ -1112,7 +1112,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `expected search entry to be a document but was: ${entry?.error.errorDetail.detail}`,
+        `expected search entry to be a document but was: ${entry?.error.errorDetail.message}`,
       );
     }
   });
@@ -1488,7 +1488,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${card?.error.errorDetail.detail}`,
+        `search entry was an error: ${card?.error.errorDetail.message}`,
       );
     }
   });
@@ -1700,7 +1700,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${vendor?.error.errorDetail.detail}`,
+        `search entry was an error: ${vendor?.error.errorDetail.message}`,
       );
     }
   });
@@ -1743,7 +1743,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       );
       if (card?.type === 'error') {
         assert.ok(
-          card.error.errorDetail.detail.includes('intentional error thrown'),
+          card.error.errorDetail.message.includes('intentional error thrown'),
           'error doc includes raised error message',
         );
       } else {
@@ -1760,7 +1760,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       } else {
         assert.ok(
           false,
-          `search entry was an error: ${card?.error.errorDetail.detail}`,
+          `search entry was an error: ${card?.error.errorDetail.message}`,
         );
       }
     }
@@ -2081,7 +2081,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${hassan?.error.errorDetail.detail}`,
+        `search entry was an error: ${hassan?.error.errorDetail.message}`,
       );
     }
 
@@ -2186,7 +2186,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${card?.error.errorDetail.detail}`,
+        `search entry was an error: ${card?.error.errorDetail.message}`,
       );
     }
 
@@ -2387,7 +2387,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${catalogEntry?.error.errorDetail.detail}`,
+        `search entry was an error: ${catalogEntry?.error.errorDetail.message}`,
       );
     }
 
@@ -2551,7 +2551,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${hassan?.error.errorDetail.detail}`,
+        `search entry was an error: ${hassan?.error.errorDetail.message}`,
       );
     }
 
@@ -2726,7 +2726,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${hassan?.error.errorDetail.detail}`,
+        `search entry was an error: ${hassan?.error.errorDetail.message}`,
       );
     }
 
@@ -2844,7 +2844,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${mango?.error.errorDetail.detail}`,
+        `search entry was an error: ${mango?.error.errorDetail.message}`,
       );
     }
 
@@ -2954,7 +2954,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${hassan?.error.errorDetail.detail}`,
+        `search entry was an error: ${hassan?.error.errorDetail.message}`,
       );
     }
 
@@ -3132,7 +3132,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${hassan?.error.errorDetail.detail}`,
+        `search entry was an error: ${hassan?.error.errorDetail.message}`,
       );
     }
 
@@ -3265,7 +3265,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${mango?.error.errorDetail.detail}`,
+        `search entry was an error: ${mango?.error.errorDetail.message}`,
       );
     }
 
@@ -3397,7 +3397,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${vanGogh?.error.errorDetail.detail}`,
+        `search entry was an error: ${vanGogh?.error.errorDetail.message}`,
       );
     }
 
@@ -3482,6 +3482,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',

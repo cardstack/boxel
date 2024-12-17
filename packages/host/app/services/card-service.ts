@@ -32,10 +32,9 @@ import type {
   FieldDef,
   Field,
   SerializeOpts,
+  IdentityContext,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
-import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
@@ -152,9 +151,10 @@ export default class CardService extends Service {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
+    opts?: { identityContext?: IdentityContext },
   ): Promise<CardDef> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(resource, doc, relativeTo);
+    let card = await api.createFromSerialized(resource, doc, relativeTo, opts);
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
@@ -198,8 +198,7 @@ export default class CardService extends Service {
   }
 
   // we return undefined if the card changed locally while the save was in-flight
-  async saveModel<T extends object>(
-    owner: T,
+  async saveModel(
     card: CardDef,
     defaultRealmHref?: string,
   ): Promise<CardDef | undefined> {
@@ -247,9 +246,6 @@ export default class CardService extends Service {
         // that was made--so we save off the new ID for the card so in the next
         // save we'll correlate to the correct card ID
         card.id = json.data.id;
-      }
-      if (isNew && result) {
-        result = trackCard(owner, result, realmURL);
       }
       if (this.subscriber) {
         this.subscriber(new URL(json.data.id), json);
@@ -332,7 +328,7 @@ export default class CardService extends Service {
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    return await this.saveModel(this, updatedCard);
+    return await this.saveModel(updatedCard);
   }
 
   private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
@@ -441,6 +437,11 @@ export default class CardService extends Service {
     await this.fetchJSON(card.id, { method: 'DELETE' });
   }
 
+  // TODO consider retiring this.  i don't think it really does what we want
+  // since it is not live, and the cards that it returns are not live and does
+  // not leverage the identity map from CardResource, so it may create
+  // duplicative instances of cards when it deserializes the results. instead of
+  // using this please use the SearchResource.
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {

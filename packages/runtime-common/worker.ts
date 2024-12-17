@@ -205,9 +205,7 @@ export class Worker {
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
-      authorizationMiddleware(
-        new RealmAuthDataSource(matrixClient, getFetch, args.realmURL),
-      ),
+      authorizationMiddleware(new RealmAuthDataSource(matrixClient, getFetch)),
     ]);
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch,

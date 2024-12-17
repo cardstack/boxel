@@ -359,7 +359,7 @@ export function expressionToSql(query: Expression) {
 
           tableValuedFunctions.set(key, {
             name,
-            fn: `jsonb_array_elements_text(${column}) as ${name}`,
+            fn: `jsonb_array_elements_text(case jsonb_typeof(${column}) when 'array' then ${column} else '[]' end) as ${name}`,
           });
         }
         return name;

@@ -823,11 +823,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}not-found-adoption-instance.json`,
       });
 
-      await waitFor('[data-test-card-preview-error]');
+      await waitFor('[data-test-card-error]');
 
+      await click('[data-test-error-detail-toggle] button');
       assert
-        .dom('[data-test-card-preview-error]')
-        .exists({ count: 1 })
+        .dom('[data-test-error-detail]')
         .includesText(`${testRealmURL}non-card not found`);
 
       await visitOperatorMode({
@@ -835,10 +835,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}broken-adoption-instance.json`,
       });
 
-      await waitFor('[data-test-card-preview-error]');
+      await waitFor('[data-test-card-error]');
 
+      await click('[data-test-error-detail-toggle] button');
       assert
-        .dom('[data-test-card-preview-error]')
+        .dom('[data-test-error-detail]')
         .includesText(
           'Encountered error rendering HTML for card: formatName is not defined',
         );
@@ -1460,6 +1461,69 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.ok(content.includes(`${testRealmURL}Country/united-states`));
     });
 
+    test<TestContextWithSSE>('monaco editor live updates when index changes', async function (assert) {
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}Person/fadhlan`],
+          },
+        },
+      ];
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+      await waitForCodeEditor();
+      await waitUntil(() => getMonacoContent().includes('Fadhlan'));
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'FadhlanXXX',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      await waitUntil(() => getMonacoContent().includes('FadhlanXXX'));
+      assert.true(
+        getMonacoContent().includes('FadhlanXXX'),
+        'monaco editor updated from index event',
+      );
+    });
+
     test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
       let expectedEvents = [
         {
@@ -1524,6 +1588,95 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-code-mode-card-preview-body]')
         .includesText('FadhlanXXX');
+    });
+
+    test<TestContextWithSSE>('card preview live updates with error', async function (assert) {
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}Person/fadhlan`],
+          },
+        },
+      ];
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+      await waitFor('[data-test-card-resource-loaded]');
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('card error state is not displayed');
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                relationships: {
+                  'friends.0': {
+                    links: { self: './missing' },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      await waitFor('[data-test-card-error]');
+      assert
+        .dom('[data-test-card-error]')
+        .exists('card error state is displayed');
+
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                relationships: {
+                  'friends.0': {
+                    links: { self: null },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      await waitFor('[data-test-card-error]', { count: 0 });
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('card error state is not displayed');
     });
 
     test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {

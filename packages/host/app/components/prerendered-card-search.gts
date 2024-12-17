@@ -1,6 +1,9 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
+
+import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -9,7 +12,7 @@ import { stringify } from 'qs';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { Query } from '@cardstack/runtime-common';
+import { Query, RealmPaths } from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
@@ -29,19 +32,69 @@ export interface PrerenderedCardData {
   url: string;
   realmUrl: string;
   html: string;
+  isError: boolean;
 }
 
-class PrerenderedCard {
+export class PrerenderedCard {
   component: HTMLComponent;
   constructor(private data: PrerenderedCardData) {
-    this.component = htmlComponent(data.html);
+    if (data.isError && !data.html) {
+      this.component = getErrorComponent(data.realmUrl, data.url);
+    } else {
+      this.component = htmlComponent(data.html);
+    }
   }
   get url() {
     return this.data.url;
   }
+  get isError() {
+    return this.data.isError;
+  }
   get realmUrl(): string {
     return this.data.realmUrl;
   }
+}
+function getErrorComponent(realmURL: string, url: string) {
+  let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
+  const DefaultErrorResultComponent: TemplateOnlyComponent = <template>
+    <div class='error'>
+      <div class='thumbnail'>
+        <TriangleAlert />
+      </div>
+      <div class='name' data-test-instance-error-name>{{name}}</div>
+    </div>
+    <style scoped>
+      .error {
+        display: flex;
+        align-content: flex-start;
+        justify-content: center;
+        padding: var(--boxel-sp-xs);
+        flex-wrap: wrap;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      .thumbnail {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: calc(100% - 64.35px);
+      }
+      .name {
+        width: 100%;
+        text-align: center;
+        font: 500 var(--boxel-font-sm);
+        line-height: 1.23;
+        letter-spacing: 0.13px;
+        text-overflow: ellipsis;
+      }
+      svg {
+        width: 50px;
+        height: 50px;
+      }
+    </style>
+  </template>;
+  return DefaultErrorResultComponent;
 }
 
 interface Signature {
@@ -104,6 +157,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
         url: r.id,
         realmUrl: realmURL,
         html: r.attributes?.html,
+        isError: !!r.attributes?.isError,
       });
     });
   }

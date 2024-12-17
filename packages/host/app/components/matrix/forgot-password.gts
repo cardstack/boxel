@@ -391,7 +391,7 @@ export default class ForgotPassword extends Component<Signature> {
 
     try {
       let clientSecret = uuidv4();
-      let { sid } = await this.matrixService.client.requestPasswordEmailToken(
+      let { sid } = await this.matrixService.requestPasswordEmailToken(
         this.state.email,
         clientSecret,
         this.state.sendAttempt,
@@ -433,7 +433,7 @@ export default class ForgotPassword extends Component<Signature> {
     }
 
     try {
-      await this.matrixService.client.setPassword(
+      await this.matrixService.setPassword(
         {
           threepid_creds: {
             sid: this.args.resetPasswordParams.sid,

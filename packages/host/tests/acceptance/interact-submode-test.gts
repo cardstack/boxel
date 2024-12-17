@@ -1587,6 +1587,47 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist();
     });
+
+    test('card that has already been opened before will reflect its latest state after being mutated through a relationship', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-update-and-save-pet]');
+
+      await triggerEvent(
+        `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-pet]`,
+        'mouseenter',
+      );
+
+      await click(
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+      );
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
+        )
+        .hasValue('Updated Pet');
+    });
   });
 
   module('index changes', function () {
@@ -1650,6 +1691,111 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
         .hasText('FadhlanXXX');
+    });
+
+    test<TestContextWithSSE>('stack item live updates with error', async function (assert) {
+      assert.expect(7);
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}Person/fadhlan`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}Person/fadhlan`],
+          },
+        },
+      ];
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is displayed');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
+        )
+        .doesNotExist('card error state is NOT displayed');
+
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                relationships: {
+                  pet: {
+                    links: { self: './missing' },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
+        )
+        .exists('card error state is displayed');
+
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => {
+          await realm.write(
+            'Person/fadhlan.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                relationships: {
+                  pet: { links: { self: null } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument),
+          );
+        },
+      });
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is displayed');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
+        )
+        .doesNotExist('card error state is NOT displayed');
     });
   });
 

@@ -27,11 +27,14 @@ import {
   type RealmInfo,
   type IndexEventData,
   RealmPermissions,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
+
+import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
@@ -199,7 +202,7 @@ class RealmResource {
     this.fetchInfoTask.cancelAll();
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
-    window.localStorage.removeItem(sessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
   private fetchingInfo: Promise<void> | undefined;
@@ -482,6 +485,16 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
+  realmOfURL(url: URL) {
+    for (const realm of this.realms.keys()) {
+      let realmURL = new URL(realm);
+      if (new RealmPaths(realmURL).inRealm(url)) {
+        return new URL(realmURL);
+      }
+    }
+    return undefined;
+  }
+
   @cached
   get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let maybePersonalRealm = `${this.realmServer.url.href}${this.matrixService.userName}/personal/`;
@@ -638,7 +651,6 @@ export default class RealmService extends Service {
 }
 
 export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-export const sessionLocalStorageKey = 'boxel-session';
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
@@ -647,7 +659,7 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    let sessionsString = window.localStorage.getItem(sessionLocalStorageKey);
+    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
     if (sessionsString) {
       return JSON.parse(sessionsString);
     }
@@ -655,12 +667,12 @@ let SessionStorage = {
   },
   persist(realmURL: string, token: string | undefined) {
     let sessionStr =
-      window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
     let session = JSON.parse(sessionStr);
     if (session[realmURL] !== token) {
       session[realmURL] = token;
       window.localStorage.setItem(
-        sessionLocalStorageKey,
+        SessionLocalStorageKey,
         JSON.stringify(session),
       );
     }

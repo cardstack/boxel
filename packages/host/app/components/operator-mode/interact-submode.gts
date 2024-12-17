@@ -23,10 +23,8 @@ import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
-  aiBotUsername,
   Deferred,
   codeRefWithAbsoluteURL,
-  getCard,
   moduleFrom,
   RealmPaths,
   type Actions,
@@ -213,14 +211,14 @@ export default class InteractSubmode extends Component<Signature> {
         // looks like perhaps there is a race condition (or something else) when a
         // new linked card is created, and when it is added to the stack and closed
         // - the parent card is not updated with the new linked card
-        await here.cardService.saveModel(here, newCard);
+        await here.cardService.saveModel(newCard);
 
         await newItem.ready();
         here.addToStack(newItem);
         return newCard;
       },
       viewCard: async (
-        card: CardDef,
+        cardOrURL: CardDef | URL,
         format: Format = 'isolated',
         opts?: { openCardInRightMostStack?: boolean },
       ): Promise<void> => {
@@ -229,7 +227,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let newItem = new StackItem({
           owner: here,
-          card,
+          ...(cardOrURL instanceof URL
+            ? { url: cardOrURL }
+            : { card: cardOrURL }),
           format,
           stackIndex,
         });
@@ -304,13 +304,6 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      runCommand: (
-        card: CardDef,
-        skillCardId: string,
-        message?: string,
-      ): void => {
-        here.runCommand.perform(card, skillCardId, message ?? 'Run command');
-      },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
@@ -341,9 +334,13 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private close = task(async (item: StackItem) => {
-    let { card, request } = item;
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
+    if (item.cardError) {
+      return;
+    }
+
+    let { card, request } = item;
 
     // only save when closing a stack item in edit mode. there should be no unsaved
     // changes in isolated mode because they were saved when user toggled between
@@ -353,35 +350,6 @@ export default class InteractSubmode extends Component<Signature> {
       request?.fulfill(updatedCard);
     }
   });
-
-  private runCommand = restartableTask(
-    async (card: CardDef, skillCardId: string, message: string) => {
-      let resource = getCard(new URL(skillCardId));
-      await resource.loaded;
-      let commandCard = resource.card;
-      if (!commandCard) {
-        throw new Error(`Could not find card "${skillCardId}"`);
-      }
-      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
-        aiBotUsername,
-      ]);
-      const context = {
-        submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.operatorModeStateService
-          .topMostStackItems()
-          .map((item) => item.card.id),
-      };
-
-      await this.matrixService.sendMessage(
-        newRoomId,
-        message,
-        [card],
-        [commandCard],
-        undefined,
-        context,
-      );
-    },
-  );
 
   @action private onCancelDelete() {
     this.itemToDelete = undefined;

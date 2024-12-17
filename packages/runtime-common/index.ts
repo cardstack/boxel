@@ -223,6 +223,10 @@ export interface CardSearch {
   getCards(
     query: Query,
     realms?: string[],
+    opts?: {
+      isLive?: true;
+      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    },
   ): {
     instances: CardDef[];
     loaded: Promise<void>;
@@ -236,17 +240,23 @@ export interface CardSearch {
     loaded: Promise<void> | undefined;
     cardError?: undefined | { id: string; error: Error };
   };
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
 }
 
 export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
 }
 
-export function getCards(query: Query, realms?: string[]) {
+export function getCards(
+  query: Query,
+  realms?: string[],
+  opts?: {
+    isLive?: true;
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+  },
+) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(query, realms);
+  return finder?.getCards(query, realms, opts);
 }
 
 export function getCard<T extends CardDef>(
@@ -260,20 +270,6 @@ export function getCard<T extends CardDef>(
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.getCard<T>(url, opts);
-}
-
-export function trackCard<T extends object>(
-  owner: T,
-  card: CardDef,
-  realmURL: URL,
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return card;
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.trackCard(owner, card, realmURL);
 }
 
 export interface CardCreator {
@@ -340,7 +336,7 @@ export interface Actions {
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (
-    card: CardDef,
+    cardOrURL: CardDef | URL,
     format?: Format,
     opts?: {
       openCardInRightMostStack?: boolean;
@@ -357,11 +353,6 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-  runCommand?: (
-    card: CardDef, // the card that the command is being run on
-    skillCardId: string, // skill card id that the command is associated with
-    message?: string, // message that posts in the chat
-  ) => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {

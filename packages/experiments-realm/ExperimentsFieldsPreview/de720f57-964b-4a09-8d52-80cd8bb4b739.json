@@ -1,0 +1,108 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "url": "https://youtube.com",
+      "urls": [
+        "https://boxel/alice",
+        "https://boxel/dan"
+      ],
+      "address": {
+        "addressLine1": "285 Fulton Street ",
+        "addressLine2": null,
+        "city": "New York City",
+        "state": "NY",
+        "postalCode": "10007",
+        "country": {
+          "name": "United States of America",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "website": "https://cardstack.com/",
+      "email": "alice@email.com",
+      "emails": [
+        "alice@email.com",
+        "dan@email.com"
+      ],
+      "phone": {
+        "type": null,
+        "country": null,
+        "area": null,
+        "number": null
+      },
+      "percentage": 100.159393,
+      "currency": {
+        "code": "EUR"
+      },
+      "amountWithCurrency": {
+        "amount": 20000000,
+        "currency": {
+          "code": "JPY"
+        }
+      },
+      "contactLink": {
+        "label": "Email",
+        "value": "alice@email.com"
+      },
+      "contactLinks": [
+        {
+          "label": "Email",
+          "value": "alice@email.com"
+        },
+        {
+          "label": "Phone",
+          "value": "+12345678989"
+        },
+        {
+          "label": "Other",
+          "value": "https://boxel/alice"
+        }
+      ],
+      "statusTag": {
+        "lightColor": "#93C5FD",
+        "darkColor": "#3B82F6",
+        "index": null,
+        "label": "Test"
+      },
+      "featuredImage": {
+        "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1479936343636-73cdc5aae0c3.jpeg",
+        "credit": "Photo by Unsplash",
+        "caption": "It's a new day, it's a new life.",
+        "altText": "Woman smiling with the glow of sun in the background",
+        "size": "actual",
+        "height": null,
+        "width": 300
+      },
+      "images": [
+        {
+          "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1521119989659-a83eee488004.jpeg",
+          "credit": "Photo by Unsplash - Ut velit modi sed aliquid molestiae in unde voluptas.",
+          "caption": "Nam voluptatem nostrum qui aperiam rerum non similique porro sed iusto placeat cum sequi dolore. ",
+          "altText": "Portrait of man on a rooftop",
+          "size": "actual",
+          "height": null,
+          "width": null
+        },
+        {
+          "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1496345875659-11f7dd282d1d.jpeg",
+          "credit": "Photo by Unsplash - Quis quibusdam rem rerum maiores 33 galisum quidem.",
+          "caption": "Aut asperiores impedit nam aperiam dolore ex libero voluptate.",
+          "altText": "Man with dark sunglasses",
+          "size": "actual",
+          "height": null,
+          "width": null
+        }
+      ],
+      "title": "Custom Field Preview",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../experiments_fields_preview",
+        "name": "ExperimentsFieldsPreview"
+      }
+    }
+  }
+}
