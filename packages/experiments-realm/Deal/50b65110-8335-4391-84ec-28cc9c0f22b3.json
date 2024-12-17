@@ -1,0 +1,94 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "status": {
+        "index": 0,
+        "label": "Discovery",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "#E3F2FD"
+        }
+      },
+      "priority": {
+        "index": null,
+        "label": null,
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": null,
+          "backgroundColor": null
+        }
+      },
+      "closeDate": null,
+      "currentValue": {
+        "amount": null
+      },
+      "predictedRevenue": {
+        "amount": null
+      },
+      "healthScore": null,
+      "notes": "lkjlj",
+      "valueBreakdown": [
+        {
+          "name": "Car show",
+          "value": {
+            "amount": null
+          }
+        }
+      ],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": null
+        }
+      },
+      "currentValue.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "predictedRevenue.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "document": {
+        "links": {
+          "self": null
+        }
+      },
+      "primaryStakeholder": {
+        "links": {
+          "self": null
+        }
+      },
+      "stakeholders": {
+        "links": {
+          "self": null
+        }
+      },
+      "valueBreakdown.0.value.currency": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/deal",
+        "name": "Deal"
+      }
+    }
+  }
+}

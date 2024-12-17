@@ -21,11 +21,9 @@ import CrmProgressBar from '../components/crm-progress-bar';
 import { EntityDisplay } from '../components/entity-display';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
-import { LooseGooseyField, LooseyGooseyData } from '../loosey-goosey';
+import { LooseGooseyField } from '../loosey-goosey';
 import { Account } from './account';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { Tag } from '../tag';
 import { PercentageField } from '../percentage';
 import { MonetaryAmount } from '../monetary-amount';
@@ -36,17 +34,13 @@ import { Contact } from './contact';
 import { ContactRow } from '../components/contact-row';
 import Users from '@cardstack/boxel-icons/users';
 import World from '@cardstack/boxel-icons/world';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import { Document } from './document';
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get companyName() {
     return this.args.model.account?.name ?? 'No Company Name';
-  }
-
-  get pillsData() {
-    return [
-      { label: 'Proposal', backgroundColor: 'var(--boxel-lilac)' },
-      { label: 'High Priority', backgroundColor: 'var(--boxel-yellow)' },
-    ];
   }
 
   get logoURL() {
@@ -59,12 +53,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
   }
 
   get primaryContactName() {
+    console.log(this.args.fields.account?.primaryContact);
     return this.args.model.account?.primaryContact?.name;
   }
 
-  get primaryContactIcon() {
-    return this.args.model.account?.primaryContact?.thumbnailURL;
-  }
   get hasCompanyInfo() {
     return (
       this.args.model?.account?.website ||
@@ -79,6 +71,15 @@ class IsolatedTemplate extends Component<typeof Deal> {
     );
   }
 
+  @action
+  viewDocument(id: string | undefined) {
+    if (id && this.args.context?.actions?.viewCard) {
+      this.args.context.actions.viewCard(new URL(id));
+    } else {
+      console.warn('Card opening functionality is not available here.');
+    }
+  }
+
   <template>
     <DealPageLayout>
       <:header>
@@ -87,28 +88,35 @@ class IsolatedTemplate extends Component<typeof Deal> {
             <h1 class='account-name'>{{this.companyName}}</h1>
           </:name>
           <:content>
-            <EntityDisplay
-              @name={{this.primaryContactName}}
-              @underline={{true}}
-            >
-              <:thumbnail>
-
-                <UserSquare class='user-icon' />
-              </:thumbnail>
-            </EntityDisplay>
+            <@fields.primaryContact
+              @format='atom'
+              @displayContainer={{false}}
+              class='primary-contact'
+            />
 
             <div class='tag-container'>
-              {{#each @model.tags as |tag|}}
+              {{#if @model.status}}
                 <Pill
                   style={{htmlSafe
                     (concat
                       'background-color: '
-                      tag.color
+                      @model.status.colorScheme.backgroundColor
                       '; border-color: transparent;'
                     )
                   }}
-                >{{tag.name}}</Pill>
-              {{/each}}
+                >{{@model.status.label}}</Pill>
+              {{/if}}
+              {{#if @model.priority}}
+                <Pill
+                  style={{htmlSafe
+                    (concat
+                      'background-color: '
+                      @model.priority.colorScheme.backgroundColor
+                      '; border-color: transparent;'
+                    )
+                  }}
+                >{{@model.priority.label}}</Pill>
+              {{/if}}
             </div>
           </:content>
         </AccountHeader>
@@ -192,14 +200,17 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   </:thumbnail>
                 </EntityDisplay>
 
-                <BoxelButton
-                  @as='button'
-                  @size='extra-small'
-                  @kind='secondary-light'
-                  class='view-proposal-btn'
-                >
-                  View Proposal
-                </BoxelButton>
+                {{#if @model.document}}
+                  <BoxelButton
+                    @as='button'
+                    @size='extra-small'
+                    @kind='secondary-light'
+                    class='view-document-btn'
+                    {{on 'click' (fn this.viewDocument @model.document.id)}}
+                  >
+                    View Document
+                  </BoxelButton>
+                {{/if}}
               </div>
               <@fields.notes />
             </footer>
@@ -218,12 +229,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <World class='header-icon' />
             </:icon>
             <:content>
-              {{#if this.hasCompanyInfo}}
-                <@fields.headquartersAddress @format='atom' />
-                <@fields.website @format='atom' />
-              {{else}}
-                Missing Company Info
-              {{/if}}
+              <div class='description'>
+                {{#if this.hasCompanyInfo}}
+                  <@fields.headquartersAddress @format='atom' />
+                  <@fields.website @format='atom' />
+                {{else}}
+                  Missing Company Info
+                {{/if}}
+              </div>
             </:content>
           </SummaryCard>
 
@@ -235,24 +248,26 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Users class='header-icon' />
             </:icon>
             <:content>
-              {{#if this.hasStakeholders}}
-                {{#if @model.primaryStakeholder}}
-                  <ContactRow
-                    @userID={{@model.primaryStakeholder.id}}
-                    @name={{@model.primaryStakeholder.name}}
-                    @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
-                    @tagLabel='primary'
-                  />
+              <div class='description'>
+                {{#if this.hasStakeholders}}
+                  {{#if @model.primaryStakeholder}}
+                    <ContactRow
+                      @userID={{@model.primaryStakeholder.id}}
+                      @name={{@model.primaryStakeholder.name}}
+                      @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
+                      @tagLabel='primary'
+                    />
+                  {{/if}}
+                  {{#each @model.stakeholders as |stakeholder|}}
+                    <ContactRow
+                      @userID={{stakeholder.id}}
+                      @name={{stakeholder.name}}
+                      @thumbnailURL={{stakeholder.thumbnailURL}}
+                      @tagLabel={{stakeholder.position}}
+                    />
+                  {{/each}}
                 {{/if}}
-                {{#each @model.stakeholders as |stakeholder|}}
-                  <ContactRow
-                    @userID={{stakeholder.id}}
-                    @name={{stakeholder.name}}
-                    @thumbnailURL={{stakeholder.thumbnailURL}}
-                    @tagLabel={{stakeholder.position}}
-                  />
-                {{/each}}
-              {{/if}}
+              </div>
             </:content>
           </SummaryCard>
 
@@ -294,8 +309,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         flex-direction: column;
         gap: var(--boxel-sp-xxxs);
       }
-
-      /* dashboard */
       .dashboard {
         container-type: inline-size;
       }
@@ -333,11 +346,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
         font: 600 var(--boxel-font-lg);
       }
       .description {
-        font: 300 var(--boxel-font-sm);
+        margin: 0;
+        font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
       }
-
-      /* Dashboard */
       .progress-container {
         display: flex;
         align-items: start;
@@ -369,7 +384,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-sm);
         font-weight: 600;
       }
-      .view-proposal-btn {
+      .view-document-btn {
         font-weight: 600;
         padding: 2px 5px;
         min-width: 0px;
@@ -384,75 +399,88 @@ class IsolatedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr;
         }
       }
+      .primary-contact {
+        width: fit-content;
+        display: inline-block;
+      }
     </style>
   </template>
 }
 
-class EditDealStatusTemplate extends Component<typeof DealStatus> {
-  @tracked label: string | undefined = this.args.model.label;
-
-  get statuses() {
-    return (this.args.model.constructor as any).values as LooseyGooseyData[];
-  }
-  get selectedStatus() {
-    return this.statuses.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  @action onSelectStatus(status: LooseyGooseyData): void {
-    this.label = status.label;
-    this.args.model.label = this.selectedStatus?.label;
-    this.args.model.index = this.selectedStatus?.index;
-  }
-
-  get placeholder() {
-    return 'Fill in';
-  }
-
-  <template>
-    <BoxelSelect
-      @placeholder={{this.placeholder}}
-      @options={{this.statuses}}
-      @selected={{this.selectedStatus}}
-      @onChange={{this.onSelectStatus}}
-      as |item|
-    >
-      <div> {{item.label}}</div>
-    </BoxelSelect>
-  </template>
-}
-
 class DealStatus extends LooseGooseyField {
-  static displayName = 'Deal Status';
+  static displayName = 'CRM Deal Status';
   static values = [
     {
       index: 0,
       label: 'Discovery',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: '#E3F2FD',
+      },
     },
     {
       index: 1,
       label: 'Proposal',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: 'var(--boxel-lilac)',
+      },
     },
     {
       index: 2,
       label: 'Negotiation',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: '#FFF3E0', // light orange
+      },
     },
     {
       index: 3,
       label: 'Closed Won',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: '#E8F5E9', // light green
+      },
     },
     {
       index: 4,
       label: 'Closed Lost',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: '#FFEBEE', // light red
+      },
     },
   ];
-
-  static edit = EditDealStatusTemplate;
 }
 
-class Proposal extends CardDef {
-  static displayName = 'CRM Proposal';
+export class DealPriority extends LooseGooseyField {
+  static displayName = 'CRM Deal Priority';
+  static values = [
+    {
+      index: 0,
+      label: 'Low',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: '#E3F2FD',
+      },
+    },
+    {
+      index: 1,
+      label: 'Medium',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: '#FFF0B3',
+      },
+    },
+    {
+      index: 2,
+      label: 'High',
+      colorScheme: {
+        foregroundColor: '#000000',
+        backgroundColor: 'var(--boxel-yellow)',
+      },
+    },
+  ];
 }
 
 class Value extends MonetaryAmount {
@@ -481,6 +509,7 @@ export class Deal extends CardDef {
   @field name = contains(StringField);
   @field account = linksTo(() => Account);
   @field status = contains(DealStatus);
+  @field priority = contains(DealPriority);
   @field closeDate = contains(DateField);
   @field currentValue = contains(MonetaryAmount);
   @field computedValue = contains(MonetaryAmount, {
@@ -506,7 +535,10 @@ export class Deal extends CardDef {
   });
   @field healthScore = contains(PercentageField);
   @field notes = contains(MarkdownField);
-  @field proposal = linksTo(() => Proposal);
+  @field document = linksTo(() => Document);
+  @field primaryStakeholder = linksTo(() => Contact);
+  @field stakeholders = linksToMany(() => Contact);
+  @field valueBreakdown = containsMany(MonetaryLineItem);
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
     computeVia: function (this: Deal) {
@@ -519,9 +551,11 @@ export class Deal extends CardDef {
       return this.account?.website;
     },
   });
-  @field primaryStakeholder = linksTo(() => Contact);
-  @field stakeholders = linksToMany(() => Contact);
-  @field valueBreakdown = containsMany(MonetaryLineItem);
+  @field primaryContact = linksTo(Contact, {
+    computeVia: function (this: Deal) {
+      return this.account?.primaryContact;
+    },
+  });
   static isolated = IsolatedTemplate;
 }
 

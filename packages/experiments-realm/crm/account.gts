@@ -18,14 +18,13 @@ import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/captions';
 import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
-import { Avatar, Pill } from '@cardstack/boxel-ui/components';
-import { EntityDisplay } from '../components/entity-display';
 import { ContactRow } from '../components/contact-row';
 
 class IsolatedTemplate extends Component<typeof Account> {
-  //Mock Data:
   get logoURL() {
-    return 'https://picsum.photos/id/237/200/300';
+    return (
+      this.args.model?.thumbnailURL ?? 'https://picsum.photos/id/237/200/300'
+    );
   }
 
   get hasCompanyInfo() {

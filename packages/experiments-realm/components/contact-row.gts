@@ -1,7 +1,6 @@
 import { Avatar, Pill } from '@cardstack/boxel-ui/components';
 import { EntityDisplay } from './entity-display';
 import GlimmerComponent from '@glimmer/component';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 interface ContactRowArgs {
   Args: {
@@ -14,7 +13,7 @@ interface ContactRowArgs {
   Element: HTMLElement;
 }
 
-class ContactRow extends GlimmerComponent<ContactRowArgs> {
+export class ContactRow extends GlimmerComponent<ContactRowArgs> {
   <template>
     <EntityDisplay>
       <:title>
@@ -31,15 +30,9 @@ class ContactRow extends GlimmerComponent<ContactRowArgs> {
       </:thumbnail>
       <:tag>
         {{#if @tagLabel}}
-          {{#if (eq @tagLabel 'primary')}}
-            <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-              Primary
-            </Pill>
-          {{else}}
-            <Pill>
-              {{@tagLabel}}
-            </Pill>
-          {{/if}}
+          <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+            {{@tagLabel}}
+          </Pill>
         {{/if}}
       </:tag>
     </EntityDisplay>

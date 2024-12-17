@@ -13,20 +13,20 @@
           "isTable": false
         },
         {
-          "displayName": "Deals",
-          "tabId": "Deal",
-          "ref": {
-            "name": "Deal",
-            "module": "crm/deal"
-          },
-          "isTable": false
-        },
-        {
           "displayName": "Accounts",
           "tabId": "Account",
           "ref": {
             "name": "Account",
             "module": "crm/account"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Deals",
+          "tabId": "Deal",
+          "ref": {
+            "name": "Deal",
+            "module": "crm/deal"
           },
           "isTable": false
         }

@@ -4,8 +4,22 @@
     "attributes": {
       "name": null,
       "status": {
-        "index": null,
-        "label": null
+        "index": 1,
+        "label": "Proposal",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "var(--boxel-lilac)"
+        }
+      },
+      "priority": {
+        "index": 2,
+        "label": "High",
+        "color": "#FFF3E0",
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "#FFF3E0"
+        }
       },
       "closeDate": null,
       "currentValue": {
@@ -72,14 +86,14 @@
           "self": "../Tag/6d80a75f-71bb-474f-979d-ef4bc571ad63"
         }
       },
-      "proposal": {
+      "document": {
         "links": {
-          "self": "../cards/545b0d90-c9cb-48cd-8dc2-7bbe22c49b7e"
+          "self": "../Document/2b0f357f-89da-4b34-a0b9-866956389d79"
         }
       },
       "primaryStakeholder": {
         "links": {
-          "self": "../Contact/a01fc5c9-d70d-4b9c-aae4-384cf2b79b25"
+          "self": null
         }
       },
       "stakeholders.0": {
