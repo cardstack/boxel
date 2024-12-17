@@ -31,7 +31,7 @@
         "label": "Renewal Due Soon",
         "color": null,
         "colorScheme": {
-          "foregroundColor": "#000000",
+          "foregroundColor": "#F57C00",
           "backgroundColor": "#FFF3E0"
         }
       },
