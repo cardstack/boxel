@@ -6,6 +6,8 @@ import { UrlField } from './url';
 import { WebsiteField } from './website';
 import { Address as AddressField } from './address';
 import { PercentageField } from './percentage';
+import { CurrencyField } from './fields/currency';
+import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
 import { StatusTagField } from './crm/contact';
 import {
   CardDef,
@@ -30,11 +32,14 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field emails = containsMany(EmailField);
   @field phone = contains(PhoneField);
   @field percentage = contains(PercentageField);
+  @field currency = contains(CurrencyField);
+  @field amountWithCurrency = contains(AmountWithCurrencyField);
   @field contactLink = contains(ContactLinkField);
   @field contactLinks = containsMany(ContactLinkField);
   @field statusTag = contains(StatusTagField);
   @field featuredImage = contains(FeaturedImageField);
   @field images = containsMany(FeaturedImageField);
+
   static displayName = 'Custom Fields ';
   static isolated = class Isolated extends Component<typeof this> {
     <template>

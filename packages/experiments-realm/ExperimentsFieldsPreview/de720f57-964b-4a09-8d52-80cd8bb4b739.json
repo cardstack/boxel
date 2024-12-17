@@ -3,7 +3,10 @@
     "type": "card",
     "attributes": {
       "url": "https://youtube.com",
-      "urls": ["https://boxel/alice", "https://boxel/dan"],
+      "urls": [
+        "https://boxel/alice",
+        "https://boxel/dan"
+      ],
       "address": {
         "addressLine1": "285 Fulton Street ",
         "addressLine2": null,
@@ -18,7 +21,10 @@
       },
       "website": "https://cardstack.com/",
       "email": "alice@email.com",
-      "emails": ["alice@email.com", "dan@email.com"],
+      "emails": [
+        "alice@email.com",
+        "dan@email.com"
+      ],
       "phone": {
         "type": null,
         "country": null,
@@ -26,6 +32,15 @@
         "number": null
       },
       "percentage": 100.159393,
+      "currency": {
+        "code": "EUR"
+      },
+      "amountWithCurrency": {
+        "amount": 20000000,
+        "currency": {
+          "code": "JPY"
+        }
+      },
       "contactLink": {
         "label": "Email",
         "value": "alice@email.com"
