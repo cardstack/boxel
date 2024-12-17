@@ -4,12 +4,12 @@
     "attributes": {
       "name": null,
       "status": {
-        "index": 0,
-        "label": "Discovery",
+        "index": 1,
+        "label": "Proposal",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#000000",
-          "backgroundColor": "#E3F2FD"
+          "backgroundColor": "var(--boxel-lilac)"
         }
       },
       "priority": {

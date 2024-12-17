@@ -242,19 +242,30 @@ class IsolatedTemplate extends Component<typeof Deal> {
               </div>
               <div class='block'>
                 <label>Predicted Revenue:</label>
-                <@fields.predictedRevenue
-                  class='highlight-value'
-                  @format='atom'
-                />
-                <p class='description secondary-value'>Based on similar events</p>
+                <div class='highlight-value'>
+                  {{#if @model.predictedRevenue.amount}}
+                    <@fields.predictedRevenue
+                      class='highlight-value'
+                      @format='atom'
+                    />
+                    <p class='description secondary-value'>Based on similar
+                      events</p>
+                  {{else}}
+                    N/A
+                  {{/if}}
+                </div>
               </div>
               <div class='block'>
                 <label>Profit Margin:</label>
                 {{! TODO: compound fields have divs that wrap them. Seems a bit inconsistent.}}
                 <div class='highlight-value'>
-                  <@fields.profitMargin @format='atom' />
+                  {{#if @model.profitMargin}}
+                    <@fields.profitMargin @format='atom' />
+                    <p class='description secondary-value'>Estimated</p>
+                  {{else}}
+                    N/A
+                  {{/if}}
                 </div>
-                <p class='description secondary-value'>Estimated</p>
               </div>
             </article>
 
@@ -311,7 +322,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 {{#if @model.notes}}
                   <@fields.notes />
                 {{else}}
-                  No Notes Found
+                  No Notes
                 {{/if}}
               </div>
             </footer>
