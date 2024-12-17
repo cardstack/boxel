@@ -331,8 +331,17 @@ export function getToolChoice(
   aiBotUserId: string,
 ): ToolChoice {
   let lastMessage = getLastUserMessage(history, aiBotUserId);
-  if (lastMessage && lastMessage.content.data?.context?.toolChoice) {
-    return lastMessage.content.data.context.toolChoice;
+  if (lastMessage && lastMessage.content.data?.context?.requireToolCall) {
+    let tools = lastMessage.content.data.context?.tools || [];
+    if (tools.length != 1) {
+      throw new Error('Forced tool calls only work with a single tool');
+    }
+    return {
+      type: 'function',
+      function: {
+        name: tools[0].function.name,
+      },
+    };
   }
   return 'auto';
 }

@@ -13,6 +13,7 @@ import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
 import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
 import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
@@ -83,12 +84,14 @@ export default class CreateProductRequirementsInstance extends Command<
       roomId,
       skills: [this.skillCard],
     });
-    await this.commandContext.sendAiAssistantMessage({
+    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+      this.commandContext,
+    );
+    await sendAiAssistantMessageCommand.execute({
       roomId,
-      show: false, // maybe? open the side panel
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
-      commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking whic
+      commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking
     });
 
     // Wait for the PRD command to have been applied
