@@ -126,6 +126,7 @@ export type {
   SingleCardDocument,
   Relationship,
   Meta,
+  CardResourceMeta,
 } from './card-document';
 export type { JWTPayload } from './realm-auth-client';
 export {

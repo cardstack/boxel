@@ -144,6 +144,29 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
               N/A
             {{/if}}
           </FieldContainer>
+          <FieldContainer
+            class='admin-data'
+            @label='Last Updated'
+            @vertical={{true}}
+          >
+            {{#if card.lastUpdated}}
+              <time timestamp={{toISOString card.lastUpdated}}>
+                {{this.formattedDate card.lastUpdated}}
+              </time>
+            {{else}}
+              N/A
+            {{/if}}
+          </FieldContainer>
+          <FieldContainer
+            class='admin-data'
+            @label='Word Count'
+            @vertical={{true}}
+          >
+            {{if card.wordCount card.wordCount 0}}
+          </FieldContainer>
+          <FieldContainer class='admin-data' @label='Editor' @vertical={{true}}>
+            {{this.editors}}
+          </FieldContainer>
           <FieldContainer class='admin-data' @label='Status' @vertical={{true}}>
             <Pill class='status-pill'>{{card.status}}</Pill>
           </FieldContainer>
@@ -178,6 +201,16 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
       minute: '2-digit',
     });
   };
+
+  get editors() {
+    return this.resource.card && this.resource.card.editors.length > 0
+      ? this.resource.card.editors
+          .map((editor) =>
+            editor.email ? `${editor.name} (${editor.email})` : editor.name,
+          )
+          .join(',')
+      : 'N/A';
+  }
 }
 
 class BlogAppTemplate extends Component<typeof BlogApp> {
