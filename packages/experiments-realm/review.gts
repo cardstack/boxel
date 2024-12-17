@@ -48,7 +48,7 @@ export class Review extends BlogPost {
           width: 100%;
           height: 100%;
           display: grid;
-          grid-template: 'img content' 1fr / 120px 1fr;
+          grid-template: 'img content' 1fr / minmax(120px, 40%) 1fr;
           gap: var(--boxel-sp-xs);
           overflow: hidden;
           text-wrap: pretty;
