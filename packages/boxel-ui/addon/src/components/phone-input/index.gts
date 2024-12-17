@@ -1,18 +1,13 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { type TCountryCode, countries, getEmojiFlag } from 'countries-list';
 import {
-  type CountryCallingCode,
-  type CountryCode,
-  getCountries,
-  getCountryCallingCode,
-  getExampleNumber,
-  isValidPhoneNumber,
-} from 'libphonenumber-js';
-// @ts-expect-error import not found
-import examples from 'libphonenumber-js/mobile/examples';
+  getCountryCodeForRegionCode,
+  getExample,
+  getSupportedRegionCodes,
+  parsePhoneNumber,
+} from 'awesome-phonenumber';
+import { type TCountryCode, countries, getEmojiFlag } from 'countries-list';
 import { debounce } from 'lodash';
 
 import { type InputValidationState } from '../input/index.gts';
@@ -30,19 +25,20 @@ interface Signature {
 }
 
 interface CountryInfo {
-  callingCode?: CountryCallingCode;
-  code: CountryCode;
+  callingCode?: string;
+  code: string;
   example?: {
-    callingCode: CountryCallingCode;
+    callingCode: string;
     nationalNumber: string;
   };
   flag?: string;
   name?: string;
 }
 
-const getCountryInfo = (countryCode: CountryCode): CountryInfo | undefined => {
-  let example = getExampleNumber(countryCode, examples);
-  let callingCode = getCountryCallingCode(countryCode);
+const getCountryInfo = (countryCode: string): CountryInfo | undefined => {
+  let example = getExample(countryCode);
+  let callingCode = getCountryCodeForRegionCode(countryCode);
+
   let c = countries[countryCode as TCountryCode];
   if (c === undefined) {
     //here some country code may not be found due to the discrepancy between countries-list and libphonenumber-js library
@@ -52,13 +48,13 @@ const getCountryInfo = (countryCode: CountryCode): CountryInfo | undefined => {
   }
   return {
     code: countryCode,
-    callingCode,
+    callingCode: callingCode.toString(),
     name: c ? c.name : undefined,
     flag: getEmojiFlag(countryCode as TCountryCode),
     example: example
       ? {
-          callingCode,
-          nationalNumber: example.format('NATIONAL'),
+          callingCode: callingCode.toString(),
+          nationalNumber: example.number?.international ?? '',
         }
       : undefined,
   };
@@ -73,18 +69,16 @@ class PhoneInput extends Component<Signature> {
   @action onSelectItem(item: CountryInfo): void {
     this.selectedItem = item;
     if (this.input.length > 0) {
-      this.validationState = isValidPhoneNumber(
-        this.input,
-        this.selectedItem.code,
-      )
-        ? 'valid'
-        : 'invalid';
+      const parsedPhoneNumber = parsePhoneNumber(this.input, {
+        regionCode: this.selectedItem.code,
+      });
+      this.validationState = parsedPhoneNumber.valid ? 'valid' : 'invalid';
     }
   }
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.items = getCountries()
+    this.items = getSupportedRegionCodes()
       .map((code) => {
         return getCountryInfo(code);
       })
@@ -107,10 +101,17 @@ class PhoneInput extends Component<Signature> {
   }
 
   private debouncedInput = debounce((input: string) => {
-    this.validationState = isValidPhoneNumber(input, this.selectedItem.code)
-      ? 'valid'
-      : 'invalid';
     this.input = input;
+
+    if (input === '') {
+      this.validationState = 'initial';
+      return;
+    }
+
+    const parsedPhoneNumber = parsePhoneNumber(input, {
+      regionCode: this.selectedItem.code,
+    });
+    this.validationState = parsedPhoneNumber.valid ? 'valid' : 'invalid';
     //save when the state is valid
     if (this.validationState === 'valid') {
       this.args.onInput(this.input);
@@ -151,13 +152,13 @@ export interface SelectedItemSignature {
   Element: HTMLDivElement;
 }
 
-const PhoneSelectedItem: TemplateOnlyComponent<SelectedItemSignature> =
-// eslint-disable-next-line prettier/prettier TODO: fix this eslint error --> Insert `·[`  prettier/prettier
+class PhoneSelectedItem extends Component<SelectedItemSignature> {
   <template>
     <div>
       {{@option.flag}}
       +{{@option.callingCode}}
     </div>
-  </template>;
+  </template>
+}
 
 export default PhoneInput;
