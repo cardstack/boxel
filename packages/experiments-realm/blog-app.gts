@@ -20,7 +20,6 @@ import {
   getCard,
   SupportedMimeType,
   type LooseSingleCardDocument,
-  relativeURL,
 } from '@cardstack/runtime-common';
 import {
   type SortOption,
@@ -372,25 +371,13 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       };
       filter.cardRef = cardRef;
 
-      let realmUrl = this.args.model[realmURL];
-      if (!this.args.model.id || !realmUrl?.href) {
-        throw new Error(`Missing card id or realm url`);
-      }
-      let relativeTo = relativeURL(
-        new URL(this.args.model.id),
-        new URL(`${cardRef.module}/${cardRef.name}`),
-        realmUrl,
-      );
-      if (!relativeTo) {
-        throw new Error(`Missing relative url`);
+      if (!this.args.model.id) {
+        throw new Error(`Missing card id`);
       }
       filter.query = {
         filter: {
           on: cardRef,
-          any: [
-            { eq: { 'blog.id': this.args.model.id } },
-            { eq: { 'blog.id': relativeTo } },
-          ],
+          eq: { 'blog.id': this.args.model.id },
         },
       };
     }
