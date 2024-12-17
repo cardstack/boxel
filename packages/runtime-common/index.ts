@@ -344,6 +344,7 @@ export interface Actions {
       fieldName?: string;
     },
   ) => Promise<void>;
+  copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
   copyCard?: (card: CardDef) => Promise<CardDef>;
   saveCard(card: CardDef): Promise<void>;
