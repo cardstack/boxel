@@ -6,17 +6,13 @@ import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { guidFor } from '@ember/object/internals';
 
-// @ts-ignore
-import { getSymbolFromCode } from 'https://esm.run/currency-code-symbol-map';
-
 class View extends Component<typeof AmountWithCurrency> {
   get formatNumberWithSeparator() {
-    const num = this.args.model.amount;
-    const currencyCode = this.args.model.currency?.code;
-    const currencySymbol = getSymbolFromCode(currencyCode) || '';
+    let num = this.args.model.amount;
+    const currencySymbol = this.args.model.currency?.symbol;
 
     if (num === null || num === undefined) {
-      return '';
+      num = 0;
     }
 
     return `${currencySymbol} ${num.toLocaleString('en-US')}`;
@@ -36,7 +32,7 @@ class Edit extends Component<typeof AmountWithCurrency> {
   setAmount(val: number) {
     let newModel = new AmountWithCurrency();
     newModel.amount = val;
-    newModel.currency = this.args.model.currency as CurrencyField;
+    newModel.currency.code = newModel.currency.code || 'USD';
     this.args.set(newModel);
   }
 
@@ -108,7 +104,7 @@ class Edit extends Component<typeof AmountWithCurrency> {
 }
 
 export class AmountWithCurrency extends FieldDef {
-  static displayName = 'AmountWithCurrency';
+  static displayName = 'Amount With Currency';
 
   @field amount = contains(NumberField);
   @field currency = contains(CurrencyField);

@@ -32,11 +32,12 @@ interface CurrencyData {
 }
 
 class CurrencyFieldEdit extends Component<typeof CurrencyField> {
+  // TODO: this is a temporary fix to show the default symbol until the field allows for a default value
   @tracked currency: CurrencyData | undefined = this.args.model.code
     ? {
         code: this.args.model.code,
       }
-    : undefined;
+    : { code: 'USD' };
   @tracked currencies: CurrencyData[] = [];
 
   constructor(owner: Owner, args: any) {
@@ -86,7 +87,8 @@ export class CurrencyField extends FieldDef {
   static edit = CurrencyFieldEdit;
 
   get symbol() {
-    return currencyCodeSymbolMapping[this.code];
+    // TODO: this is a temporary fix to show the default symbol until the field allows for a default value
+    return currencyCodeSymbolMapping[this.code || 'USD'];
   }
 
   static atom = class Atom extends Component<typeof this> {
@@ -97,7 +99,8 @@ export class CurrencyField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      {{#if @model.code}}
+      {{! TODO: this is a temporary fix to show the default symbol until the field allows for a default value }}
+      {{#if @model.symbol}}
         {{@model.symbol}}
       {{else}}
         Please select a currency
