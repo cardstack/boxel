@@ -62,8 +62,8 @@ export class Review extends BlogPost {
         }
         .content {
           grid-area: content;
-          display: flex;
-          flex-direction: column;
+          display: grid;
+          grid-template-rows: repeat(3, max-content) 1fr;
           gap: var(--boxel-sp-xs);
           max-width: 100%;
           padding: var(--boxel-sp-xs);
@@ -90,13 +90,13 @@ export class Review extends BlogPost {
           letter-spacing: var(--boxel-lsp-xs);
         }
         .description {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 4;
           overflow: hidden;
           margin: 0;
           font: var(--boxel-font-xs);
           letter-spacing: var(--boxel-lsp-xs);
+        }
+        .info {
+          align-self: end;
         }
         .byline,
         .date {

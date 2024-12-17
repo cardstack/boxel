@@ -225,6 +225,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           @title={{or @model.title ''}}
           @tagline={{or @model.description ''}}
           @thumbnailURL={{or @model.thumbnailURL ''}}
+          @icon={{@model.constructor.icon}}
           @element='header'
           aria-label='Sidebar Header'
         />
@@ -267,21 +268,19 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       </:contentHeader>
       <:grid>
         {{#if this.query}}
-          <div class='content-scroll-container'>
-            <CardsGrid
-              @selectedView={{this.selectedView}}
-              @context={{@context}}
-              @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
-              @query={{this.query}}
-              @realms={{this.realms}}
-            >
-              <:meta as |card|>
-                {{#if this.showAdminData}}
-                  <BlogAdminData @cardId={{card.url}} />
-                {{/if}}
-              </:meta>
-            </CardsGrid>
-          </div>
+          <CardsGrid
+            @selectedView={{this.selectedView}}
+            @context={{@context}}
+            @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
+            @query={{this.query}}
+            @realms={{this.realms}}
+          >
+            <:meta as |card|>
+              {{#if this.showAdminData}}
+                <BlogAdminData @cardId={{card.url}} />
+              {{/if}}
+            </:meta>
+          </CardsGrid>
         {{/if}}
       </:grid>
     </Layout>
@@ -308,7 +307,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     </style>
   </template>
 
-  filters: LayoutFilter[] = new TrackedArray(FILTERS);
+  filters: LayoutFilter[] = new TrackedArray(this.args.model.filters);
 
   @tracked private selectedView: ViewOption = 'card';
   @tracked private activeFilter: LayoutFilter = this.filters[0];
@@ -451,12 +450,14 @@ export class BlogApp extends CardDef {
   static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
+  filters = FILTERS;
   static isolated = BlogAppTemplate;
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <BasicFitted
         class='fitted-blog'
         @thumbnailURL={{@model.thumbnailURL}}
+        @iconComponent={{@model.constructor.icon}}
         @primary={{@model.title}}
         @secondary={{@model.website}}
       />
@@ -470,12 +471,20 @@ export class BlogApp extends CardDef {
             padding: var(--boxel-sp-xxxs);
             align-items: center;
           }
-          .fitted-blog :deep(.card-thumbnail) {
+          .fitted-blog :deep(.thumbnail-section) {
             border: 1px solid var(--boxel-450);
             border-radius: var(--boxel-border-radius-lg);
             width: 40px;
             height: 40px;
             overflow: hidden;
+          }
+          .fitted-blog :deep(.card-thumbnail) {
+            width: 100%;
+            height: 100%;
+          }
+          .fitted-blog :deep(.card-type-icon) {
+            width: 20px;
+            height: 20px;
           }
           .fitted-blog :deep(.info-section) {
             display: flex;

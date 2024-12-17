@@ -36,7 +36,12 @@
       },
       "blog": {
         "links": {
-          "self": "../BlogApp/651c10a3-a093-4d26-93d0-de316666a03d"
+          "self": "../ReviewBlog/583df6bb-5739-418a-9186-978bd72816c1"
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
         }
       }
     },
