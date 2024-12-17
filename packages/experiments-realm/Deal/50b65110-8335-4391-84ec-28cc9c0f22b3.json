@@ -35,18 +35,8 @@
         }
       },
       "healthScore": null,
-      "notes": "lkjlj",
-      "valueBreakdown": [
-        {
-          "name": "Car show",
-          "value": {
-            "amount": null,
-            "currency": {
-              "code": null
-            }
-          }
-        }
-      ],
+      "notes": "",
+      "valueBreakdown": [],
       "title": null,
       "description": null,
       "thumbnailURL": null

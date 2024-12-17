@@ -72,6 +72,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
     );
   }
 
+  get hasValueBreakdown() {
+    return (
+      this.args.model.valueBreakdown &&
+      this.args.model.valueBreakdown.length > 0
+    );
+  }
+
   get hasStakeholders() {
     return (
       this.args.model.primaryStakeholder ||
@@ -253,27 +260,29 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
             <hr />
 
-            <article class='value-breakdown'>
-              <header>
-                <label>Value Breakdown</label>
-              </header>
-              <table class='breakdown-table'>
-                <tbody>
-                  {{#each @fields.valueBreakdown as |item|}}
-                    <tr>
-                      <td class='item-name'>
-                        <item.name />
-                      </td>
-                      <td class='item-value'>
-                        <item.value @format='atom' />
-                      </td>
-                    </tr>
-                  {{/each}}
-                </tbody>
-              </table>
-            </article>
+            {{#if this.hasValueBreakdown}}
+              <article class='value-breakdown'>
+                <header>
+                  <label>Value Breakdown</label>
+                </header>
+                <table class='breakdown-table'>
+                  <tbody>
+                    {{#each @fields.valueBreakdown as |item|}}
+                      <tr>
+                        <td class='item-name'>
+                          <item.name />
+                        </td>
+                        <td class='item-value'>
+                          <item.value @format='atom' />
+                        </td>
+                      </tr>
+                    {{/each}}
+                  </tbody>
+                </table>
+              </article>
 
-            <hr />
+              <hr />
+            {{/if}}
 
             <footer class='next-steps'>
               <div class='next-steps-row'>
@@ -298,11 +307,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   </BoxelButton>
                 {{/if}}
               </div>
-              {{#if @model.notes}}
-                <@fields.notes />
-              {{else}}
-                No Notes Found
-              {{/if}}
+              <div class='description'>
+                {{#if @model.notes}}
+                  <@fields.notes />
+                {{else}}
+                  No Notes Found
+                {{/if}}
+              </div>
             </footer>
 
           </:content>
@@ -473,6 +484,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
         font-weight: 600;
       }
       /* footer */
+      .next-steps {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
       .next-steps-row {
         display: flex;
         justify-content: space-between;
