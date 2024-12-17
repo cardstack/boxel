@@ -170,7 +170,7 @@ export class RatingsSummary extends FieldDef {
   @field count = contains(NumberField);
   @field isEditable = contains(BooleanField);
 
-  static atom = class Atom extends Component<typeof this> {
+  static embedded = class Embedded extends Component<typeof this> {
     <template>
       <span class='rating-summary'>
         <StarRating
@@ -201,5 +201,30 @@ export class RatingsSummary extends FieldDef {
     </template>
   };
 
-  static embedded = this.atom;
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.average}}
+        <span class='rating-summary'>
+          <StarIcon class='icon' @type='full' width='10' height='10' />
+          <span class='rating'><@fields.average /></span>
+        </span>
+      {{/if}}
+      <style scoped>
+        .rating-summary {
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxxs);
+          color: currentColor;
+        }
+        .icon {
+          flex-shrink: 0;
+        }
+        .rating {
+          font: 600 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
+      </style>
+    </template>
+  };
 }

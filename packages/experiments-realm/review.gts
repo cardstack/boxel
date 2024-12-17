@@ -3,6 +3,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import { setBackgroundImage } from './components/layout';
 import { formatDatetime } from './blog-app';
 import { BlogPost } from './blog-post';
 import { RatingsSummary } from './ratings-summary';
@@ -12,6 +13,103 @@ export class Review extends BlogPost {
   static displayName = 'Review';
   @field rating = contains(RatingsSummary);
   @field userRating = contains(RatingsSummary);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <article class='embedded-review'>
+        <div
+          class='thumbnail'
+          style={{setBackgroundImage @model.thumbnailURL}}
+        />
+        <div class='content'>
+          <div class='meta'>
+            {{! TODO: replace with category field }}
+            <span class='category'>Movie Review</span>
+            {{#if @model.rating}}
+              <@fields.rating class='rating-info' @format='atom' />
+            {{/if}}
+          </div>
+          <h3 class='title'><@fields.title /></h3>
+          <p class='description'>{{@model.description}}</p>
+          <div class='info'>
+            {{#if @model.authorBio}}
+              <div class='byline'>{{@model.authorBio.title}}</div>
+            {{/if}}
+            {{#if @model.datePublishedIsoTimestamp}}
+              <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+                {{@model.formattedDatePublished}}
+              </time>
+            {{/if}}
+          </div>
+        </div>
+      </article>
+      <style scoped>
+        .embedded-review {
+          width: 100%;
+          height: 100%;
+          display: grid;
+          grid-template: 'img content' 1fr / 120px 1fr;
+          gap: var(--boxel-sp-xs);
+          overflow: hidden;
+          text-wrap: pretty;
+        }
+        .thumbnail {
+          grid-area: img;
+          background-color: var(--boxel-200);
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+        }
+        .content {
+          grid-area: content;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          max-width: 100%;
+          padding: var(--boxel-sp-xs);
+          overflow: hidden;
+        }
+        .meta {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xxxs);
+          overflow: hidden;
+        }
+        .category {
+          background-color: var(--boxel-yellow);
+          padding: 0 var(--boxel-sp-4xs);
+          border-radius: 3px;
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
+        .title {
+          margin: 0;
+          font: 700 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .description {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 4;
+          overflow: hidden;
+          margin: 0;
+          font: var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .byline,
+        .date {
+          text-wrap: nowrap;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>
@@ -27,7 +125,8 @@ export class Review extends BlogPost {
         {{/if}}
         <div class='content'>
           <div class='rating-group'>
-            {{! TODO: category here }}
+            {{! TODO: replace with category field }}
+            <span class='category'>Movie Review</span>
             <@fields.rating class='rating' />
           </div>
           <h1><@fields.title /></h1>
@@ -110,6 +209,13 @@ export class Review extends BlogPost {
           align-items: center;
           justify-content: space-between;
           gap: var(--boxel-sp-sm);
+        }
+        .category {
+          background-color: var(--boxel-yellow);
+          padding: 0 var(--boxel-sp-xs);
+          border-radius: 5px;
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
         }
         .rating {
           display: inline-block;
