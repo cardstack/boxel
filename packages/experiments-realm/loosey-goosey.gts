@@ -31,6 +31,9 @@ class LooseyGooseyEditTemplate extends Component<typeof LooseGooseyField> {
   @tracked label: string | undefined = this.args.model.label;
 
   get statuses() {
+    if (!this.args.model) {
+      return [];
+    }
     return (this.args.model.constructor as any).values as LooseyGooseyData[];
   }
   get selectedStatus() {
