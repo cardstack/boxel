@@ -7,9 +7,14 @@ import PhoneInput from './index.gts';
 
 export default class PhoneInputUsage extends Component {
   @tracked value = '';
+  @tracked countryCode = '';
 
   @action onInput(value: string): void {
     this.value = value;
+  }
+
+  @action onCountryCodeChange(code: string): void {
+    this.countryCode = code;
   }
 
   <template>
@@ -22,7 +27,12 @@ export default class PhoneInputUsage extends Component {
         </p>
       </:description>
       <:example>
-        <PhoneInput @value={{this.value}} @onInput={{this.onInput}} />
+        <PhoneInput
+          @value={{this.value}}
+          @countryCode={{this.countryCode}}
+          @onInput={{this.onInput}}
+          @onCountryCodeChange={{this.onCountryCodeChange}}
+        />
       </:example>
     </FreestyleUsage>
   </template>

@@ -15,6 +15,8 @@ import BoxelInputGroup from '../input-group/index.gts';
 
 interface Signature {
   Args: {
+    countryCode: string;
+    onCountryCodeChange: (code: string) => void;
     onInput: (value: string) => void;
     value: string;
   };
@@ -68,6 +70,10 @@ class PhoneInput extends Component<Signature> {
 
   @action onSelectItem(item: CountryInfo): void {
     this.selectedItem = item;
+    if (this.args.onCountryCodeChange) {
+      console.log('onSelectItem', item.callingCode);
+      this.args.onCountryCodeChange(item.callingCode ?? '');
+    }
     if (this.input.length > 0) {
       const parsedPhoneNumber = parsePhoneNumber(this.input, {
         regionCode: this.selectedItem.code,
@@ -83,6 +89,12 @@ class PhoneInput extends Component<Signature> {
         return getCountryInfo(code);
       })
       .filter((c) => c !== undefined) as CountryInfo[];
+
+    if (this.args.countryCode) {
+      this.selectedItem = this.items.find(
+        (item) => item.callingCode === this.args.countryCode,
+      )!;
+    }
   }
 
   get placeholder(): string | undefined {
