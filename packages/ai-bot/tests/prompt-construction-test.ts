@@ -1134,6 +1134,28 @@ test('Has the skill card specified by the last state update, even if there are o
   assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));
 });
 
+test('if tool calls are required, ensure they are set', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/forced-function-call.json'),
+    ),
+  );
+
+  const { messages, tools, toolChoice } = getPromptParts(
+    eventList,
+    '@ai-bot:localhost',
+  );
+  assert.equal(messages.length, 2);
+  assert.equal(messages[1].role, 'user');
+  assert.true(tools.length === 1);
+  assert.deepEqual(toolChoice, {
+    type: 'function',
+    function: {
+      name: 'NeverCallThisPlease_hEhhctZntkzJkySR5Uvsq6',
+    },
+  });
+});
+
 test('Create search function calls', () => {
   const history: IRoomEvent[] = [
     {
