@@ -49,10 +49,14 @@ class IsolatedTemplate extends Component<typeof Account> {
       <:header>
         <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
           <:name>
-            <h1 class='account-name'>{{@model.name}}</h1>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name'>Missing Account Name</h1>
+            {{/if}}
           </:name>
           <:content>
-            <div class='description'>
+            <div class='description content-container'>
               {{#if @model.primaryContact}}
                 <@fields.primaryContact
                   @format='atom'
@@ -79,7 +83,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
+              <div class='description content-container'>
                 {{#if this.hasCompanyInfo}}
                   <@fields.headquartersAddress @format='atom' />
                   <@fields.website @format='atom' />
@@ -98,7 +102,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <ContactIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
+              <div class='description content-container'>
                 {{#if this.hasContacts}}
                   {{#if @model.primaryContact}}
                     <ContactRow
@@ -183,9 +187,11 @@ class IsolatedTemplate extends Component<typeof Account> {
         display: inline-block;
       }
       .description {
-        margin: 0;
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content-container {
+        margin: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
@@ -195,6 +201,9 @@ class IsolatedTemplate extends Component<typeof Account> {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
+      }
+      .default-value {
+        color: var(--boxel-400);
       }
     </style>
   </template>
@@ -286,7 +295,6 @@ class UrgencyTag extends LooseGooseyField {
 
 export class Account extends CardDef {
   static displayName = 'CRM Account';
-
   @field name = contains(StringField, {
     computeVia: function (this: Account) {
       return this.company?.name;

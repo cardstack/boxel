@@ -39,6 +39,7 @@ import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
 import { Query } from '@cardstack/runtime-common/query';
+import { Company } from './company';
 
 interface DealSizeSummary {
   summary: string;
@@ -47,10 +48,6 @@ interface DealSizeSummary {
 }
 
 class IsolatedTemplate extends Component<typeof Deal> {
-  get companyName() {
-    return this.args.model.account?.name ?? 'No Company Name';
-  }
-
   get logoURL() {
     return (
       this.args.model.thumbnailURL ??
@@ -155,18 +152,28 @@ class IsolatedTemplate extends Component<typeof Deal> {
   <template>
     <DealPageLayout>
       <:header>
-        <AccountHeader @logoURL={{this.logoURL}} @name={{this.companyName}}>
+        <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
           <:name>
-            <h1 class='account-name'>{{this.companyName}}</h1>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name default-value'>Missing Deal Name</h1>
+            {{/if}}
           </:name>
           <:content>
-            <div class='description'>
-              <@fields.primaryContact
-                @format='atom'
-                @displayContainer={{false}}
-                class='primary-contact'
-              />
-
+            <div class='description content-container'>
+              <div class='info-container'>
+                <@fields.company
+                  @format='atom'
+                  @displayContainer={{false}}
+                  class='info-atom'
+                />
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                  class='info-atom'
+                />
+              </div>
               <div class='tag-container'>
                 {{#if @model.status}}
                   <Pill
@@ -242,6 +249,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               </div>
               <div class='block'>
                 <label>Predicted Revenue:</label>
+                {{! TODO: compound fields have divs that wrap them. Seems a bit inconsistent.}}
                 <div class='highlight-value'>
                   {{#if @model.predictedRevenue.amount}}
                     <@fields.predictedRevenue
@@ -251,7 +259,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     <p class='description secondary-value'>Based on similar
                       events</p>
                   {{else}}
-                    N/A
+                    <div class='default-value'>
+                      N/A
+                    </div>
                   {{/if}}
                 </div>
               </div>
@@ -263,7 +273,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     <@fields.profitMargin @format='atom' />
                     <p class='description secondary-value'>Estimated</p>
                   {{else}}
-                    N/A
+                    <div class='default-value'>
+                      N/A
+                    </div>
                   {{/if}}
                 </div>
               </div>
@@ -318,11 +330,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   </BoxelButton>
                 {{/if}}
               </div>
-              <div class='description'>
+              <div class='description content-container'>
                 {{#if @model.notes}}
                   <@fields.notes />
                 {{else}}
-                  No Notes
+                  <div class='default-value'>
+                    No Notes
+                  </div>
                 {{/if}}
               </div>
             </footer>
@@ -346,7 +360,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   <@fields.headquartersAddress @format='atom' />
                   <@fields.website @format='atom' />
                 {{else}}
-                  Missing Company Info
+                  <div class='default-value'>
+                    Missing Company Info
+                  </div>
                 {{/if}}
               </div>
             </:content>
@@ -379,7 +395,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     />
                   {{/each}}
                 {{else}}
-                  No Stakeholders
+                  <div class='default-value'>
+                    No Stakeholders
+                  </div>
                 {{/if}}
 
               </div>
@@ -423,6 +441,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
         font: 300 var(--boxel-font-sm);
         color: var(--boxel-orange);
       }
+      .default-value {
+        color: var(--boxel-400);
+      }
       .block {
         display: flex;
         flex-direction: column;
@@ -449,7 +470,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
         flex-shrink: 0;
         margin-left: auto;
       }
-      .tag-container {
+      .tag-container,
+      .info-container {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -464,9 +486,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
         font: 600 var(--boxel-font-lg);
       }
       .description {
-        margin: 0;
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content-container {
+        margin: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
@@ -522,7 +546,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr;
         }
       }
-      .primary-contact {
+      .info-atom {
         width: fit-content;
         display: inline-block;
       }
@@ -678,6 +702,12 @@ export class Deal extends CardDef {
   @field primaryContact = linksTo(Contact, {
     computeVia: function (this: Deal) {
       return this.account?.primaryContact;
+    },
+  });
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field company = linksTo(Company, {
+    computeVia: function (this: Deal) {
+      return this.account?.company;
     },
   });
   static isolated = IsolatedTemplate;
