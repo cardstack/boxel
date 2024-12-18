@@ -4,7 +4,6 @@ import {
   Component,
   FieldDef,
   StringField,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import { LooseGooseyField, LooseyGooseyData } from './loosey-goosey';
 import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
@@ -59,12 +58,27 @@ export class PhoneNumberType extends LooseGooseyField {
   static edit = PhoneNumberTypeEdit;
 }
 
-export class PhoneNumber extends StringField {
+export class PhoneNumber extends FieldDef {
   static displayName = 'Phone Number';
+  @field number = contains(StringField);
+  @field countryCode = contains(StringField);
+
+  setNumber = (number: string) => {
+    this.number = number;
+  };
+
+  setCountryCode = (code: string) => {
+    this.countryCode = code;
+  };
 
   static edit = class Edit extends Component<typeof PhoneNumber> {
     <template>
-      <PhoneInput @value={{@model}} @onInput={{@set}} />
+      <PhoneInput
+        @countryCode={{@model.countryCode}}
+        @value={{@model.number}}
+        @onInput={{@model.setNumber}}
+        @onCountryCodeChange={{@model.setCountryCode}}
+      />
     </template>
   };
 
@@ -72,7 +86,11 @@ export class PhoneNumber extends StringField {
     <template>
       <div class='row'>
         <PhoneIcon class='icon gray' />
-        <span>{{@model}}</span>
+        {{#if @model.countryCode}}
+          <span>+{{@model.countryCode}}{{@model.number}}</span>
+        {{else}}
+          <span>{{@model.number}}</span>
+        {{/if}}
       </div>
       <style scoped>
         .row {
@@ -89,19 +107,31 @@ export class PhoneNumber extends StringField {
       </style>
     </template>
   };
+
+  static embedded = class Embedded extends Component<typeof PhoneNumber> {
+    <template>
+      {{#if @model.countryCode}}
+        <span>+{{@model.countryCode}}{{@model.number}}</span>
+      {{else}}
+        <span>{{@model.number}}</span>
+      {{/if}}
+    </template>
+  };
 }
 
 export class ContactPhoneNumber extends FieldDef {
-  @field value = contains(PhoneNumber);
+  @field phoneNumber = contains(PhoneNumber);
   @field type = contains(PhoneNumberType);
 
   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
     <template>
       <div class='row'>
-        <@fields.value @format='atom' />
-        <Pill class='gray'>
-          {{@model.type.label}}
-        </Pill>
+        <@fields.phoneNumber @format='atom' />
+        {{#if @model.type.label}}
+          <Pill class='gray'>
+            {{@model.type.label}}
+          </Pill>
+        {{/if}}
       </div>
       <style scoped>
         .row {
@@ -120,15 +150,17 @@ export class ContactPhoneNumber extends FieldDef {
       </style>
     </template>
   };
-}
 
-//TODO: Remove this after implementing the phone number
-export class CardWithContactPhoneNumber extends CardDef {
-  @field contactPhone = contains(ContactPhoneNumber);
-
-  static isolated = class Isolated extends Component<typeof this> {
+  static embedded = class Embedded extends Component<
+    typeof ContactPhoneNumber
+  > {
     <template>
-      <@fields.contactPhone @format='atom' />
+      {{#if @model.phoneNumber.countryCode}}
+        <span
+        >+{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}</span>
+      {{else}}
+        <span>{{@model.phoneNumber.number}}</span>
+      {{/if}}
     </template>
   };
 }

@@ -31,6 +31,16 @@
         "area": null,
         "number": null
       },
+      "phoneNumber": {
+        "phoneNumber": {
+          "number": "1158524727",
+          "countryCode": "60"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
       "percentage": 100.159393,
       "currency": {
         "code": "EUR"

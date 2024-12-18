@@ -2,6 +2,7 @@ import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
 import { PhoneField } from './phone';
+import { ContactPhoneNumber as PhoneNumberField } from './phone-number';
 import { UrlField } from './url';
 import { WebsiteField } from './website';
 import { Address as AddressField } from './address';
@@ -31,6 +32,7 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field email = contains(EmailField);
   @field emails = containsMany(EmailField);
   @field phone = contains(PhoneField);
+  @field phoneNumber = contains(PhoneNumberField);
   @field percentage = contains(PercentageField);
   @field currency = contains(CurrencyField);
   @field amountWithCurrency = contains(AmountWithCurrencyField);
