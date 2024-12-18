@@ -642,8 +642,8 @@ export class BlogPost extends CardDef {
           {{/if}}
           <ul class='info'>
             <li class='byline'>
-              {{#each @fields.authors as |author index|}}
-                <author @format='atom' class='author' />
+              {{#each @fields.authors as |AuthorComponent index|}}
+                <AuthorComponent @format='atom' class='author' />
                 <span>{{this.additionalTextForAuthorComponent index}}</span>
               {{/each}}
             </li>
