@@ -256,14 +256,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
                       class='highlight-value'
                       @format='atom'
                     />
-                    <p class='description secondary-value'>Based on similar
-                      events</p>
                   {{else}}
                     <div class='default-value'>
                       N/A
                     </div>
                   {{/if}}
                 </div>
+                <p class='description secondary-value'>Based on similar events</p>
               </div>
               <div class='block'>
                 <label>Profit Margin:</label>
@@ -271,13 +270,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 <div class='highlight-value'>
                   {{#if @model.profitMargin}}
                     <@fields.profitMargin @format='atom' />
-                    <p class='description secondary-value'>Estimated</p>
                   {{else}}
                     <div class='default-value'>
                       N/A
                     </div>
                   {{/if}}
                 </div>
+                <p class='description secondary-value'>Estimated</p>
               </div>
             </article>
 
