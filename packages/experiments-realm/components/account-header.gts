@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import ImageIcon from '@cardstack/boxel-icons/image';
 
 interface AccountHeaderArgs {
   Args: {
@@ -15,7 +16,11 @@ interface AccountHeaderArgs {
 class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
   <template>
     <header class='account-header' ...attributes>
-      <img src={{@logoURL}} alt={{@name}} class='account-header-logo' />
+      {{#if @logoURL}}
+        <img src={{@logoURL}} alt={{@name}} class='account-header-logo' />
+      {{else}}
+        <ImageIcon class='account-header-logo default-icon-container' />
+      {{/if}}
       <div class='account-header-info'>
         {{#if (has-block 'name')}}
           {{yield to='name'}}
@@ -39,6 +44,10 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
         height: 60px;
         object-fit: cover;
         border-radius: var(--boxel-border-radius-xl);
+      }
+      .default-icon-container {
+        background-color: var(--boxel-200);
+        color: var(--boxel-400);
       }
       .account-header-info {
         min-width: 0;

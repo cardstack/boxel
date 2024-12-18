@@ -49,14 +49,11 @@ interface DealSizeSummary {
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
+    //We default to account thumbnail
     return (
-      this.args.model.thumbnailURL ??
-      this.args.model.account?.thumbnailURL ??
-      this.args.model.account?.company?.thumbnailURL ??
-      'https://picsum.photos/id/237/200/300'
+      this.args.model.thumbnailURL ?? this.args.model.account?.thumbnailURL
     );
   }
-
   get primaryContactName() {
     console.log(this.args.fields.account?.primaryContact);
     return this.args.model.account?.primaryContact?.name;
