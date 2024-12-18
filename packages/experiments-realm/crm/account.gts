@@ -27,10 +27,6 @@ import { LooseGooseyField } from '../loosey-goosey';
 import { StatusPill } from '../components/status-pill';
 
 class IsolatedTemplate extends Component<typeof Account> {
-  get logoURL() {
-    return this.args.model?.thumbnailURL;
-  }
-
   get hasCompanyInfo() {
     return this.args.model?.website || this.args.model?.headquartersAddress;
   }
@@ -45,7 +41,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   <template>
     <AccountPageLayout>
       <:header>
-        <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
+        <AccountHeader @logoURL={{@thumbnailURL}} @name={{@model.name}}>
           <:name>
             {{#if @model.name}}
               <h1 class='account-name'>{{@model.name}}</h1>
