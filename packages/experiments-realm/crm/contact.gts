@@ -634,7 +634,7 @@ class AtomTemplate extends Component<typeof Contact> {
           class='avatar'
         />
       {{/if}}
-      <span class='name'>{{@model.name}}</span>
+      <span class='name'>{{this.label}}</span>
     </div>
     <style scoped>
       .contact {
