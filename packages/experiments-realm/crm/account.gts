@@ -41,7 +41,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   <template>
     <AccountPageLayout>
       <:header>
-        <AccountHeader @logoURL={{@thumbnailURL}} @name={{@model.name}}>
+        <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
           <:name>
             {{#if @model.name}}
               <h1 class='account-name'>{{@model.name}}</h1>
