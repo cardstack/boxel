@@ -15,9 +15,7 @@ interface AccountHeaderArgs {
 class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
   <template>
     <header class='account-header' ...attributes>
-      {{#if @logoURL}}
-        <img src={{@logoURL}} alt={{@name}} class='account-header-logo' />
-      {{/if}}
+      <img src={{@logoURL}} alt={{@name}} class='account-header-logo' />
       <div class='account-header-info'>
         {{#if (has-block 'name')}}
           {{yield to='name'}}

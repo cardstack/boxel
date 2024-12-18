@@ -28,9 +28,7 @@ import { StatusPill } from '../components/status-pill';
 
 class IsolatedTemplate extends Component<typeof Account> {
   get logoURL() {
-    return (
-      this.args.model?.thumbnailURL ?? 'https://picsum.photos/id/237/200/300'
-    );
+    return this.args.model?.thumbnailURL;
   }
 
   get hasCompanyInfo() {
@@ -52,7 +50,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             {{#if @model.name}}
               <h1 class='account-name'>{{@model.name}}</h1>
             {{else}}
-              <h1 class='account-name'>Missing Account Name</h1>
+              <h1 class='account-name default-value'>Missing Account Name</h1>
             {{/if}}
           </:name>
           <:content>
@@ -88,7 +86,9 @@ class IsolatedTemplate extends Component<typeof Account> {
                   <@fields.headquartersAddress @format='atom' />
                   <@fields.website @format='atom' />
                 {{else}}
-                  Missing Company Info
+                  <div class='default-value'>
+                    Missing Company Info
+                  </div>
                 {{/if}}
               </div>
             </:content>
@@ -123,7 +123,9 @@ class IsolatedTemplate extends Component<typeof Account> {
                     {{/if}}
                   {{/each}}
                 {{else}}
-                  Missing Contacts
+                  <div class='default-value'>
+                    Missing Contacts
+                  </div>
                 {{/if}}
               </div>
             </:content>
@@ -295,18 +297,18 @@ class UrgencyTag extends LooseGooseyField {
 
 export class Account extends CardDef {
   static displayName = 'CRM Account';
-  @field name = contains(StringField, {
-    computeVia: function (this: Account) {
-      return this.company?.name;
-    },
-  });
   @field company = linksTo(Company);
   @field primaryContact = linksTo(Contact);
   @field contacts = linksToMany(Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
   @field urgencyTag = contains(UrgencyTag);
-  //From linked Company
+
+  @field name = contains(StringField, {
+    computeVia: function (this: Account) {
+      return this.company?.name;
+    },
+  });
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
     computeVia: function (this: Account) {
@@ -325,7 +327,6 @@ export class Account extends CardDef {
       return this.primaryContact?.statusTag;
     },
   });
-
   @field title = contains(StringField, {
     computeVia: function (this: Account) {
       return this.company?.name;

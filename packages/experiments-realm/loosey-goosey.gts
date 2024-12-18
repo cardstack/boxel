@@ -56,7 +56,10 @@ export class LooseyGooseyEditTemplate extends Component<
   }
 
   get placeholder() {
-    return `Fill in ${this.args.model?.constructor?.displayName}`;
+    if (this.args.model?.constructor?.displayName) {
+      return `Fill in ${this.args.model?.constructor?.displayName}`;
+    }
+    return 'Fill in';
   }
 
   <template>
