@@ -318,11 +318,7 @@ export class Realm {
         return await this.internalHandle(request, true);
       },
       authorizationMiddleware(
-        new RealmAuthDataSource(
-          this.#matrixClient,
-          () => virtualNetwork.fetch,
-          this.url,
-        ),
+        new RealmAuthDataSource(this.#matrixClient, () => virtualNetwork.fetch),
       ),
     ]);
 

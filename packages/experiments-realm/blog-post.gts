@@ -8,6 +8,8 @@ import {
   contains,
   linksTo,
   Component,
+  getCardMeta,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { Author } from './author';
@@ -15,6 +17,8 @@ import { setBackgroundImage } from './components/layout';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
+import NumberField from '../base/number';
+import { User } from './user';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -536,7 +540,9 @@ export class BlogPost extends CardDef {
   @field headline = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: BlogPost) {
-      return this.headline?.length ? this.headline : 'Untitled Blog Post';
+      return this.headline?.length
+        ? this.headline
+        : `Untitled ${this.constructor.displayName}`;
     },
   });
   @field slug = contains(StringField);
@@ -556,6 +562,18 @@ export class BlogPost extends CardDef {
   });
   @field blog = linksTo(BlogAppCard, { isUsed: true });
   @field featuredImage = contains(FeaturedImageField);
+  @field lastUpdated = contains(DatetimeField, {
+    computeVia: function (this: BlogPost) {
+      let lastModified = getCardMeta(this, 'lastModified');
+      return lastModified ? new Date(lastModified * 1000) : undefined;
+    },
+  });
+  @field wordCount = contains(NumberField, {
+    computeVia: function (this: BlogPost) {
+      return this.body?.length;
+    },
+  });
+  @field editors = linksToMany(User);
 
   get formattedDatePublished() {
     if (this.status === 'Published' && this.publishDate) {
@@ -573,6 +591,20 @@ export class BlogPost extends CardDef {
       return this.publishDate.toISOString();
     }
     return undefined;
+  }
+
+  get formattedLastUpdated() {
+    return this.lastUpdated
+      ? formatDatetime(this.lastUpdated, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })
+      : undefined;
+  }
+
+  get lastUpdatedIsoTimestamp() {
+    return this.lastUpdated ? this.lastUpdated.toISOString() : undefined;
   }
 
   static embedded = EmbeddedTemplate;
@@ -607,7 +639,15 @@ export class BlogPost extends CardDef {
               <li class='pub-date'>
                 Published on
                 <time timestamp={{@model.datePublishedIsoTimestamp}}>
-                  {{this.formattedDatePublished}}
+                  {{@model.formattedDatePublished}}
+                </time>
+              </li>
+            {{/if}}
+            {{#if @model.lastUpdatedIsoTimestamp}}
+              <li class='last-updated-date'>
+                Last Updated on
+                <time timestamp={{@model.lastUpdatedIsoTimestamp}}>
+                  {{@model.formattedLastUpdated}}
                 </time>
               </li>
             {{/if}}
@@ -693,19 +733,5 @@ export class BlogPost extends CardDef {
         }
       </style>
     </template>
-
-    private get formattedDatePublished() {
-      if (
-        this.args.model.status === 'Published' &&
-        this.args.model.publishDate
-      ) {
-        return formatDatetime(this.args.model.publishDate, {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
-      }
-      return undefined;
-    }
   };
 }
