@@ -10,7 +10,6 @@ import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CardHeaderUsage from './components/card-header/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
-import PhoneInputUsage from './components/phone-input/usage.gts';
 import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
@@ -27,6 +26,7 @@ import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
 import MultiSelectUsage from './components/multi-select/usage.gts';
+import PhoneInputUsage from './components/phone-input/usage.gts';
 import PillUsage from './components/pill/usage.gts';
 import ProgressBarUsage from './components/progress-bar/usage.gts';
 import ProgressRadialUsage from './components/progress-radial/usage.gts';
@@ -49,7 +49,6 @@ export const ALL_USAGE_COMPONENTS = [
   ['CardContentContainer', CardContentContainerUsage],
   ['CardHeader', CardHeaderUsage],
   ['CircleSpinner', CircleSpinnerUsage],
-  ['PhoneInput', PhoneInputUsage],
   ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
@@ -66,6 +65,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Message', MessageUsage],
   ['Modal', ModalUsage],
   ['MultiSelect', MultiSelectUsage],
+  ['PhoneInput', PhoneInputUsage],
   ['Pill', PillUsage],
   ['ProgressBar', ProgressBarUsage],
   ['ProgressRadial', ProgressRadialUsage],
