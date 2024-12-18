@@ -8,6 +8,7 @@ import {
 import { LooseGooseyField, LooseyGooseyData } from './loosey-goosey';
 import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
+import { EntityDisplay } from './components/entity-display';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -58,7 +59,7 @@ export class PhoneNumberType extends LooseGooseyField {
   static edit = PhoneNumberTypeEdit;
 }
 
-export class PhoneNumber extends FieldDef {
+export class PhoneField extends FieldDef {
   static displayName = 'Phone Number';
   @field number = contains(StringField);
   @field countryCode = contains(StringField);
@@ -71,7 +72,7 @@ export class PhoneNumber extends FieldDef {
     this.countryCode = code;
   };
 
-  static edit = class Edit extends Component<typeof PhoneNumber> {
+  static edit = class Edit extends Component<typeof PhoneField> {
     <template>
       <PhoneInput
         @countryCode={{@model.countryCode}}
@@ -82,33 +83,29 @@ export class PhoneNumber extends FieldDef {
     </template>
   };
 
-  static atom = class Atom extends Component<typeof PhoneNumber> {
+  static atom = class Atom extends Component<typeof PhoneField> {
     <template>
-      <div class='row'>
-        <PhoneIcon class='icon gray' />
-        {{#if @model.countryCode}}
-          <span>+{{@model.countryCode}}{{@model.number}}</span>
-        {{else}}
-          <span>{{@model.number}}</span>
-        {{/if}}
-      </div>
+      <EntityDisplay @underline={{false}}>
+        <:title>
+          {{#if @model.countryCode}}
+            +{{@model.countryCode}}{{@model.number}}
+          {{else}}
+            {{@model.number}}
+          {{/if}}
+        </:title>
+        <:thumbnail>
+          <PhoneIcon class='icon' />
+        </:thumbnail>
+      </EntityDisplay>
       <style scoped>
-        .row {
-          display: flex;
-          align-items: center;
-          word-break: break-all;
-          gap: var(--boxel-sp-xxs);
-        }
         .icon {
-          width: var(--boxel-icon-xs);
-          height: var(--boxel-icon-xs);
-          flex-shrink: 0;
+          color: var(--boxel-400);
         }
       </style>
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof PhoneNumber> {
+  static embedded = class Embedded extends Component<typeof PhoneField> {
     <template>
       {{#if @model.countryCode}}
         <span>+{{@model.countryCode}}{{@model.number}}</span>
@@ -120,32 +117,38 @@ export class PhoneNumber extends FieldDef {
 }
 
 export class ContactPhoneNumber extends FieldDef {
-  @field phoneNumber = contains(PhoneNumber);
+  @field phoneNumber = contains(PhoneField);
   @field type = contains(PhoneNumberType);
 
   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
     <template>
-      <div class='row'>
-        <@fields.phoneNumber @format='atom' />
-        {{#if @model.type.label}}
-          <Pill class='gray'>
-            {{@model.type.label}}
-          </Pill>
-        {{/if}}
-      </div>
+      <EntityDisplay @underline={{false}}>
+        <:title>
+          {{#if @model.phoneNumber.countryCode}}
+            +{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}
+          {{else}}
+            {{@model.phoneNumber.number}}
+          {{/if}}
+        </:title>
+        <:thumbnail>
+          <PhoneIcon class='icon' />
+        </:thumbnail>
+        <:tag>
+          {{#if @model.type.label}}
+            <Pill class='pill-gray'>
+              {{@model.type.label}}
+            </Pill>
+          {{/if}}
+        </:tag>
+      </EntityDisplay>
       <style scoped>
-        .row {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-          word-break: break-all;
+        .icon {
+          color: var(--boxel-400);
         }
-        .gray {
-          font-weight: 300;
-          font-size: 10px;
-          word-break: keep-all;
-          --pill-background-color: var(--boxel-200);
-          border: none;
+        .pill-gray {
+          --default-pill-padding: 0 var(--boxel-sp-xxxs);
+          background-color: var(--boxel-200);
+          border-color: transparent;
         }
       </style>
     </template>
@@ -155,12 +158,7 @@ export class ContactPhoneNumber extends FieldDef {
     typeof ContactPhoneNumber
   > {
     <template>
-      {{#if @model.phoneNumber.countryCode}}
-        <span
-        >+{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}</span>
-      {{else}}
-        <span>{{@model.phoneNumber.number}}</span>
-      {{/if}}
+      <@fields.phoneNumber @format='embedded' />
     </template>
   };
 }
