@@ -27,14 +27,16 @@ class ColorScheme extends FieldDef {
   @field backgroundColor = contains(StringField);
 }
 
-class LooseyGooseyEditTemplate extends Component<typeof LooseGooseyField> {
+export class LooseyGooseyEditTemplate extends Component<
+  typeof LooseGooseyField
+> {
   @tracked label: string | undefined = this.args.model.label;
 
-  get statuses() {
+  get statuses(): any[] {
     if (!this.args.model) {
       return [];
     }
-    return (this.args.model.constructor as any).values as LooseyGooseyData[];
+    return (this.args.model.constructor as any).values;
   }
   get selectedStatus() {
     return this.statuses.find((status) => {

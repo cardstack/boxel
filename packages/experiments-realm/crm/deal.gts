@@ -293,7 +293,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     {{#each @fields.valueBreakdown as |item|}}
                       <tr>
                         <td class='item-name'>
-                          <item.name />
+                          {{item.name}}
                         </td>
                         <td class='item-value'>
                           <item.value @format='atom' />

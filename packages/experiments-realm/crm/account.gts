@@ -118,7 +118,7 @@ class IsolatedTemplate extends Component<typeof Account> {
                         @userID={{contact.id}}
                         @name={{contact.name}}
                         @thumbnailURL={{contact.thumbnailURL}}
-                        @tagLabel={{contact.role}}
+                        @tagLabel={{contact.position}}
                       />
                     {{/if}}
                   {{/each}}
