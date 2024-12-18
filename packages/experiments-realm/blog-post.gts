@@ -20,13 +20,23 @@ import BlogIcon from '@cardstack/boxel-icons/notebook';
 import NumberField from '../base/number';
 import { User } from './user';
 import { BlogCategory } from './blog-category';
+import TagsIcon from '@cardstack/boxel-icons/tags';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
+  get categoriesSummary() {
+    return this.args.model.categories?.map((c) => c.longName).join(', ');
+  }
   <template>
     <article class='embedded-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
+      {{#if @model.categories.length}}
+        <div class='categories'>
+          <TagsIcon />
+          {{this.categoriesSummary}}
+        </div>
+      {{/if}}
       {{#if @model.authorBio}}
         <@fields.authorBio
           class='byline'
@@ -48,6 +58,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         grid-template:
           'img title title' max-content
           'img desc desc' max-content
+          'img categories categories' max-content
           'img byline date' 1fr / 40% 1fr max-content;
         gap: var(--boxel-sp-xs);
         padding-right: var(--boxel-sp-xl);
@@ -101,6 +112,15 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         gap: 0 var(--boxel-sp-xxxs);
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+      }
+      .categories {
+        margin-top: var(--boxel-sp-lg);
+        display: flex;
+      }
+      .categories svg {
+        width: 18px;
+        height: 18px;
+        margin-right: var(--boxel-sp-xs);
       }
     </style>
   </template>
@@ -656,6 +676,13 @@ export class BlogPost extends CardDef {
           </ul>
         </header>
         <@fields.body />
+        {{#if @model.categories.length}}
+          <div class='categories'>
+            {{#each @model.categories as |category|}}
+              <div class='category'>{{category.longName}}</div>
+            {{/each}}
+          </div>
+        {{/if}}
         {{#if @model.authorBio}}
           <@fields.authorBio class='author-embedded-bio' @format='embedded' />
         {{/if}}
@@ -732,6 +759,16 @@ export class BlogPost extends CardDef {
         }
         .author-embedded-bio {
           margin-top: var(--boxel-sp-xl);
+        }
+        .categories {
+          margin-bottom: var(--boxel-sp-sm);
+        }
+        .category {
+          padding: var(--boxel-sp-xxs);
+          border-radius: var(--boxel-border-radius-sm);
+          background-color: #efefef;
+          display: inline-block;
+          font-family: var(--boxel-font-family);
         }
       </style>
     </template>

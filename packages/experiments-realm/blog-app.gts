@@ -248,6 +248,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
             @query={{this.query}}
             @realms={{this.realms}}
+            class={{this.gridClass}}
           >
             <:meta as |card|>
               {{#if this.showAdminData}}
@@ -278,6 +279,9 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
+      :deep(.card-view.categories-grid) {
+        --grid-card-height: 150px;
+      }
     </style>
   </template>
 
@@ -289,6 +293,17 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     super(owner, args);
     this.setFilters();
     this.activeFilter = this.filters[0];
+  }
+
+  private get gridClass() {
+    if (this.activeFilter.displayName === 'Blog Posts') {
+      return 'blog-posts-grid';
+    } else if (this.activeFilter.displayName === 'Author Bios') {
+      return 'author-bios-grid';
+    } else if (this.activeFilter.displayName === 'Categories') {
+      return 'categories-grid';
+    }
+    return '';
   }
 
   private setFilters() {

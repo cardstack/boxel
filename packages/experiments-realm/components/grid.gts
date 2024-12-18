@@ -29,7 +29,11 @@ interface CardsGridSignature {
 }
 export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   <template>
-    <ul class='cards {{@selectedView}}-view' data-test-cards-grid-cards>
+    <ul
+      class='cards {{@selectedView}}-view'
+      data-test-cards-grid-cards
+      ...attributes
+    >
       {{#let
         (component @context.prerenderedCardSearchComponent)
         as |PrerenderedCardSearch|

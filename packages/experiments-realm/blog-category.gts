@@ -140,6 +140,9 @@ export class BlogCategory extends CardDef {
             display: inline;
             margin-left: var(--boxel-sp-xxs);
           }
+          .category-description {
+            display: none;
+          }
         }
       </style>
       <div class='blog-category'>
