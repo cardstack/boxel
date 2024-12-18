@@ -89,6 +89,7 @@ export class BlogCategory extends CardDef {
       <style scoped>
         .blog-category {
           height: 100%;
+          padding: var(--boxel-sp-xs);
         }
         .category-name {
           padding: var(--boxel-sp-xxs);
@@ -132,14 +133,35 @@ export class BlogCategory extends CardDef {
             border-radius: var(--boxel-border-radius-xs);
           }
         }
+        @container fitted-card ((height > 30px) and (height <= 60px)) {
+          .blog-category {
+            padding: var(--boxel-sp-xxs);
+            display: flex;
+          }
+          .category-name {
+            padding: 0 var(--boxel-sp-xxs);
+            border-radius: var(--boxel-border-radius-xs);
+            display: flex;
+            align-items: center;
+            height: 32px;
+            margin: auto 0;
+            margin-right: var(--boxel-sp-xs);
+          }
+          .category-full-name {
+            margin: auto 0;
+          }
+          .category-label {
+            display: none;
+          }
+          .category-description {
+            display: none;
+          }
+        }
         @container fitted-card ((aspect-ratio > 4) and (height <= 60px)) {
           .category-label {
             display: none;
           }
-          .category-full-name {
-            display: inline;
-            margin-left: var(--boxel-sp-xxs);
-          }
+
           .category-description {
             display: none;
           }
