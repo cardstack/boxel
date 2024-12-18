@@ -103,7 +103,7 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field attachedCards = linksToMany(CardDef);
-
+  @field requireCommandCall = contains(BooleanField);
   // This is a bit of a "fake" field in that it would not serialize properly.
   // It works OK for the purposes of transient input to SendAiAssistantMessageCommand.
   // The typescript type here is intended to be { command: Command<any, any, any>; autoExecute: boolean }[]
