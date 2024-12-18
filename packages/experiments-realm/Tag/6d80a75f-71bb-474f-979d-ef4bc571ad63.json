@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "High Priority",
+      "color": "var(--boxel-yellow)",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tag",
+        "name": "Tag"
+      }
+    }
+  }
+}

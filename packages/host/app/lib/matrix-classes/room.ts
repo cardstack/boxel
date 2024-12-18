@@ -1,7 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 
-import isEqual from 'lodash/isEqual';
 import { type IEvent } from 'matrix-js-sdk';
+
+import { SKILLS_STATE_EVENT_TYPE } from '@cardstack/host/services/matrix-service';
 
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -21,11 +22,7 @@ export type SkillsConfig = {
 
 export default class Room {
   @tracked private _events: DiscreteMatrixEvent[] = [];
-  @tracked private _name: string | undefined;
-  @tracked private _skillsConfig: SkillsConfig = {
-    enabledEventIds: [],
-    disabledEventIds: [],
-  };
+  @tracked private _roomState: MatrixSDK.RoomState | undefined;
 
   readonly mutex = new Mutex();
 
@@ -34,23 +31,26 @@ export default class Room {
   }
 
   get name() {
-    return this._name;
+    return this._roomState?.events.get('m.room.name')?.get('')?.event.content
+      ?.name;
   }
 
-  updateName(name: string) {
-    if (this._name !== name) {
-      this._name = name;
-    }
+  notifyRoomStateUpdated(rs: MatrixSDK.RoomState) {
+    this._roomState = rs; // this is usually the same object, but some internal state has changed. This assignment kicks off reactivity.
+  }
+
+  get hasRoomState() {
+    return this._roomState !== undefined;
   }
 
   get skillsConfig() {
-    return this._skillsConfig;
-  }
-
-  updateSkillsConfig(config: SkillsConfig | undefined) {
-    if (config && !isEqual(this._skillsConfig, config)) {
-      this._skillsConfig = config;
-    }
+    return (
+      this._roomState?.events.get(SKILLS_STATE_EVENT_TYPE)?.get('')?.event
+        .content ?? {
+        enabledEventIds: [],
+        disabledEventIds: [],
+      }
+    );
   }
 
   addEvent(event: TempEvent, oldEventId?: string) {
