@@ -6,6 +6,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { CountryField } from './country';
+import MapPinIcon from '@cardstack/boxel-icons/map-pin';
+import { EntityDisplay } from './components/entity-display';
 
 function getAddressRows(
   addressLine1: string | undefined,
@@ -28,8 +30,29 @@ function getAddressRows(
     .map((r) => r.join(', '));
 }
 
+class Atom extends Component<typeof Address> {
+  get label() {
+    return (
+      [this.args.model?.city, this.args.model?.country?.code]
+        .filter(Boolean)
+        .join(', ') || ''
+    );
+  }
+  <template>
+    <EntityDisplay>
+      <:title>
+        {{this.label}}
+      </:title>
+      <:thumbnail>
+        <MapPinIcon />
+      </:thumbnail>
+    </EntityDisplay>
+  </template>
+}
+
 export class Address extends FieldDef {
   static displayName = 'Address';
+  static icon = MapPinIcon;
   @field addressLine1 = contains(StringField);
   @field addressLine2 = contains(StringField);
   @field city = contains(StringField);
@@ -75,4 +98,6 @@ export class Address extends FieldDef {
       </address>
     </template>
   };
+
+  static atom = Atom;
 }

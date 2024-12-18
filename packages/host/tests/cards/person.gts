@@ -1,5 +1,7 @@
 import { on } from '@ember/modifier';
 
+import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
 import {
@@ -30,14 +32,24 @@ export class Person extends CardDef {
   @field description = contains(StringCard, { computeVia: () => 'Person' });
 
   static isolated = class Isolated extends Component<typeof this> {
-    runSwitchToCodeModeCommandViaAiAssistant = () => {
+    runSwitchToCodeModeCommandViaAiAssistant = async () => {
       let commandContext = this.args.context?.commandContext;
       if (!commandContext) {
         console.error('No command context found');
         return;
       }
+      let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+        commandContext,
+      );
+      let { roomId } = await createAIAssistantRoomCommand.execute({
+        name: 'AI Assistant Room',
+      });
       let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
-      commandContext.sendAiAssistantMessage({
+      let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+        commandContext,
+      );
+      await sendAiAssistantMessageCommand.execute({
+        roomId,
         prompt: 'Switch to code mode',
         commands: [{ command: switchSubmodeCommand, autoExecute: true }],
       });

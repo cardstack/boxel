@@ -2,30 +2,41 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Liam O'Connor",
-      "primaryEmail": null,
-      "secondaryEmail": null,
+      "firstName": "Liam",
+      "lastName": "O'Connor",
+      "position": "Data Analystic",
+      "department": "app",
+      "primaryEmail": "liam@gmail.com",
+      "secondaryEmail": "liamOConnor@gmail.com",
       "phoneMobile": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "mobile",
+        "country": 1,
+        "area": 510,
+        "number": 2323423
       },
       "phoneOffice": {
-        "country": null,
-        "area": null,
-        "phoneNumber": null
+        "type": "office",
+        "country": 1,
+        "area": 510,
+        "number": 1231232
       },
-      "status": {
-        "index": null,
-        "label": null
-      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "https://www.google.com/"
+        },
+        {
+          "label": "X",
+          "value": "https://www.google.com/"
+        }
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://images.pexels.com/photos/3785079/pexels-photo-3785079.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2"
     },
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../Company/e1856419-27b0-4ce3-98fe-759d21c7144f"
         }
       }
     },

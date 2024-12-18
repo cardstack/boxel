@@ -1,7 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { htmlSafe } from '@ember/template';
-import type IconComponent from '@cardstack/boxel-icons/captions';
+import { type CardorFieldTypeIcon } from 'https://cardstack.com/base/card-api';
+import ImageIcon from '@cardstack/boxel-icons/image';
 import { FilterList } from '@cardstack/boxel-ui/components';
 import { element } from '@cardstack/boxel-ui/helpers';
 import type { Query, ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -9,7 +10,7 @@ import type { SortOption } from './sort';
 
 export interface LayoutFilter {
   displayName: string;
-  icon: typeof IconComponent;
+  icon: CardorFieldTypeIcon;
   cardTypeName: string;
   createNewButtonText?: string;
   isCreateNewDisabled?: boolean;
@@ -46,9 +47,10 @@ export const setBackgroundImage = (
 
 interface TitleGroupSignature {
   Args: {
-    title: string;
-    tagline: string;
-    thumbnailURL: string;
+    title?: string;
+    tagline?: string;
+    thumbnailURL?: string;
+    icon?: CardorFieldTypeIcon;
     element?: keyof HTMLElementTagNameMap;
   };
   Element: HTMLElement;
@@ -56,7 +58,22 @@ interface TitleGroupSignature {
 export const TitleGroup: TemplateOnlyComponent<TitleGroupSignature> = <template>
   {{#let (element @element) as |Tag|}}
     <Tag class='title-group' ...attributes>
-      <div class='thumbnail' style={{setBackgroundImage @thumbnailURL}} />
+      {{#if @thumbnailURL}}
+        <div
+          class='image-container thumbnail'
+          style={{setBackgroundImage @thumbnailURL}}
+          role='img'
+          alt={{@title}}
+        />
+      {{else if @icon}}
+        <div class='image-container'>
+          <@icon class='icon' width='24' height='24' />
+        </div>
+      {{else}}
+        <div class='image-container default-icon-container'>
+          <ImageIcon width='24' height='24' />
+        </div>
+      {{/if}}
       <h1 class='title'>{{@title}}</h1>
       <p class='tagline'>{{@tagline}}</p>
     </Tag>
@@ -67,16 +84,25 @@ export const TitleGroup: TemplateOnlyComponent<TitleGroupSignature> = <template>
       grid-template-columns: max-content 1fr;
       column-gap: var(--boxel-sp-xs);
     }
-    .thumbnail {
+    .image-container {
       grid-row: 1 / 3;
       width: var(--thumbnail-size, var(--boxel-icon-xl));
       height: var(--thumbnail-size, var(--boxel-icon-xl));
-      padding: var(--boxel-sp-6xs);
       border: 1px solid var(--boxel-450);
       border-radius: var(--boxel-border-radius-xl);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .thumbnail {
       background-position: center;
       background-repeat: no-repeat;
       background-size: cover;
+    }
+    .default-icon-container {
+      background-color: var(--boxel-200);
+      color: var(--boxel-400);
     }
     .title {
       align-self: end;

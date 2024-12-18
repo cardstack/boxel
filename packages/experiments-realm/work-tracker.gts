@@ -28,7 +28,7 @@ import {
 } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
-import { AppCard } from '/catalog/app-card';
+import { AppCard } from '/experiments/app-card';
 import { TaskStatusField, Project } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';

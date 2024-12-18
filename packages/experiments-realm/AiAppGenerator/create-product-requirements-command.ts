@@ -11,6 +11,9 @@ import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
 import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
+import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
@@ -40,10 +43,10 @@ export default class CreateProductRequirementsInstance extends Command<
         Update the appTitle.
         Update the prompt to be grammatically accurate.
         Description should be 1 or 2 short sentences.
-        In overview, provide 1 or 2 paragraph summary of the most important ways this app will meet the needs of the target audience. The capabilites of the platform allow creating types that can be linked to other types, and creating fields. 
-        
+        In overview, provide 1 or 2 paragraph summary of the most important ways this app will meet the needs of the target audience. The capabilites of the platform allow creating types that can be linked to other types, and creating fields.
+
         For the schema, consider the types required. Write out the schema as a mermaid class diagram.
-        
+
         NEVER offer to update the card, you MUST call patchCard in your response.`,
     });
   }
@@ -59,24 +62,36 @@ export default class CreateProductRequirementsInstance extends Command<
     let prdCard = new ProductRequirementDocument();
 
     let saveCardCommand = new SaveCardCommand(this.commandContext);
-    let SaveCardInputType = await saveCardCommand.getInputType();
-    await saveCardCommand.execute(
-      new SaveCardInputType({
-        realm: input.realm,
-        card: prdCard,
-      }),
-    );
+    await saveCardCommand.execute({
+      realm: input.realm,
+      card: prdCard,
+    });
     // Get patch command, this takes the card and returns a command that can be used to patch the card
     let patchPRDCommand = new PatchCardCommand(this.commandContext, {
       cardType: ProductRequirementDocument,
     });
 
-    let { roomId } = await this.commandContext.sendAiAssistantMessage({
-      show: false, // maybe? open the side panel
+    let createRoomCommand = new CreateAIAssistantRoomCommand(
+      this.commandContext,
+    );
+    let { roomId } = await createRoomCommand.execute({
+      name: 'Product Requirements Doc Creation',
+    });
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId,
+      skills: [this.skillCard],
+    });
+    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+      this.commandContext,
+    );
+    await sendAiAssistantMessageCommand.execute({
+      roomId,
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
-      skillCards: [this.skillCard],
-      commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking whic
+      commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking
     });
 
     // Wait for the PRD command to have been applied

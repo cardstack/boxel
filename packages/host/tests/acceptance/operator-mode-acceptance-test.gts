@@ -22,10 +22,9 @@ import {
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import {
-  tokenRefreshPeriodSec,
-  sessionLocalStorageKey,
-} from '@cardstack/host/services/realm';
+import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
+
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -808,14 +807,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
+      let originalToken = window.localStorage.getItem(SessionLocalStorageKey);
       await waitUntil(
         () =>
-          window.localStorage.getItem(sessionLocalStorageKey) !== originalToken,
+          window.localStorage.getItem(SessionLocalStorageKey) !== originalToken,
         { timeout: refreshInSec * 3 * 1000 },
       );
 
-      let newToken = window.localStorage.getItem(sessionLocalStorageKey);
+      let newToken = window.localStorage.getItem(SessionLocalStorageKey);
       assert.ok(newToken, 'new session token obtained');
       assert.notEqual(
         originalToken,
@@ -994,7 +993,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('1000 of 1000 left');
+        .hasText('1,000 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasNoClass('out-of-credit');
@@ -1023,7 +1022,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('1000 of 1000 left');
+        .hasText('1,000 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasNoClass('out-of-credit');
@@ -1082,7 +1081,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('0 of 1000 left');
+        .hasText('0 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasClass('out-of-credit');
@@ -1105,7 +1104,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('0 of 1000 left');
+        .hasText('0 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasClass('out-of-credit');
@@ -1128,7 +1127,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
-        .hasText('1000 of 1000 left');
+        .hasText('1,000 of 1,000 left');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasNoClass('out-of-credit');

@@ -119,7 +119,14 @@ export function constructHistory(
       try {
         rawEvent.content.data = JSON.parse(rawEvent.content.data);
       } catch (e) {
-        Sentry.captureException(e);
+        Sentry.captureException(e, {
+          attachments: [
+            {
+              data: rawEvent.content.data,
+              filename: 'rawEventContentData.txt',
+            },
+          ],
+        });
         log.error('Error parsing JSON', e);
         throw new HistoryConstructionError((e as Error).message);
       }

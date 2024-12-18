@@ -40,6 +40,8 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
+import { testOnlyResetLiveCardState } from '@cardstack/host/resources/card-resource';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
@@ -293,6 +295,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSSE>(function () {
     this.subscribers = [];
     let self = this;
+    testOnlyResetLiveCardState();
 
     class MockMessageService extends Service {
       register() {
@@ -821,6 +824,7 @@ export function setupRealmServerEndpoints(
                   url: 'https://extra-credits-payment-link-1250',
                   metadata: {
                     creditReloadAmount: 1250,
+                    price: 5,
                   },
                 },
               },
@@ -831,6 +835,7 @@ export function setupRealmServerEndpoints(
                   url: 'https://extra-credits-payment-link-15000',
                   metadata: {
                     creditReloadAmount: 15000,
+                    price: 30,
                   },
                 },
               },
@@ -841,6 +846,7 @@ export function setupRealmServerEndpoints(
                   url: 'https://extra-credits-payment-link-80000',
                   metadata: {
                     creditReloadAmount: 80000,
+                    price: 100,
                   },
                 },
               },

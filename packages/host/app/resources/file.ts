@@ -199,12 +199,21 @@ class _FileResource extends Resource<Args> {
 
     this.setSubscription(realmURL, (event: { type: string; data: string }) => {
       let eventData = JSON.parse(event.data);
-      if (event.type !== 'index' || !eventData.updatedFile) {
+      if (
+        event.type !== 'index' ||
+        // we wait specifically for the index complete event ("incremental") so
+        // that the subsequent index read retrieves the latest contents of the file
+        eventData.type !== 'incremental' ||
+        !Array.isArray(eventData.invalidations)
+      ) {
         return;
       }
 
-      let { updatedFile } = eventData as { updatedFile: string };
-      if (this.url === updatedFile) {
+      let { invalidations } = eventData as { invalidations: string[] };
+      let normalizedURL = this.url.endsWith('.json')
+        ? this.url.replace(/\.json$/, '')
+        : this.url;
+      if (invalidations.includes(normalizedURL)) {
         this.read.perform();
       }
     });

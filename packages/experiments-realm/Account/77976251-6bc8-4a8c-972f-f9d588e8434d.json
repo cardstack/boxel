@@ -2,14 +2,37 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": null,
+      "shippingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "company": {
         "links": {
-          "self": "../Company/05326db9-ea5c-4f20-b516-ac3f2282e973"
+          "self": null
         }
       },
       "primaryContact": {
@@ -17,14 +40,9 @@
           "self": null
         }
       },
-      "contacts.0": {
+      "contacts": {
         "links": {
           "self": null
-        }
-      },
-      "contacts.1": {
-        "links": {
-          "self": "../Customer/67e87a6c-00d0-4c48-9318-f0c96daa4cae"
         }
       }
     },

@@ -632,7 +632,7 @@ export default class ProfileEmail extends Component<Signature> {
 
     let emailAdded = false;
     try {
-      await this.matrixService.client.addThreePidOnly({
+      await this.matrixService.addThreePidOnly({
         auth,
         client_secret: this.emailState.clientSecret,
         sid: this.emailState.sid,
@@ -671,7 +671,7 @@ export default class ProfileEmail extends Component<Signature> {
       let oldEmails = this.matrixService.profile.threePids;
       await Promise.all(
         oldEmails.map((email) =>
-          this.matrixService.client.deleteThreePid('email', email),
+          this.matrixService.deleteThreePid('email', email),
         ),
       );
       this.emailState = { type: 'initial' };

@@ -1,3 +1,4 @@
+import { FeaturedImageField } from './fields/featured-image';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -7,6 +8,8 @@ import {
   contains,
   linksTo,
   Component,
+  getCardMeta,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { Author } from './author';
@@ -14,18 +17,22 @@ import { setBackgroundImage } from './components/layout';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
+import NumberField from '../base/number';
+import { User } from './user';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='embedded-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
-      <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
+      <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
-      <@fields.authorBio
-        class='byline'
-        @format='atom'
-        @displayContainer={{false}}
-      />
+      {{#if @model.authorBio}}
+        <@fields.authorBio
+          class='byline'
+          @format='atom'
+          @displayContainer={{false}}
+        />
+      {{/if}}
       {{#if @model.datePublishedIsoTimestamp}}
         <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
           {{@model.formattedDatePublished}}
@@ -33,9 +40,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       {{/if}}
     </article>
     <style scoped>
-      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
       .embedded-blog-post {
-        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         display: grid;
@@ -47,19 +52,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         padding-right: var(--boxel-sp-xl);
         overflow: hidden;
       }
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6 {
-        font-family: var(
-          --blog-post-heading-font-family,
-          'Playfair Display',
-          serif
-        );
-        font-weight: 700;
-      }
       .thumbnail {
         grid-area: img;
         background-color: var(--boxel-200);
@@ -70,10 +62,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
       .title {
         grid-area: title;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        overflow: hidden;
         margin: var(--boxel-sp-lg) 0 0;
         font-size: var(--boxel-font-size-lg);
         line-height: calc(30 / 22);
@@ -81,10 +69,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
       .description {
         grid-area: desc;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 4;
-        overflow: hidden;
         margin: 0;
         font-size: var(--boxel-font-size);
         line-height: calc(22 / 16);
@@ -114,9 +98,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         display: inline-flex;
         align-items: center;
         gap: 0 var(--boxel-sp-xxxs);
-        font-weight: 500;
-        font-size: var(--boxel-font-size-sm);
-        line-height: calc(18 / 13);
+        font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
@@ -128,7 +110,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
     <article class='fitted-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
       <div class='content'>
-        <h3 class='title'>{{if @model.title @model.title 'Untitled Post'}}</h3>
+        <h3 class='title'><@fields.title /></h3>
         <p class='description'>{{@model.description}}</p>
         <span class='byline'>{{@model.authorBio.title}}</span>
         {{#if @model.datePublishedIsoTimestamp}}
@@ -139,29 +121,13 @@ class FittedTemplate extends Component<typeof BlogPost> {
       </div>
     </article>
     <style scoped>
-      @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
       .fitted-blog-post {
-        --xs-line-height: calc(14 / 11);
-        font-family: var(--blog-post-font-family, 'Lora', serif);
         width: 100%;
         height: 100%;
         min-width: 100px;
         min-height: 29px;
         display: grid;
         overflow: hidden;
-      }
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6 {
-        font-family: var(
-          --blog-post-heading-font-family,
-          'Playfair Display',
-          serif
-        );
-        font-weight: 700;
       }
       .thumbnail {
         grid-area: img;
@@ -184,7 +150,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         overflow: hidden;
         margin: 0;
 
-        font-size: var(--boxel-font-size-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
         line-height: 1.3;
       }
@@ -195,9 +161,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         -webkit-line-clamp: 3;
         overflow: hidden;
         margin: 0;
-        font-size: var(--boxel-font-size-xs);
+        font: var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
-        line-height: var(--xs-line-height);
       }
       .byline {
         grid-area: byline;
@@ -214,10 +179,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
       .byline,
       .date {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
+        font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
-        line-height: var(--xs-line-height);
       }
 
       @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
@@ -291,7 +254,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
       @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
         .title {
           font-size: var(--boxel-font-size-xs);
-          line-height: var(--xs-line-height);
         }
       }
 
@@ -357,7 +319,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
       @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
         .title {
           font-size: var(--boxel-font-size);
-          line-height: calc(22 / 16);
         }
       }
 
@@ -463,7 +424,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .title {
           -webkit-line-clamp: 3;
           font-size: var(--boxel-font-size-xs);
-          line-height: var(--xs-line-height);
         }
         .description,
         .byline,
@@ -542,7 +502,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .title {
           -webkit-line-clamp: 2;
           font-size: var(--boxel-font-size-xs);
-          line-height: var(--xs-line-height);
         }
       }
 
@@ -563,8 +522,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         }
         .title {
           -webkit-line-clamp: 2;
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--xs-line-height);
+          font-size: 600 var(--boxel-font-size-xs);
         }
       }
     </style>
@@ -579,7 +537,14 @@ class Status extends StringField {
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   static icon = BlogIcon;
-  @field title = contains(StringField);
+  @field headline = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: BlogPost) {
+      return this.headline?.length
+        ? this.headline
+        : `Untitled ${this.constructor.displayName}`;
+    },
+  });
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
   @field authorBio = linksTo(Author);
@@ -595,7 +560,20 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
-  @field blog = linksTo(BlogAppCard);
+  @field blog = linksTo(BlogAppCard, { isUsed: true });
+  @field featuredImage = contains(FeaturedImageField);
+  @field lastUpdated = contains(DatetimeField, {
+    computeVia: function (this: BlogPost) {
+      let lastModified = getCardMeta(this, 'lastModified');
+      return lastModified ? new Date(lastModified * 1000) : undefined;
+    },
+  });
+  @field wordCount = contains(NumberField, {
+    computeVia: function (this: BlogPost) {
+      return this.body?.length;
+    },
+  });
+  @field editors = linksToMany(User);
 
   get formattedDatePublished() {
     if (this.status === 'Published' && this.publishDate) {
@@ -615,35 +593,40 @@ export class BlogPost extends CardDef {
     return undefined;
   }
 
+  get formattedLastUpdated() {
+    return this.lastUpdated
+      ? formatDatetime(this.lastUpdated, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })
+      : undefined;
+  }
+
+  get lastUpdatedIsoTimestamp() {
+    return this.lastUpdated ? this.lastUpdated.toISOString() : undefined;
+  }
+
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>
         <header>
-          <@fields.blog class='blog' @displayContainer={{false}} />
-          {{#if @model.thumbnailURL}}
-            <figure>
-              <img
-                class='featured-image'
-                src={{@model.thumbnailURL}}
-                alt='remote work'
-              />
-              <figcaption>
-                Success in remote work is achievable with the right approach.
-              </figcaption>
-            </figure>
+          {{#if @model.blog}}
+            <@fields.blog class='blog' @displayContainer={{false}} />
           {{/if}}
-          {{#if @model.title}}
-            <h1><@fields.title /></h1>
+          {{#if @model.featuredImage.imageUrl}}
+            <@fields.featuredImage class='featured-image' />
           {{/if}}
+          <h1><@fields.title /></h1>
           {{#if @model.description}}
             <p class='description'>
               <@fields.description />
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.authorBio.title}}
+            {{#if @model.authorBio}}
               <li class='byline'>
                 <@fields.authorBio
                   class='author'
@@ -656,13 +639,24 @@ export class BlogPost extends CardDef {
               <li class='pub-date'>
                 Published on
                 <time timestamp={{@model.datePublishedIsoTimestamp}}>
-                  {{this.formattedDatePublished}}
+                  {{@model.formattedDatePublished}}
+                </time>
+              </li>
+            {{/if}}
+            {{#if @model.lastUpdatedIsoTimestamp}}
+              <li class='last-updated-date'>
+                Last Updated on
+                <time timestamp={{@model.lastUpdatedIsoTimestamp}}>
+                  {{@model.formattedLastUpdated}}
                 </time>
               </li>
             {{/if}}
           </ul>
         </header>
         <@fields.body />
+        {{#if @model.authorBio}}
+          <@fields.authorBio class='author-embedded-bio' @format='embedded' />
+        {{/if}}
       </article>
       <style scoped>
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
@@ -698,20 +692,14 @@ export class BlogPost extends CardDef {
           letter-spacing: normal;
           margin-bottom: var(--boxel-sp-lg);
         }
-        figure {
-          margin: 0;
-        }
-        figcaption {
-          font-style: italic;
-        }
-        .featured-image {
+        .featured-image :deep(.image) {
           border-radius: var(--boxel-border-radius-xl);
           overflow: hidden;
         }
         .blog {
           background-color: inherit;
         }
-        .blog + figure {
+        .blog + .featured-image {
           margin-top: var(--boxel-sp-sm);
         }
         .description {
@@ -735,25 +723,15 @@ export class BlogPost extends CardDef {
           display: inline-flex;
           align-items: center;
           gap: 0 var(--boxel-sp-xxxs);
+          font-weight: 600;
         }
         .author {
-          display: contents;
+          display: contents; /* workaround for removing block-levelness of atom format */
+        }
+        .author-embedded-bio {
+          margin-top: var(--boxel-sp-xl);
         }
       </style>
     </template>
-
-    private get formattedDatePublished() {
-      if (
-        this.args.model.status === 'Published' &&
-        this.args.model.publishDate
-      ) {
-        return formatDatetime(this.args.model.publishDate, {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
-      }
-      return undefined;
-    }
   };
 }

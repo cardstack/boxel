@@ -17,14 +17,16 @@ import {
   Tooltip,
   BoxelDropdownAPI,
 } from '@cardstack/boxel-ui/components';
-import { cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
+import { compact, cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
 
 import {
-  ThreeDotsHorizontal,
+  Eye,
   IconCircle,
   IconCircleSelected,
+  IconLink,
   IconPencil,
   IconTrash,
+  ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
 import { type Actions } from '@cardstack/runtime-common';
@@ -145,31 +147,42 @@ export default class OperatorModeOverlays extends Component<Signature> {
                           </Tooltip>
                         </:trigger>
                         <:content as |dd|>
-                          {{#if (this.isMenuDisplayed 'view' renderedCard)}}
-                            <Menu
-                              @closeMenu={{dd.close}}
-                              @items={{array
-                                (menuItem
-                                  'View card'
-                                  (fn this.openOrSelectCard cardDefOrId)
+                          <Menu
+                            @closeMenu={{dd.close}}
+                            @items={{compact
+                              (array
+                                (if
+                                  (this.isMenuDisplayed 'view' renderedCard)
+                                  (menuItem
+                                    'View card'
+                                    (fn this.openOrSelectCard cardDefOrId)
+                                    icon=Eye
+                                  )
                                 )
-                              }}
-                            />
-                          {{else if
-                            (this.isMenuDisplayed 'delete' renderedCard)
-                          }}
-                            <Menu
-                              @closeMenu={{dd.close}}
-                              @items={{array
-                                (menuItem
-                                  'Delete'
-                                  (fn @publicAPI.delete cardDefOrId)
-                                  icon=IconTrash
-                                  dangerous=true
+                                (if
+                                  (this.isMenuDisplayed
+                                    'copy-card-url' renderedCard
+                                  )
+                                  (menuItem
+                                    'Copy Card URL'
+                                    (fn
+                                      @publicAPI.copyURLToClipboard cardDefOrId
+                                    )
+                                    icon=IconLink
+                                  )
                                 )
-                              }}
-                            />
-                          {{/if}}
+                                (if
+                                  (this.isMenuDisplayed 'delete' renderedCard)
+                                  (menuItem
+                                    'Delete'
+                                    (fn @publicAPI.delete cardDefOrId)
+                                    icon=IconTrash
+                                    dangerous=true
+                                  )
+                                )
+                              )
+                            }}
+                          />
                         </:content>
                       </BoxelDropdown>
                     </div>
@@ -431,6 +444,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       case 'more-options':
         return (
           this.isMenuDisplayed('view', renderedCard) ||
+          this.isMenuDisplayed('copy-card-url', renderedCard) ||
           this.isMenuDisplayed('delete', renderedCard)
         );
       default:
@@ -445,7 +459,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
   ) {
     switch (type) {
       case 'view':
-        return this.isField(renderedCard);
+      case 'copy-card-url':
+        return true;
       case 'delete':
         return (
           !this.isField(renderedCard) &&

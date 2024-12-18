@@ -6,9 +6,15 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
+import {
+  enqueueTask,
+  restartableTask,
+  timeout,
+  all,
+  task,
+} from 'ember-concurrency';
 
+import perform from 'ember-concurrency/helpers/perform';
 import max from 'lodash/max';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -24,12 +30,15 @@ import { not } from '@cardstack/boxel-ui/helpers';
 
 import { unixTime } from '@cardstack/runtime-common';
 
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -101,7 +110,7 @@ export default class Room extends Component<Signature> {
               <AiAssistantSkillMenu
                 class='skills'
                 @skills={{this.sortedSkills}}
-                @onChooseCard={{this.attachSkill}}
+                @onChooseCard={{perform this.attachSkillTask}}
                 @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
                 data-test-skill-menu
               />
@@ -169,6 +178,7 @@ export default class Room extends Component<Signature> {
   </template>
 
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
@@ -398,7 +408,7 @@ export default class Room extends Component<Signature> {
     // update value, but it had already been used previously in the same
     // computation" error
     schedule('afterRender', () => {
-      this.matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+      this.matrixService.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }
 
@@ -586,14 +596,15 @@ export default class Room extends Component<Signature> {
     return this.autoAttachmentResource.cards;
   }
 
-  // using enqueue task on this ensures that updates don't step on each other
-  private updateSkillIsActiveTask = enqueueTask(
+  updateSkillIsActiveTask = task(
     async (skillEventId: string, isActive: boolean) => {
-      await this.matrixService.updateSkillIsActive(
-        this.args.roomId,
+      await new UpdateSkillActivationCommand(
+        this.commandService.commandContext,
+      ).execute({
+        roomId: this.args.roomId,
         skillEventId,
         isActive,
-      );
+      });
     },
   );
 
@@ -623,9 +634,15 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  private attachSkill = (card: SkillCard) => {
-    this.matrixService.addSkillCardsToRoom(this.args.roomId, [card]);
-  };
+  private attachSkillTask = task(async (card: SkillCard) => {
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.args.roomId,
+      skills: [card],
+    });
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

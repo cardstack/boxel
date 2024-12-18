@@ -13,6 +13,7 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
+import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import { formatDistanceToNow } from 'date-fns';
 import {
   task,
@@ -35,7 +36,7 @@ import {
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash, IconLink, Warning } from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
@@ -47,8 +48,6 @@ import {
   cardTypeIcon,
   CommandContext,
 } from '@cardstack/runtime-common';
-
-import config from '@cardstack/host/config/environment';
 
 import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
@@ -272,16 +271,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
-  private copyToClipboard = restartableTask(async () => {
-    if (!this.card.id) {
-      return;
-    }
-    if (config.environment === 'test') {
-      return; // navigator.clipboard is not available in test environment
-    }
-    await navigator.clipboard.writeText(this.card.id);
-  });
-
   private clearSelections = () => {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
@@ -300,7 +289,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(),
+        action: () => this.args.publicAPI.copyURLToClipboard(this.card),
         icon: IconLink,
         disabled: !this.card.id,
       }),
@@ -611,10 +600,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{else if this.cardError}}
           <CardHeader
             @cardTypeDisplayName={{this.cardErrorTitle}}
-            @cardTypeIcon={{Warning}}
+            @cardTypeIcon={{ExclamationCircle}}
             @isTopCard={{this.isTopCard}}
             @onClose={{unless this.isBuried (perform this.closeItem)}}
-            class='stack-item-header'
+            class='stack-item-header stack-item-header-error'
             style={{cssVar
               boxel-card-header-icon-container-min-width=(if
                 this.isBuried '50px' '95px'
@@ -794,6 +783,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: var(--stack-item-header-height);
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
+      }
+      .stack-item-header-error {
+        color: var(--boxel-error-300);
       }
 
       .stack-item-content {

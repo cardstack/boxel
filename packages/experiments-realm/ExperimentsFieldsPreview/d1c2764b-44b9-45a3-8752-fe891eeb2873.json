@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "url": null,
+      "urls": [],
+      "address": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "website": null,
+      "email": null,
+      "emails": [],
+      "phone": {
+        "type": null,
+        "country": null,
+        "area": null,
+        "number": null
+      },
+      "percentage": null,
+      "currency": {
+        "code": null
+      },
+      "amountWithCurrency": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "contactLink": {
+        "label": null,
+        "value": null
+      },
+      "contactLinks": [],
+      "statusTag": {
+        "lightColor": null,
+        "darkColor": null,
+        "index": null,
+        "label": null
+      },
+      "featuredImage": {
+        "imageUrl": null,
+        "credit": null,
+        "caption": null,
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null
+      },
+      "images": [],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../experiments_fields_preview",
+        "name": "ExperimentsFieldsPreview"
+      }
+    }
+  }
+}

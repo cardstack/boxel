@@ -1,7 +1,8 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import { UrlField } from '../url';
+import { WebsiteField } from '../website';
 import { Address } from '../address';
+import { EntityDisplay } from '../components/entity-display';
 
 import {
   Component,
@@ -13,43 +14,16 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 
 class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
-    <div class='row'>
-      <BuildingIcon class='icon' />
-
-      {{#if @model.name}}
-        <span class='building-name'>{{@model.name}}</span>
-      {{else}}
-        <span class='no-building'>No Company Assigned</span>
-      {{/if}}
+    <div class='company-group'>
+      <EntityDisplay @underline={{true}}>
+        <:title>
+          {{@model.name}}
+        </:title>
+        <:thumbnail>
+          <BuildingIcon />
+        </:thumbnail>
+      </EntityDisplay>
     </div>
-
-    <style scoped>
-      .icon {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        flex-shrink: 0;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-      .row > span {
-        -webkit-line-clamp: 1;
-        text-wrap: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-      .building-name {
-        font-size: var(--boxel-font-xs);
-        font-weight: 300;
-        text-decoration: underline;
-      }
-      .no-building {
-        font-size: var(--boxel-font-xs);
-        font-weight: 300;
-      }
-    </style>
   </template>
 }
 
@@ -59,7 +33,7 @@ export class Company extends CardDef {
   @field industry = contains(StringField);
   @field headquartersAddress = contains(Address);
   @field phone = contains(NumberField);
-  @field website = contains(UrlField);
+  @field website = contains(WebsiteField);
   @field stockSymbol = contains(StringField);
 
   @field title = contains(StringField, {

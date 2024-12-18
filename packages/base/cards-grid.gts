@@ -286,8 +286,22 @@ class Isolated extends Component<typeof CardsGrid> {
         display: none;
       }
       .instance-error {
-        opacity: 0.33;
-        color: var(--boxel-error-100);
+        position: relative;
+      }
+      .instance-error::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 0, 0, 0.1);
+      }
+      .instance-error .boundaries {
+        box-shadow: 0 0 0 1px var(--boxel-error-300);
+      }
+      .instance-error:hover .boundaries {
+        box-shadow: 0 0 0 1px var(--boxel-dark);
       }
     </style>
   </template>

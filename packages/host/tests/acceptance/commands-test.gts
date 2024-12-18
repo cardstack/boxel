@@ -16,8 +16,10 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
+import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -135,20 +137,27 @@ module('Acceptance | Commands tests', function (hooks) {
           participants: input.participants,
         });
         let saveCardCommand = new SaveCardCommand(this.commandContext);
-        const SaveCardInput = await saveCardCommand.getInputType();
-        await saveCardCommand.execute(
-          new SaveCardInput({
-            card: meeting,
-            realm: testRealmURL,
-          }),
-        );
+        await saveCardCommand.execute({
+          card: meeting,
+          realm: testRealmURL,
+        });
 
         // Mutate and save again
         let patchCardCommand = new PatchCardCommand(this.commandContext, {
           cardType: Meeting,
         });
 
-        await this.commandContext.sendAiAssistantMessage({
+        let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+          this.commandContext,
+        );
+        let { roomId } = await createAIAssistantRoomCommand.execute({
+          name: 'AI Assistant Room',
+        });
+        let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+          this.commandContext,
+        );
+        await sendAiAssistantMessageCommand.execute({
+          roomId,
           prompt: `Change the topic of the meeting to "${input.topic}"`,
           attachedCards: [meeting],
           commands: [{ command: patchCardCommand, autoExecute: true }],
@@ -157,13 +166,9 @@ module('Acceptance | Commands tests', function (hooks) {
         await patchCardCommand.waitForNextCompletion();
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
-        const ShowCardInput = await showCardCommand.getInputType();
-        await showCardCommand.execute(
-          new ShowCardInput({
-            cardToShow: meeting,
-            placement: 'addToStack',
-          }),
-        );
+        await showCardCommand.execute({
+          cardToShow: meeting,
+        });
 
         return undefined;
       }
@@ -201,14 +206,26 @@ module('Acceptance | Commands tests', function (hooks) {
       });
 
       static isolated = class Isolated extends Component<typeof this> {
-        runSwitchToCodeModeCommandViaAiAssistant = (autoExecute: boolean) => {
+        runSwitchToCodeModeCommandViaAiAssistant = async (
+          autoExecute: boolean,
+        ) => {
           let commandContext = this.args.context?.commandContext;
           if (!commandContext) {
             console.error('No command context found');
             return;
           }
+          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+            commandContext,
+          );
+          let { roomId } = await createAIAssistantRoomCommand.execute({
+            name: 'AI Assistant Room',
+          });
           let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
-          commandContext.sendAiAssistantMessage({
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+            commandContext,
+          );
+          await sendAiAssistantMessageCommand.execute({
+            roomId,
             prompt: 'Switch to code mode',
             commands: [{ command: switchSubmodeCommand, autoExecute }],
           });
@@ -224,12 +241,10 @@ module('Acceptance | Commands tests', function (hooks) {
             undefined,
           );
           setOwner(scheduleMeeting, getOwner(this)!);
-          await scheduleMeeting.execute(
-            new ScheduleMeetingInput({
-              topic: 'Meeting with Hassan',
-              participants: [this.args.model],
-            }),
-          );
+          await scheduleMeeting.execute({
+            topic: 'Meeting with Hassan',
+            participants: [this.args.model as Person],
+          });
         };
         runDelayCommandViaAiAssistant = async () => {
           let commandContext = this.args.context?.commandContext;
@@ -238,7 +253,10 @@ module('Acceptance | Commands tests', function (hooks) {
             return;
           }
           let sleepCommand = new SleepCommand(commandContext);
-          commandContext.sendAiAssistantMessage({
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+            commandContext,
+          );
+          await sendAiAssistantMessageCommand.execute({
             prompt: 'Please delay',
             roomId: 'mock_room_1',
             commands: [{ command: sleepCommand, autoExecute: true }],
@@ -312,7 +330,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('a command sent via sendAiAssistantMessage with autoExecute flag is automatically executed by the bot, panel closed', async function (assert) {
+  test('a command sent via SendAiAssistantMessageCommand with autoExecute flag is automatically executed by the bot, panel closed', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -334,7 +352,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
@@ -420,7 +438,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .exists();
   });
 
-  test('a command sent via sendAiAssistantMessage with autoExecute flag is automatically executed by the bot, panel open', async function (assert) {
+  test('a command sent via SendAiAssistantMessageCommand with autoExecute flag is automatically executed by the bot, panel open', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -442,7 +460,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitUntil(() => getRoomIds().includes('mock_room_1'));
     let roomId = 'mock_room_1';
     let message = getRoomEvents(roomId).pop()!;
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     let toolName = boxelMessageData.context.tools[0].function.name;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Delaying 1 second',
@@ -490,7 +508,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .exists();
   });
 
-  test('a command sent via sendAiAssistantMessage without autoExecute flag is not automatically executed by the bot', async function (assert) {
+  test('a command sent via SendAiAssistantMessageCommand without autoExecute flag is not automatically executed by the bot', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -512,7 +530,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
@@ -635,15 +653,16 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, 'org.boxel.message');
-    let boxelMessageData = message.content.data;
+    let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
     let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
-    let cardFragment = getRoomEvents(roomId).find(
-      (event) => event.event_id === meetingCardEventId,
-    )!.content.data.cardFragment;
-
+    let cardFragment = JSON.parse(
+      getRoomEvents(roomId).find(
+        (event) => event.event_id === meetingCardEventId,
+      )!.content.data,
+    ).cardFragment;
     let parsedCard = JSON.parse(cardFragment);
     let meetingCardId = parsedCard.data.id;
 

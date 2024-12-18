@@ -52,6 +52,9 @@ import Profile from './icons/profile.gts';
 import Rows4 from './icons/rows-4.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
+import Star from './icons/star.gts';
+import StarFilled from './icons/star-filled.gts';
+import StarHalfFill from './icons/star-half-fill.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import ThreeDotsHorizontal from './icons/three-dots-horizontal.gts';
 import TriangleLeft from './icons/triangle-left.gts';
@@ -109,6 +112,9 @@ export const ALL_ICON_COMPONENTS = [
   Rows4,
   Send,
   Sparkle,
+  Star,
+  StarFilled,
+  StarHalfFill,
   SuccessBordered,
   ThreeDotsHorizontal,
   TriangleLeft,
@@ -167,6 +173,9 @@ export {
   Rows4,
   Send,
   Sparkle,
+  Star,
+  StarFilled,
+  StarHalfFill,
   SuccessBordered,
   ThreeDotsHorizontal,
   TriangleLeft,
