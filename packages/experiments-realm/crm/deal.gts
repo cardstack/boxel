@@ -288,20 +288,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 <header>
                   <label>Value Breakdown</label>
                 </header>
-                <table class='breakdown-table'>
-                  <tbody>
-                    {{#each @fields.valueBreakdown as |item|}}
-                      <tr>
-                        <td class='item-name'>
-                          {{item.name}}
-                        </td>
-                        <td class='item-value'>
-                          <item.value @format='atom' />
-                        </td>
-                      </tr>
-                    {{/each}}
-                  </tbody>
-                </table>
+                <div class='breakdown-table'>
+                  <@fields.valueBreakdown />
+                </div>
               </article>
 
               <hr />
@@ -509,15 +498,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-right: 1rem;
         margin-top: 0.5rem;
       }
-      .item-name,
-      .item-value {
-        padding: 8px;
-        text-align: left;
-      }
-      .item-value {
-        text-align: right;
-        font-weight: 600;
-      }
       /* footer */
       .next-steps {
         display: flex;
@@ -640,6 +620,36 @@ export class ValueLineItem extends FieldDef {
   static displayName = 'CRM Value Line Item';
   @field name = contains(StringField);
   @field value = contains(AmountWithCurrencyField);
+
+  static embedded = class Embedded extends Component<typeof ValueLineItem> {
+    <template>
+      <div class='line-item'>
+        <div class='description'>{{@model.name}}</div>
+        <div class='amount'>
+          <@fields.value class='amount' @format='atom' />
+        </div>
+      </div>
+
+      <style scoped>
+        .line-item {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-xs);
+        }
+
+        .description {
+          word-wrap: break-word;
+          min-width: 0;
+        }
+
+        .amount {
+          text-align: right;
+          font-weight: 600;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class Deal extends CardDef {
