@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
 
@@ -21,7 +22,6 @@ import {
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 
 let loader: Loader;
 
