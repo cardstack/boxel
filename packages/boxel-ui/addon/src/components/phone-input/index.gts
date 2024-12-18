@@ -71,7 +71,6 @@ class PhoneInput extends Component<Signature> {
   @action onSelectItem(item: CountryInfo): void {
     this.selectedItem = item;
     if (this.args.onCountryCodeChange) {
-      console.log('onSelectItem', item.callingCode);
       this.args.onCountryCodeChange(item.callingCode ?? '');
     }
     if (this.input.length > 0) {
@@ -82,7 +81,7 @@ class PhoneInput extends Component<Signature> {
     }
   }
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
     this.items = getSupportedRegionCodes()
       .map((code) => {
@@ -102,10 +101,6 @@ class PhoneInput extends Component<Signature> {
       return this.selectedItem.example?.nationalNumber;
     }
     return undefined;
-  }
-
-  get phoneNumber(): string {
-    return `+${this.selectedItem.callingCode} `;
   }
 
   @action onInput(v: string): void {
