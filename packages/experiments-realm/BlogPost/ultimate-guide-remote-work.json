@@ -33,6 +33,16 @@
         "links": {
           "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
         }
+      },
+      "editors.1": {
+        "links": {
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
+        }
+      },
+      "editors.2": {
+        "links": {
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
+        }
       }
     },
     "meta": {

@@ -14,6 +14,21 @@ export class Review extends BlogPost {
   @field rating = contains(RatingsSummary);
   @field userRating = contains(RatingsSummary);
 
+  get formattedAuthors() {
+    const authors = this.authors ?? [];
+    if (authors.length === 0) return 'N/A';
+
+    const titles = authors.map((author) => author.title);
+
+    if (titles.length === 2) {
+      return `${titles[0]} and ${titles[1]}`;
+    }
+
+    return titles.length > 2
+      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
+      : titles[0];
+  }
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <article class='embedded-review'>
@@ -32,8 +47,8 @@ export class Review extends BlogPost {
           <h3 class='title'><@fields.title /></h3>
           <p class='description'>{{@model.description}}</p>
           <div class='info'>
-            {{#if @model.authorBio}}
-              <div class='byline'>{{@model.authorBio.title}}</div>
+            {{#if @model.formattedAuthors}}
+              <div class='byline'>{{@model.formattedAuthors}}</div>
             {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
               <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
@@ -134,13 +149,9 @@ export class Review extends BlogPost {
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.authorBio}}
+            {{#if @model.formattedAuthors}}
               <li class='byline'>
-                <@fields.authorBio
-                  class='author'
-                  @format='atom'
-                  @displayContainer={{false}}
-                />
+                {{@model.formattedAuthors}}
               </li>
             {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
@@ -159,8 +170,8 @@ export class Review extends BlogPost {
             <@fields.userRating class='user-rating' />
           </div>
           <hr />
-          {{#if @model.authorBio}}
-            <@fields.authorBio @format='embedded' />
+          {{#if @model.authors}}
+            <@fields.authors @format='embedded' />
           {{/if}}
         </div>
       </article>

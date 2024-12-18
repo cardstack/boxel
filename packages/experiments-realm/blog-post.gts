@@ -26,8 +26,8 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
-      {{#if @model.authorBio}}
-        <@fields.authorBio
+      {{#if @model.authors}}
+        <@fields.authors
           class='byline'
           @format='atom'
           @displayContainer={{false}}
@@ -112,7 +112,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
       <div class='content'>
         <h3 class='title'><@fields.title /></h3>
         <p class='description'>{{@model.description}}</p>
-        <span class='byline'>{{@model.authorBio.title}}</span>
+        <span class='byline'>{{this.formattedAuthors}}</span>
         {{#if @model.datePublishedIsoTimestamp}}
           <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
             {{@model.formattedDatePublished}}
@@ -527,6 +527,21 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
     </style>
   </template>
+
+  get formattedAuthors() {
+    const authors = this.args.model.authors ?? [];
+    if (authors.length === 0) return 'N/A';
+
+    const titles = authors.map((author) => author.title);
+
+    if (titles.length === 2) {
+      return `${titles[0]} and ${titles[1]}`;
+    }
+
+    return titles.length > 2
+      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
+      : titles[0];
+  }
 }
 
 class Status extends StringField {
@@ -547,7 +562,7 @@ export class BlogPost extends CardDef {
   });
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
-  @field authorBio = linksTo(Author);
+  @field authors = linksToMany(Author);
   @field publishDate = contains(DatetimeField);
   @field status = contains(Status, {
     computeVia: function (this: BlogPost) {
@@ -626,15 +641,12 @@ export class BlogPost extends CardDef {
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.authorBio}}
-              <li class='byline'>
-                <@fields.authorBio
-                  class='author'
-                  @format='atom'
-                  @displayContainer={{false}}
-                />
-              </li>
-            {{/if}}
+            <li class='byline'>
+              {{#each @fields.authors as |author index|}}
+                <author @format='atom' class='author' />
+                <span>{{this.additionalTextForAuthorComponent index}}</span>
+              {{/each}}
+            </li>
             {{#if @model.datePublishedIsoTimestamp}}
               <li class='pub-date'>
                 Published on
@@ -654,8 +666,8 @@ export class BlogPost extends CardDef {
           </ul>
         </header>
         <@fields.body />
-        {{#if @model.authorBio}}
-          <@fields.authorBio class='author-embedded-bio' @format='embedded' />
+        {{#if @model.authors}}
+          <@fields.authors class='author-embedded-bio' @format='embedded' />
         {{/if}}
       </article>
       <style scoped>
@@ -722,16 +734,39 @@ export class BlogPost extends CardDef {
         .byline {
           display: inline-flex;
           align-items: center;
-          gap: 0 var(--boxel-sp-xxxs);
-          font-weight: 600;
+          gap: var(--boxel-sp-xs) var(--boxel-sp-xxxs);
+          flex-wrap: wrap;
+          font: 600 var(--boxel-font-sm);
         }
         .author {
-          display: contents; /* workaround for removing block-levelness of atom format */
+          display: contents !important; /* workaround for removing block-levelness of atom format */
         }
         .author-embedded-bio {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
           margin-top: var(--boxel-sp-xl);
         }
       </style>
     </template>
+
+    additionalTextForAuthorComponent = (authorIndex: number) => {
+      let isLast = this.args.fields.authors?.length - 1 === authorIndex;
+      let isLastTwo = this.args.fields.authors?.length - 2 === authorIndex;
+      let text = '';
+      if (this.args.fields.authors.length > 2 && !isLast) {
+        text = text + ',';
+      }
+
+      if (this.args.fields.authors.length > 2) {
+        text = text + ' ';
+      }
+
+      if (isLastTwo) {
+        text = text + 'and';
+      }
+
+      return text;
+    };
   };
 }
