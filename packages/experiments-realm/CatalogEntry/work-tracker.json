@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Work Tracker",
+      "description": "Catalog entry for Work Tracker App card",
+      "isField": false,
+      "ref": {
+        "module": "../work-tracker",
+        "name": "WorkTracker"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

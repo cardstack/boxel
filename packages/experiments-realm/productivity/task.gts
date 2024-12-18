@@ -508,8 +508,8 @@ export class Task extends TaskBase {
   static displayName = 'Task';
   static icon = CheckboxIcon;
   @field priority = contains(BaseTaskPriority);
-  @field project = linksTo(Project);
-  @field team = linksTo(Team);
+  @field project = linksTo(() => Project);
+  @field team = linksTo(() => Team);
   @field children = linksToMany(() => Task);
   @field status = contains(TaskStatusField);
 

@@ -2970,7 +2970,6 @@ export function getFields(
           return [];
         }
       }
-
       return [[maybeFieldName, maybeField]];
     });
     fields = { ...fields, ...Object.fromEntries(currentFields) };
