@@ -19,6 +19,7 @@ import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
 import NumberField from '../base/number';
 import { User } from './user';
+import { BlogCategory } from './blog-category';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -562,6 +563,7 @@ export class BlogPost extends CardDef {
   });
   @field blog = linksTo(BlogAppCard, { isUsed: true });
   @field featuredImage = contains(FeaturedImageField);
+  @field categories = linksToMany(BlogCategory);
   @field lastUpdated = contains(DatetimeField, {
     computeVia: function (this: BlogPost) {
       let lastModified = getCardMeta(this, 'lastModified');
