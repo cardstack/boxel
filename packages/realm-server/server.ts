@@ -36,6 +36,7 @@ import {
   getMatrixUsername,
 } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
+import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 const DEFAULT_PERMISSIONS = Object.freeze([
   'read',
@@ -432,7 +433,7 @@ export class RealmServer {
 
     await this.matrixClient.sendEvent(roomId, 'm.room.message', {
       body: JSON.stringify({ eventType }),
-      msgtype: 'org.boxel.realm-server-event',
+      msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
     });
   };
 
