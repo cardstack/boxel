@@ -56,7 +56,7 @@ export default class ActivityCard extends GlimmerComponent<ActivityCardArgs> {
     <style scoped>
       .activity-card {
         background: var(--activity-card-bg, var(--boxel-light));
-        border: 1px solid var(--activity-card-border, var(--boxel-border));
+        border: 1px solid var(--activity-card-border, var(--boxel-300));
         border-radius: var(
           --activity-card-border-radius,
           var(--boxel-border-radius-xl)
@@ -131,6 +131,9 @@ export default class ActivityCard extends GlimmerComponent<ActivityCardArgs> {
           flex-direction: column;
           align-items: flex-start;
           gap: var(--boxel-sp-xxxs);
+        }
+        .activity-card-content {
+          padding: var(--activity-card-content-padding, 0);
         }
       }
     </style>

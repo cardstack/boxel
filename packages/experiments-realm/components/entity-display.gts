@@ -29,16 +29,18 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
     >
       <div class='entity-thumbnail'>{{yield to='thumbnail'}}</div>
 
-      <div class='entity-name-tag'>
-        <span class='entity-name {{if this.shouldUnderlineText "underline"}}'>
-          {{yield to='title'}}
-        </span>
+      <div class='entity-info'>
+        <div class='entity-name-tag'>
+          <span class='entity-name {{if this.shouldUnderlineText "underline"}}'>
+            {{yield to='title'}}
+          </span>
 
-        {{yield to='tag'}}
-      </div>
+          {{yield to='tag'}}
+        </div>
 
-      <div class='entity-content'>
-        {{yield to='content'}}
+        <div class='entity-content'>
+          {{yield to='content'}}
+        </div>
       </div>
     </div>
     <style scoped>
@@ -60,6 +62,11 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
         justify-content: center;
         flex-shrink: 0;
         color: var(--entity-display-thumbnail-color, var(--boxel-600));
+      }
+      .entity-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--entity-display-info-gap, var(--boxel-sp-xxxs));
       }
       .entity-name-tag {
         display: flex;
