@@ -739,7 +739,7 @@ export class BlogPost extends CardDef {
           font: 600 var(--boxel-font-sm);
         }
         .author {
-          display: contents !important; /* workaround for removing block-levelness of atom format */
+          display: contents; /* workaround for removing block-levelness of atom format */
         }
         .author-embedded-bio {
           display: flex;
