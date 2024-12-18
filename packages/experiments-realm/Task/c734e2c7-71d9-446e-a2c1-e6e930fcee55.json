@@ -2,32 +2,28 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Add functionality where + opens create card modal with correct status",
-      "taskDetail": null,
-      "status": {
-        "index": null,
-        "label": "In Progress"
-      },
       "priority": {
         "index": 0,
         "label": "Low"
       },
+      "status": {
+        "completed": false,
+        "index": null,
+        "label": "In Progress"
+      },
+      "taskName": "Add functionality where + opens create card modal with correct status",
       "dateRange": {
         "start": null,
         "end": null
       },
+      "taskDetail": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
-        }
-      },
       "project": {
         "links": {
-          "self": null
+          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
         }
       },
       "team": {
@@ -38,6 +34,11 @@
       "children": {
         "links": {
           "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
         }
       },
       "tags": {

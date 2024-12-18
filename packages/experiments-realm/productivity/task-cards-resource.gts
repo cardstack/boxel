@@ -100,8 +100,6 @@ class TaskCollection extends Resource<Args> {
       (this.query === undefined || this.queryHasChanged(named.query))
     ) {
       this.run.perform(named.query, named.realm);
-    } else {
-      this.commit([]); //default columns
     }
   }
 }

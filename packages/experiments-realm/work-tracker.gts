@@ -115,7 +115,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       this.realmHrefs,
     );
 
-    // await this.assigneeQuery.loaded;
+    await this.assigneeQuery.loaded;
   });
 
   get assigneeCards() {
@@ -273,7 +273,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
             },
             project: {
               links: {
-                self: null,
+                self: this.currentProject.id ?? null,
               },
             },
           },

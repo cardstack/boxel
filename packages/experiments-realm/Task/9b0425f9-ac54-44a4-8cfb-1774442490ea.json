@@ -3,15 +3,15 @@
     "type": "card",
     "attributes": {
       "priority": {
-        "index": null,
-        "label": null
+        "index": 3,
+        "label": "High"
       },
       "status": {
         "completed": false,
-        "index": 3,
-        "label": "In Progress"
+        "index": 0,
+        "label": "Not Started"
       },
-      "taskName": "Resolve bug where overlay only appears on certain cards",
+      "taskName": "Cleanup all the dbs",
       "dateRange": {
         "start": null,
         "end": null
@@ -23,12 +23,12 @@
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
         }
       },
       "team": {
         "links": {
-          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+          "self": null
         }
       },
       "children": {
