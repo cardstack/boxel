@@ -202,22 +202,13 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
   };
 
   get editors() {
-    const editors = this.resource.card?.editors ?? [];
-    if (editors.length === 0) return 'N/A';
-
-    const formattedEditors = editors.map((editor) =>
-      editor.email ? `${editor.name} (${editor.email})` : editor.name,
-    );
-
-    if (formattedEditors.length === 2) {
-      return `${formattedEditors[0]} and ${formattedEditors[1]}`;
-    }
-
-    return formattedEditors.length > 2
-      ? `${formattedEditors.slice(0, -1).join(', ')}, and ${formattedEditors.at(
-          -1,
-        )}`
-      : formattedEditors[0];
+    return this.resource.card && this.resource.card.editors.length > 0
+      ? this.resource.card.editors
+          .map((editor) =>
+            editor.email ? `${editor.name} (${editor.email})` : editor.name,
+          )
+          .join(',')
+      : 'N/A';
   }
 }
 
