@@ -222,12 +222,18 @@ class IsolatedTemplate extends Component<typeof Account> {
           </:icon>
           <:content>
             <ActivityCard>
-              <:thumbnail>
-                <PhoneIcon />
-              </:thumbnail>
-              <:title>
-                Customer Call
-              </:title>
+              <:header>
+                <EntityDisplay>
+                  <:title>
+                    <span class='activity-card-title'>
+                      Customer Call
+                    </span>
+                  </:title>
+                  <:thumbnail>
+                    <PhoneIcon />
+                  </:thumbnail>
+                </EntityDisplay>
+              </:header>
               <:icon>
                 <Pill class='activity-pill'>
                   Left VoiceMail
@@ -252,6 +258,7 @@ class IsolatedTemplate extends Component<typeof Account> {
                   <EntityDisplay>
                     <:thumbnail>
                       <Avatar
+                        class='avatar'
                         @thumbnailURL='https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2'
                       />
                     </:thumbnail>
@@ -291,6 +298,10 @@ class IsolatedTemplate extends Component<typeof Account> {
       .account-name {
         font: 600 var(--boxel-font-lg);
         margin: 0;
+      }
+      .avatar {
+        flex-shrink: 0;
+        --profile-avatar-icon-size: 25px;
       }
       /* Summary */
       .summary-title {
@@ -345,6 +356,14 @@ class IsolatedTemplate extends Component<typeof Account> {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp);
+      }
+      .activity-card-title {
+        font-size: var(
+          --activity-card-title-font-size,
+          var(--boxel-font-size-sm)
+        );
+        font-weight: var(--activity-card-title-font-weight, 600);
+        margin: 0;
       }
       .activity-time {
         font-size: var(--boxel-font-xs);

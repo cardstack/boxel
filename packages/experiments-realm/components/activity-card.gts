@@ -1,8 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
-import { EntityDisplay } from './entity-display';
 
 interface ActivityCardArgs {
   Blocks: {
+    header: [];
     title: [];
     thumbnail: [];
     description?: [];
@@ -17,18 +17,9 @@ export default class ActivityCard extends GlimmerComponent<ActivityCardArgs> {
     <article class='activity-card' ...attributes>
       <header class='activity-card-header'>
         <div class='activity-card-title-desc-group'>
-          <EntityDisplay>
-            <:title>
-              <span class='activity-card-title'>
-                {{yield to='title'}}
-              </span>
-            </:title>
-            <:thumbnail>
-              <span class='activity-card-thumbnail'>
-                {{yield to='thumbnail'}}
-              </span>
-            </:thumbnail>
-          </EntityDisplay>
+          {{#if (has-block 'header')}}
+            {{yield to='header'}}
+          {{/if}}
 
           {{#if (has-block 'description')}}
             <p class='activity-card-description'>
@@ -81,24 +72,6 @@ export default class ActivityCard extends GlimmerComponent<ActivityCardArgs> {
         display: flex;
         align-items: center;
         gap: var(--activity-card-title-desc-group-gap, var(--boxel-sp-sm));
-      }
-      /* extend from entity-display */
-      .activity-card-thumbnail {
-        flex-shrink: 0;
-        width: var(--entity-display-thumbnail-size, var(--boxel-icon-sm));
-        height: var(--entity-display-thumbnail-size, var(--boxel-icon-sm));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--entity-display-thumbnail-color, var(--boxel-600));
-      }
-      .activity-card-title {
-        font-size: var(
-          --activity-card-title-font-size,
-          var(--boxel-font-size-sm)
-        );
-        font-weight: var(--activity-card-title-font-weight, 600);
-        margin: 0;
       }
       .activity-card-description {
         margin: 0;
