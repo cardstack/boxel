@@ -6,3 +6,4 @@ export const APP_BOXEL_COMMAND_RESULT_MSGTYPE = 'app.boxel.commandResult';
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
+export const LEGACY_APP_BOXEL_REALMS_EVENT_TYPE = 'com.cardstack.boxel.realms';
