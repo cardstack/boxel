@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { BlogApp as BlogAppCard } from './blog-app';
+import { htmlSafe } from '@ember/template';
 
 let BlogCategoryTemplate = class Embedded extends Component<typeof this> {
   <template>
@@ -36,7 +37,11 @@ let BlogCategoryTemplate = class Embedded extends Component<typeof this> {
       }
     </style>
     <div class='blog-category'>
-      <div class='category-name' style='background-color: {{@model.color}}'>
+      {{! template-lint-disable no-inline-styles }}
+      <div
+        class='category-name'
+        style='background-color: {{htmlSafe @model.color}}'
+      >
         <@fields.shortName />
       </div>
       <div class='category-label'>
@@ -78,7 +83,11 @@ export class BlogCategory extends CardDef {
         }
       </style>
       <div class='category-atom'>
-        <div class='circle' style='background-color: {{@model.color}}' />
+        {{! template-lint-disable no-inline-styles }}
+        <div
+          class='circle'
+          style='background-color: {{htmlSafe @model.color}}'
+        />
         <@fields.longName />
       </div>
     </template>
@@ -177,7 +186,11 @@ export class BlogCategory extends CardDef {
         }
       </style>
       <div class='blog-category'>
-        <div class='category-name' style='background-color: {{@model.color}}'>
+        {{! template-lint-disable no-inline-styles }}
+        <div
+          class='category-name'
+          style='background-color: {{htmlSafe @model.color}}'
+        >
           <@fields.shortName />
         </div>
         <div class='category-label'>
