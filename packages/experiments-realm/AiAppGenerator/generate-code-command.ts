@@ -9,6 +9,7 @@ import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import StringField from 'https://cardstack.com/base/string';
 import { ProductRequirementDocument } from '../product-requirement-document';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 
 export class GenerateCodeInput extends CardDef {
   @field productRequirements = linksTo(() => ProductRequirementDocument);
@@ -262,9 +263,11 @@ import { on } from '@ember/modifier';
       roomId: input.roomId,
       skills: [this.skillCard],
     });
-    await this.commandContext.sendAiAssistantMessage({
+    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+      this.commandContext,
+    );
+    await sendAiAssistantMessageCommand.execute({
       roomId: input.roomId,
-      show: false, // maybe? open the side panel
       prompt:
         'Generate code for the application given the product requirements, you do not need to strictly follow the schema if it does not seem appropriate for the application.',
       attachedCards: [input.productRequirements],

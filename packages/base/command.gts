@@ -4,6 +4,7 @@ import {
   FieldDef,
   StringField,
   contains,
+  containsMany,
   field,
   linksTo,
   linksToMany,
@@ -94,5 +95,21 @@ export class AddSkillsToRoomInput extends CardDef {
 export class UpdateSkillActivationInput extends CardDef {
   @field roomId = contains(StringField);
   @field skillEventId = contains(StringField);
-  @field value = contains(BooleanField);
+  @field isActive = contains(BooleanField);
+}
+
+export class SendAiAssistantMessageInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field prompt = contains(StringField);
+  @field clientGeneratedId = contains(StringField);
+  @field attachedCards = linksToMany(CardDef);
+
+  // This is a bit of a "fake" field in that it would not serialize properly.
+  // It works OK for the purposes of transient input to SendAiAssistantMessageCommand.
+  // The typescript type here is intended to be { command: Command<any, any, any>; autoExecute: boolean }[]
+  @field commands = containsMany(JsonField);
+}
+
+export class SendAiAssistantMessageResult extends CardDef {
+  @field eventId = contains(StringField);
 }

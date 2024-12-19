@@ -27,7 +27,6 @@ import {
   loaderFor,
   LooseCardResource,
   ResolvedCodeRef,
-  Command,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -44,10 +43,7 @@ import {
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import Room, {
-  SkillsConfig,
-  TempEvent,
-} from '@cardstack/host/lib/matrix-classes/room';
+import Room, { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -451,7 +447,7 @@ export default class MatrixService extends Service {
     return this.client.createRealmSession(realmURL);
   }
 
-  private async sendEvent(
+  async sendEvent(
     roomId: string,
     eventType: string,
     content:
@@ -460,7 +456,7 @@ export default class MatrixService extends Service {
       | ReactionEventContent
       | CommandResultContent,
   ) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
       if ('data' in content) {
         const encodedContent = {
@@ -534,8 +530,8 @@ export default class MatrixService extends Service {
   async addCardsToRoom(
     cards: CardDef[],
     roomId: string,
-    cardHashes: Map<string, string>,
-    opts?: CardAPI.SerializeOpts,
+    cardHashes: Map<string, string> = this.cardHashes,
+    opts: CardAPI.SerializeOpts = { maybeRelativeURL: null },
   ): Promise<string[]> {
     if (!cards.length) {
       return [];
@@ -603,8 +599,6 @@ export default class MatrixService extends Service {
     let attachedCardsEventIds = await this.addCardsToRoom(
       attachedCards,
       roomId,
-      this.cardHashes,
-      { maybeRelativeURL: null },
     );
 
     await this.sendEvent(roomId, 'm.room.message', {
@@ -622,64 +616,6 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
-  }
-
-  public async sendAiAssistantMessage(params: {
-    roomId: string;
-    show?: boolean; // if truthy, ensure the side panel is open to the room
-    prompt: string;
-    attachedCards?: CardDef[];
-    commands?: { command: Command<any, any, any>; autoExecute: boolean }[];
-  }): Promise<{ roomId: string }> {
-    let roomId = params.roomId;
-    let html = markdownToHtml(params.prompt);
-    let mappings = await basicMappings(this.loaderService.loader);
-    let tools = [];
-    for (let { command, autoExecute } of params.commands ?? []) {
-      // get a registered name for the command
-      let name = this.commandService.registerCommand(command, autoExecute);
-      tools.push({
-        type: 'function',
-        function: {
-          name,
-          description: command.description,
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
-            },
-            required: ['attributes', 'description'],
-          },
-        },
-      });
-    }
-
-    let attachedCardsEventIds = await this.addCardsToRoom(
-      params.attachedCards ?? [],
-      roomId,
-      this.cardHashes,
-      { maybeRelativeURL: null },
-    );
-
-    let clientGeneratedId = uuidv4();
-
-    await this.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.message',
-      body: params.prompt || '',
-      format: 'org.matrix.custom.html',
-      formatted_body: html,
-      clientGeneratedId,
-      data: {
-        attachedCardsEventIds,
-        context: {
-          tools,
-        },
-      },
-    } as CardMessageContent);
-    return { roomId };
   }
 
   private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
@@ -890,7 +826,7 @@ export default class MatrixService extends Service {
   }
 
   async setPowerLevel(roomId: string, userId: string, powerLevel: number) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.setPowerLevel(roomId, userId, powerLevel);
     });
@@ -927,7 +863,7 @@ export default class MatrixService extends Service {
     content: Record<string, any>,
     stateKey: string = '',
   ) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.sendStateEvent(roomId, eventType, content, stateKey);
     });
@@ -941,7 +877,7 @@ export default class MatrixService extends Service {
       content: Record<string, any>,
     ) => Promise<Record<string, any>>,
   ) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       let currentContent = await this.getStateEventSafe(
         roomId,
@@ -959,21 +895,21 @@ export default class MatrixService extends Service {
   }
 
   async leave(roomId: string) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.leave(roomId);
     });
   }
 
   async forget(roomId: string) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.forget(roomId);
     });
   }
 
   async setRoomName(roomId: string, name: string) {
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.setRoomName(roomId, name);
     });
@@ -1013,7 +949,14 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private addRoomEvent(event: TempEvent, oldEventId?: string) {
+  async getRoomState(roomId: string) {
+    return this.client
+      .getRoom(roomId)
+      ?.getLiveTimeline()
+      .getState('f' as MatrixSDK.Direction);
+  }
+
+  private async addRoomEvent(event: TempEvent, oldEventId?: string) {
     let { room_id: roomId } = event;
 
     if (!roomId) {
@@ -1021,14 +964,18 @@ export default class MatrixService extends Service {
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let roomData = this.ensureRoomData(roomId);
+    let roomData = await this.ensureRoomData(roomId);
     roomData.addEvent(event, oldEventId);
   }
 
-  private ensureRoomData(roomId: string) {
+  private async ensureRoomData(roomId: string) {
     let roomData = this.getRoomData(roomId);
     if (!roomData) {
       roomData = new Room();
+      let rs = await this.getRoomState(roomId);
+      if (rs) {
+        roomData.notifyRoomStateUpdated(rs);
+      }
       this.setRoomData(roomId, roomData);
     }
     return roomData;
@@ -1147,16 +1094,8 @@ export default class MatrixService extends Service {
     }
     roomStates = Array.from(roomStateMap.values());
     for (let rs of roomStates) {
-      let roomData = this.ensureRoomData(rs.roomId);
-      let name = rs.events.get('m.room.name')?.get('')?.event.content?.name;
-      if (name) {
-        roomData.updateName(name);
-      }
-      let skillsConfig = rs.events.get(SKILLS_STATE_EVENT_TYPE)?.get('')?.event
-        .content;
-      if (skillsConfig) {
-        roomData.updateSkillsConfig(skillsConfig as SkillsConfig);
-      }
+      let roomData = await this.ensureRoomData(rs.roomId);
+      roomData.notifyRoomStateUpdated(rs);
     }
     roomStateUpdatesDrained!();
   };

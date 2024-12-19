@@ -447,7 +447,11 @@ export default class Room extends Component<Signature> {
 
   private get sortedSkills(): Skill[] {
     return [...this.skills].sort((a, b) => {
-      return a.card.title.localeCompare(b.card.title);
+      // Not all of the skills have a title, so we use the skillEventId as a fallback
+      // which should be consistent.
+      let aTitle = a.card.title || a.skillEventId;
+      let bTitle = b.card.title || b.skillEventId;
+      return aTitle.localeCompare(bTitle);
     });
   }
 
@@ -603,7 +607,7 @@ export default class Room extends Component<Signature> {
       ).execute({
         roomId: this.args.roomId,
         skillEventId,
-        value: isActive,
+        isActive,
       });
     },
   );

@@ -98,7 +98,8 @@ export class BaseTaskStatusField extends LooseGooseyField {
     </template>
   };
 
-  static edit = BaseTaskStatusEdit;
+  //TODO: Not static. Need to improve ability to extend field templates
+  edit = BaseTaskStatusEdit;
 }
 
 export class FittedTask extends Component<typeof TaskBase> {
@@ -488,7 +489,8 @@ export class BaseTaskPriority extends LooseGooseyField {
     },
   ];
 
-  static edit = EditPriority;
+  //TODO: Not static. Need to improve ability to extend field templates
+  edit = EditPriority;
   static embedded = class Embedded extends Component<typeof BaseTaskPriority> {
     <template>
       {{@model.label}}

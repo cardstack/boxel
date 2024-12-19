@@ -22,32 +22,28 @@ import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
-import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
-import NewSession from '@cardstack/host/components/ai-assistant/new-session';
-import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
-import RenameSession from '@cardstack/host/components/ai-assistant/rename-session';
-import Room from '@cardstack/host/components/matrix/room';
-import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
-
 import ENV from '@cardstack/host/config/environment';
-import { Message } from '@cardstack/host/lib/matrix-classes/message';
-import {
-  isMatrixError,
-  eventDebounceMs,
-} from '@cardstack/host/lib/matrix-utils';
 
-import CommandService from '@cardstack/host/services/command-service';
-import type MatrixService from '@cardstack/host/services/matrix-service';
-import type MonacoService from '@cardstack/host/services/monaco-service';
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-
+import AddSkillsToRoomCommand from '../../commands/add-skills-to-room';
+import CreateAIAssistantRoomCommand from '../../commands/create-ai-assistant-room';
+import { Message } from '../../lib/matrix-classes/message';
+import { isMatrixError, eventDebounceMs } from '../../lib/matrix-utils';
+import CommandService from '../../services/command-service';
+import { type MonacoSDK } from '../../services/monaco-service';
 import {
   CurrentRoomIdPersistenceKey,
   NewSessionIdPersistenceKey,
-} from '@cardstack/host/utils/local-storage-keys';
+} from '../../utils/local-storage-keys';
+import NewSession from '../ai-assistant/new-session';
+import AiAssistantPastSessionsList from '../ai-assistant/past-sessions';
+import RenameSession from '../ai-assistant/rename-session';
+import Room from '../matrix/room';
+import DeleteModal from '../operator-mode/delete-modal';
 
 import assistantIcon from './ai-assist-icon.webp';
+
+import type MatrixService from '../../services/matrix-service';
+import type MonacoService from '../../services/monaco-service';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
@@ -380,23 +376,45 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.loadMonaco.perform();
   }
 
-  private enterRoomInitially() {
+  private async enterRoomInitially() {
     let persistedRoomId = window.localStorage.getItem(
       CurrentRoomIdPersistenceKey,
     );
-    if (
-      persistedRoomId &&
-      this.aiSessionRooms.find((r) => r.roomId === persistedRoomId)
-    ) {
-      this.currentRoomId = persistedRoomId;
-    } else {
-      let latestRoom = this.latestRoom;
-      if (latestRoom) {
-        this.currentRoomId = latestRoom.roomId;
-      } else {
-        this.createNewSession();
+    if (persistedRoomId) {
+      let roomToEnter = this.aiSessionRooms.find(
+        (r) => r.roomId === persistedRoomId,
+      );
+      if (!roomToEnter) {
+        // If you open the AI Assistant right away, the room might not be loaded yet.
+        // In that case, let's wait for it for up to 2 seconds.
+        await Promise.race([
+          timeout(2000),
+          new Promise<void>((resolve) => {
+            let interval = setInterval(() => {
+              roomToEnter = this.aiSessionRooms.find(
+                (r) => r.roomId === persistedRoomId,
+              );
+              if (roomToEnter) {
+                clearInterval(interval);
+                resolve();
+              }
+            }, 250);
+          }),
+        ]);
+      }
+      if (roomToEnter) {
+        this.currentRoomId = roomToEnter.roomId;
+        return;
       }
     }
+
+    let latestRoom = this.latestRoom;
+    if (latestRoom) {
+      this.currentRoomId = latestRoom.roomId;
+      return;
+    }
+
+    this.createNewSession();
   }
 
   @cached
@@ -413,7 +431,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushAll;
     await Promise.all([...this.roomResources.values()].map((r) => r.loading));
-    this.enterRoomInitially();
+    await this.enterRoomInitially();
   });
 
   @action
