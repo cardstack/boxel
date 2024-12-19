@@ -168,6 +168,10 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     );
   }
 
+  get activeTabClass() {
+    return this.activeTab?.tabId ? this.activeTab.tabId.toLowerCase() : '';
+  }
+
   get activeTabRef() {
     if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
       return;
@@ -281,7 +285,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     </TabbedHeader>
 
     <Layout
-      class='crm-app'
+      class='crm-app {{this.activeTabClass}}'
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
@@ -442,11 +446,17 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         margin-left: auto;
       }
       /* Cards grid crm */
+      /* catch all tab */
       .crm-app :where(.card-view-container) {
         grid-template-columns: 1fr;
       }
-      .crm-app :where(.grid-view) {
-        --grid-card-min-width: 300px;
+      /* contact tab */
+      .crm-app.contact {
+        --grid-view-min-width: 300px;
+      }
+      /* deal tab */
+      .crm-app.deal {
+        --strip-view-min-width: 1fr;
       }
     </style>
   </template>
