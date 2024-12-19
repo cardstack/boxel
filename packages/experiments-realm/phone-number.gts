@@ -17,6 +17,14 @@ import PhoneIcon from '@cardstack/boxel-icons/phone';
 class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
   @tracked label: string | undefined = this.args.model.label;
 
+  statuses = PhoneNumberType.values;
+  selectedStatus = this.selected;
+  placeholder = 'Select phone number type';
+
+  @action onSelectStatus(type: LooseyGooseyData): void {
+    this.onSelect(type);
+  }
+
   get types() {
     return PhoneNumberType.values;
   }
@@ -32,6 +40,7 @@ class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
     this.args.model.label = this.selected?.label;
     this.args.model.index = this.selected?.index;
   }
+
   <template>
     <RadioInput
       @groupDescription='Office, Work, Home '
