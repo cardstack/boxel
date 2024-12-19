@@ -9,16 +9,24 @@
       "primaryEmail": "david@gmail.com",
       "secondaryEmail": "david23232@gmail.com",
       "phoneMobile": {
-        "type": "office",
-        "country": 1,
-        "area": 415,
-        "number": 123456
+        "phoneNumber": {
+          "number": "1158524828",
+          "countryCode": "60"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
       },
       "phoneOffice": {
-        "type": null,
-        "country": null,
-        "area": null,
-        "number": null
+        "phoneNumber": {
+          "number": null,
+          "countryCode": null
+        },
+        "type": {
+          "index": null,
+          "label": null
+        }
       },
       "socialLinks": [
         {

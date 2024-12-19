@@ -770,9 +770,15 @@ importers:
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
+      awesome-phonenumber:
+        specifier: ^7.2.0
+        version: 7.2.0
       classnames:
         specifier: ^2.3.2
         version: 2.3.2
+      countries-list:
+        specifier: ^3.1.1
+        version: 3.1.1
       dayjs:
         specifier: ^1.11.7
         version: 1.11.7
@@ -4533,7 +4539,7 @@ packages:
       ember-source: ^4.0.0 || ^5.0.0
     dependencies:
       '@ember/test-waiters': 3.0.2
-      '@embroider/macros': 1.16.5(@glint/template@1.3.0)
+      '@embroider/macros': 1.16.9(@glint/template@1.3.0)
       '@simple-dom/interface': 1.4.0
       broccoli-debug: 0.6.5
       broccoli-funnel: 3.0.8
@@ -4764,7 +4770,6 @@ packages:
       semver: 7.6.2
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /@embroider/shared-internals@0.50.2:
     resolution: {integrity: sha512-l3SKn1YdxTFBjY3ylYTLHxFY0dG2XxIsjbtZt7Mm6QyZFssWBDg3oWYwBoUpkw/ysjNJf8IcI7reXhB23WXwDw==}
@@ -4828,7 +4833,6 @@ packages:
       typescript-memoize: 1.1.1
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /@embroider/test-setup@0.47.2:
     resolution: {integrity: sha512-zTiNaicOeBJWQ+uAJOEg4Z4plmvF2Ckze+tMZ0sycp2o09UV72WC8s9L3pssWOGgHMV6Kl+eCfFQelWwUOqz1Q==}
@@ -8452,6 +8456,7 @@ packages:
 
   /acorn-import-assertions@1.9.0(acorn@8.10.0):
     resolution: {integrity: sha512-cmMwop9x+8KFhxvKrKfPYmN6/pKTYYHBqLa0DfvVZcKMJWNyWLnaqND7dx/qn66R7ewM1UX5XMaDVP5wlVTaVA==}
+    deprecated: package has been renamed to acorn-import-attributes
     peerDependencies:
       acorn: ^8
     dependencies:
@@ -9039,6 +9044,11 @@ packages:
   /available-typed-arrays@1.0.5:
     resolution: {integrity: sha512-DMD0KiN46eipeziST1LPP/STfDU0sufISXmjSgvVsoU2tqxctQeASejWcfNtxYKqETM1UxQ8sp2OrSBWpHY6sw==}
     engines: {node: '>= 0.4'}
+
+  /awesome-phonenumber@7.2.0:
+    resolution: {integrity: sha512-CqH0TyDMHiMhqGRg/kaJDiV5KRok5AdrJKvUsED9/QRQdiCjUzp32+NqEEnY+OWEDTeeqlyLsLs7SLR/sPQU2A==}
+    engines: {node: '>=18'}
+    dev: false
 
   /aws-sdk@2.1477.0:
     resolution: {integrity: sha512-DLsrKosrKRe5P1E+BcJAVpOXkma4oUOrcyBUridDmUhdf9k3jj5dnL1roFuDpTmNDDhK8a1tUgY3wmXoKQtv7A==}
@@ -9887,7 +9897,6 @@ packages:
     engines: {node: '>=4'}
     dependencies:
       is-windows: 1.0.2
-    dev: false
 
   /big-integer@1.6.51:
     resolution: {integrity: sha512-GPEid2Y9QU1Exl1rpO9B2IPJGHPSupF5GnVIP0blYvNOMer2bTvSWs1jGOUg04hTmu67nmLsQ9TBo1puaotBHg==}
@@ -11945,6 +11954,10 @@ packages:
       path-type: 4.0.0
       typescript: 5.1.6
     dev: true
+
+  /countries-list@3.1.1:
+    resolution: {integrity: sha512-nPklKJ5qtmY5MdBKw1NiBAoyx5Sa7p2yPpljZyQ7gyCN1m+eMFs9I6CT37Mxt8zvR5L3VzD3DJBE4WQzX3WF4A==}
+    dev: false
 
   /crc32-stream@2.0.0:
     resolution: {integrity: sha512-UjZSqFCbn+jZUHJIh6Y3vMF7EJLcJWNm4tKDf2peJRwlZKHvkkvOMTvAei6zjU9gO1xONVr3rRFw0gixm2eUng==}
@@ -18585,7 +18598,6 @@ packages:
     engines: {node: '>=4'}
     dependencies:
       better-path-resolve: 1.0.0
-    dev: false
 
   /is-symbol@1.0.4:
     resolution: {integrity: sha512-C/CPBqKWnvdcxqIARxyOh4v1UUEOCHpgDa0WYgpKDFMszcrPcffg5uhwSgPCLD2WWxmq6isisz87tzT01tuGhg==}
@@ -21457,7 +21469,6 @@ packages:
 
   /pkg-entry-points@1.1.1:
     resolution: {integrity: sha512-BhZa7iaPmB4b3vKIACoppyUoYn8/sFs17VJJtzrzPZvEnN2nqrgg911tdL65lA2m1ml6UI3iPeYbZQ4VXpn1mA==}
-    dev: false
 
   /pkg-up@2.0.0:
     resolution: {integrity: sha512-fjAPuiws93rm7mPUu21RdBnkeZNrbfCFCwfAhPWY+rR3zG0ubpe5cEReHOw5fIbfmsxEV/g2kSxGTATY3Bpnwg==}
