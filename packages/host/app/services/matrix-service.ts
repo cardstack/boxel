@@ -411,6 +411,29 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
+        // TODO: remove this once we've migrated all users
+        // TEMPORARY MIGRATION CODE
+        if (!accountDataContent?.realms) {
+          console.log(
+            'You currently have no realms set, checking your old realms',
+          );
+          accountDataContent = await this._client.getAccountDataFromServer<{
+            realms: string[];
+          }>('com.cardstack.boxel.realms');
+          if (accountDataContent?.realms) {
+            console.log('Migrating your old realms to the new format');
+            await this._client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+              realms: accountDataContent.realms,
+            });
+            console.log('Removing your old realms data');
+            await this._client.setAccountData('com.cardstack.boxel.realms', {
+              realms: [],
+            });
+          } else {
+            console.log('No old realms found');
+          }
+        }
+        // END OF TEMPORARY MIGRATION CODE
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );
