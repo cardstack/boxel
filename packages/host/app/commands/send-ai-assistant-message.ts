@@ -47,6 +47,10 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     let html = markdownToHtml(input.prompt);
     let mappings = await basicMappings(loaderService.loader);
     let tools = [];
+    let requireToolCall = input.requireCommandCall ?? false;
+    if (requireToolCall && input.commands?.length > 1) {
+      throw new Error('Cannot require tool call and have multiple commands');
+    }
     for (let { command, autoExecute } of input.commands ?? []) {
       let cardAPI = await this.loadCardAPI();
       // get a registered name for the command
@@ -87,6 +91,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
         attachedCardsEventIds,
         context: {
           tools,
+          requireToolCall,
         },
       },
     } as CardMessageContent);
