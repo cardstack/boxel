@@ -150,6 +150,13 @@ export interface ReactionEventContent {
   };
 }
 
+export type CommandReactionEventContent = ReactionEventContent & {
+  msgtype: 'org.boxel.command_result';
+  data: {
+    card_event_id: string | null;
+  };
+};
+
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
@@ -227,39 +234,12 @@ export interface SkillsConfigEvent extends RoomStateEvent {
   };
 }
 
-export interface CommandResultEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandResultContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
-export interface CommandResultContent {
-  'm.relates_to'?: {
-    rel_type: 'm.annotation';
-    key: string;
-    event_id: string;
-    'm.in_reply_to'?: {
-      event_id: string;
-    };
-  };
-  formatted_body: string;
-  body: string;
-  msgtype: 'org.boxel.commandResult';
-  result: any;
-}
-
 export type MatrixEvent =
   | RoomCreateEvent
   | RoomJoinRules
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
-  | CommandResultEvent
   | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent

@@ -14,7 +14,7 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CommandEvent,
-  CommandResultEvent,
+  CommandReactionEventContent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
   ReactionEvent,
@@ -30,11 +30,7 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event:
-      | MessageEvent
-      | CommandEvent
-      | CardMessageEvent
-      | CommandResultEvent,
+    private event: MessageEvent | CommandEvent | CardMessageEvent,
     owner: Owner,
     private builderContext: {
       effectiveEventId: string;
@@ -60,7 +56,6 @@ export default class MessageBuilder {
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
       command: null,
-      commandResult: null,
       status: this.event.status,
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
@@ -126,7 +121,6 @@ export default class MessageBuilder {
     ) {
       messageArgs.formattedMessage = this.formattedMessageForCommand;
       messageArgs.command = await this.buildMessageCommand();
-      messageArgs.commandResult = await this.buildCommandResultCard();
       messageArgs.isStreamingFinished = true;
     }
     return messageArgs;
@@ -139,6 +133,7 @@ export default class MessageBuilder {
       let r = e.content['m.relates_to'];
       return (
         e.type === 'm.reaction' &&
+        e.content.msgtype === 'org.boxel.command_result' &&
         r?.rel_type === 'm.annotation' &&
         (r?.event_id === event.content.data.eventId ||
           r?.event_id === event.event_id ||
@@ -146,38 +141,23 @@ export default class MessageBuilder {
       );
     }) as ReactionEvent | undefined;
     let status: CommandStatus = 'ready';
-    if (annotation?.content['m.relates_to'].key === 'applied') {
+    let reactionContent = annotation?.content as
+      | CommandReactionEventContent
+      | undefined;
+    if (reactionContent && reactionContent['m.relates_to'].key === 'applied') {
       status = 'applied';
     }
+    let commandResultCardId: string | undefined =
+      reactionContent?.data.card_event_id ?? undefined;
     let messageCommand = new MessageCommand(
       command.id,
       command.name,
       command.arguments,
       this.builderContext.effectiveEventId,
       status,
+      commandResultCardId,
       getOwner(this)!,
     );
     return messageCommand;
-  }
-
-  private async buildCommandResultCard() {
-    let event = this.event as CommandEvent;
-    let commandResultEvent = this.builderContext.events.find(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.commandResult' &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-        e.content['m.relates_to'].event_id === event.content.data.eventId,
-    ) as CommandResultEvent;
-    let r = commandResultEvent?.content?.result
-      ? await this.commandService.createCommandResultArgs(
-          event,
-          commandResultEvent,
-        )
-      : undefined;
-    let commandResult = r
-      ? await this.commandService.createCommandResult(r)
-      : undefined;
-    return commandResult;
   }
 }
