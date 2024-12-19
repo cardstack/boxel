@@ -17,8 +17,8 @@ import {
 import {
   getCard,
   type LooseSingleCardDocument,
-  relativeURL,
   ResolvedCodeRef,
+  TypedFilter,
 } from '@cardstack/runtime-common';
 import {
   type SortOption,
@@ -308,20 +308,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 
   private setFilters() {
     let blogId = this.args.model.id;
-    if (!blogId) {
-      throw new Error('Missing blog id');
-    }
 
     let makeQuery = (codeRef: ResolvedCodeRef) => {
-      let relativeTo = relativeURL(
-        new URL(blogId!),
-        new URL(`${codeRef.module}/${codeRef.name}`),
-        this.realms[0],
-      );
-      if (!relativeTo) {
-        throw new Error('Missing relativeTo');
-      }
-
       if (!blogId) {
         throw new Error('Missing blog id');
       }
@@ -329,10 +317,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       return {
         filter: {
           on: codeRef,
-          any: [
-            { eq: { 'blog.id': blogId } },
-            { eq: { 'blog.id': relativeTo } },
-          ],
+          eq: { 'blog.id': blogId },
         },
       };
     };
