@@ -486,7 +486,10 @@ export class CurrentRun {
         ),
       );
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
-      let data = api.serializeCard(card, { includeComputeds: true });
+      let data = api.serializeCard(card, {
+        includeComputeds: true,
+        maybeRelativeURL: null,
+      });
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
         (rel) => delete (rel as Relationship).data,

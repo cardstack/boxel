@@ -275,7 +275,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           relationships: {
             owner: {
               links: {
-                self: `../Person/owner`,
+                self: `${testRealmURL}Person/owner`,
               },
             },
           },
@@ -490,7 +490,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         relationships: {
           owner: {
             links: {
-              self: `../Person/owner`,
+              self: `${testRealmURL}Person/owner`,
             },
           },
         },
@@ -576,7 +576,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         relationships: {
           owner: {
             links: {
-              self: `../Person/owner`,
+              self: `${testRealmURL}Person/owner`,
             },
           },
         },
@@ -651,7 +651,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           realmName: 'Unnamed Workspace',
           isField: false,
           ref: {
-            module: `./person`,
+            module: `${testRealmURL}person`,
             name: 'Person',
           },
           demo: {},
@@ -2007,11 +2007,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
           },
           'pets.0': {
-            links: { self: `../Pet/mango` },
+            links: { self: `${testRealmURL}Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
           },
           'pets.1': {
-            links: { self: `../Pet/vanGogh` },
+            links: { self: `${testRealmURL}Pet/vanGogh` },
             data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
           },
         },
@@ -2529,7 +2529,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         relationships: {
           friend: {
             links: {
-              self: `./mango`,
+              self: `${testRealmURL}Friend/mango`,
             },
           },
         },
@@ -2661,7 +2661,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           relationships: {
             friend: {
               links: {
-                self: `./mango`,
+                self: `${testRealmURL}Friend/mango`,
               },
               data: {
                 type: 'card',
@@ -2698,7 +2698,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             relationships: {
               friend: {
                 links: {
-                  self: `./hassan`,
+                  self: `${testRealmURL}Friend/hassan`,
                 },
                 data: {
                   type: 'card',
@@ -2779,7 +2779,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           relationships: {
             friend: {
               links: {
-                self: `./hassan`,
+                self: `${testRealmURL}Friend/hassan`,
               },
               data: {
                 type: 'card',
@@ -2816,7 +2816,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             relationships: {
               friend: {
                 links: {
-                  self: `./mango`,
+                  self: `${testRealmURL}Friend/mango`,
                 },
                 data: {
                   type: 'card',
@@ -2927,7 +2927,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           relationships: {
             friend: {
               links: {
-                self: `./hassan`,
+                self: `${testRealmURL}Friend/hassan`,
               },
               data: {
                 type: 'card',
@@ -3050,11 +3050,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           relationships: {
             'friends.0': {
-              links: { self: './mango' },
+              links: { self: `${testRealmURL}Friends/mango` },
               data: { type: 'card', id: mangoID },
             },
             'friends.1': {
-              links: { self: './vanGogh' },
+              links: { self: `${testRealmURL}Friends/vanGogh` },
               data: { type: 'card', id: vanGoghID },
             },
           },
@@ -3086,7 +3086,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: './hassan' },
+                links: { self: `${testRealmURL}Friends/hassan` },
                 data: { type: 'card', id: hassanID },
               },
             },
@@ -3112,7 +3112,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: './hassan' },
+                links: { self: `${testRealmURL}Friends/hassan` },
                 data: { type: 'card', id: hassanID },
               },
             },
@@ -3184,7 +3184,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           relationships: {
             'friends.0': {
-              links: { self: './hassan' },
+              links: { self: `${testRealmURL}Friends/hassan` },
               data: { type: 'card', id: hassanID },
             },
           },
@@ -3215,11 +3215,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: './mango' },
+                links: { self: `${testRealmURL}Friends/mango` },
                 data: { type: 'card', id: mangoID },
               },
               'friends.1': {
-                links: { self: './vanGogh' },
+                links: { self: `${testRealmURL}Friends/vanGogh` },
                 data: { type: 'card', id: vanGoghID },
               },
             },
@@ -3245,7 +3245,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: './hassan' },
+                links: { self: `${testRealmURL}Friends/hassan` },
                 data: { type: 'card', id: hassanID },
               },
             },
@@ -3316,7 +3316,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           relationships: {
             'friends.0': {
-              links: { self: './hassan' },
+              links: { self: `${testRealmURL}Friends/hassan` },
               data: { type: 'card', id: hassanID },
             },
           },
@@ -3347,11 +3347,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: './mango' },
+                links: { self: `${testRealmURL}Friends/mango` },
                 data: { type: 'card', id: mangoID },
               },
               'friends.1': {
-                links: { self: './vanGogh' },
+                links: { self: `${testRealmURL}Friends/vanGogh` },
                 data: { type: 'card', id: vanGoghID },
               },
             },
@@ -3377,7 +3377,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: './hassan' },
+                links: { self: `${testRealmURL}Friends/hassan` },
                 data: { type: 'card', id: hassanID },
               },
             },
