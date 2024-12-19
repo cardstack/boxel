@@ -4,6 +4,11 @@ import * as MatrixSDK from 'matrix-js-sdk';
 
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
+import {
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_REALMS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -57,7 +62,7 @@ export class MockClient implements ExtendedClient {
 
     this.emitEvent(
       new MatrixEvent({
-        type: 'com.cardstack.boxel.realms',
+        type: APP_BOXEL_REALMS_EVENT_TYPE,
         content: {
           realms: this.sdkOpts.activeRealms ?? [],
         },
@@ -405,9 +410,9 @@ export class MockClient implements ExtendedClient {
 
   private eventHandlerType(type: string) {
     switch (type) {
-      case 'com.cardstack.boxel.realms':
+      case APP_BOXEL_REALMS_EVENT_TYPE:
         return this.sdk.ClientEvent.AccountData;
-      case 'com.cardstack.boxel.room.skills':
+      case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case 'm.reaction':
       case 'm.room.create':
       case 'm.room.message':

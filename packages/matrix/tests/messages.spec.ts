@@ -28,6 +28,10 @@ import {
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+} from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
@@ -246,7 +250,7 @@ test.describe('Room messages', () => {
     let cardFragments = messages.filter(
       (message) =>
         message.type === 'm.room.message' &&
-        message.content?.msgtype === 'org.boxel.cardFragment',
+        message.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
     );
     expect(cardFragments.length).toStrictEqual(4);
     let lastFragmentIndex = messages.findIndex(
@@ -918,12 +922,12 @@ test.describe('Room messages', () => {
     let messageEvents = events.filter(
       (e) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.message',
+        e.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
     );
     let cardFragmentEvents = events.filter(
       (e) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.cardFragment' &&
+        e.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE &&
         !e.content.data.nextFragment,
     );
     expect(messageEvents.length).toEqual(3);

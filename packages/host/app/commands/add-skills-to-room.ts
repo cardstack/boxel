@@ -1,10 +1,10 @@
 import { service } from '@ember/service';
 
+import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-
-import { SKILLS_STATE_EVENT_TYPE } from '../services/matrix-service';
 
 import type MatrixService from '../services/matrix-service';
 
@@ -32,7 +32,7 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
     );
     await matrixService.updateStateEvent(
       roomId,
-      SKILLS_STATE_EVENT_TYPE,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       '',
       async (oldContent: Record<string, any>) => {
         return {

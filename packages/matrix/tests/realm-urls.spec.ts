@@ -9,6 +9,7 @@ import {
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   appURL,
   startServer as startRealmServer,
@@ -37,7 +38,7 @@ test.describe('Realm URLs in Matrix account data', () => {
     await updateAccountData(
       '@user1:localhost',
       user.accessToken,
-      'com.cardstack.boxel.realms',
+      APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({ realms: [] }),
     );
     await setupUserSubscribed('@user1:localhost', realmServer);
@@ -65,7 +66,7 @@ test.describe('Realm URLs in Matrix account data', () => {
     await updateAccountData(
       '@user1:localhost',
       user.accessToken,
-      'com.cardstack.boxel.realms',
+      APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({
         realms: ['http://example.com/'],
       }),

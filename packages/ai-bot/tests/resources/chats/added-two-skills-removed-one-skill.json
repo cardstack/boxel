@@ -285,8 +285,8 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.cardFragment",
-      "format": "org.boxel.card",
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/personal/SkillCard/31a074dd-4a48-46cd-bc5e-41267d4ddc43\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_1\\\",\\\"title\\\":\\\"skill 1\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
@@ -300,7 +300,7 @@
     "age": 59763
   },
   {
-    "type": "com.cardstack.boxel.room.skills",
+    "type": "app.boxel.room.skills",
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
@@ -321,8 +321,8 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.cardFragment",
-      "format": "org.boxel.card",
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/personal/SkillCard/4ecb2f52-bb72-4df2-86de-f6162a628933\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_2\\\",\\\"title\\\":\\\"skill 2\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
@@ -336,7 +336,7 @@
     "age": 54909
   },
   {
-    "type": "com.cardstack.boxel.room.skills",
+    "type": "app.boxel.room.skills",
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
@@ -367,7 +367,7 @@
     }
   },
   {
-    "type": "com.cardstack.boxel.room.skills",
+    "type": "app.boxel.room.skills",
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {

@@ -8,6 +8,7 @@ import {
   RealmAuthClient,
   RealmAuthMatrixClientInterface,
 } from '@cardstack/runtime-common/realm-auth-client';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createClient } from 'matrix-js-sdk';
 
 export class RealmAuth {
@@ -50,7 +51,7 @@ export class RealmAuth {
     });
     let realmsEventData =
       (await matrixClient.getAccountDataFromServer(
-        'com.cardstack.boxel.realms',
+        APP_BOXEL_REALMS_EVENT_TYPE,
       )) || {};
     console.log('Realms event data:', realmsEventData, typeof realmsEventData);
     let realms = realmsEventData.realms || [];

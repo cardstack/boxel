@@ -9,6 +9,7 @@ import {
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
 import { IsolatedRealmServer } from './isolated-realm-server';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -740,13 +741,13 @@ export async function getRoomEvents(
       rooms.map((r) => getAllRoomEvents(r, accessToken)),
     );
     // there will generally be 2 rooms, one is the DM room we do for
-    // authentication, the other is the actual chat (with org.boxel.message events)
+    // authentication, the other is the actual chat (with app.boxel.message events)
     return (
       roomsWithEvents.find((messages) => {
         return messages.find(
           (message) =>
             message.type === 'm.room.message' &&
-            message.content?.msgtype === 'org.boxel.message',
+            message.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
         );
       }) ?? []
     );

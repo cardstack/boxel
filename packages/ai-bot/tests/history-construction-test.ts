@@ -4,6 +4,12 @@ import {
   extractCardFragmentsFromEvents,
   HistoryConstructionError,
 } from '../helpers';
+import {
+  APP_BOXEL_CARD_FORMAT,
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import { type IRoomEvent } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -383,8 +389,8 @@ module('constructHistory', () => {
         event_id: '1',
         origin_server_ts: 1234567900,
         content: {
-          msgtype: 'org.boxel.cardFragment',
-          format: 'org.boxel.card',
+          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+          format: APP_BOXEL_CARD_FORMAT,
           formatted_body: '',
           body: '',
           data: JSON.stringify({
@@ -405,8 +411,8 @@ module('constructHistory', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.cardFragment',
-          format: 'org.boxel.card',
+          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+          format: APP_BOXEL_CARD_FORMAT,
           formatted_body: '',
           body: '',
           data: JSON.stringify({
@@ -428,8 +434,8 @@ module('constructHistory', () => {
         event_id: '3',
         origin_server_ts: 1234567910,
         content: {
-          msgtype: 'org.boxel.cardFragment',
-          format: 'org.boxel.card',
+          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+          format: APP_BOXEL_CARD_FORMAT,
           formatted_body: '',
           body: '',
           data: JSON.stringify({
@@ -450,7 +456,7 @@ module('constructHistory', () => {
         event_id: '4',
         origin_server_ts: 1234567920,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -479,7 +485,7 @@ module('constructHistory', () => {
         event_id: '4',
         origin_server_ts: 1234567920,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -542,8 +548,8 @@ module('constructHistory', () => {
         room_id: 'room1',
         sender: '@user:localhost',
         content: {
-          msgtype: 'org.boxel.cardFragment',
-          format: 'org.boxel.card',
+          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+          format: APP_BOXEL_CARD_FORMAT,
           body: 'card fragment 1 of 1',
           formatted_body: 'card fragment 1 of 1',
           // data should be a JSON string

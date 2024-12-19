@@ -21,6 +21,8 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
@@ -1073,7 +1075,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       // out of monthly credit
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 0;
       simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
-        msgtype: 'org.boxel.realm-server-event',
+        msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
 
@@ -1097,7 +1099,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       // out of monthly credit and additional credit
       userResponseBody.data.attributes.extraCreditsAvailableInBalance = 0;
       simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
-        msgtype: 'org.boxel.realm-server-event',
+        msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
@@ -1120,7 +1122,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       // out of additional credit
       userResponseBody.data.attributes.creditsAvailableInPlanAllowance = 1000;
       simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
-        msgtype: 'org.boxel.realm-server-event',
+        msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');

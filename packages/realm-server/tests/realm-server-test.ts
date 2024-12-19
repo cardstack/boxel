@@ -81,6 +81,7 @@ import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
+import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -4083,7 +4084,9 @@ module('Realm Server', function (hooks) {
       done: () => void,
     ) {
       let messages = await matrixClient.roomMessages(roomId);
-      if (messages[0].content.msgtype === 'org.boxel.realm-server-event') {
+      if (
+        messages[0].content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
+      ) {
         assert.strictEqual(
           messages[0].content.body,
           JSON.stringify({ eventType: 'billing-notification' }),
