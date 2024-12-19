@@ -12,7 +12,10 @@ import {
 
 import { module, test } from 'qunit';
 
-import { GridContainer } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInputValidationState,
+  GridContainer,
+} from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
@@ -51,6 +54,7 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 
 let matrixRoomId = '';
 module('Acceptance | Commands tests', function (hooks) {
@@ -263,6 +267,30 @@ module('Acceptance | Commands tests', function (hooks) {
           });
           await sleepCommand.execute(new ScheduleMeetingInput());
         };
+        runWhatSubmodeAmIIn = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+            commandContext,
+          );
+          let { roomId } = await createAIAssistantRoomCommand.execute({
+            name: 'Submode Check',
+          });
+          let getBoxelUIStateCommand = new GetBoxelUIStateCommand(
+            commandContext,
+          );
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+            commandContext,
+          );
+          await sendAiAssistantMessageCommand.execute({
+            roomId,
+            prompt: 'What submode am I in?',
+            commands: [{ command: getBoxelUIStateCommand, autoExecute: true }],
+          });
+        };
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -296,6 +324,10 @@ module('Acceptance | Commands tests', function (hooks) {
             {{on 'click' this.runDelayCommandViaAiAssistant}}
             data-test-delay-button
           >Delay with autoExecute</button>
+          <button
+            {{on 'click' this.runWhatSubmodeAmIIn}}
+            data-test-what-submode-am-i-in
+          >What submode and I in?</button>
         </template>
       };
     }
@@ -704,5 +736,94 @@ module('Acceptance | Commands tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
       )
       .includesText('Meeting with Hassan');
+  });
+
+  test('a command executed via the AI Assistant shows the result as an embedded card', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+    );
+    await click('[data-test-what-submode-am-i-in]');
+    await click('[data-test-open-ai-assistant]');
+    await waitUntil(() => getRoomIds().length > 0);
+    let roomId = getRoomIds().pop()!;
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    assert.strictEqual(boxelMessageData.context.tools.length, 1);
+    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
+    let toolName = boxelMessageData.context.tools[0].function.name;
+    assert.ok(
+      /^GetBoxelUIState/.test(toolName),
+      'The function name starts with GetBoxelUIStateCommand_',
+    );
+    assert.strictEqual(
+      boxelMessageData.context.tools[0].function.description,
+      'Get information about the current state of the Boxel UI, including the current submode, what cards are open, and what room, if any, the AI assistant is showing.',
+    );
+    // TODO: do we need to include `required: ['attributes'],` in the parameters object? If so, how?
+    assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+        },
+        attributes: {
+          type: 'object',
+          properties: {},
+        },
+        relationships: {
+          properties: {},
+          type: 'object',
+        },
+      },
+      required: ['attributes', 'description'],
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Inspecting the current UI state',
+      msgtype: 'org.boxel.command',
+      formatted_body: 'Inspecting the current UI state',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            attributes: {},
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+    await settled();
+    assert
+      .dom(
+        '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+      )
+      .containsText('What submode am I in?');
+    assert
+      .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
+      .containsText('Inspecting the current UI state');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists();
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-boxel-command-result]')
+      .containsText('Submode: Interact');
   });
 });

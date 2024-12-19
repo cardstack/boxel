@@ -252,8 +252,8 @@ export class RoomResource extends Resource<Args> {
     let effectiveEventId = event.event_id;
     let update = false;
     if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
-      // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
-      // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
+      // ensure that we update a message when we see a reaction event for it, since we merge data from the reaction event
+      // into the message state (i.e. apply button, command result)
       update = true;
     } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
       effectiveEventId = event.content['m.relates_to'].event_id;
@@ -293,7 +293,7 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     if (event.content.msgtype === 'org.boxel.commandResult') {
-      //don't display command result in the room as a message
+      // Legacy data
       return;
     }
 

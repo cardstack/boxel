@@ -113,3 +113,19 @@ export class SendAiAssistantMessageInput extends CardDef {
 export class SendAiAssistantMessageResult extends CardDef {
   @field eventId = contains(StringField);
 }
+
+export class GetBoxelUIStateResult extends CardDef {
+  @field submode = contains(StringField);
+  //TODO expand this to include more of the UI state:
+  // - open cards
+  // - current room ID
+}
+
+export class SearchCardsResult extends CardDef {
+  @field cardDocs = containsMany(JsonField);
+}
+
+export class LegacyGenerateAppModuleResult extends CardDef {
+  @field moduleId = contains(StringField);
+  @field source = contains(StringField);
+}
