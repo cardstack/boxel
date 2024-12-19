@@ -410,9 +410,13 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private createCard = restartableTask(async () => {
-    let ref = this.activeFilter.cardRef;
+    if (!this.activeFilter?.query?.filter) {
+      throw new Error('Missing active filter');
+    }
+    let ref = (this.activeFilter.query.filter as TypedFilter).on;
+
     if (!ref) {
-      return;
+      throw new Error('Missing card ref');
     }
     let currentRealm = this.realms[0];
     let doc: LooseSingleCardDocument = {
