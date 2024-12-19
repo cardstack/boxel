@@ -1,32 +1,24 @@
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import { PhoneField } from '../phone';
+import { ContactPhoneNumber } from '../phone-number';
 import { EmailField } from '../email';
 import { ContactLinkField } from '../fields/contact-link';
 import {
   Component,
   CardDef,
-  FieldDef,
   field,
   contains,
   linksTo,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { fn } from '@ember/helper';
-import { RadioInput } from '@cardstack/boxel-ui/components';
-import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
-import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import AvatarGroup from '../components/avatar-group';
 import { Company } from './company';
 import { Avatar } from '@cardstack/boxel-ui/components';
 import { StatusPill } from '../components/status-pill';
-import type IconComponent from '@cardstack/boxel-icons/captions';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
+import { LooseGooseyField } from '../loosey-goosey';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -51,91 +43,6 @@ export class SocialLinkField extends ContactLinkField {
       cta: 'Contact',
     },
   ];
-}
-
-const getStatusData = (
-  label: string | undefined,
-): LooseyGooseyData | undefined => {
-  return StatusField.values.find((status) => status.label === label);
-};
-
-export interface LooseyGooseyData {
-  index: number;
-  label: string;
-  icon: typeof IconComponent;
-  lightColor: string;
-  darkColor: string;
-}
-
-export class LooseGooseyField extends FieldDef {
-  @field index = contains(NumberField); //sorting order
-  @field label = contains(StringField);
-  static values: LooseyGooseyData[] = []; //help with the types
-}
-
-class EditContactStatusTemplate extends Component<typeof StatusField> {
-  @tracked label = this.args.model.label;
-
-  get statuses() {
-    return StatusField.values;
-  }
-
-  get selectedStatus() {
-    return this.statuses?.find((status) => {
-      return status.label === this.label;
-    });
-  }
-
-  @action handleStatusChange(status: LooseyGooseyData): void {
-    this.label = status.label;
-    this.args.model.label = this.selectedStatus?.label;
-    this.args.model.index = this.selectedStatus?.index;
-  }
-
-  <template>
-    <RadioInput
-      @groupDescription='Select Status'
-      @items={{this.statuses}}
-      @checkedId={{this.selectedStatus.label}}
-      @orientation='horizontal'
-      @spacing='default'
-      @keyName='label'
-      as |item|
-    >
-      <item.component @onChange={{fn this.handleStatusChange item.data}}>
-        {{item.data.label}}
-      </item.component>
-    </RadioInput>
-  </template>
-}
-
-export class StatusField extends LooseGooseyField {
-  // loosey goosey pattern
-  static displayName = 'status';
-
-  static values = [
-    {
-      index: 0,
-      label: 'Customer',
-      icon: HeartHandshakeIcon,
-      lightColor: '#8bff98',
-      darkColor: '#01d818',
-    },
-    {
-      index: 1,
-      label: 'Lead',
-      icon: TargetArrowIcon,
-      lightColor: '#E6F4FF',
-      darkColor: '#0090FF',
-    },
-  ];
-
-  static edit = EditContactStatusTemplate;
-  static embedded = class Embedded extends Component<typeof StatusField> {
-    <template>
-      {{@model.label}}
-    </template>
-  };
 }
 
 class EmbeddedTemplate extends Component<typeof Contact> {
@@ -170,16 +77,8 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
 
-      {{#if @model.status.label}}
-        {{#let (getStatusData @model.status.label) as |statusData|}}
-          <StatusPill
-            @label={{@model.status.label}}
-            @icon={{statusData.icon}}
-            @iconDarkColor={{statusData.darkColor}}
-            @iconLightColor={{statusData.lightColor}}
-            class='status-pill'
-          />
-        {{/let}}
+      {{#if @model.statusTag.label}}
+        <@fields.statusTag @format='atom' class='crm-status-pill' />
       {{/if}}
     </article>
 
@@ -210,8 +109,9 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         gap: var(--boxel-sp-xxxs);
         flex-wrap: wrap;
       }
-      .status-pill {
+      .crm-status-pill {
         width: fit-content;
+        margin-top: auto;
       }
     </style>
   </template>
@@ -257,17 +157,10 @@ class FittedTemplate extends Component<typeof Contact> {
           <@fields.socialLinks @format='atom' />
         </div>
       {{/if}}
-
-      {{#if @model.status.label}}
-        {{#let (getStatusData @model.status.label) as |statusData|}}
-          <StatusPill
-            @label={{@model.status.label}}
-            @icon={{statusData.icon}}
-            @iconDarkColor={{statusData.darkColor}}
-            @iconLightColor={{statusData.lightColor}}
-          />
-        {{/let}}
+      {{#if @model.statusTag.label}}
+        <@fields.statusTag @format='atom' class='crm-status-pill' />
       {{/if}}
+
     </article>
 
     <style scoped>
@@ -291,6 +184,14 @@ class FittedTemplate extends Component<typeof Contact> {
       .avatar-group-container {
         grid-area: avatar-group-container;
       }
+      .avatar-group-container
+        :where(.avatar-info .company-group .entity-name-tag) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+      }
       .contact-info {
         grid-area: contact-info;
         display: flex;
@@ -303,9 +204,10 @@ class FittedTemplate extends Component<typeof Contact> {
       .links {
         grid-area: links;
       }
-      .status-pill {
+      .crm-status-pill {
         grid-area: status;
         width: fit-content;
+        margin-top: auto;
       }
       .links {
         font-size: var(--boxel-font-xs);
@@ -315,6 +217,42 @@ class FittedTemplate extends Component<typeof Contact> {
         display: flex;
         gap: var(--boxel-sp-xxxs);
         flex-wrap: wrap;
+      }
+      .avatar-group-container :where(.avatar-thumbnail) {
+        --profile-avatar-icon-size: 55px;
+      }
+
+      @container fitted-card (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'links'
+            'status';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
+      }
+
+      /* Catch all because contact info is too dense*/
+      @container fitted-card (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'links'
+            'status';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
       }
 
       @container fitted-card ((aspect-ratio <= 1.0) and (224px <= height <= 226px)) {
@@ -451,6 +389,22 @@ class FittedTemplate extends Component<typeof Contact> {
         }
       }
 
+      @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
+        .fitted-contact-card {
+          grid-template:
+            'avatar-group-container'
+            'status'
+            'links';
+          grid-template-rows: max-content max-content auto;
+        }
+        .avatar-group-container :where(.avatar-thumbnail) {
+          --profile-avatar-icon-size: 55px;
+        }
+        .contact-info {
+          display: none;
+        }
+      }
+
       @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
         .fitted-contact-card {
           grid-template:
@@ -552,6 +506,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           grid-template-rows: max-content;
           gap: var(--boxel-sp-xs);
         }
@@ -566,7 +521,7 @@ class FittedTemplate extends Component<typeof Contact> {
         }
         .contact-info,
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -590,7 +545,7 @@ class FittedTemplate extends Component<typeof Contact> {
         .links {
           display: none;
         }
-        .status-pill {
+        .crm-status-pill {
           margin-left: auto;
           margin-top: 0;
           align-self: center;
@@ -600,6 +555,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -612,7 +568,7 @@ class FittedTemplate extends Component<typeof Contact> {
           font-size: var(--boxel-font-size-sm);
         }
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -620,6 +576,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -632,7 +589,7 @@ class FittedTemplate extends Component<typeof Contact> {
           font-size: var(--boxel-font-size-sm);
         }
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
       }
@@ -640,6 +597,7 @@ class FittedTemplate extends Component<typeof Contact> {
       @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
         .fitted-contact-card {
           grid-template: 'avatar-group-container';
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xs);
         }
         .avatar-group-container {
@@ -648,7 +606,7 @@ class FittedTemplate extends Component<typeof Contact> {
         .avatar-group-container :where(.avatar-thumbnail),
         .avatar-group-container :where(.company-group),
         .links,
-        .status-pill {
+        .crm-status-pill {
           display: none;
         }
         .avatar-group-container :where(.avatar-info .name) {
@@ -676,7 +634,7 @@ class AtomTemplate extends Component<typeof Contact> {
           class='avatar'
         />
       {{/if}}
-      <span class='name'>{{@model.name}}</span>
+      <span class='name'>{{this.label}}</span>
     </div>
     <style scoped>
       .contact {
@@ -700,6 +658,38 @@ class AtomTemplate extends Component<typeof Contact> {
   </template>
 }
 
+export class StatusTagField extends LooseGooseyField {
+  static icon = ContactIcon;
+  @field lightColor = contains(StringField);
+  @field darkColor = contains(StringField);
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.darkColor}}
+          @iconLightColor={{@model.lightColor}}
+        />
+      {{/if}}
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.darkColor}}
+          @iconLightColor={{@model.lightColor}}
+        />
+      {{/if}}
+    </template>
+  };
+}
+
 export class Contact extends CardDef {
   static displayName = 'CRM Contact';
   static icon = ContactIcon;
@@ -711,10 +701,10 @@ export class Contact extends CardDef {
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);
   @field secondaryEmail = contains(EmailField);
-  @field phoneMobile = contains(PhoneField);
-  @field phoneOffice = contains(PhoneField);
-  @field status = contains(StatusField);
+  @field phoneMobile = contains(ContactPhoneNumber);
+  @field phoneOffice = contains(ContactPhoneNumber);
   @field socialLinks = containsMany(SocialLinkField);
+  @field statusTag = contains(StatusTagField); //this is an empty field that gets computed in subclasses
 
   @field name = contains(StringField, {
     computeVia: function (this: Contact) {

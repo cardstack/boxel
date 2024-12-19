@@ -40,6 +40,7 @@ export default class SummaryCard extends GlimmerComponent<SummaryCardArgs> {
         gap: var(--boxel-sp-sm);
         overflow: hidden;
         min-width: 0;
+        min-height: var(--summary-card-min-height, 120px);
       }
       .summary-card-header {
         position: relative;

@@ -49,8 +49,6 @@ import {
   CommandContext,
 } from '@cardstack/runtime-common';
 
-import config from '@cardstack/host/config/environment';
-
 import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import type {
@@ -273,16 +271,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
-  private copyToClipboard = restartableTask(async () => {
-    if (!this.card.id) {
-      return;
-    }
-    if (config.environment === 'test') {
-      return; // navigator.clipboard is not available in test environment
-    }
-    await navigator.clipboard.writeText(this.card.id);
-  });
-
   private clearSelections = () => {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
@@ -301,7 +289,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(),
+        action: () => this.args.publicAPI.copyURLToClipboard(this.card),
         icon: IconLink,
         disabled: !this.card.id,
       }),

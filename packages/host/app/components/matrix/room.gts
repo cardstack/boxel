@@ -31,6 +31,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { unixTime } from '@cardstack/runtime-common';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -446,7 +447,11 @@ export default class Room extends Component<Signature> {
 
   private get sortedSkills(): Skill[] {
     return [...this.skills].sort((a, b) => {
-      return a.card.title.localeCompare(b.card.title);
+      // Not all of the skills have a title, so we use the skillEventId as a fallback
+      // which should be consistent.
+      let aTitle = a.card.title || a.skillEventId;
+      let bTitle = b.card.title || b.skillEventId;
+      return aTitle.localeCompare(bTitle);
     });
   }
 
@@ -597,11 +602,13 @@ export default class Room extends Component<Signature> {
 
   updateSkillIsActiveTask = task(
     async (skillEventId: string, isActive: boolean) => {
-      await this.matrixService.updateSkillIsActive(
-        this.args.roomId,
+      await new UpdateSkillActivationCommand(
+        this.commandService.commandContext,
+      ).execute({
+        roomId: this.args.roomId,
         skillEventId,
         isActive,
-      );
+      });
     },
   );
 

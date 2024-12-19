@@ -39,7 +39,7 @@ class Isolated extends Component<typeof VideoProduct> {
           <span class='seller'>
             {{@model.seller.title}}
           </span>
-          <@fields.ratingsSummary @format='atom' />
+          <@fields.ratingsSummary @format='embedded' />
         </div>
         <h1 class='title'>{{@model.title}}</h1>
         <div class='price'><MonetaryAmountAtom

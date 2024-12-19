@@ -15,8 +15,8 @@
     "deploy:boxel-motion:preview-staging": "cd packages/boxel-motion/addon && pnpm build && cd ../test-app && pnpm exec ember deploy s3-preview-staging --verbose",
     "deploy:boxel-ui": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy",
     "deploy:boxel-ui:preview-staging": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy s3-preview-staging --verbose",
-    "lint": "pnpm run --filter './packages/**' --if-present -r lint",
-    "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
+    "lint": "pnpm run --filter './packages/**' --filter '!./packages/boxel-motion/**' --if-present -r lint",
+    "lint:fix": "pnpm run --filter './packages/**' --filter '!./packages/boxel-motion/**' --if-present -r lint:fix"
   },
   "pnpm": {
     "allowedDeprecatedVersions": {
