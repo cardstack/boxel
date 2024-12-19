@@ -9,7 +9,13 @@ import StringField from 'https://cardstack.com/base/string';
 import { BlogApp as BlogAppCard } from './blog-app';
 import { htmlSafe } from '@ember/template';
 
-let BlogCategoryTemplate = class Embedded extends Component<typeof this> {
+function htmlSafeColor(color) {
+  return htmlSafe(color || '');
+}
+
+let BlogCategoryTemplate = class Embedded extends Component<
+  typeof BlogCategory
+> {
   <template>
     <style scoped>
       .blog-category {
@@ -40,7 +46,7 @@ let BlogCategoryTemplate = class Embedded extends Component<typeof this> {
       {{! template-lint-disable no-inline-styles }}
       <div
         class='category-name'
-        style='background-color: {{htmlSafe @model.color}}'
+        style='background-color: {{htmlSafeColor @model.color}}'
       >
         <@fields.shortName />
       </div>
@@ -86,14 +92,14 @@ export class BlogCategory extends CardDef {
         {{! template-lint-disable no-inline-styles }}
         <div
           class='circle'
-          style='background-color: {{htmlSafe @model.color}}'
+          style='background-color: {{htmlSafeColor @model.color}}'
         />
         <@fields.longName />
       </div>
     </template>
   };
 
-  static fitted = class FittedTemplate extends Component<typeof this> {
+  static fitted = class FittedTemplate extends Component<typeof BlogCategory> {
     <template>
       <style scoped>
         .blog-category {
@@ -189,7 +195,7 @@ export class BlogCategory extends CardDef {
         {{! template-lint-disable no-inline-styles }}
         <div
           class='category-name'
-          style='background-color: {{htmlSafe @model.color}}'
+          style='background-color: {{htmlSafeColor @model.color}}'
         >
           <@fields.shortName />
         </div>
