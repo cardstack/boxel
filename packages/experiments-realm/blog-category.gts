@@ -166,6 +166,15 @@ export class BlogCategory extends CardDef {
             display: none;
           }
         }
+        @container fitted-card ( (height <= 120px)) {
+          .category-label {
+            display: none;
+          }
+
+          .category-full-name {
+            display: none;
+          }
+        }
       </style>
       <div class='blog-category'>
         <div class='category-name' style='background-color: {{@model.color}}'>
