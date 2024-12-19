@@ -26,12 +26,15 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
-      {{#if @model.authors}}
-        <@fields.authors
-          class='byline'
-          @format='atom'
-          @displayContainer={{false}}
-        />
+      {{#if @model.displayAuthors}}
+        {{#each @fields.authors as |AuthorComponent index|}}
+          <AuthorComponent
+            @format='atom'
+            class='byline'
+            @displayContainer={{false}}
+          />
+          <span>{{@model.additionalTextForAuthorComponent index}}</span>
+        {{/each}}
       {{/if}}
       {{#if @model.datePublishedIsoTimestamp}}
         <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
@@ -112,7 +115,9 @@ class FittedTemplate extends Component<typeof BlogPost> {
       <div class='content'>
         <h3 class='title'><@fields.title /></h3>
         <p class='description'>{{@model.description}}</p>
-        <span class='byline'>{{this.formattedAuthors}}</span>
+        {{#if @model.formattedAuthors}}
+          <span class='byline'>{{@model.formattedAuthors}}</span>
+        {{/if}}
         {{#if @model.datePublishedIsoTimestamp}}
           <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
             {{@model.formattedDatePublished}}
@@ -527,21 +532,6 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
     </style>
   </template>
-
-  get formattedAuthors() {
-    const authors = this.args.model.authors ?? [];
-    if (authors.length === 0) return 'N/A';
-
-    const titles = authors.map((author) => author.title);
-
-    if (titles.length === 2) {
-      return `${titles[0]} and ${titles[1]}`;
-    }
-
-    return titles.length > 2
-      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
-      : titles[0];
-  }
 }
 
 class Status extends StringField {
@@ -622,6 +612,44 @@ export class BlogPost extends CardDef {
     return this.lastUpdated ? this.lastUpdated.toISOString() : undefined;
   }
 
+  get formattedAuthors() {
+    const authors = this.authors ?? [];
+    if (authors.length === 0) return undefined;
+
+    const titles = authors.map((author) => author.title);
+
+    if (titles.length === 2) {
+      return `${titles[0]} and ${titles[1]}`;
+    }
+
+    return titles.length > 2
+      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
+      : titles[0];
+  }
+
+  get displayAuthors() {
+    return this.authors && this.authors.length > 0;
+  }
+
+  additionalTextForAuthorComponent = (authorIndex: number) => {
+    let isLast = this.authors?.length - 1 === authorIndex;
+    let isLastTwo = this.authors?.length - 2 === authorIndex;
+    let text = '';
+    if (this.authors.length > 2 && !isLast) {
+      text = text + ',';
+    }
+
+    if (this.authors.length > 2) {
+      text = text + ' ';
+    }
+
+    if (isLastTwo) {
+      text = text + 'and';
+    }
+
+    return text;
+  };
+
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
@@ -641,12 +669,14 @@ export class BlogPost extends CardDef {
             </p>
           {{/if}}
           <ul class='info'>
-            <li class='byline'>
-              {{#each @fields.authors as |AuthorComponent index|}}
-                <AuthorComponent @format='atom' class='author' />
-                <span>{{this.additionalTextForAuthorComponent index}}</span>
-              {{/each}}
-            </li>
+            {{#if @model.displayAuthors}}
+              <li class='byline'>
+                {{#each @fields.authors as |AuthorComponent index|}}
+                  <AuthorComponent @format='atom' class='author' />
+                  <span>{{@model.additionalTextForAuthorComponent index}}</span>
+                {{/each}}
+              </li>
+            {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
               <li class='pub-date'>
                 Published on
@@ -749,24 +779,5 @@ export class BlogPost extends CardDef {
         }
       </style>
     </template>
-
-    additionalTextForAuthorComponent = (authorIndex: number) => {
-      let isLast = this.args.fields.authors?.length - 1 === authorIndex;
-      let isLastTwo = this.args.fields.authors?.length - 2 === authorIndex;
-      let text = '';
-      if (this.args.fields.authors.length > 2 && !isLast) {
-        text = text + ',';
-      }
-
-      if (this.args.fields.authors.length > 2) {
-        text = text + ' ';
-      }
-
-      if (isLastTwo) {
-        text = text + 'and';
-      }
-
-      return text;
-    };
   };
 }

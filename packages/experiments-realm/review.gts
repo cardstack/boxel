@@ -14,21 +14,6 @@ export class Review extends BlogPost {
   @field rating = contains(RatingsSummary);
   @field userRating = contains(RatingsSummary);
 
-  get formattedAuthors() {
-    const authors = this.authors ?? [];
-    if (authors.length === 0) return 'N/A';
-
-    const titles = authors.map((author) => author.title);
-
-    if (titles.length === 2) {
-      return `${titles[0]} and ${titles[1]}`;
-    }
-
-    return titles.length > 2
-      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
-      : titles[0];
-  }
-
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <article class='embedded-review'>

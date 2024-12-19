@@ -302,7 +302,7 @@ export class Author extends CardDef {
         {{else}}
           <UserIcon class='author-icon' width='20' height='20' />
         {{/if}}
-        <span class='autor-title'>
+        <span class='author-title'>
           <@fields.title />
         </span>
       </span>
