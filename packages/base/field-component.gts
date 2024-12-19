@@ -323,13 +323,14 @@ export function getBoxComponent(
         overflow: hidden;
       }
 
-      /*
-        TODO: regarding the atom format styling below, we probably want to refactor to move
-        any styles that effect the inside of the card boundary into the CardDef's atom template
-      */
+      .field-component-card.atom-format.display-container-false {
+        display: contents;
+      }
       .field-component-card.atom-format.display-container-true {
+        display: inline-block;
+        width: auto;
+        height: auto;
         padding: 4px var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
       }
     </style>
   </template>;

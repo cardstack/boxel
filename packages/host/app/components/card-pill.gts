@@ -97,7 +97,6 @@ export default class CardPill extends Component<CardPillSignature> {
         display: none;
       }
       .card-content {
-        display: flex;
         max-width: 100px;
         white-space: nowrap;
         overflow: hidden;
