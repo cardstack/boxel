@@ -1,0 +1,73 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "status": {
+        "index": 1,
+        "label": "Proposal",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "var(--boxel-lilac)"
+        }
+      },
+      "priority": {
+        "index": null,
+        "label": null,
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": null,
+          "backgroundColor": null
+        }
+      },
+      "closeDate": null,
+      "currentValue": {
+        "amount": 100000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "predictedRevenue": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "healthScore": null,
+      "notes": "",
+      "valueBreakdown": [],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": null
+        }
+      },
+      "document": {
+        "links": {
+          "self": null
+        }
+      },
+      "primaryStakeholder": {
+        "links": {
+          "self": null
+        }
+      },
+      "stakeholders": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/deal",
+        "name": "Deal"
+      }
+    }
+  }
+}

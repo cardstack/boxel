@@ -540,7 +540,9 @@ export class BlogPost extends CardDef {
   @field headline = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: BlogPost) {
-      return this.headline?.length ? this.headline : 'Untitled Blog Post';
+      return this.headline?.length
+        ? this.headline
+        : `Untitled ${this.constructor.displayName}`;
     },
   });
   @field slug = contains(StringField);

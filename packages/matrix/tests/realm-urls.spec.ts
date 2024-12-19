@@ -4,16 +4,27 @@ import {
   synapseStop,
   type SynapseInstance,
   registerUser,
+  getAccountData,
   updateAccountData,
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
+import {
+  login,
+  logout,
+  registerRealmUsers,
+  setupUserSubscribed,
+} from '../helpers';
+
 import {
   appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
+import {
+  APP_BOXEL_REALMS_EVENT_TYPE,
+  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+} from '../helpers/matrix-constants';
 
 test.describe('Realm URLs in Matrix account data', () => {
   let synapse: SynapseInstance;
@@ -37,7 +48,7 @@ test.describe('Realm URLs in Matrix account data', () => {
     await updateAccountData(
       '@user1:localhost',
       user.accessToken,
-      'com.cardstack.boxel.realms',
+      APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({ realms: [] }),
     );
     await setupUserSubscribed('@user1:localhost', realmServer);
@@ -65,7 +76,7 @@ test.describe('Realm URLs in Matrix account data', () => {
     await updateAccountData(
       '@user1:localhost',
       user.accessToken,
-      'com.cardstack.boxel.realms',
+      APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({
         realms: ['http://example.com/'],
       }),
@@ -88,5 +99,39 @@ test.describe('Realm URLs in Matrix account data', () => {
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-visibility]',
       ),
     ).toHaveText('private');
+  });
+
+  test('deprecated account data key is supported by auto-migrating user to new key', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+    await updateAccountData(
+      '@user1:localhost',
+      user.accessToken,
+      LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+      JSON.stringify({
+        realms: ['http://localhost:4205/user1/personal/'],
+      }),
+    );
+    await logout(page);
+    await login(page, 'user1', 'pass', { url: appURL });
+
+    await page.locator('[data-test-workspace-chooser-toggle]').click();
+
+    await page
+      .locator('[data-test-workspace-chooser]')
+      .waitFor({ state: 'visible' });
+
+    expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace]'),
+    ).toHaveCount(1);
+    let realms = await getAccountData<{ realms: string[] } | undefined>(
+      '@user1:localhost',
+      user.accessToken,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+    );
+    expect(realms).toEqual({
+      realms: ['http://localhost:4205/user1/personal/'],
+    });
   });
 });

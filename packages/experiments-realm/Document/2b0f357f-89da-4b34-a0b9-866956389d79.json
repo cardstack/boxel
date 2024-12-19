@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/document",
+        "name": "Document"
+      }
+    }
+  }
+}

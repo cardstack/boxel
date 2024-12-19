@@ -26,10 +26,8 @@
         "dan@email.com"
       ],
       "phone": {
-        "type": null,
-        "country": null,
-        "area": null,
-        "number": null
+        "number": "1159292211",
+        "countryCode": "60"
       },
       "percentage": 100.159393,
       "currency": {

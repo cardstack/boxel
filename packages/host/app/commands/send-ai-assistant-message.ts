@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { markdownToHtml } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
@@ -78,7 +80,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
 
     let { event_id } = await matrixService.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: input.prompt || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
