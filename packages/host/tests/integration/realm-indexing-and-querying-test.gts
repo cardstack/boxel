@@ -668,8 +668,22 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             `${testRealmURL}person-catalog-entry.json`,
           ),
           realmInfo: testRealmInfo,
-          realmURL: 'http://test-realm/test/',
+          realmURL: testRealmURL,
         },
+      });
+      let instance = await indexer.instance(
+        new URL(`${testRealmURL}person-catalog-entry`),
+      );
+      assert.deepEqual(instance?.searchDoc, {
+        _cardType: 'Catalog Entry',
+        demo: {},
+        description: 'Catalog entry for Person card',
+        id: `${testRealmURL}person-catalog-entry`,
+        isField: false,
+        moduleHref: `${testRealmURL}person`,
+        realmName: 'Unnamed Workspace',
+        ref: `${testRealmURL}person/Person`,
+        title: 'Person Card',
       });
     } else {
       assert.ok(
