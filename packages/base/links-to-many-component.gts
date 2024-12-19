@@ -17,7 +17,7 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
-import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -283,10 +283,8 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           )
           as |Item|
         }}
-          <div class='boxel-pills-container' data-test-pill-item={{i}}>
-            <div class='boxel-pill'>
-              <Item @format='atom' />
-            </div>
+          <Pill class='item-pill' data-test-pill-item={{i}}>
+            <Item @format='atom' @displayContainer={{false}} />
             <IconButton
               @variant='primary'
               @icon={{IconX}}
@@ -298,7 +296,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
               data-test-remove-card
               data-test-remove={{i}}
             />
-          </div>
+          </Pill>
         {{/let}}
       {{/each}}
       <AddButton
@@ -315,37 +313,30 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
     </div>
     <style scoped>
       .boxel-pills {
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
         display: flex;
         flex-wrap: wrap;
-
+        gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
-        --boxel-add-button-pill-font: var(--boxel-font-sm);
-        gap: var(--boxel-sp-xs);
-      }
-      .boxel-pills-container {
-        position: relative;
-        height: fit-content;
-      }
-      .boxel-pill .atom-format.display-container-true {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding-right: var(--boxel-sp-lg);
-        color: var(--boxel-dark);
       }
       .remove-item-button {
-        --icon-color: var(--boxel-dark);
-        position: absolute;
-        right: 0;
-        top: 0;
-
-        width: 22px;
-        height: 100%;
-        display: flex;
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
         align-items: center;
-        padding-right: var(--boxel-sp-xxs);
+      }
+      .remove-item-button:hover {
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
+      }
+      .item-pill :deep(.atom-default-template:hover) {
+        text-decoration: underline;
+      }
+      .item-pill:has(button:hover) {
+        color: var(--boxel-600);
+        border-color: var(--boxel-600);
       }
     </style>
   </template>

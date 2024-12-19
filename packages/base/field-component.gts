@@ -327,9 +327,7 @@ export function getBoxComponent(
         display: contents;
       }
       .field-component-card.atom-format.display-container-true {
-        display: inline-block;
-        width: auto;
-        height: auto;
+        display: inline;
         padding: 4px var(--boxel-sp-sm);
       }
     </style>

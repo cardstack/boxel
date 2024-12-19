@@ -102,13 +102,6 @@ export default class CardPill extends Component<CardPillSignature> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .card-content > :deep(.atom-format) {
-        background: none;
-        border-radius: 0;
-        white-space: inherit;
-        overflow: inherit;
-        text-overflow: inherit;
-      }
       .remove-button {
         --boxel-icon-button-width: var(--boxel-icon-sm);
         --boxel-icon-button-height: var(--boxel-icon-sm);
