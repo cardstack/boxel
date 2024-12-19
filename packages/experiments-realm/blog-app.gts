@@ -45,34 +45,6 @@ import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
 import type { BlogPost } from './blog-post';
 
-export const SORT_OPTIONS: SortOption[] = [
-  {
-    id: 'datePubDesc',
-    displayName: 'Date Published',
-    sort: [
-      {
-        by: 'createdAt',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    id: 'lastUpdatedDesc',
-    displayName: 'Last Updated',
-    sort: [
-      {
-        by: 'lastModified',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    id: 'cardTitleAsc',
-    displayName: 'A-Z',
-    sort: sortByCardTitleAsc,
-  },
-];
-
 export const toISOString = (datetime: Date) => datetime.toISOString();
 
 export const formatDatetime = (
@@ -322,37 +294,16 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       };
     };
 
-    this.filters = [
-      {
-        displayName: 'Blog Posts',
-        icon: BlogPostIcon,
-        createNewButtonText: 'Post',
-        showAdminData: true,
-        sortOptions: SORT_OPTIONS,
-        query: makeQuery({
-          name: 'BlogPost',
-          module: new URL('./blog-post', import.meta.url).href,
-        }),
-      },
-      {
-        displayName: 'Author Bios',
-        icon: AuthorIcon,
-        createNewButtonText: 'Author',
-        query: makeQuery({
-          name: 'Author',
-          module: new URL('./author', import.meta.url).href,
-        }),
-      },
-      {
-        displayName: 'Categories',
-        icon: CategoriesIcon,
-        createNewButtonText: 'Category',
-        query: makeQuery({
-          name: 'BlogCategory',
-          module: new URL('./blog-category', import.meta.url).href,
-        }),
-      },
-    ];
+    this.filters =
+      this.args.model.filters?.map((filter) => {
+        if (!filter.query && filter.cardRef) {
+          return {
+            ...filter,
+            query: makeQuery(filter.cardRef),
+          };
+        }
+        return filter;
+      }) ?? [];
   }
 
   private get selectedSort() {
@@ -435,6 +386,80 @@ export class BlogApp extends CardDef {
   static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
+
+  static sortOptionList: SortOption[] = [
+    {
+      id: 'datePubDesc',
+      displayName: 'Date Published',
+      sort: [
+        {
+          on: {
+            module: new URL('./blog-post', import.meta.url).href,
+            name: 'BlogPost',
+          },
+          by: 'publishDate',
+          direction: 'desc',
+        },
+      ],
+    },
+    {
+      id: 'lastUpdatedDesc',
+      displayName: 'Last Updated',
+      sort: [
+        {
+          by: 'lastModified',
+          direction: 'desc',
+        },
+      ],
+    },
+    {
+      id: 'cardTitleAsc',
+      displayName: 'A-Z',
+      sort: sortByCardTitleAsc,
+    },
+  ];
+
+  static filterList: LayoutFilter[] = [
+    {
+      displayName: 'Blog Posts',
+      icon: BlogPostIcon,
+      cardTypeName: 'Blog Post',
+      createNewButtonText: 'Post',
+      showAdminData: true,
+      sortOptions: BlogApp.sortOptionList,
+      cardRef: {
+        name: 'BlogPost',
+        module: new URL('./blog-post', import.meta.url).href,
+      },
+    },
+    {
+      displayName: 'Author Bios',
+      icon: AuthorIcon,
+      cardTypeName: 'Author',
+      createNewButtonText: 'Author',
+      cardRef: {
+        name: 'Author',
+        module: new URL('./author', import.meta.url).href,
+      },
+    },
+    {
+      displayName: 'Categories',
+      icon: CategoriesIcon,
+      cardTypeName: 'Category',
+      createNewButtonText: 'Category',
+      cardRef: {
+        name: 'BlogCategory',
+        module: new URL('./blog-category', import.meta.url).href,
+      },
+    },
+  ];
+
+  get filters(): LayoutFilter[] {
+    if (this.constructor && 'filterList' in this.constructor) {
+      return this.constructor.filterList as LayoutFilter[];
+    }
+    return BlogApp.filterList;
+  }
 
   static isolated = BlogAppTemplate;
   static fitted = class Fitted extends Component<typeof this> {
