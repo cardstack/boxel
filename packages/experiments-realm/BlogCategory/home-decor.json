@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "Home decoration & interior design",
+      "shortName": "Home Decor",
+      "slug": "home",
+      "color": "red",
+      "description": "Articles about the aesthetic side of home building and renovation",
+      "title": "Home decoration & interior design",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}
