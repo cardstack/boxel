@@ -33,7 +33,7 @@ export default class CodeRefField extends FieldDef {
 
   static [serialize](
     codeRef: ResolvedCodeRef,
-    _doc: JSONAPISingleResourceDocument,
+    doc: JSONAPISingleResourceDocument,
     _visited?: Set<string>,
     opts?: SerializeOpts,
   ) {
@@ -41,6 +41,9 @@ export default class CodeRefField extends FieldDef {
       ...codeRef,
       ...(opts?.maybeRelativeURL
         ? { module: opts.maybeRelativeURL(codeRef.module) }
+        : {}),
+      ...(opts?.maybeRelativeURL === null // signifies that the URL should be absolute
+        ? { module: new URL(codeRef.module, doc.data.id).href }
         : {}),
     };
   }
