@@ -1,5 +1,5 @@
 import StringField from 'https://cardstack.com/base/string';
-import { PhoneField } from '../phone';
+import { ContactPhoneNumber } from '../phone-number';
 import { EmailField } from '../email';
 import { ContactLinkField } from '../fields/contact-link';
 import {
@@ -701,8 +701,8 @@ export class Contact extends CardDef {
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);
   @field secondaryEmail = contains(EmailField);
-  @field phoneMobile = contains(PhoneField);
-  @field phoneOffice = contains(PhoneField);
+  @field phoneMobile = contains(ContactPhoneNumber);
+  @field phoneOffice = contains(ContactPhoneNumber);
   @field socialLinks = containsMany(SocialLinkField);
   @field statusTag = contains(StatusTagField); //this is an empty field that gets computed in subclasses
 
