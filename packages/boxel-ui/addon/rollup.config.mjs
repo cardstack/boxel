@@ -2,7 +2,6 @@ import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import copy from 'rollup-plugin-copy';
-import css from 'rollup-plugin-import-css';
 
 const addon = new Addon({
   srcDir: 'src',
@@ -16,7 +15,6 @@ export default {
 
   plugins: [
     scopedCSS('src'),
-    css(),
 
     // These are the modules that users should be able to import from your
     // addon. Anything not listed here may get optimized away.
@@ -44,29 +42,28 @@ export default {
     // Ensure that .gjs files are properly integrated as Javascript
     addon.gjs(),
 
-    // addons are allowed to contain imports of .css files, which we want rollup
-    // to leave alone and keep in the published output.
+    // css is importable for side-effect
+    addon.keepAssets(['**/*.css']),
+
+    // these asset types are imported for their URLs
     addon.keepAssets(
-      [
-        'styles/**/*.css',
-        '**/*.css',
-        '**/*.otf',
-        '**/*.png',
-        '**/*.webp',
-        '**/*.woff2',
-      ],
+      ['**/*.otf', '**/*.png', '**/*.webp', '**/*.woff2'],
       'default',
     ),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean({ runOnce: true }),
 
-    // Copy Readme and License into published package
+    // Copy files into published package
     copy({
       targets: [
         { src: '../README.md', dest: '.' },
         { src: '../LICENSE.md', dest: '.' },
+        { src: './src/styles/*.{css,woff2,otf}', dest: './dist/styles' },
       ],
+      // this makes it late enough that the `clean()` hook above doesn't remove
+      // our copied files
+      hook: 'generateBundle',
     }),
 
     // This babel config should *not* apply presets or compile away ES modules.

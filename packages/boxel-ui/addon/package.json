@@ -73,7 +73,7 @@
     "@babel/plugin-transform-class-static-block": "^7.22.11",
     "@babel/plugin-transform-typescript": "^7.22.15",
     "@babel/runtime": "^7.24.4",
-    "@embroider/addon-dev": "^7.0.0",
+    "@embroider/addon-dev": "7.0.1-unstable.4070ba7",
     "@embroider/macros": "^1.16.9",
     "@rollup/plugin-babel": "^6.0.4",
     "@tsconfig/ember": "3.0.1",
@@ -97,7 +97,6 @@
     "prettier-plugin-ember-template-tag": "^1.1.0",
     "rollup": "^4.18.1",
     "rollup-plugin-copy": "^3.5.0",
-    "rollup-plugin-import-css": "^3.5.7",
     "svgo": "3.0.2"
   },
   "peerDependencies": {
