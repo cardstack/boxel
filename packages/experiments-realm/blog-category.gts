@@ -9,8 +9,8 @@ import StringField from 'https://cardstack.com/base/string';
 import { BlogApp as BlogAppCard } from './blog-app';
 import { htmlSafe } from '@ember/template';
 
-function htmlSafeColor(color) {
-  return htmlSafe(color || '');
+function htmlSafeColor(color?: string) {
+  return htmlSafe(`background-color: ${color || ''}`);
 }
 
 let BlogCategoryTemplate = class Embedded extends Component<
@@ -44,10 +44,7 @@ let BlogCategoryTemplate = class Embedded extends Component<
     </style>
     <div class='blog-category'>
       {{! template-lint-disable no-inline-styles }}
-      <div
-        class='category-name'
-        style='background-color: {{htmlSafeColor @model.color}}'
-      >
+      <div class='category-name' style={{htmlSafeColor @model.color}}>
         <@fields.shortName />
       </div>
       <div class='category-label'>
@@ -90,10 +87,7 @@ export class BlogCategory extends CardDef {
       </style>
       <div class='category-atom'>
         {{! template-lint-disable no-inline-styles }}
-        <div
-          class='circle'
-          style='background-color: {{htmlSafeColor @model.color}}'
-        />
+        <div class='circle' style={{htmlSafeColor @model.color}} />
         <@fields.longName />
       </div>
     </template>
@@ -193,10 +187,7 @@ export class BlogCategory extends CardDef {
       </style>
       <div class='blog-category'>
         {{! template-lint-disable no-inline-styles }}
-        <div
-          class='category-name'
-          style='background-color: {{htmlSafeColor @model.color}}'
-        >
+        <div class='category-name' style={{htmlSafeColor @model.color}}>
           <@fields.shortName />
         </div>
         <div class='category-label'>
