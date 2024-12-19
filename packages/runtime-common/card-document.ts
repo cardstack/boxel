@@ -356,6 +356,7 @@ export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
     attributes: {
       displayName: summary.display_name,
       total: summary.total,
+      iconHTML: summary.icon_html,
     },
   }));
 

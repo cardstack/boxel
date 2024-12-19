@@ -106,6 +106,7 @@ export default class CardPrerender extends Component {
       reader,
       indexWriter,
       renderCard: this.renderService.renderCard.bind(this.renderService),
+      render: this.renderService.render.bind(this.renderService),
     });
     setOwner(currentRun, getOwner(this)!);
 
@@ -128,6 +129,7 @@ export default class CardPrerender extends Component {
         indexWriter,
         ignoreData: { ...ignoreData },
         renderCard: this.renderService.renderCard.bind(this.renderService),
+        render: this.renderService.render.bind(this.renderService),
       });
       setOwner(currentRun, getOwner(this)!);
       let current = await CurrentRun.incremental(currentRun, {

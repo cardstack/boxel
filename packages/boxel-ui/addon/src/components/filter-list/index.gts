@@ -58,6 +58,9 @@ export default class FilterList extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
         padding: var(--boxel-sp-xxs);
         margin-bottom: var(--boxel-sp-4xs);
+
+        display: flex;
+        gap: var(--boxel-sp-4xs);
       }
       .filter-list__button.selected {
         color: var(--boxel-light);

@@ -3999,7 +3999,8 @@ module('Realm Server', function (hooks) {
       let response = await request
         .get('/_types')
         .set('Accept', 'application/json');
-
+      let iconHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions" viewbox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>';
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.deepEqual(response.body, {
         data: [
@@ -4009,6 +4010,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               displayName: 'Friend',
               total: 2,
+              iconHTML,
             },
           },
           {
@@ -4017,6 +4019,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               displayName: 'Home',
               total: 1,
+              iconHTML,
             },
           },
           {
@@ -4025,6 +4028,7 @@ module('Realm Server', function (hooks) {
             attributes: {
               displayName: 'Person',
               total: 3,
+              iconHTML,
             },
           },
         ],
