@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "Finance",
+      "shortName": "Finance",
+      "slug": "finance",
+      "color": "lightblue",
+      "description": "Stocks, bonds, and other financial instruments",
+      "title": "Finance",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}

@@ -11,7 +11,7 @@ import type { SortOption } from './sort';
 export interface LayoutFilter {
   displayName: string;
   icon: CardorFieldTypeIcon;
-  cardTypeName: string;
+  cardTypeName?: string;
   createNewButtonText?: string;
   isCreateNewDisabled?: boolean;
   cardRef?: ResolvedCodeRef;
