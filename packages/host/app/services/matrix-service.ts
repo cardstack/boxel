@@ -426,9 +426,7 @@ export default class MatrixService extends Service {
               realms: accountDataContent.realms,
             });
             console.log('Removing your old realms data');
-            await this._client.setAccountData('com.cardstack.boxel.realms', {
-              realms: [],
-            });
+            await this._client.setAccountData('com.cardstack.boxel.realms', {});
           } else {
             console.log('No old realms found');
           }
