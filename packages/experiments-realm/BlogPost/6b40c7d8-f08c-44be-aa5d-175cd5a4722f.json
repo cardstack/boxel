@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": null,
+      "slug": null,
+      "body": "# hello\n<ul>\n<li>One</li>\n<li>Two</li>\n</ul>",
+      "publishDate": null,
+      "featuredImage": {
+        "imageUrl": null,
+        "credit": null,
+        "caption": null,
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "authors": {
+        "links": {
+          "self": null
+        }
+      },
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-post",
+        "name": "BlogPost"
+      }
+    }
+  }
+}

@@ -29,6 +29,7 @@ import {
   encodeWebSafeBase64,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 
 const REGISTRATION_TOKEN = 'abc123';
 
@@ -284,7 +285,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     let realms = await getAccountData<{ realms: string[] } | undefined>(
       auth.userId,
       auth.accessToken,
-      'com.cardstack.boxel.realms',
+      APP_BOXEL_REALMS_EVENT_TYPE,
     );
     expect(realms).toEqual({
       realms: ['http://localhost:4205/user1/personal/'],

@@ -1686,6 +1686,12 @@ export class BaseDef {
       if (stack.includes(value)) {
         return { id: value.id };
       }
+      function makeAbsoluteURL(maybeRelativeURL: string) {
+        if (!value[relativeTo]) {
+          return maybeRelativeURL;
+        }
+        return new URL(maybeRelativeURL, value[relativeTo]).href;
+      }
       return Object.fromEntries(
         Object.entries(
           getFields(value, { includeComputeds: true, usedFieldsOnly: true }),
@@ -1694,11 +1700,19 @@ export class BaseDef {
           if (field?.fieldType === 'linksToMany') {
             return [
               fieldName,
-              field.queryableValue(rawValue, [value, ...stack]),
+              field
+                .queryableValue(rawValue, [value, ...stack])
+                ?.map((v: any) => {
+                  return { ...v, id: makeAbsoluteURL(v.id) };
+                }) ?? null,
             ];
           }
           if (isNotLoadedValue(rawValue)) {
-            return [fieldName, { id: rawValue.reference }];
+            let normalizedId = rawValue.reference;
+            if (value[relativeTo]) {
+              normalizedId = new URL(normalizedId, value[relativeTo]).href;
+            }
+            return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
           return [
             fieldName,
@@ -2970,7 +2984,6 @@ export function getFields(
           return [];
         }
       }
-
       return [[maybeFieldName, maybeField]];
     });
     fields = { ...fields, ...Object.fromEntries(currentFields) };

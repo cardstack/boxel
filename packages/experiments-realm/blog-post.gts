@@ -19,11 +19,22 @@ import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
 import NumberField from '../base/number';
 import { User } from './user';
+import { BlogCategory, categoryStyle } from './blog-category';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='embedded-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
+      {{#if @model.categories.length}}
+        <div class='categories'>
+          {{#each @model.categories as |category|}}
+            <div
+              class='category'
+              style={{categoryStyle category}}
+            >{{category.shortName}}</div>
+          {{/each}}
+        </div>
+      {{/if}}
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
       {{#if @model.displayAuthors}}
@@ -45,6 +56,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         height: 100%;
         display: grid;
         grid-template:
+          'img categories categories' max-content
           'img title title' max-content
           'img desc desc' max-content
           'img byline date' 1fr / 40% 1fr max-content;
@@ -62,7 +74,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
       .title {
         grid-area: title;
-        margin: var(--boxel-sp-lg) 0 0;
+        margin: var(--boxel-sp-xxs) 0 0;
         font-size: var(--boxel-font-size-lg);
         line-height: calc(30 / 22);
         letter-spacing: var(--boxel-lsp-xs);
@@ -101,6 +113,19 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
+
+      .categories {
+        margin-top: var(--boxel-sp);
+      }
+
+      .category {
+        font-size: var(--boxel-font-size-xs);
+        padding: 3px var(--boxel-sp-xxxs);
+        border-radius: var(--boxel-border-radius-sm);
+        display: inline-block;
+        font-family: var(--boxel-font-family);
+        font-weight: 600;
+      }
     </style>
   </template>
 }
@@ -109,6 +134,14 @@ class FittedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='fitted-blog-post'>
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
+      <div class='categories'>
+        {{#each @model.categories as |category|}}
+          <div
+            class='category'
+            style={{categoryStyle category}}
+          >{{category.shortName}}</div>
+        {{/each}}
+      </div>
       <div class='content'>
         <h3 class='title'><@fields.title /></h3>
         <p class='description'>{{@model.description}}</p>
@@ -185,11 +218,36 @@ class FittedTemplate extends Component<typeof BlogPost> {
         letter-spacing: var(--boxel-lsp-sm);
       }
 
+      .categories {
+        margin-top: -27px;
+        height: 20px;
+        margin-left: 7px;
+        display: none;
+      }
+
+      .category {
+        font-size: 0.6rem;
+        height: 18px;
+        padding: 3px 4px;
+        border-radius: var(--boxel-border-radius-sm);
+        display: inline-block;
+        font-family: var(--boxel-font-family);
+        font-weight: 600;
+        margin-right: var(--boxel-sp-xxxs);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
         .fitted-blog-post {
           grid-template:
             'img' 42%
+            'categories' max-content
             'content' 1fr / 1fr;
+        }
+        .categories {
+          display: flex;
         }
         .content {
           display: grid;
@@ -212,8 +270,13 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .fitted-blog-post {
           grid-template:
             'img' 92px
+            'categories' max-content
             'content' 1fr / 1fr;
         }
+        .categories {
+          display: flex;
+        }
+
         .content {
           display: grid;
           grid-template:
@@ -233,7 +296,11 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .fitted-blog-post {
           grid-template:
             'img' 92px
+            'categories' max-content
             'content' 1fr / 1fr;
+        }
+        .categories {
+          display: flex;
         }
         .content {
           display: grid;
@@ -287,6 +354,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .fitted-blog-post {
           grid-template:
             'img' 68px
+            'categories' max-content
             'content' 1fr / 1fr;
         }
         .content {
@@ -328,7 +396,11 @@ class FittedTemplate extends Component<typeof BlogPost> {
         .fitted-blog-post {
           grid-template:
             'img' 55%
+            'categories' max-content
             'content' 1fr / 1fr;
+        }
+        .categories {
+          display: flex;
         }
         .content {
           display: grid;
@@ -564,6 +636,7 @@ export class BlogPost extends CardDef {
   });
   @field blog = linksTo(BlogAppCard, { isUsed: true });
   @field featuredImage = contains(FeaturedImageField);
+  @field categories = linksToMany(BlogCategory);
   @field lastUpdated = contains(DatetimeField, {
     computeVia: function (this: BlogPost) {
       let lastModified = getCardMeta(this, 'lastModified');
@@ -640,6 +713,16 @@ export class BlogPost extends CardDef {
           {{#if @model.featuredImage.imageUrl}}
             <@fields.featuredImage class='featured-image' />
           {{/if}}
+          {{#if @model.categories.length}}
+            <div class='categories'>
+              {{#each @model.categories as |category|}}
+                <div
+                  class='category'
+                  style={{categoryStyle category}}
+                >{{category.shortName}}</div>
+              {{/each}}
+            </div>
+          {{/if}}
           <h1><@fields.title /></h1>
           {{#if @model.description}}
             <p class='description'>
@@ -710,6 +793,7 @@ export class BlogPost extends CardDef {
           line-height: 1.25;
           letter-spacing: normal;
           margin-bottom: var(--boxel-sp-lg);
+          margin-top: 0;
         }
         .featured-image :deep(.image) {
           border-radius: var(--boxel-border-radius-xl);
@@ -753,6 +837,17 @@ export class BlogPost extends CardDef {
           flex-direction: column;
           gap: var(--boxel-sp);
           margin-top: var(--boxel-sp-xl);
+        }
+        .categories {
+          margin-top: var(--boxel-sp);
+        }
+        .category {
+          font-size: var(--boxel-font-size-xs);
+          padding: 3px var(--boxel-sp-xxxs);
+          border-radius: var(--boxel-border-radius-sm);
+          display: inline-block;
+          font-family: var(--boxel-font-family);
+          font-weight: 600;
         }
       </style>
     </template>

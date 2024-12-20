@@ -99,6 +99,7 @@ export type ExtendedClient = Pick<
   | 'setRoomName'
   | 'startClient'
   | 'getAccountDataFromServer'
+  | 'setAccountData'
 > & {
   requestEmailToken(
     type: 'registration' | 'threepid',

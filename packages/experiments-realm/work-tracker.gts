@@ -6,6 +6,7 @@ import {
   field,
   BaseDef,
   CardDef,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -23,7 +24,7 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { TaskStatusField } from './productivity/task';
+import { TaskStatusField, Project } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
@@ -32,17 +33,17 @@ import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import User from '@cardstack/boxel-icons/user';
-import FolderGit from '@cardstack/boxel-icons/folder-git';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import type Owner from '@ember/owner';
 import {
   AnyFilter,
   CardTypeFilter,
   Query,
+  EqFilter,
 } from '@cardstack/runtime-common/query';
 
-type FilterType = 'status' | 'assignee' | 'project';
+type FilterType = 'status' | 'assignee';
 
 export interface SelectedItem {
   name?: string;
@@ -68,7 +69,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       searchKey: 'label',
       label: 'Status',
       codeRef: {
-        module: `${this.realmHref}productivity/task`,
+        module: new URL('./productivity/task', import.meta.url).href,
         name: 'Status',
       },
       options: () => TaskStatusField.values,
@@ -77,19 +78,10 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       searchKey: 'name',
       label: 'Assignee',
       codeRef: {
-        module: `${this.realmHref}productivity/task`,
+        module: new URL('./productivity/task', import.meta.url).href,
         name: 'TeamMember',
       },
       options: () => this.assigneeCards,
-    },
-    project: {
-      searchKey: 'name',
-      label: 'Project',
-      codeRef: {
-        module: `${this.realmHref}productivity/task`,
-        name: 'Project',
-      },
-      options: () => this.projectCards,
     },
   };
   selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
@@ -118,24 +110,11 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       this.realmHrefs,
     );
 
-    this.projectQuery = getCards(
-      {
-        filter: {
-          type: this.filters.project.codeRef,
-        },
-      },
-      this.realmHrefs,
-    );
     await this.assigneeQuery.loaded;
-    await this.projectQuery.loaded;
   });
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
-  }
-
-  get projectCards() {
-    return this.projectQuery.instances;
   }
 
   filterObject(filterType: FilterType) {
@@ -186,13 +165,25 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   get assignedTaskCodeRef() {
     return {
-      module: `${this.realmHref}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
+      module: new URL('./productivity/task', import.meta.url).href,
       name: 'Task',
     };
   }
 
-  get getTaskQuery(): Query {
-    let everyArr: (AnyFilter | CardTypeFilter)[] = [];
+  get currentProject() {
+    return this.args.model.project;
+  }
+
+  get getTaskQuery(): Query | undefined {
+    let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
+    if (!this.realmURL) {
+      throw new Error('No realm url');
+    }
+    if (!this.currentProject || !this.currentProject.id) {
+      console.log('No project');
+      return;
+    }
+    everyArr.push({ eq: { 'project.id': this.currentProject.id } });
     this.filterTypes.forEach((filterType) => {
       let anyFilter = this.filterObject(filterType);
       if (anyFilter.length > 0) {
@@ -272,7 +263,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
             },
             project: {
               links: {
-                self: null,
+                self: this.currentProject.id ?? null,
               },
             },
           },
@@ -360,8 +351,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return RectangleEllipsis;
       case 'assignee':
         return User;
-      case 'project':
-        return FolderGit;
       default:
         return undefined;
     }
@@ -369,6 +358,11 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   <template>
     <div class='task-app'>
+      {{#if (not this.currentProject.id)}}
+        <div class='disabled'>
+          Link a project to continue
+        </div>
+      {{/if}}
       <div class='filter-section'>
         <div class='filter-dropdown-container'>
           {{#if this.selectedFilterConfig}}
@@ -484,8 +478,23 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         position: relative;
         flex-direction: column;
         font: var(--boxel-font);
-        margin-left: var(--boxel-sp);
+        padding-left: var(--boxel-sp);
         height: 100%;
+      }
+      .disabled {
+        position: absolute;
+        top: 0%;
+        left: 0%;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(38 38 38 / 50%);
+        z-index: 10; /*TODO: Resolve z-index with drag and drop. This has to be greater than --draggable-overlay-z-index + 1*/
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 500;
       }
       .filter-section {
         display: flex;
@@ -611,6 +620,7 @@ export class WorkTracker extends AppCard {
   static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
   static isolated = WorkTrackerIsolated;
+  @field project = linksTo(() => Project);
   @field title = contains(StringField, {
     computeVia: function (this: WorkTracker) {
       return 'Work Tracker';

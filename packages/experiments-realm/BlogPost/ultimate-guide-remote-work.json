@@ -39,6 +39,16 @@
           "self": "../BlogApp/ramped"
         }
       },
+      "categories.0": {
+        "links": {
+          "self": "../BlogCategory/productivity"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../BlogCategory/home-decor"
+        }
+      },
       "editors.0": {
         "links": {
           "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
