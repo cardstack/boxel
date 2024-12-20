@@ -27,14 +27,11 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
       {{#if @model.displayAuthors}}
-        {{#each @fields.authors as |AuthorComponent index|}}
-          <AuthorComponent
-            @format='atom'
-            class='byline'
-            @displayContainer={{false}}
-          />
-          <span>{{@model.additionalTextForAuthorComponent index}}</span>
-        {{/each}}
+        <div class='byline'>
+          {{#each @fields.authors as |AuthorComponent|}}
+            <AuthorComponent @format='atom' @displayContainer={{false}} />
+          {{/each}}
+        </div>
       {{/if}}
       {{#if @model.datePublishedIsoTimestamp}}
         <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
@@ -631,25 +628,6 @@ export class BlogPost extends CardDef {
     return this.authors && this.authors.length > 0;
   }
 
-  additionalTextForAuthorComponent = (authorIndex: number) => {
-    let isLast = this.authors?.length - 1 === authorIndex;
-    let isLastTwo = this.authors?.length - 2 === authorIndex;
-    let text = '';
-    if (this.authors.length > 2 && !isLast) {
-      text = text + ',';
-    }
-
-    if (this.authors.length > 2) {
-      text = text + ' ';
-    }
-
-    if (isLastTwo) {
-      text = text + 'and';
-    }
-
-    return text;
-  };
-
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
@@ -671,9 +649,8 @@ export class BlogPost extends CardDef {
           <ul class='info'>
             {{#if @model.displayAuthors}}
               <li class='byline'>
-                {{#each @fields.authors as |AuthorComponent index|}}
+                {{#each @fields.authors as |AuthorComponent|}}
                   <AuthorComponent @format='atom' class='author' />
-                  <span>{{@model.additionalTextForAuthorComponent index}}</span>
                 {{/each}}
               </li>
             {{/if}}

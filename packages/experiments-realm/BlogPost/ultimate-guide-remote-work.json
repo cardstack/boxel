@@ -24,6 +24,16 @@
           "self": "../Author/jane-doe"
         }
       },
+      "authors.1": {
+        "links": {
+          "self": "../Author/alice-enwunder"
+        }
+      },
+      "authors.2": {
+        "links": {
+          "self": "../Author/3a655a91-98b5-4f33-a071-b62d39218b33"
+        }
+      },
       "blog": {
         "links": {
           "self": "../BlogApp/ramped"
