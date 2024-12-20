@@ -645,7 +645,7 @@ export class BlogPost extends CardDef {
   });
   @field wordCount = contains(NumberField, {
     computeVia: function (this: BlogPost) {
-      return this.body?.length;
+      return this.body?.trim().split(/\s+/).length;
     },
   });
   @field editors = linksToMany(User);
