@@ -25,6 +25,13 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import { LooseGooseyField } from '../loosey-goosey';
 import { StatusPill } from '../components/status-pill';
+import { Avatar, Pill, BoxelButton } from '@cardstack/boxel-ui/components';
+import { EntityDisplay } from '../components/entity-display';
+import ActivityCard from '../components/activity-card';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import PhoneIcon from '@cardstack/boxel-icons/phone';
+import SquareUser from '@cardstack/boxel-icons/square-user';
+import CalendarTime from '@cardstack/boxel-icons/calendar-time';
 
 class IsolatedTemplate extends Component<typeof Account> {
   get hasCompanyInfo() {
@@ -156,15 +163,102 @@ class IsolatedTemplate extends Component<typeof Account> {
       </:summary>
 
       <:activities>
-        <h2 class='activities-title'>Activities</h2>
+        <SummaryCard class='activities-summary-card'>
+          <:title>
+            <h2 class='activity-title'>Recent Activities</h2>
+          </:title>
+          <:icon>
+            <BoxelButton
+              @kind='primary'
+              class='activity-button-mobile'
+              data-test-settings-button
+            >
+              <PlusIcon />
+            </BoxelButton>
+
+            <BoxelButton
+              @kind='primary'
+              @size='base'
+              class='activity-button-desktop'
+              data-test-settings-button
+            >
+              <PlusIcon />
+              New Activity
+            </BoxelButton>
+          </:icon>
+          <:content>
+            <ActivityCard>
+              <:thumbnail>
+                <PhoneIcon />
+              </:thumbnail>
+              <:title>
+                Customer Call
+              </:title>
+              <:icon>
+                <Pill class='activity-pill'>
+                  Left VoiceMail
+                </Pill>
+              </:icon>
+              <:description>
+                Discuss Q3 product roadmap
+              </:description>
+              <:content>
+                <div class='activity-card-group'>
+                  <EntityDisplay>
+                    <:thumbnail>
+                      <SquareUser />
+                    </:thumbnail>
+                    <:title>
+                      Dmitri Petrov
+                    </:title>
+                    <:content>
+                      Technova
+                    </:content>
+                  </EntityDisplay>
+                  <EntityDisplay>
+                    <:thumbnail>
+                      <Avatar
+                        @thumbnailURL='https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2'
+                      />
+                    </:thumbnail>
+                    <:title>
+                      Rep: Janus Dios
+                    </:title>
+                    <:content>
+                      Sales Associate
+                    </:content>
+                  </EntityDisplay>
+                  <EntityDisplay class='activity-time'>
+                    <:thumbnail>
+                      <CalendarTime />
+                    </:thumbnail>
+                    <:title>
+                      May 15, 2024
+                    </:title>
+                    <:content>
+                      3:15pm
+                    </:content>
+                  </EntityDisplay>
+                </div>
+              </:content>
+            </ActivityCard>
+          </:content>
+        </SummaryCard>
       </:activities>
     </AccountPageLayout>
 
     <style scoped>
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
       .account-name {
         font: 600 var(--boxel-font-lg);
         margin: 0;
       }
+      /* Summary */
       .summary-title {
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xxs);
@@ -202,6 +296,55 @@ class IsolatedTemplate extends Component<typeof Account> {
       }
       .default-value {
         color: var(--boxel-400);
+      }
+      /* Activities */
+      .activity-button-mobile {
+        display: none;
+      }
+      .activity-button-desktop {
+        display: inline-flex;
+      }
+      .activities-summary-card {
+        --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
+        container-type: inline-size;
+        container-name: activities-summary-card;
+      }
+      .activity-title {
+        font: 600 var(--boxel-font-med);
+        letter-spacing: var(--boxel-lsp-xxs);
+        margin: 0;
+      }
+      .activity-pill {
+        --pill-background-color: var(--boxel-200);
+      }
+      .activity-card-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+      .activity-time {
+        font-size: var(--boxel-font-xs);
+        color: var(--boxel-color-gray);
+        margin-left: auto;
+      }
+
+      @container activities-summary-card (max-width: 447px) {
+        .activity-button-mobile {
+          display: inline-flex;
+          --boxel-button-padding: 0px 0px;
+          min-width: 2rem;
+        }
+        .activity-button-desktop {
+          display: none;
+        }
+        .activity-card-group {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .activity-time {
+          margin-left: 0;
+        }
       }
     </style>
   </template>
