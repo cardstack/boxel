@@ -644,7 +644,8 @@ class AtomTemplate extends Component<typeof Contact> {
         min-width: 0; /* Helps with text overflow */
       }
       .avatar {
-        --profile-avatar-icon-size: 30px;
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
       }
       .name {
