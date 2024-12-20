@@ -12,12 +12,19 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
-import { Contact } from './contact';
+import { Contact, StatusTagField } from './contact';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import BuildingIcon from '@cardstack/boxel-icons/captions';
+import BuildingIcon from '@cardstack/boxel-icons/building';
+import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
+import { ContactRow } from '../components/contact-row';
+import TrendingUp from '@cardstack/boxel-icons/trending-up';
+import ContactIcon from '@cardstack/boxel-icons/contact';
+import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import { LooseGooseyField } from '../loosey-goosey';
+import { StatusPill } from '../components/status-pill';
 import { Avatar, Pill, BoxelButton } from '@cardstack/boxel-ui/components';
 import { EntityDisplay } from '../components/entity-display';
 import ActivityCard from '../components/activity-card';
@@ -26,62 +33,7 @@ import PhoneIcon from '@cardstack/boxel-icons/phone';
 import SquareUser from '@cardstack/boxel-icons/square-user';
 import CalendarTime from '@cardstack/boxel-icons/calendar-time';
 
-// Perhaps, can be address?
-interface ContactRowArgs {
-  Args: {
-    userID: string;
-    name: string;
-    thumbnailURL: string;
-    isPrimary: boolean;
-  };
-  Blocks: {};
-  Element: HTMLElement;
-}
-
-class ContactRow extends GlimmerComponent<ContactRowArgs> {
-  <template>
-    <EntityDisplay>
-      <:title>
-        {{@name}}
-      </:title>
-      <:thumbnail>
-        <Avatar
-          @userID={{@userID}}
-          @displayName={{@name}}
-          @thumbnailURL={{@thumbnailURL}}
-          @isReady={{true}}
-          class='avatar'
-        />
-      </:thumbnail>
-      <:tag>
-        {{#if @isPrimary}}
-          <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-            Primary
-          </Pill>
-        {{/if}}
-      </:tag>
-    </EntityDisplay>
-    <style scoped>
-      .avatar {
-        --profile-avatar-icon-size: 30px;
-        flex-shrink: 0;
-      }
-      .primary-tag {
-        --pill-font-weight: 400;
-        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        --pill-font: 400 var(--boxel-font-xs);
-        --pill-border: none;
-      }
-    </style>
-  </template>
-}
-
 class IsolatedTemplate extends Component<typeof Account> {
-  //Mock Data:
-  get logoURL() {
-    return 'https://picsum.photos/id/237/200/300';
-  }
-
   get hasCompanyInfo() {
     return this.args.model?.website || this.args.model?.headquartersAddress;
   }
@@ -96,17 +48,27 @@ class IsolatedTemplate extends Component<typeof Account> {
   <template>
     <AccountPageLayout>
       <:header>
-        <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
+        <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
           <:name>
-            <h1 class='account-name'>{{@model.name}}</h1>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name default-value'>Missing Account Name</h1>
+            {{/if}}
           </:name>
           <:content>
-            <div class='description'>
-              <@fields.primaryContact
-                @format='atom'
-                @displayContainer={{false}}
-                class='primary-contact'
-              />
+            <div class='description content-container'>
+              {{#if @model.primaryContact}}
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                  class='primary-contact'
+                />
+                <div class='tag-container'>
+                  <@fields.statusTag @format='atom' />
+                  <@fields.urgencyTag @format='atom' />
+                </div>
+              {{/if}}
             </div>
           </:content>
         </AccountHeader>
@@ -122,12 +84,14 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
+              <div class='description content-container'>
                 {{#if this.hasCompanyInfo}}
                   <@fields.headquartersAddress @format='atom' />
                   <@fields.website @format='atom' />
                 {{else}}
-                  Missing Company Info
+                  <div class='default-value'>
+                    Missing Company Info
+                  </div>
                 {{/if}}
               </div>
             </:content>
@@ -138,17 +102,17 @@ class IsolatedTemplate extends Component<typeof Account> {
               <h3 class='summary-title'>Contacts</h3>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <ContactIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
+              <div class='description content-container'>
                 {{#if this.hasContacts}}
                   {{#if @model.primaryContact}}
                     <ContactRow
                       @userID={{@model.primaryContact.id}}
                       @name={{@model.primaryContact.name}}
                       @thumbnailURL={{@model.primaryContact.thumbnailURL}}
-                      @isPrimary={{true}}
+                      @tagLabel='primary'
                     />
                   {{/if}}
                   {{#each @model.contacts as |contact|}}
@@ -157,12 +121,14 @@ class IsolatedTemplate extends Component<typeof Account> {
                         @userID={{contact.id}}
                         @name={{contact.name}}
                         @thumbnailURL={{contact.thumbnailURL}}
-                        @isPrimary={{false}}
+                        @tagLabel={{contact.position}}
                       />
                     {{/if}}
                   {{/each}}
                 {{else}}
-                  Missing Contacts
+                  <div class='default-value'>
+                    Missing Contacts
+                  </div>
                 {{/if}}
               </div>
             </:content>
@@ -173,7 +139,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <h3 class='summary-title'>Lifetime Value</h3>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <ChartBarPopular class='header-icon' />
             </:icon>
             <:content>
               <h3 class='summary-highlight'>Desc</h3>
@@ -186,7 +152,7 @@ class IsolatedTemplate extends Component<typeof Account> {
               <h3 class='summary-title'>Active Deals</h3>
             </:title>
             <:icon>
-              <BuildingIcon class='header-icon' />
+              <TrendingUp class='header-icon' />
             </:icon>
             <:content>
               <h3 class='summary-highlight'>Desc</h3>
@@ -313,12 +279,23 @@ class IsolatedTemplate extends Component<typeof Account> {
         display: inline-block;
       }
       .description {
-        margin: 0;
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content-container {
+        margin: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+      }
+      .tag-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .default-value {
+        color: var(--boxel-400);
       }
       /* Activities */
       .activity-button-mobile {
@@ -373,20 +350,104 @@ class IsolatedTemplate extends Component<typeof Account> {
   </template>
 }
 
+class UrgencyTag extends LooseGooseyField {
+  static icon = CalendarExclamation;
+  static displayName = 'CRM Urgency Tag';
+  static values = [
+    {
+      index: 0,
+      label: 'Overdue for Renewal',
+      colorScheme: {
+        foregroundColor: '#D32F2F', // Dark Red
+        backgroundColor: '#FFEBEE', // Light Red
+      },
+    },
+    {
+      index: 1,
+      label: 'Renewal Due Soon',
+      colorScheme: {
+        foregroundColor: '#F57C00', // Dark Orange
+        backgroundColor: '#FFF3E0', // Light Orange
+      },
+    },
+    {
+      index: 2,
+      label: 'Recently Renewed',
+      colorScheme: {
+        foregroundColor: '#388E3C', // Dark Green
+        backgroundColor: '#E8F5E9', // Light Green
+      },
+    },
+    {
+      index: 3,
+      label: 'Expiring Soon',
+      colorScheme: {
+        foregroundColor: '#FBC02D', // Dark Yellow
+        backgroundColor: '#FFF9C4', // Light Yellow
+      },
+    },
+    {
+      index: 4,
+      label: 'Inactive for X Days',
+      colorScheme: {
+        foregroundColor: '#757575', // Dark Grey
+        backgroundColor: '#E0E0E0', // Light Grey
+      },
+    },
+    {
+      index: 5,
+      label: 'Follow-Up Required',
+      colorScheme: {
+        foregroundColor: '#1976D2', // Dark Blue
+        backgroundColor: '#E3F2FD', // Light Blue
+      },
+    },
+    {
+      index: 6,
+      label: 'Pending Contract',
+      colorScheme: {
+        foregroundColor: '#512DA8', // Dark Purple
+        backgroundColor: '#EDE7F6', // Light Purple
+      },
+    },
+    {
+      index: 7,
+      label: 'Next Review Scheduled',
+      colorScheme: {
+        foregroundColor: '#558B2F', // Dark Olive Green
+        backgroundColor: '#F1F8E9', // Light Olive Green
+      },
+    },
+  ];
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.colorScheme.foregroundColor}}
+          @iconLightColor={{@model.colorScheme.backgroundColor}}
+        />
+      {{/if}}
+    </template>
+  };
+}
+
 export class Account extends CardDef {
   static displayName = 'CRM Account';
+  @field company = linksTo(Company);
+  @field primaryContact = linksTo(Contact);
+  @field contacts = linksToMany(Contact);
+  @field shippingAddress = contains(AddressField);
+  @field billingAddress = contains(AddressField);
+  @field urgencyTag = contains(UrgencyTag);
 
   @field name = contains(StringField, {
     computeVia: function (this: Account) {
       return this.company?.name;
     },
   });
-  @field company = linksTo(Company);
-  @field primaryContact = linksTo(Contact);
-  @field contacts = linksToMany(Contact);
-  @field shippingAddress = contains(AddressField);
-  @field billingAddress = contains(AddressField);
-  //From linked Company
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
     computeVia: function (this: Account) {
@@ -399,7 +460,12 @@ export class Account extends CardDef {
       return this.company?.website;
     },
   });
-
+  //TODO: Fix after CS-7670. Maybe no fix needed
+  @field statusTag = contains(StatusTagField, {
+    computeVia: function (this: Account) {
+      return this.primaryContact?.statusTag;
+    },
+  });
   @field title = contains(StringField, {
     computeVia: function (this: Account) {
       return this.company?.name;

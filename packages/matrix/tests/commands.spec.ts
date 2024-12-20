@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { Credentials, putEvent, registerUser } from '../docker/synapse';
+import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+} from '../helpers/matrix-constants';
 
 import {
   login,
@@ -56,7 +61,9 @@ test.describe('Commands', () => {
     let message;
     await expect(async () => {
       message = (await getRoomEvents()).pop()!;
-      expect(message?.content?.msgtype).toStrictEqual('org.boxel.message');
+      expect(message?.content?.msgtype).toStrictEqual(
+        APP_BOXEL_MESSAGE_MSGTYPE,
+      );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
 
@@ -187,7 +194,9 @@ test.describe('Commands', () => {
     let message;
     await expect(async () => {
       message = (await getRoomEvents()).pop()!;
-      expect(message?.content?.msgtype).toStrictEqual('org.boxel.message');
+      expect(message?.content?.msgtype).toStrictEqual(
+        APP_BOXEL_MESSAGE_MSGTYPE,
+      );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
     expect(boxelMessageData.context.tools).toMatchObject([]);
@@ -218,7 +227,7 @@ test.describe('Commands', () => {
     ).toHaveCount(1);
     await sendMessage(page, room1, 'please change this card');
     let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    expect(message.content.msgtype).toStrictEqual(APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     expect(boxelMessageData.context.tools).toMatchObject([]);
   }); */
@@ -230,7 +239,7 @@ test.describe('Commands', () => {
     let room1 = await getRoomId(page);
     let cardId = `${appURL}/hassan`;
     let content = {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
@@ -278,7 +287,7 @@ test.describe('Commands', () => {
     let room1 = await getRoomId(page);
     let card_id = `${appURL}/hassan`;
     let content = {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
@@ -313,7 +322,7 @@ test.describe('Commands', () => {
     await expect(async () => {
       let events = await getRoomEvents('user1', 'pass', room1);
       let commandResultEvent = (events as any).find(
-        (e: any) => e.content.msgtype === 'org.boxel.commandResult',
+        (e: any) => e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
       );
       await expect(commandResultEvent).toBeDefined();
     }).toPass();
@@ -335,7 +344,7 @@ test.describe('Commands', () => {
     await page.locator('[data-test-switch-to-code-mode-button]').click();
     await waitUntil(async () => (await getRoomEvents()).length > 0);
     let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    expect(message.content.msgtype).toStrictEqual(APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     expect(boxelMessageData.context.tools.length).toEqual(1);
     expect(boxelMessageData.context.tools[0].type).toEqual('function');

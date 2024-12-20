@@ -1,6 +1,7 @@
 import { module, test, assert } from 'qunit';
 import { shouldSetRoomTitle } from '../lib/set-title';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {
@@ -370,7 +371,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.command',
+          msgtype: APP_BOXEL_COMMAND_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'patching card',
           formatted_body: 'patching card',
@@ -439,7 +440,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.command',
+          msgtype: APP_BOXEL_COMMAND_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'patching card',
           formatted_body: 'patching card',

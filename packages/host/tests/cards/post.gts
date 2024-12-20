@@ -1,8 +1,9 @@
 import {
   contains,
   field,
-  Component,
+  linksTo,
   CardDef,
+  Component,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
@@ -10,13 +11,13 @@ import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
 import { PersonField } from './person';
+import { Publication } from './publication';
 
 export class Post extends CardDef {
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
   @field author = contains(PersonField);
   @field views = contains(NumberCard);
   @field createdAt = contains(DatetimeCard);
+  @field publication = linksTo(() => Publication);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title />
