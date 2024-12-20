@@ -2,6 +2,7 @@ import { FeaturedImageField } from './fields/featured-image';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
+import NumberField from 'https://cardstack.com/base/number';
 import {
   CardDef,
   field,
@@ -11,15 +12,16 @@ import {
   getCardMeta,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
-import { Author } from './author';
-import { setBackgroundImage } from './components/layout';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
-import NumberField from '../base/number';
-import { User } from './user';
+
+import { setBackgroundImage } from './components/layout';
+
+import { Author } from './author';
+import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
+import { User } from './user';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -37,13 +39,9 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       {{/if}}
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
-      {{#if @model.displayAuthors}}
-        <div class='byline'>
-          {{#each @fields.authors as |AuthorComponent|}}
-            <AuthorComponent @format='atom' @displayContainer={{false}} />
-          {{/each}}
-        </div>
-      {{/if}}
+      <span class='byline'>
+        {{@model.formattedAuthors}}
+      </span>
       {{#if @model.datePublishedIsoTimestamp}}
         <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
           {{@model.formattedDatePublished}}
@@ -99,19 +97,15 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         grid-area: date;
         align-self: end;
         justify-self: end;
-        text-wrap: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
       }
       .byline,
       .date {
         margin-bottom: var(--boxel-sp-xs);
-        height: 30px; /* author thumbnail max height */
-        display: inline-flex;
-        align-items: center;
-        gap: 0 var(--boxel-sp-xxxs);
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
       }
 
       .categories {
