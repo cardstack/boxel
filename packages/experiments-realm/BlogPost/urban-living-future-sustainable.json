@@ -21,7 +21,17 @@
     "relationships": {
       "authors.0": {
         "links": {
-          "self": "../Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7"
+          "self": "../Author/jane-doe"
+        }
+      },
+      "authors.1": {
+        "links": {
+          "self": "../Author/alice-enwunder"
+        }
+      },
+      "authors.2": {
+        "links": {
+          "self": "../Author/ad28d989-68a8-4bad-a8dc-05f9f724489c"
         }
       },
       "blog": {

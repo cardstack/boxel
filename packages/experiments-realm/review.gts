@@ -32,9 +32,7 @@ export class Review extends BlogPost {
           <h3 class='title'><@fields.title /></h3>
           <p class='description'>{{@model.description}}</p>
           <div class='info'>
-            {{#if @model.formattedAuthors}}
-              <div class='byline'>{{@model.formattedAuthors}}</div>
-            {{/if}}
+            <div class='byline'>{{@model.formattedAuthors}}</div>
             {{#if @model.datePublishedIsoTimestamp}}
               <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
                 {{@model.formattedDatePublished}}
@@ -135,9 +133,15 @@ export class Review extends BlogPost {
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.formattedAuthors}}
+            {{#if @model.authors.length}}
               <li class='byline'>
-                {{@model.formattedAuthors}}
+                {{#each @fields.authors as |AuthorComponent|}}
+                  <AuthorComponent
+                    class='author'
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
+                {{/each}}
               </li>
             {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
@@ -156,7 +160,7 @@ export class Review extends BlogPost {
             <@fields.userRating class='user-rating' />
           </div>
           <hr />
-          {{#if @model.authors}}
+          {{#if @model.authors.length}}
             <@fields.authors @format='embedded' />
           {{/if}}
         </div>
@@ -264,8 +268,8 @@ export class Review extends BlogPost {
         .byline {
           display: inline-flex;
           align-items: center;
-          gap: 0 var(--boxel-sp-xxxs);
-          font-weight: 600;
+          gap: var(--boxel-sp-xs) var(--boxel-sp);
+          flex-wrap: wrap;
         }
         .author {
           display: contents; /* workaround for removing block-levelness of atom format */

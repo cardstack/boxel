@@ -691,10 +691,6 @@ export class BlogPost extends CardDef {
       : titles[0];
   }
 
-  get displayAuthors() {
-    return this.authors && this.authors.length > 0;
-  }
-
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
@@ -724,10 +720,14 @@ export class BlogPost extends CardDef {
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.displayAuthors}}
+            {{#if @model.authors.length}}
               <li class='byline'>
                 {{#each @fields.authors as |AuthorComponent|}}
-                  <AuthorComponent @format='atom' class='author' />
+                  <AuthorComponent
+                    class='author'
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
                 {{/each}}
               </li>
             {{/if}}
@@ -750,7 +750,7 @@ export class BlogPost extends CardDef {
           </ul>
         </header>
         <@fields.body />
-        {{#if @model.authors}}
+        {{#if @model.authors.length}}
           <@fields.authors class='author-embedded-bio' @format='embedded' />
         {{/if}}
       </article>
@@ -819,17 +819,13 @@ export class BlogPost extends CardDef {
         .byline {
           display: inline-flex;
           align-items: center;
-          gap: var(--boxel-sp-xs) var(--boxel-sp-xxxs);
+          gap: var(--boxel-sp-xs) var(--boxel-sp);
           flex-wrap: wrap;
-          font: 600 var(--boxel-font-sm);
         }
         .author {
           display: contents; /* workaround for removing block-levelness of atom format */
         }
         .author-embedded-bio {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp);
           margin-top: var(--boxel-sp-xl);
         }
         .categories {
