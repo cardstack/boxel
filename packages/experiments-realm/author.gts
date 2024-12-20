@@ -277,6 +277,9 @@ export class Author extends CardDef {
           font: var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-sm);
         }
+        .author-bio-links {
+          align-self: end;
+        }
         .author-bio-links > :deep(.embedded-format) {
           display: flex;
           flex-wrap: wrap;
@@ -359,7 +362,6 @@ export class Author extends CardDef {
           height: 100%;
           min-width: 100px;
           min-height: 29px;
-          display: grid;
           gap: var(--gap-size);
           overflow: hidden;
           padding: var(--boxel-sp-xs);
@@ -380,6 +382,7 @@ export class Author extends CardDef {
         }
         .title-group {
           grid-area: header;
+          overflow: hidden;
         }
         .title {
           display: -webkit-box;
@@ -431,6 +434,7 @@ export class Author extends CardDef {
 
         @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
           .author-fitted {
+            display: grid;
             grid-template:
               'img' max-content
               'header' max-content
@@ -445,27 +449,28 @@ export class Author extends CardDef {
         /* Aspect ratio < 1.0 (Vertical card) */
         @container fitted-card (aspect-ratio <= 1.0) and (224px <= height < 226px) {
           .author-fitted {
+            display: grid;
             grid-template:
               'img' max-content
-              'header' 1fr
-              'links' max-content / 1fr;
-          }
-          .title,
-          .description {
-            -webkit-line-clamp: 3;
+              'header' max-content
+              'links' 1fr / 1fr;
           }
           .bio {
             display: none;
+          }
+          .links {
+            align-self: end;
           }
         }
 
         @container fitted-card (aspect-ratio <= 1.0) and (180px <= height < 224px) {
           .author-fitted {
             --thumbnail-size: 40px;
+            display: grid;
             grid-template:
               'img' max-content
-              'header' 1fr
-              'links' max-content / 1fr;
+              'header' max-content
+              'links' 1fr / 1fr;
           }
           .title {
             font-size: var(--boxel-font-size-sm);
@@ -473,15 +478,19 @@ export class Author extends CardDef {
           .bio {
             display: none;
           }
+          .links {
+            align-self: end;
+          }
         }
 
         @container fitted-card (aspect-ratio <= 1.0) and (148px <= height < 180px) {
           .author-fitted {
             --thumbnail-size: 40px;
+            display: grid;
             grid-template:
               'img' max-content
-              'header' 1fr
-              'links' max-content / 1fr;
+              'header' max-content
+              'links' 1fr / 1fr;
           }
           .title {
             font-size: var(--boxel-font-size-sm);
@@ -490,15 +499,19 @@ export class Author extends CardDef {
           .bio {
             display: none;
           }
+          .links {
+            align-self: end;
+          }
         }
 
         @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
           .author-fitted {
             --thumbnail-size: 40px;
+            display: grid;
             grid-template:
               'img' max-content
-              'header' 1fr
-              'links' max-content / 1fr;
+              'header' max-content
+              'links' 1fr / 1fr;
           }
           .title {
             font-size: var(--boxel-font-size-xs);
@@ -506,6 +519,9 @@ export class Author extends CardDef {
           .description,
           .bio {
             display: none;
+          }
+          .links {
+            align-self: end;
           }
         }
 
@@ -514,6 +530,7 @@ export class Author extends CardDef {
             --thumbnail-size: 40px;
             --link-icon-size: 13px;
             --gap-size: var(--boxel-sp-4xs);
+            display: grid;
             grid-template:
               'img' max-content
               'header' 1fr
@@ -528,9 +545,49 @@ export class Author extends CardDef {
           }
         }
 
+        @container fitted-card (aspect-ratio <= 1.0) and (92px <= height < 118px) {
+          .author-fitted {
+            --thumbnail-size: 40px;
+            --link-icon-size: 13px;
+            --gap-size: var(--boxel-sp-4xs);
+            display: grid;
+            grid-template:
+              'img' max-content
+              'header' 1fr
+              'links' max-content / 1fr;
+          }
+          .title {
+            font-size: var(--boxel-font-size-xs);
+          }
+          .description,
+          .bio {
+            display: none;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height < 92px) {
+          .author-fitted {
+            --thumbnail-size: 20px;
+            --gap-size: var(--boxel-sp-4xs);
+            display: grid;
+            grid-template:
+              'img' max-content
+              'header' 1fr / 1fr;
+          }
+          .title {
+            font-size: var(--boxel-font-size-xs);
+          }
+          .description,
+          .bio,
+          .links {
+            display: none;
+          }
+        }
+
         @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height)) {
           .author-fitted {
             --gap-size: var(--boxel-sp-xs);
+            display: grid;
             grid-template:
               'img' max-content
               'header' max-content
@@ -553,6 +610,7 @@ export class Author extends CardDef {
         @container fitted-card ((1.0 < aspect-ratio) and (151px <= height)) {
           .author-fitted {
             --gap-size: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+            display: grid;
             grid-template:
               'img header' minmax(var(--thumbnail-size), max-content)
               'img links' 1fr / max-content 1fr;
@@ -578,6 +636,7 @@ export class Author extends CardDef {
           .author-fitted {
             --gap-size: var(--boxel-sp-xxs) var(--boxel-sp-sm);
             --thumbnail-size: 50px;
+            display: grid;
             grid-template:
               'img header' minmax(var(--thumbnail-size), max-content)
               'img links' 1fr / max-content 1fr;
@@ -599,10 +658,11 @@ export class Author extends CardDef {
         @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
           .author-fitted {
             --gap-size: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-            --thumbnail-size: 30px;
+            --thumbnail-size: 20px;
             --link-icon-size: 15px;
+            display: grid;
             grid-template:
-              'img header' 1fr
+              'img header' minmax(var(--thumbnail-size), max-content)
               'img links' 1fr / max-content 1fr;
           }
           .title-group {
@@ -615,12 +675,16 @@ export class Author extends CardDef {
           .description {
             display: none;
           }
+          .links {
+            align-self: end;
+          }
         }
 
-        @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
+        @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (56px <= height <= 77px)) {
           .author-fitted {
             --gap-size: var(--boxel-sp-xs);
             --thumbnail-size: 34px;
+            display: grid;
             grid-template: 'img header' 1fr / max-content 1fr;
             padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
             align-items: center;
@@ -638,6 +702,7 @@ export class Author extends CardDef {
           .author-fitted {
             --gap-size: var(--boxel-sp-xxs);
             --thumbnail-size: 40px;
+            display: grid;
             grid-template: 'img header' 1fr / max-content 1fr;
             align-items: center;
             padding: var(--boxel-sp-xxxs);
@@ -652,10 +717,13 @@ export class Author extends CardDef {
           }
         }
 
-        @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
+        @container fitted-card ((1.0 < aspect-ratio) and (height <= 55px)) {
           .author-fitted {
-            --gap-size: var(--boxel-sp-xxxs);
+            --gap-size: var(--boxel-sp-xs);
             --thumbnail-size: 20px;
+            display: grid;
+            grid-template: 'img header' 1fr / max-content 1fr;
+            align-items: center;
             padding: var(--boxel-sp-xxxs);
           }
           .author-thumbnail.is-icon {
@@ -671,9 +739,18 @@ export class Author extends CardDef {
             font-size: var(--boxel-font-size-xs);
             line-height: 1.1;
           }
+          .description {
+            display: block;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+          }
+          .bio,
+          .links {
+            display: none;
+          }
         }
 
-        @container fitted-card ((1.0 < aspect-ratio) and (width <= 100px) and (height <= 57px)) {
+        @container fitted-card ((1.0 < aspect-ratio) and (width <= 100px) and (height <= 55px)) {
           .author-fitted {
             display: flex;
             align-items: center;
