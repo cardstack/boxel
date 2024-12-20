@@ -3,8 +3,8 @@ import { EntityDisplay } from './entity-display';
 
 interface ActivityCardArgs {
   Blocks: {
-    title: [];
-    thumbnail: [];
+    title?: [];
+    thumbnail?: [];
     description?: [];
     icon?: [];
     content?: [];
