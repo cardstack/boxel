@@ -19,6 +19,7 @@ import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import { LooseGooseyField } from '../loosey-goosey';
+import { EntityDisplay } from '../components/entity-display';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -220,22 +221,6 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .avatar-group-container :where(.avatar-thumbnail) {
         --profile-avatar-icon-size: 55px;
-      }
-
-      @container fitted-card (height < 300px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'links'
-            'status';
-          grid-template-rows: max-content max-content auto;
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 55px;
-        }
-        .contact-info {
-          display: none;
-        }
       }
 
       /* Catch all because contact info is too dense*/
@@ -625,16 +610,20 @@ class AtomTemplate extends Component<typeof Contact> {
   }
   <template>
     <div class='contact'>
-      {{#if @model.id}}
-        <Avatar
-          @userID={{@model.id}}
-          @displayName={{@model.name}}
-          @thumbnailURL={{@model.thumbnailURL}}
-          @isReady={{true}}
-          class='avatar'
-        />
-      {{/if}}
-      <span class='name'>{{this.label}}</span>
+      <EntityDisplay @underline={{true}}>
+        <:title>
+          {{this.label}}
+        </:title>
+        <:thumbnail>
+          <Avatar
+            @userID={{@model.id}}
+            @displayName={{@model.name}}
+            @thumbnailURL={{@model.thumbnailURL}}
+            @isReady={{true}}
+            class='avatar'
+          />
+        </:thumbnail>
+      </EntityDisplay>
     </div>
     <style scoped>
       .contact {
@@ -647,13 +636,6 @@ class AtomTemplate extends Component<typeof Contact> {
         --profile-avatar-icon-size: 20px;
         --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
-      }
-      .name {
-        text-decoration: underline;
-        flex: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
     </style>
   </template>

@@ -76,7 +76,7 @@
       ],
       "title": null,
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://picsum.photos/id/500/200/300"
     },
     "relationships": {
       "account": {
