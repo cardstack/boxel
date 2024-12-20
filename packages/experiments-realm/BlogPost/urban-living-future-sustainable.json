@@ -29,9 +29,9 @@
           "self": "../BlogApp/ramped"
         }
       },
-      "categories.0": {
+      "categories": {
         "links": {
-          "self": "../BlogCategory/4f1fc705-d849-478a-b7c3-8280f614ce3b"
+          "self": null
         }
       },
       "editors": {

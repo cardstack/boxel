@@ -37,12 +37,12 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       {{/if}}
       <h3 class='title'><@fields.title /></h3>
       <p class='description'>{{@model.description}}</p>
-      {{#if @model.authorBio}}
-        <@fields.authorBio
-          class='byline'
-          @format='atom'
-          @displayContainer={{false}}
-        />
+      {{#if @model.displayAuthors}}
+        <div class='byline'>
+          {{#each @fields.authors as |AuthorComponent|}}
+            <AuthorComponent @format='atom' @displayContainer={{false}} />
+          {{/each}}
+        </div>
       {{/if}}
       {{#if @model.datePublishedIsoTimestamp}}
         <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
@@ -145,7 +145,9 @@ class FittedTemplate extends Component<typeof BlogPost> {
       <div class='content'>
         <h3 class='title'><@fields.title /></h3>
         <p class='description'>{{@model.description}}</p>
-        <span class='byline'>{{@model.authorBio.title}}</span>
+        {{#if @model.formattedAuthors}}
+          <span class='byline'>{{@model.formattedAuthors}}</span>
+        {{/if}}
         {{#if @model.datePublishedIsoTimestamp}}
           <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
             {{@model.formattedDatePublished}}
@@ -619,7 +621,7 @@ export class BlogPost extends CardDef {
   });
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
-  @field authorBio = linksTo(Author);
+  @field authors = linksToMany(Author);
   @field publishDate = contains(DatetimeField);
   @field status = contains(Status, {
     computeVia: function (this: BlogPost) {
@@ -680,6 +682,25 @@ export class BlogPost extends CardDef {
     return this.lastUpdated ? this.lastUpdated.toISOString() : undefined;
   }
 
+  get formattedAuthors() {
+    const authors = this.authors ?? [];
+    if (authors.length === 0) return undefined;
+
+    const titles = authors.map((author) => author.title);
+
+    if (titles.length === 2) {
+      return `${titles[0]} and ${titles[1]}`;
+    }
+
+    return titles.length > 2
+      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
+      : titles[0];
+  }
+
+  get displayAuthors() {
+    return this.authors && this.authors.length > 0;
+  }
+
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static isolated = class Isolated extends Component<typeof this> {
@@ -709,13 +730,11 @@ export class BlogPost extends CardDef {
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.authorBio}}
+            {{#if @model.displayAuthors}}
               <li class='byline'>
-                <@fields.authorBio
-                  class='author'
-                  @format='atom'
-                  @displayContainer={{false}}
-                />
+                {{#each @fields.authors as |AuthorComponent|}}
+                  <AuthorComponent @format='atom' class='author' />
+                {{/each}}
               </li>
             {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
@@ -737,9 +756,8 @@ export class BlogPost extends CardDef {
           </ul>
         </header>
         <@fields.body />
-
-        {{#if @model.authorBio}}
-          <@fields.authorBio class='author-embedded-bio' @format='embedded' />
+        {{#if @model.authors}}
+          <@fields.authors class='author-embedded-bio' @format='embedded' />
         {{/if}}
       </article>
       <style scoped>
@@ -807,13 +825,17 @@ export class BlogPost extends CardDef {
         .byline {
           display: inline-flex;
           align-items: center;
-          gap: 0 var(--boxel-sp-xxxs);
-          font-weight: 600;
+          gap: var(--boxel-sp-xs) var(--boxel-sp-xxxs);
+          flex-wrap: wrap;
+          font: 600 var(--boxel-font-sm);
         }
         .author {
           display: contents; /* workaround for removing block-levelness of atom format */
         }
         .author-embedded-bio {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
           margin-top: var(--boxel-sp-xl);
         }
         .categories {
