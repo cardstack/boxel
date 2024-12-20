@@ -13,6 +13,13 @@ function htmlSafeColor(color?: string) {
   return htmlSafe(`background-color: ${color || ''}`);
 }
 
+export const categoryStyle = (category: Partial<BlogCategory>) => {
+  return htmlSafe(`
+    background-color: ${category.backgroundColor || '#FFFFFF'};
+    color: ${category.textColor || '#000000'};
+  `);
+};
+
 let BlogCategoryTemplate = class Embedded extends Component<
   typeof BlogCategory
 > {
@@ -44,7 +51,7 @@ let BlogCategoryTemplate = class Embedded extends Component<
     </style>
     <div class='blog-category'>
       {{! template-lint-disable no-inline-styles }}
-      <div class='category-name' style={{htmlSafeColor @model.color}}>
+      <div class='category-name' style={{categoryStyle @model}}>
         <@fields.shortName />
       </div>
       <div class='category-label'>
@@ -64,7 +71,8 @@ export class BlogCategory extends CardDef {
   @field longName = contains(StringField);
   @field shortName = contains(StringField);
   @field slug = contains(StringField);
-  @field color = contains(StringField);
+  @field backgroundColor = contains(StringField);
+  @field textColor = contains(StringField);
   @field description = contains(StringField);
   @field blog = linksTo(BlogAppCard, { isUsed: true });
 
@@ -87,7 +95,7 @@ export class BlogCategory extends CardDef {
       </style>
       <div class='category-atom'>
         {{! template-lint-disable no-inline-styles }}
-        <div class='circle' style={{htmlSafeColor @model.color}} />
+        <div class='circle' style={{htmlSafeColor @model.backgroundColor}} />
         <@fields.longName />
       </div>
     </template>
@@ -187,7 +195,7 @@ export class BlogCategory extends CardDef {
       </style>
       <div class='blog-category'>
         {{! template-lint-disable no-inline-styles }}
-        <div class='category-name' style={{htmlSafeColor @model.color}}>
+        <div class='category-name' style={{categoryStyle @model}}>
           <@fields.shortName />
         </div>
         <div class='category-label'>

@@ -251,8 +251,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
-      :deep(.card-view.categories-grid) {
-        --grid-card-height: 150px;
+      :deep(.categories-grid) {
+        --card-view-height: 150px;
       }
     </style>
   </template>
@@ -268,14 +268,16 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private get gridClass() {
-    if (this.activeFilter.displayName === 'Blog Posts') {
-      return 'blog-posts-grid';
-    } else if (this.activeFilter.displayName === 'Author Bios') {
-      return 'author-bios-grid';
-    } else if (this.activeFilter.displayName === 'Categories') {
-      return 'categories-grid';
-    }
-    return '';
+    let displayName = this.activeFilter.displayName;
+    let gridName =
+      displayName === 'Blog Posts'
+        ? 'blog-posts-grid'
+        : displayName === 'Author Bios'
+        ? 'author-bios-grid'
+        : displayName === 'Categories'
+        ? 'categories-grid'
+        : '';
+    return gridName ? `bordered-items ${gridName}` : '';
   }
 
   private setFilters() {

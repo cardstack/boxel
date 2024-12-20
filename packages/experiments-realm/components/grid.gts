@@ -156,7 +156,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         container-name: fitted-card;
         container-type: size;
       }
-      .card-view-container :deep(article) {
+      .bordered-items > .card-view-container > * {
         border-radius: var(--boxel-border-radius);
         box-shadow: inset 0 0 0 1px var(--boxel-light-500);
       }

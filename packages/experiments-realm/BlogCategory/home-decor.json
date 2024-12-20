@@ -5,7 +5,8 @@
       "longName": "Home decoration & interior design",
       "shortName": "Home Decor",
       "slug": "home",
-      "color": "red",
+      "backgroundColor": "red",
+      "textColor": "white",
       "description": "Articles about the aesthetic side of home building and renovation",
       "title": "Home decoration & interior design",
       "thumbnailURL": null
