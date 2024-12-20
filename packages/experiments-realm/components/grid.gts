@@ -74,31 +74,76 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
     </ul>
     <style scoped>
       .cards {
+        --default-card-view-min-width: 750px;
+        --default-card-view-max-width: 1fr;
+        --default-card-view-height: 347px;
+        --default-grid-view-min-width: 224px;
+        --default-grid-view-max-width: 1fr;
+        --default-grid-view-height: max-content;
+        --default-strip-view-min-width: 49%;
+        --default-strip-view-max-width: 1fr;
+        --default-strip-view-height: 180px;
+
         display: grid;
         grid-template-columns: repeat(
           auto-fill,
-          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
+          minmax(
+            var(--card-view-min-width, var(--default-card-view-min-width)),
+            var(--card-view-max-width, var(--default-card-view-max-width))
+          )
         );
-        grid-auto-rows: var(--grid-card-height);
+        grid-auto-rows: var(
+          --card-view-height,
+          var(--default-card-view-height)
+        );
         gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
         padding: var(--boxel-sp-6xs);
       }
-      .card-view {
-        --grid-card-height: 347px;
-        grid-template-columns: minmax(750px, 1fr);
+
+      .cards.card-view {
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(
+            var(--card-view-min-width, var(--default-card-view-min-width)),
+            var(--card-view-max-width, var(--default-card-view-max-width))
+          )
+        );
+        grid-auto-rows: var(
+          --card-view-height,
+          var(--default-card-view-height)
+        );
       }
-      .strip-view {
-        --grid-card-min-width: 49%;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: 180px;
+
+      .cards.strip-view {
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(
+            var(--strip-view-min-width, var(--default-strip-view-min-width)),
+            var(--strip-view-max-width, var(--default-strip-view-max-width))
+          )
+        );
+        grid-auto-rows: var(
+          --strip-view-height,
+          var(--default-strip-view-height)
+        );
       }
-      .grid-view {
-        --grid-card-min-width: 224px;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: max-content;
+
+      .cards.grid-view {
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(
+            var(--grid-view-min-width, var(--default-grid-view-min-width)),
+            var(--grid-view-max-width, var(--default-grid-view-max-width))
+          )
+        );
+        grid-auto-rows: var(
+          --grid-view-height,
+          var(--default-grid-view-height)
+        );
       }
+
       .grid-view-container {
         aspect-ratio: 5/6;
       }

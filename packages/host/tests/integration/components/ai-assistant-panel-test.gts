@@ -16,6 +16,13 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -356,7 +363,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     for (let i = 0; i < 20; i++) {
       simulateRemoteMessage(roomId, '@testuser:staging', {
         body: `question #${i + 1}`,
-        msgtype: 'org.boxel.message',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: `question #${i + 1}`,
         format: 'org.matrix.custom.html',
       });
@@ -384,7 +391,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -434,7 +441,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
     let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Incorrect command',
       formatted_body: 'Incorrect command',
       format: 'org.matrix.custom.html',
@@ -455,7 +462,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
@@ -480,7 +487,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Changing first name to Jackie',
       formatted_body: 'Changing first name to Jackie',
       format: 'org.matrix.custom.html',
@@ -578,7 +585,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({ toolCall: payload }),
@@ -635,7 +642,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Removing pet and changing preferred carrier',
       formatted_body: 'Removing pet and changing preferred carrier',
       format: 'org.matrix.custom.html',
@@ -677,7 +684,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Link to pet and change preferred carrier',
       formatted_body: 'Link to pet and change preferred carrier',
       format: 'org.matrix.custom.html',
@@ -730,7 +737,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Change tripTitle to Trip to Japan',
       formatted_body: 'Change tripTitle to Trip to Japan',
       format: 'org.matrix.custom.html',
@@ -772,7 +779,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
       format: 'org.matrix.custom.html',
@@ -796,7 +803,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     });
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Incorrect patch command',
       formatted_body: 'Incorrect patch command',
       format: 'org.matrix.custom.html',
@@ -818,7 +825,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     });
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Change first name to Jackie',
       formatted_body: 'Change first name to Jackie',
       format: 'org.matrix.custom.html',
@@ -883,7 +890,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
       format: 'org.matrix.custom.html',
@@ -934,7 +941,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let event1Id = await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       formatted_body: '',
-      msgtype: 'org.boxel.cardFragment',
+      msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
       data: JSON.stringify({
         index: 0,
         totalParts: 1,
@@ -958,7 +965,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       formatted_body: 'card with error',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       data: JSON.stringify({
         attachedCardsEventIds: [event1Id],
       }),
@@ -1213,7 +1220,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -1250,7 +1257,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'Say one word.',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
@@ -1471,7 +1478,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     simulateRemoteMessage(roomId, '@testuser:staging', {
       body: 'Say one word.',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
@@ -1529,7 +1536,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await simulateRemoteMessage(roomId, '@testuser:staging', {
       body: 'I have a feeling something will go wrong',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
@@ -1546,7 +1553,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await simulateRemoteMessage(roomId, '@testuser:staging', {
       body: 'I have a feeling something will go wrong',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
@@ -1668,7 +1675,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'Say one word.',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
@@ -1683,7 +1690,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'What is a french bulldog?',
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'What is a french bulldog?',
       format: 'org.matrix.custom.html',
     });
@@ -1877,7 +1884,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
     let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
@@ -1951,7 +1958,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -1980,7 +1987,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       (event) =>
         event.type === 'm.room.message' &&
         typeof event.content === 'object' &&
-        event.content.msgtype === 'org.boxel.commandResult',
+        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
     );
     assert.equal(
       commandResultEvents.length,
@@ -2002,7 +2009,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       (event) =>
         event.type === 'm.room.message' &&
         typeof event.content === 'object' &&
-        event.content.msgtype === 'org.boxel.commandResult',
+        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
     );
     assert.equal(
       commandResultEvents.length,
@@ -2016,7 +2023,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(id);
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
@@ -2049,7 +2056,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let commandResultEvent = (await getRoomEvents(roomId)).find(
       (e) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
         e.content['m.relates_to']?.rel_type === 'm.annotation',
     ) as CommandResultEvent;
     let serializedResults =
@@ -2077,7 +2084,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(id);
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
@@ -2109,7 +2116,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let commandResultEvent = (await getRoomEvents(roomId)).find(
       (e) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
         e.content['m.relates_to']?.rel_type === 'm.annotation',
     ) as CommandResultEvent;
     let serializedResults =
@@ -2135,7 +2142,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
@@ -2206,7 +2213,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
@@ -2281,7 +2288,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',

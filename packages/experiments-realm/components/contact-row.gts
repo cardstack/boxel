@@ -38,13 +38,14 @@ export class ContactRow extends GlimmerComponent<ContactRowArgs> {
     </EntityDisplay>
     <style scoped>
       .avatar {
-        --profile-avatar-icon-size: 30px;
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
       }
       .primary-tag {
         --pill-font-weight: 400;
-        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-6xs);
-        --pill-font: 400 var(--boxel-font-sm);
+        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+        --pill-font: 400 var(--boxel-font-xs);
         --pill-border: none;
       }
     </style>
