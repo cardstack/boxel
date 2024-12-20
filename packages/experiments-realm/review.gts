@@ -97,6 +97,7 @@ export class Review extends BlogPost {
         }
         .info {
           align-self: end;
+          overflow: hidden;
         }
         .byline,
         .date {
