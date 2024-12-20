@@ -16,12 +16,20 @@ export class ReviewBlog extends BlogApp {
       createNewButtonText: 'Post',
       showAdminData: true,
       sortOptions: BlogApp.sortOptionList,
+      cardRef: {
+        name: 'Review',
+        module: new URL('./review', import.meta.url).href,
+      },
     },
     {
       displayName: 'Authors',
       icon: AuthorIcon,
       cardTypeName: 'Author',
       createNewButtonText: 'Author',
+      cardRef: {
+        name: 'Author',
+        module: new URL('./author', import.meta.url).href,
+      },
     },
   ];
 }

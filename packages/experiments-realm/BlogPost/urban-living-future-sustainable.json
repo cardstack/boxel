@@ -28,6 +28,16 @@
         "links": {
           "self": "../BlogApp/ramped"
         }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../BlogCategory/4f1fc705-d849-478a-b7c3-8280f614ce3b"
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {
