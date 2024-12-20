@@ -217,16 +217,16 @@ class FittedTemplate extends Component<typeof BlogPost> {
       }
 
       .categories {
-        display: flex;
-        margin-top: -30px;
+        margin-top: -27px;
         height: 20px;
         margin-left: 7px;
         display: none;
       }
 
       .category {
-        font-size: var(--boxel-font-size-xs);
-        padding: 3px var(--boxel-sp-xxxs);
+        font-size: 0.6rem;
+        height: 18px;
+        padding: 3px 4px;
         border-radius: var(--boxel-border-radius-sm);
         display: inline-block;
         font-family: var(--boxel-font-family);
