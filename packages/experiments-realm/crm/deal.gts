@@ -459,7 +459,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .info-container {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: start;
         gap: var(--boxel-sp-xxs);
       }
       .summary-title {
@@ -531,6 +531,243 @@ class IsolatedTemplate extends Component<typeof Deal> {
         height: var(--boxel-icon-sm);
         flex-shrink: 0;
         margin-left: auto;
+      }
+    </style>
+  </template>
+}
+
+class FittedTemplate extends Component<typeof Deal> {
+  get logoURL() {
+    return (
+      this.args.model.thumbnailURL ?? this.args.model.account?.thumbnailURL
+    );
+  }
+
+  get primaryContactName() {
+    return this.args.model.account?.primaryContact?.name;
+  }
+
+  get hasCompanyInfo() {
+    return (
+      this.args.model?.account?.website ||
+      this.args.model?.account?.headquartersAddress
+    );
+  }
+
+  get hasValueBreakdown() {
+    return (
+      this.args.model.valueBreakdown &&
+      this.args.model.valueBreakdown.length > 0
+    );
+  }
+
+  get hasStakeholders() {
+    return (
+      this.args.model.primaryStakeholder ||
+      (this.args.model.stakeholders?.length ?? 0) > 0
+    );
+  }
+
+  <template>
+    <article class='fitted-deal-card'>
+      <header class='deal-header'>
+        <AccountHeader
+          @logoURL={{this.logoURL}}
+          @name={{@model.name}}
+          class='crm-account-header'
+        >
+          <:name>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name default-value'>Missing Deal Name</h1>
+            {{/if}}
+          </:name>
+          <:content>
+            <div class='account-info'>
+              <@fields.company
+                @format='atom'
+                @displayContainer={{false}}
+                class='info-atom'
+              />
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+                class='info-atom'
+              />
+            </div>
+          </:content>
+        </AccountHeader>
+
+        <div class='deal-status'>
+          {{@model.status.label}}
+        </div>
+      </header>
+
+      <div class='deal-content'>
+        <div class='deal-details'>
+          <div class='deal-field'>
+            <label>Current Value:</label>
+            <@fields.computedValue class='highlight-value' @format='atom' />
+          </div>
+
+          <div class='deal-field'>
+            <label>Close Date</label>
+            <div class='highlight-value'>
+              <@fields.closeDate @format='atom' />
+            </div>
+          </div>
+
+          {{#if @model.healthScore}}
+            <div class='deal-field'>
+              <label>Health Score</label>
+              <div class='progress-container'>
+                <CrmProgressBar
+                  @value={{@model.healthScore}}
+                  @max={{100}}
+                  @color='var(--boxel-green)'
+                />
+                <div class='highlight-value'>
+                  {{@model.healthScore}}
+                </div>
+              </div>
+            </div>
+          {{/if}}
+        </div>
+
+        <div class='event-details'>
+          {{! just serve the placeholder for grid system ,pending event card - https://linear.app/cardstack/issue/CS-7691/add-event-card }}
+        </div>
+      </div>
+
+    </article>
+
+    <style scoped>
+      h1,
+      p {
+        margin: 0;
+      }
+      label {
+        color: var(--boxel-500);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+      }
+      .default-value {
+        color: var(--boxel-400);
+      }
+      .fitted-deal-card {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        grid-template-areas:
+          'deal-header'
+          'deal-content';
+        grid-template-rows: max-content auto;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+      .deal-header {
+        grid-area: deal-header;
+        display: grid;
+        grid-template-areas: 'crm-account-header deal-status';
+        grid-template-columns: 75% auto;
+        align-items: start;
+        gap: var(--boxel-sp-lg);
+      }
+      .deal-content {
+        grid-area: deal-content;
+        display: grid;
+        grid-template-areas: 'deal-details event-details';
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-lg);
+        margin-top: auto;
+      }
+      .crm-account-header {
+        grid-area: crm-account-header;
+        overflow: hidden;
+      }
+      .deal-status {
+        grid-area: deal-status;
+        margin-left: auto;
+      }
+      .account-name {
+        font-size: var(--boxel-font-size-med);
+        font-weight: 600;
+      }
+      .account-info {
+        display: flex;
+        align-items: start;
+        gap: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .account-name,
+      .account-info:deep(.entity-name) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+        width: 100%;
+      }
+      .info-atom {
+        width: fit-content;
+        display: inline-block;
+      }
+      /* deal details */
+      .deal-details {
+        grid-area: deal-details;
+        display: flex;
+        gap: var(--boxel-sp-lg);
+      }
+      .deal-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .highlight-value {
+        font-weight: 600;
+        font-size: calc(var(--boxel-font-size) - 1px);
+      }
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .event-details {
+        grid-area: event-details;
+        background-color: var(--boxel-300);
+      }
+      /* Catch all because deal is too dense*/
+      @container fitted-card (height < 180px) {
+        .fitted-deal-card {
+          grid-template-areas: 'deal-header';
+          grid-template-rows: auto;
+          padding: var(--boxel-sp-sm);
+        }
+        .deal-content {
+          display: none;
+        }
+
+        .deal-header {
+          grid-area: deal-header;
+          display: grid;
+          grid-template-areas: 'crm-account-header';
+          grid-template-columns: 1fr;
+          align-items: start;
+          gap: var(--boxel-sp-lg);
+        }
+        .deal-status {
+          display: none;
+        }
+
+        .deal-header:deep(.account-header-logo) {
+          width: 40px;
+          height: 40px;
+        }
+        .account-name {
+          font-size: var(--boxel-font-size-sm);
+        }
       }
     </style>
   </template>
@@ -717,6 +954,7 @@ export class Deal extends CardDef {
     },
   });
   static isolated = IsolatedTemplate;
+  static fitted = FittedTemplate;
 }
 
 interface DealPageLayoutArgs {
