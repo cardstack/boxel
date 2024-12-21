@@ -13,6 +13,7 @@ export type DndItem = Record<string, any>;
 
 export interface DndKanbanBoardArgs<DndColumn> {
   columns: DndColumn[];
+  displayCard?: (card: DndItem) => boolean;
   isLoading?: boolean;
   onMove?: (
     draggedCard: DndItem,
@@ -153,6 +154,14 @@ export default class DndKanbanBoard extends Component<
     this.draggedCard = null;
   }
 
+  @action
+  displayCard(card: DndItem): boolean {
+    if (this.args.displayCard) {
+      return this.args.displayCard(card);
+    }
+    return true;
+  }
+
   <template>
     {{#if this.areModifiersLoaded}}
       <div class='draggable-container' {{on 'dragend' this.onDragEnd}}>
@@ -173,29 +182,31 @@ export default class DndKanbanBoard extends Component<
 
             <div class='column-drop-zone'>
               {{#each column.cards as |card|}}
-                <div
-                  class='draggable-card {{if @isLoading "is-loading"}}'
-                  {{this.DndSortableItemModifier
-                    group='cards'
-                    data=(hash item=card parent=column)
-                    onDrop=this.moveCard
-                    isOnTargetClass='is-on-target'
-                    onDragStart=(fn this.onDragStart card)
-                  }}
-                >
-                  {{#if (and @isLoading (eq card this.draggedCard))}}
-                    <div class='overlay'></div>
-                    {{yield card column to='card'}}
-                    <LoadingIndicator
-                      width='18'
-                      height='18'
-                      @color='var(--boxel-light)'
-                      class='loader'
-                    />
-                  {{else}}
-                    {{yield card column to='card'}}
-                  {{/if}}
-                </div>
+                {{#if (this.displayCard card)}}
+                  <div
+                    class='draggable-card {{if @isLoading "is-loading"}}'
+                    {{this.DndSortableItemModifier
+                      group='cards'
+                      data=(hash item=card parent=column)
+                      onDrop=this.moveCard
+                      isOnTargetClass='is-on-target'
+                      onDragStart=(fn this.onDragStart card)
+                    }}
+                  >
+                    {{#if (and @isLoading (eq card this.draggedCard))}}
+                      <div class='overlay'></div>
+                      {{yield card column to='card'}}
+                      <LoadingIndicator
+                        width='18'
+                        height='18'
+                        @color='var(--boxel-light)'
+                        class='loader'
+                      />
+                    {{else}}
+                      {{yield card column to='card'}}
+                    {{/if}}
+                  </div>
+                {{/if}}
               {{/each}}
             </div>
           </div>
