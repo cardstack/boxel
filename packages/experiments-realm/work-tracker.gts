@@ -94,6 +94,9 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   );
 
   get cardInstances() {
+    if (!this.cards || !this.cards.instances) {
+      return [];
+    }
     return this.cards.instances as Task[];
   }
 
