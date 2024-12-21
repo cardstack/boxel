@@ -49,19 +49,9 @@ class TaskCollection extends Resource<Args> {
     return Array.from(this.data.values());
   }
 
-  get hasEmptyData() {
-    return this.columns.every((column) => column.cards.length === 0);
-  }
-
-  get numberOfCards() {
-    return this.columns.reduce((acc, column) => acc + column.cards.length, 0);
-  }
-
   modify(_positional: never[], named: Args['named']) {
     this.hasColumnKey = named.hasColumnKey;
-    if (named.cards.length !== this.numberOfCards) {
-      this.commit(named.cards, named.columnKeys);
-    }
+    this.commit(named.cards, named.columnKeys);
   }
 }
 
