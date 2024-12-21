@@ -3,6 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { Loader } from '@cardstack/runtime-common';
 
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -66,7 +67,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       prompt: 'Hello, world!',
     });
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'app.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 0);
   });
@@ -85,7 +86,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       commands: [{ command, autoExecute: false }],
     });
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'app.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -109,7 +110,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       requireCommandCall: false,
     });
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'app.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -133,7 +134,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       requireCommandCall: true,
     });
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'app.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -161,7 +162,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       requireCommandCall: false,
     });
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'app.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 2);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
