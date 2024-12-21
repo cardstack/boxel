@@ -92,6 +92,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       },
     },
     this.realmHrefs,
+    { isLive: true },
   );
 
   get cardInstances() {
@@ -119,7 +120,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   }
 
   hasColumnKey = (card: Task, key: string) => {
-    return card.status.label === key;
+    return card.status?.label === key;
   };
 
   taskCollection = getTaskCardsResource(
@@ -173,9 +174,10 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
     if (!this.currentProject || !this.currentProject.id) {
       console.log('No project');
-      return {}; //can we query a no-op?
+      everyArr.push({ eq: { 'project.id': null } });
+    } else {
+      everyArr.push({ eq: { 'project.id': this.currentProject.id } });
     }
-    everyArr.push({ eq: { 'project.id': this.currentProject.id } });
     return (
       everyArr.length > 0
         ? {
@@ -348,10 +350,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     );
   }
 
-  get showLoadingOfDropdown() {
-    return this.assigneeQuery?.isLoading;
-  }
-
   <template>
     <div class='task-app'>
       {{#if (not this.currentProject.id)}}
@@ -361,53 +359,49 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       {{/if}}
       <div class='filter-section'>
         <div class='filter-dropdown-container'>
-          {{#if this.showLoadingOfDropdown}}
-            Loading...
-          {{else}}
-            {{#if this.selectedFilterConfig}}
-              {{#let (this.selectedFilterConfig.options) as |options|}}
-                <FilterDropdown
-                  @searchField={{this.selectedFilterConfig.searchKey}}
-                  @options={{options}}
-                  @realmURLs={{this.realmHrefs}}
-                  @selected={{this.selectedItemsForFilter}}
-                  @onChange={{this.onChange}}
-                  @onClose={{this.onClose}}
-                  as |item|
-                >
-                  {{#let (this.isSelectedItem item) as |isSelected|}}
-                    <StatusPill
-                      @isSelected={{isSelected}}
-                      @label={{if
-                        (eq this.selectedFilter 'status')
-                        item.label
-                        item.name
-                      }}
-                    />
-                  {{/let}}
-                </FilterDropdown>
-              {{/let}}
-            {{else}}
-              <BoxelSelect
-                class='status-select'
-                @selected={{this.selectedFilter}}
-                @options={{this.filterTypes}}
-                @onChange={{this.onSelectFilter}}
-                @placeholder={{'Choose a Filter'}}
-                @matchTriggerWidth={{false}}
-                @triggerComponent={{FilterTrigger}}
+          {{#if this.selectedFilterConfig}}
+            {{#let (this.selectedFilterConfig.options) as |options|}}
+              <FilterDropdown
+                @searchField={{this.selectedFilterConfig.searchKey}}
+                @options={{options}}
+                @realmURLs={{this.realmHrefs}}
+                @selected={{this.selectedItemsForFilter}}
+                @onChange={{this.onChange}}
+                @onClose={{this.onClose}}
                 as |item|
               >
-                {{#let (this.getFilterIcon item) as |Icon|}}
-                  <div class='filter-option'>
-                    {{#if Icon}}
-                      <Icon class='filter-display-icon' />
-                    {{/if}}
-                    <span class='filter-display-text'>{{item}}</span>
-                  </div>
+                {{#let (this.isSelectedItem item) as |isSelected|}}
+                  <StatusPill
+                    @isSelected={{isSelected}}
+                    @label={{if
+                      (eq this.selectedFilter 'status')
+                      item.label
+                      item.name
+                    }}
+                  />
                 {{/let}}
-              </BoxelSelect>
-            {{/if}}
+              </FilterDropdown>
+            {{/let}}
+          {{else}}
+            <BoxelSelect
+              class='status-select'
+              @selected={{this.selectedFilter}}
+              @options={{this.filterTypes}}
+              @onChange={{this.onSelectFilter}}
+              @placeholder={{'Choose a Filter'}}
+              @matchTriggerWidth={{false}}
+              @triggerComponent={{FilterTrigger}}
+              as |item|
+            >
+              {{#let (this.getFilterIcon item) as |Icon|}}
+                <div class='filter-option'>
+                  {{#if Icon}}
+                    <Icon class='filter-display-icon' />
+                  {{/if}}
+                  <span class='filter-display-text'>{{item}}</span>
+                </div>
+              {{/let}}
+            </BoxelSelect>
           {{/if}}
         </div>
         <div class='filter-display-sec'>
