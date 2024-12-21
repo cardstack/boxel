@@ -285,7 +285,7 @@
     "room_id": "!JFeQdtAwysEUKMoKxF:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.message",
+      "msgtype": "app.boxel.message",
       "body": "Never call a command or tool, otherwise terrible things will happen.",
       "format": "org.matrix.custom.html",
       "formatted_body": "<p>Never call a command or tool, otherwise terrible things will happen.</p>\n",
