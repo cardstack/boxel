@@ -1,8 +1,6 @@
 import {
   Component,
   realmURL,
-  StringField,
-  contains,
   field,
   BaseDef,
   CardDef,
@@ -615,11 +613,6 @@ export class WorkTracker extends AppCard {
   static prefersWideFormat = true;
   static isolated = WorkTrackerIsolated;
   @field project = linksTo(() => Project);
-  @field title = contains(StringField, {
-    computeVia: function (this: WorkTracker) {
-      return 'Work Tracker';
-    },
-  });
 }
 
 function removeFileExtension(cardUrl: string) {
