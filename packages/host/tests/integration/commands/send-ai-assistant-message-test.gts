@@ -3,8 +3,8 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { Loader } from '@cardstack/runtime-common';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
