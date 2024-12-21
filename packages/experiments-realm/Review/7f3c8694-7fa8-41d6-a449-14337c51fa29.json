@@ -20,16 +20,16 @@
         "imageUrl": "https://boxel-images.boxel.ai/app-assets/blog-posts/space-movie-thumb.jpeg",
         "credit": null,
         "caption": null,
-        "altText": "",
+        "altText": "Scene from Singularity’s Echo",
         "size": "cover",
-        "height": 485,
+        "height": 400,
         "width": null
       },
-      "description": "In an era hungry for originality, \"Singularity’s Echo\" emerges as a luminous beacon in the cosmic darkness—an audacious journey that redefines what viewers can expect from the genre. Directed by the elusive auteur Oruni Kilrain, this film harnesses the raw power of interstellar wonder and transforms it into a multilayered narrative tapestry. Blending heart-stirring drama with disorienting visuals, \"Singularity’s Echo* reminds us that true cinematic frontiers remain ripe for exploration, stretching beyond the gravitational pull of safe storytelling.",
+      "description": "In an era hungry for originality, \"Singularity’s Echo\" emerges as a luminous beacon in the cosmic darkness—an audacious journey that redefines what viewers can expect from the genre. Directed by the elusive auteur Oruni Kilrain, this film harnesses the raw power of interstellar wonder and transforms it into a multilayered narrative tapestry. Blending heart-stirring drama with disorienting visuals, \"Singularity’s Echo\" reminds us that true cinematic frontiers remain ripe for exploration, stretching beyond the gravitational pull of safe storytelling.",
       "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/blog-posts/space-movie-thumb.jpeg"
     },
     "relationships": {
-      "authorBio": {
+      "authors.0": {
         "links": {
           "self": "../Author/3a655a91-98b5-4f33-a071-b62d39218b33"
         }
@@ -37,6 +37,11 @@
       "blog": {
         "links": {
           "self": "../ReviewBlog/583df6bb-5739-418a-9186-978bd72816c1"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../BlogCategory/5c529dbb-bc16-41ee-9c31-a2b28e07b79d"
         }
       },
       "editors": {

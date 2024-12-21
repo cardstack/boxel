@@ -14,6 +14,9 @@ function htmlSafeColor(color?: string) {
 }
 
 export const categoryStyle = (category: Partial<BlogCategory>) => {
+  if (!category) {
+    return;
+  }
   return htmlSafe(`
     background-color: ${category.backgroundColor || '#FFFFFF'};
     color: ${category.textColor || '#000000'};
