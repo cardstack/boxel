@@ -24,7 +24,7 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { TaskStatusField, Project } from './productivity/task';
+import { TaskStatusField, Project, Task } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
@@ -54,16 +54,6 @@ export interface SelectedItem {
 class WorkTrackerIsolated extends Component<typeof AppCard> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
-  private declare assigneeQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-    loaded: Promise<void>;
-  };
-  private declare projectQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-    loaded: Promise<void>;
-  };
   filters = {
     status: {
       searchKey: 'label',
@@ -87,55 +77,57 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.initializeDropdownData.perform();
   }
 
   get filterTypes() {
     return Object.keys(this.filters) as FilterType[];
   }
 
-  taskCollection = getTaskCardsResource(
-    this,
-    () => this.getTaskQuery,
-    () => this.realmHref,
+  cards = getCards(this.getTaskQuery, this.realmHrefs, { isLive: true });
+
+  assigneeQuery = getCards(
+    {
+      filter: {
+        type: this.filters.assignee.codeRef,
+      },
+    },
+    this.realmHrefs,
   );
 
-  initializeDropdownData = restartableTask(async () => {
-    this.assigneeQuery = getCards(
-      {
-        filter: {
-          type: this.filters.assignee.codeRef,
-        },
-      },
-      this.realmHrefs,
-    );
-
-    await this.assigneeQuery.loaded;
-  });
+  get cardInstances() {
+    return this.cards.instances as Task[];
+  }
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
   }
 
-  filterObject(filterType: FilterType) {
-    let selectedItems = this.selectedItems.get(filterType) ?? [];
-    return selectedItems.map((item) => {
-      if (filterType === 'status') {
-        return {
-          eq: {
-            'status.label': item.label,
-          },
-        };
-      } else {
-        let key = filterType + '.name';
-        return {
-          eq: {
-            [key]: item.name,
-          },
-        };
-      }
+  @action showTaskCard(card: Task): boolean {
+    return this.filterTypes.every((filterType: FilterType) => {
+      let selectedItems = this.selectedItems.get(filterType) ?? [];
+      if (selectedItems.length === 0) return true;
+      return selectedItems.some((item) => {
+        if (filterType === 'status') {
+          return card.status.label === item.label;
+        } else if (filterType === 'assignee') {
+          return card.assignee?.name === item.name;
+        } else {
+          return false;
+        }
+      });
     });
   }
+
+  hasColumnKey = (card: Task, key: string) => {
+    return card.status.label === key;
+  };
+
+  taskCollection = getTaskCardsResource(
+    this,
+    () => this.cardInstances,
+    () => TaskStatusField.values.map((status) => status.label) ?? [],
+    () => this.hasColumnKey,
+  );
 
   get selectedFilterConfig() {
     if (this.selectedFilter === undefined) {
@@ -174,25 +166,16 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     return this.args.model.project;
   }
 
-  get getTaskQuery(): Query | undefined {
+  get getTaskQuery(): Query {
     let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
     if (!this.realmURL) {
       throw new Error('No realm url');
     }
     if (!this.currentProject || !this.currentProject.id) {
       console.log('No project');
-      return;
+      return {}; //can we query a no-op?
     }
     everyArr.push({ eq: { 'project.id': this.currentProject.id } });
-    this.filterTypes.forEach((filterType) => {
-      let anyFilter = this.filterObject(filterType);
-      if (anyFilter.length > 0) {
-        everyArr.push({
-          any: anyFilter,
-        } as AnyFilter);
-      }
-    });
-
     return (
       everyArr.length > 0
         ? {
@@ -290,18 +273,20 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   @action async onMoveCardMutation(
     draggedCard: DndItem,
-    targetCard: DndItem | undefined,
-    sourceColumnAfterDrag: DndColumn,
+    _targetCard: DndItem | undefined,
+    _sourceColumnAfterDrag: DndColumn,
     targetColumnAfterDrag: DndColumn,
   ) {
-    let updatedCard = this.taskCollection.update(
-      draggedCard,
-      targetCard,
-      sourceColumnAfterDrag,
-      targetColumnAfterDrag,
+    let cardInNewCol = targetColumnAfterDrag.cards.find(
+      (c: CardDef) => c.id === draggedCard.id,
     );
-    //TODO: save the card!
-    await this.args.context?.actions?.saveCard?.(updatedCard);
+    if (cardInNewCol) {
+      let statusValue = TaskStatusField.values.find(
+        (value) => value.label === targetColumnAfterDrag.title,
+      );
+      cardInNewCol.status = new TaskStatusField(statusValue);
+      await this.args.context?.actions?.saveCard?.(cardInNewCol);
+    }
   }
 
   @action onSelectFilter(item: FilterType) {
@@ -356,6 +341,17 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
   }
 
+  get showLoadingOfKanban() {
+    // We want to display the stale data when the kanban is non-empty
+    return (
+      this.cards && this.cards.isLoading && this.taskCollection.hasEmptyData
+    );
+  }
+
+  get showLoadingOfDropdown() {
+    return this.assigneeQuery?.isLoading;
+  }
+
   <template>
     <div class='task-app'>
       {{#if (not this.currentProject.id)}}
@@ -365,49 +361,53 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       {{/if}}
       <div class='filter-section'>
         <div class='filter-dropdown-container'>
-          {{#if this.selectedFilterConfig}}
-            {{#let (this.selectedFilterConfig.options) as |options|}}
-              <FilterDropdown
-                @searchField={{this.selectedFilterConfig.searchKey}}
-                @options={{options}}
-                @realmURLs={{this.realmHrefs}}
-                @selected={{this.selectedItemsForFilter}}
-                @onChange={{this.onChange}}
-                @onClose={{this.onClose}}
+          {{#if this.showLoadingOfDropdown}}
+            Loading...
+          {{else}}
+            {{#if this.selectedFilterConfig}}
+              {{#let (this.selectedFilterConfig.options) as |options|}}
+                <FilterDropdown
+                  @searchField={{this.selectedFilterConfig.searchKey}}
+                  @options={{options}}
+                  @realmURLs={{this.realmHrefs}}
+                  @selected={{this.selectedItemsForFilter}}
+                  @onChange={{this.onChange}}
+                  @onClose={{this.onClose}}
+                  as |item|
+                >
+                  {{#let (this.isSelectedItem item) as |isSelected|}}
+                    <StatusPill
+                      @isSelected={{isSelected}}
+                      @label={{if
+                        (eq this.selectedFilter 'status')
+                        item.label
+                        item.name
+                      }}
+                    />
+                  {{/let}}
+                </FilterDropdown>
+              {{/let}}
+            {{else}}
+              <BoxelSelect
+                class='status-select'
+                @selected={{this.selectedFilter}}
+                @options={{this.filterTypes}}
+                @onChange={{this.onSelectFilter}}
+                @placeholder={{'Choose a Filter'}}
+                @matchTriggerWidth={{false}}
+                @triggerComponent={{FilterTrigger}}
                 as |item|
               >
-                {{#let (this.isSelectedItem item) as |isSelected|}}
-                  <StatusPill
-                    @isSelected={{isSelected}}
-                    @label={{if
-                      (eq this.selectedFilter 'status')
-                      item.label
-                      item.name
-                    }}
-                  />
+                {{#let (this.getFilterIcon item) as |Icon|}}
+                  <div class='filter-option'>
+                    {{#if Icon}}
+                      <Icon class='filter-display-icon' />
+                    {{/if}}
+                    <span class='filter-display-text'>{{item}}</span>
+                  </div>
                 {{/let}}
-              </FilterDropdown>
-            {{/let}}
-          {{else}}
-            <BoxelSelect
-              class='status-select'
-              @selected={{this.selectedFilter}}
-              @options={{this.filterTypes}}
-              @onChange={{this.onSelectFilter}}
-              @placeholder={{'Choose a Filter'}}
-              @matchTriggerWidth={{false}}
-              @triggerComponent={{FilterTrigger}}
-              as |item|
-            >
-              {{#let (this.getFilterIcon item) as |Icon|}}
-                <div class='filter-option'>
-                  {{#if Icon}}
-                    <Icon class='filter-display-icon' />
-                  {{/if}}
-                  <span class='filter-display-text'>{{item}}</span>
-                </div>
-              {{/let}}
-            </BoxelSelect>
+              </BoxelSelect>
+            {{/if}}
           {{/if}}
         </div>
         <div class='filter-display-sec'>
@@ -434,6 +434,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         <DndKanbanBoard
           @columns={{this.taskCollection.columns}}
           @onMove={{this.onMoveCardMutation}}
+          @displayCard={{this.showTaskCard}}
         >
           <:header as |column|>
             <ColumnHeader
@@ -457,7 +458,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
                 <CardComponent class='card' />
               </div>
             {{/let}}
-
           </:card>
         </DndKanbanBoard>
       </div>
