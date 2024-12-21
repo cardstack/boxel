@@ -5,6 +5,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { setBackgroundImage } from './components/layout';
 import { formatDatetime } from './blog-app';
+import { categoryStyle } from './blog-category';
 import { BlogPost } from './blog-post';
 import { RatingsSummary } from './ratings-summary';
 
@@ -23,8 +24,15 @@ export class Review extends BlogPost {
         />
         <div class='content'>
           <div class='meta'>
-            {{! TODO: replace with category field }}
-            <span class='category'>Movie Review</span>
+            {{#if @model.categories.length}}
+              <div class='categories'>
+                {{#each @model.categories as |category|}}
+                  <div class='category' style={{categoryStyle category}}>
+                    {{category.title}}
+                  </div>
+                {{/each}}
+              </div>
+            {{/if}}
             {{#if @model.rating}}
               <@fields.rating class='rating-info' @format='atom' />
             {{/if}}
@@ -75,10 +83,14 @@ export class Review extends BlogPost {
           gap: var(--boxel-sp-xxxs);
           overflow: hidden;
         }
+        .categories {
+          display: inline-flex;
+          gap: var(--boxel-sp-xxs);
+          flex-wrap: wrap;
+        }
         .category {
-          background-color: var(--boxel-yellow);
           padding: 0 var(--boxel-sp-4xs);
-          border-radius: 3px;
+          border-radius: var(--boxel-border-radius-xs);
           font: 500 var(--boxel-font-xs);
           letter-spacing: var(--boxel-lsp-sm);
         }
@@ -122,8 +134,13 @@ export class Review extends BlogPost {
         <@fields.featuredImage class='featured-image' />
         <div class='content'>
           <div class='rating-group'>
-            {{! TODO: replace with category field }}
-            <span class='category'>Movie Review</span>
+            <div class='categories'>
+              {{#each @model.categories as |category|}}
+                <div class='category' style={{categoryStyle category}}>
+                  {{category.title}}
+                </div>
+              {{/each}}
+            </div>
             <@fields.rating class='rating' />
           </div>
           <h1><@fields.title /></h1>
@@ -211,12 +228,17 @@ export class Review extends BlogPost {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--boxel-sp-sm);
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-lg) var(--boxel-sp-sm);
+        }
+        .categories {
+          display: inline-flex;
+          gap: var(--boxel-sp-xxs);
+          flex-wrap: wrap;
         }
         .category {
-          background-color: var(--boxel-yellow);
           padding: 0 var(--boxel-sp-xs);
-          border-radius: 5px;
+          border-radius: var(--boxel-border-radius-sm);
           font: 500 var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-xs);
         }

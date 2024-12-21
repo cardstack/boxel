@@ -34,19 +34,14 @@
           "self": "../Author/3a655a91-98b5-4f33-a071-b62d39218b33"
         }
       },
-      "authors.1": {
-        "links": {
-          "self": "../Author/ad28d989-68a8-4bad-a8dc-05f9f724489c"
-        }
-      },
       "blog": {
         "links": {
           "self": "../ReviewBlog/583df6bb-5739-418a-9186-978bd72816c1"
         }
       },
-      "categories": {
+      "categories.0": {
         "links": {
-          "self": null
+          "self": "../BlogCategory/5c529dbb-bc16-41ee-9c31-a2b28e07b79d"
         }
       },
       "editors": {

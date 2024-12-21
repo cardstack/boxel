@@ -113,12 +113,11 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       }
 
       .category {
-        font-size: var(--boxel-font-size-xs);
+        display: inline-block;
         padding: 3px var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius-sm);
-        display: inline-block;
-        font-family: var(--boxel-font-family);
-        font-weight: 600;
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
       }
     </style>
   </template>
@@ -832,12 +831,11 @@ export class BlogPost extends CardDef {
           margin-top: var(--boxel-sp);
         }
         .category {
-          font-size: var(--boxel-font-size-xs);
+          display: inline-block;
           padding: 3px var(--boxel-sp-xxxs);
           border-radius: var(--boxel-border-radius-sm);
-          display: inline-block;
-          font-family: var(--boxel-font-family);
-          font-weight: 600;
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
         }
       </style>
     </template>
