@@ -302,7 +302,9 @@ export class Author extends CardDef {
         {{else}}
           <UserIcon class='author-icon' width='20' height='20' />
         {{/if}}
-        <@fields.title />
+        <span class='author-title'>
+          <@fields.title />
+        </span>
       </span>
       <style scoped>
         .author-atom {
@@ -325,6 +327,9 @@ export class Author extends CardDef {
           background-position: center;
           background-repeat: no-repeat;
           background-size: cover;
+        }
+        .author-title {
+          text-wrap: nowrap;
         }
       </style>
     </template>

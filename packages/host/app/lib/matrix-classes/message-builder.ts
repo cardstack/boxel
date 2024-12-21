@@ -6,6 +6,12 @@ import { inject as service } from '@ember/service';
 
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import {
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import type CommandService from '@cardstack/host/services/command-service';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
@@ -115,13 +121,13 @@ export default class MessageBuilder {
     let { event } = this;
     let messageArgs = this.coreMessageArgs;
     messageArgs.errorMessage = this.errorMessage;
-    if (event.content.msgtype === 'org.boxel.message') {
+    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       messageArgs.clientGeneratedId = this.clientGeneratedId;
       messageArgs.attachedCardIds = this.attachedCardIds;
     } else if (event.content.msgtype === 'm.text') {
       messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
     } else if (
-      event.content.msgtype === 'org.boxel.command' &&
+      event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
       event.content.data.toolCall
     ) {
       messageArgs.formattedMessage = this.formattedMessageForCommand;
@@ -165,7 +171,7 @@ export default class MessageBuilder {
     let commandResultEvent = this.builderContext.events.find(
       (e) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
         e.content['m.relates_to']?.rel_type === 'm.annotation' &&
         e.content['m.relates_to'].event_id === event.content.data.eventId,
     ) as CommandResultEvent;

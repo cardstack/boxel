@@ -668,8 +668,22 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             `${testRealmURL}person-catalog-entry.json`,
           ),
           realmInfo: testRealmInfo,
-          realmURL: 'http://test-realm/test/',
+          realmURL: testRealmURL,
         },
+      });
+      let instance = await indexer.instance(
+        new URL(`${testRealmURL}person-catalog-entry`),
+      );
+      assert.deepEqual(instance?.searchDoc, {
+        _cardType: 'Catalog Entry',
+        demo: {},
+        description: 'Catalog entry for Person card',
+        id: `${testRealmURL}person-catalog-entry`,
+        isField: false,
+        moduleHref: `${testRealmURL}person`,
+        realmName: 'Unnamed Workspace',
+        ref: `${testRealmURL}person/Person`,
+        title: 'Person Card',
       });
     } else {
       assert.ok(
@@ -1821,6 +1835,106 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         _cardType: 'Person',
       },
       `search doc does not include fullName field`,
+    );
+  });
+
+  test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Publication/pacific.json': {
+          data: {
+            id: `${testRealmURL}Publication/pacific`,
+            attributes: { title: 'Pacific Weekly' },
+            relationships: {
+              'featuredPosts.0': { links: { self: `../Post/1` } },
+              'featuredPosts.1': { links: { self: `../Post/2` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}publication`,
+                name: 'Publication',
+              },
+            },
+          },
+        },
+        'Post/1.json': {
+          data: {
+            id: `${testRealmURL}Post/1`,
+            attributes: {
+              title: '50 Ways to Leave Your Laptop',
+              views: 5,
+            },
+            relationships: {
+              publication: {
+                links: { self: `../Publication/pacific` },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/post',
+                name: 'Post',
+              },
+            },
+          },
+        },
+        'Post/2.json': {
+          data: {
+            id: `${testRealmURL}Post/2`,
+            attributes: {
+              title: '49 Shades of Mauve',
+              views: 24,
+            },
+            relationships: {
+              publication: {
+                links: { self: `../Publication/pacific` },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/post',
+                name: 'Post',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}Post/1`));
+    assert.deepEqual(
+      entry?.searchDoc,
+      {
+        _cardType: 'Post',
+        author: {
+          fullName: ' ',
+        },
+        id: `${testRealmURL}Post/1`,
+        title: '50 Ways to Leave Your Laptop',
+        publication: {
+          id: `${testRealmURL}Publication/pacific`,
+        },
+        views: 5,
+      },
+      `post 1 search doc includes publication relationship`,
+    );
+    let entry2 = await getInstance(
+      realm,
+      new URL(`${testRealmURL}Publication/pacific`),
+    );
+    assert.deepEqual(
+      entry2?.searchDoc,
+      {
+        _cardType: 'Publication',
+        id: `${testRealmURL}Publication/pacific`,
+        title: 'Pacific Weekly',
+        featuredPosts: [
+          {
+            id: `${testRealmURL}Post/1`,
+          },
+          { id: `${testRealmURL}Post/2` },
+        ],
+      },
+      `publication search doc includes featuredPosts relationship`,
     );
   });
 

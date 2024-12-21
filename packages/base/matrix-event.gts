@@ -5,6 +5,14 @@ import {
   type AttributesSchema,
   type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
+import {
+  APP_BOXEL_CARD_FORMAT,
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -128,7 +136,7 @@ export interface CommandMessageContent {
     rel_type: string;
     event_id: string;
   };
-  msgtype: 'org.boxel.command';
+  msgtype: typeof APP_BOXEL_COMMAND_MSGTYPE;
   format: 'org.matrix.custom.html';
   body: string;
   formatted_body: string;
@@ -176,7 +184,7 @@ export interface CardMessageContent {
     rel_type: string;
     event_id: string;
   };
-  msgtype: 'org.boxel.message';
+  msgtype: typeof APP_BOXEL_MESSAGE_MSGTYPE;
   format: 'org.matrix.custom.html';
   body: string;
   formatted_body: string;
@@ -208,8 +216,8 @@ export interface CardFragmentContent {
     rel_type: string;
     event_id: string;
   };
-  msgtype: 'org.boxel.cardFragment';
-  format: 'org.boxel.card';
+  msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE;
+  format: typeof APP_BOXEL_CARD_FORMAT;
   formatted_body: string;
   body: string;
   errorMessage?: string;
@@ -222,7 +230,7 @@ export interface CardFragmentContent {
 }
 
 export interface SkillsConfigEvent extends RoomStateEvent {
-  type: 'com.cardstack.boxel.room.skills';
+  type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
     enabledEventIds: string[];
     disabledEventIds: string[];
@@ -251,7 +259,7 @@ export interface CommandResultContent {
   };
   formatted_body: string;
   body: string;
-  msgtype: 'org.boxel.commandResult';
+  msgtype: typeof APP_BOXEL_COMMAND_RESULT_MSGTYPE;
   result: any;
 }
 

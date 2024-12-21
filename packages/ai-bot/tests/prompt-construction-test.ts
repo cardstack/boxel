@@ -5,12 +5,18 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 
 import {
-  getTools,
   getModifyPrompt,
-  getRelevantCards,
-  SKILL_INSTRUCTIONS_MESSAGE,
   getPromptParts,
+  getRelevantCards,
+  getTools,
+  SKILL_INSTRUCTIONS_MESSAGE,
 } from '../helpers';
+import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
@@ -91,7 +97,7 @@ module('getModifyPrompt', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -139,7 +145,7 @@ module('getModifyPrompt', () => {
     assert.true(result[1].content?.includes('Hey'));
     if (
       history[0].type === 'm.room.message' &&
-      history[0].content.msgtype === 'org.boxel.message'
+      history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
         result[0].content?.includes(
@@ -149,7 +155,7 @@ module('getModifyPrompt', () => {
     } else {
       assert.true(
         false,
-        'expected "m.room.message" event with a "org.boxel.message" msgtype',
+        `expected "m.room.message" event with a "${APP_BOXEL_MESSAGE_MSGTYPE}" msgtype`,
       );
     }
   });
@@ -189,7 +195,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
@@ -242,7 +248,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
           formatted_body: 'set the location to home',
@@ -300,7 +306,7 @@ module('getModifyPrompt', () => {
     assert.equal(attachedCards.length, 1);
     if (
       history[1].type === 'm.room.message' &&
-      history[1].content.msgtype === 'org.boxel.message'
+      history[1].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.equal(
         attachedCards[0],
@@ -313,7 +319,7 @@ module('getModifyPrompt', () => {
     } else {
       assert.true(
         false,
-        'expected "m.room.message" event with a "org.boxel.message" msgtype',
+        `expected "m.room.message" event with a "${APP_BOXEL_MESSAGE_MSGTYPE}" msgtype`,
       );
     }
   });
@@ -324,7 +330,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
@@ -349,7 +355,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
           formatted_body: 'set the location to home',
@@ -383,7 +389,7 @@ module('getModifyPrompt', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -433,7 +439,7 @@ module('getModifyPrompt', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -476,7 +482,7 @@ module('getModifyPrompt', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -526,7 +532,7 @@ module('getModifyPrompt', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -569,7 +575,7 @@ module('getModifyPrompt', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           formatted_body: 'Hey',
@@ -630,7 +636,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
@@ -725,7 +731,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
@@ -822,7 +828,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
@@ -903,7 +909,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
           formatted_body: '<p>set the name to dave</p>\n',
@@ -934,7 +940,7 @@ module('getModifyPrompt', () => {
         type: 'm.room.message',
         sender: '@ian:localhost',
         content: {
-          msgtype: 'org.boxel.message',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
           formatted_body: 'set the location to home',
@@ -1162,7 +1168,7 @@ test('Create search function calls', () => {
       type: 'm.room.message',
       sender: '@ian:localhost',
       content: {
-        msgtype: 'org.boxel.message',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'set the name to dave',
         formatted_body: '<p>set the name to dave</p>\n',
         data: {
@@ -1194,7 +1200,7 @@ test('Return host result of tool call back to open ai', () => {
       room_id: 'room-id-1',
       sender: '@tintinthong:localhost',
       content: {
-        msgtype: 'org.boxel.message',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'search for the following card instances',
         format: 'org.matrix.custom.html',
         formatted_body: '<p>search for the following card instances</p>\n',
@@ -1343,7 +1349,7 @@ test('Return host result of tool call back to open ai', () => {
       room_id: 'room-id-1',
       sender: '@tintinthong:localhost',
       content: {
-        msgtype: 'org.boxel.message',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'yes module type',
         format: 'org.matrix.custom.html',
         formatted_body: '<p>yes module type</p>\n',
@@ -1461,7 +1467,7 @@ test('Return host result of tool call back to open ai', () => {
       sender: '@ai-bot:localhost',
       content: {
         body: "Search for card instances of type 'Author'",
-        msgtype: 'org.boxel.command',
+        msgtype: APP_BOXEL_COMMAND_MSGTYPE,
         formatted_body: "Search for card instances of type 'Author'",
         format: 'org.matrix.custom.html',
         data: {
@@ -1510,7 +1516,7 @@ test('Return host result of tool call back to open ai', () => {
         body: 'Command Results from command event $H7dH0ZzG0W3M_1k_YRjnDOirWRthYvWq7TKmfAfhQqw',
         formatted_body:
           '<p>Command Results from command event $H7dH0ZzG0W3M_1k_YRjnDOirWRthYvWq7TKmfAfhQqw</p>\n',
-        msgtype: 'org.boxel.commandResult',
+        msgtype: APP_BOXEL_COMMAND_RESULT_MSGTYPE,
         result:
           '[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]',
       },

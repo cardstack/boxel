@@ -19,9 +19,19 @@
       "thumbnailURL": "https://images.unsplash.com/photo-1614624532983-4ce03382d63d?q=80&w=3131&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     "relationships": {
-      "authorBio": {
+      "authors.0": {
         "links": {
           "self": "../Author/jane-doe"
+        }
+      },
+      "authors.1": {
+        "links": {
+          "self": "../Author/alice-enwunder"
+        }
+      },
+      "authors.2": {
+        "links": {
+          "self": "../Author/3a655a91-98b5-4f33-a071-b62d39218b33"
         }
       },
       "blog": {
@@ -29,9 +39,29 @@
           "self": "../BlogApp/ramped"
         }
       },
+      "categories.0": {
+        "links": {
+          "self": "../BlogCategory/productivity"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../BlogCategory/home-decor"
+        }
+      },
       "editors.0": {
         "links": {
           "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
+        }
+      },
+      "editors.1": {
+        "links": {
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
+        }
+      },
+      "editors.2": {
+        "links": {
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       }
     },

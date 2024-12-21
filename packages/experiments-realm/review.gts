@@ -32,8 +32,8 @@ export class Review extends BlogPost {
           <h3 class='title'><@fields.title /></h3>
           <p class='description'>{{@model.description}}</p>
           <div class='info'>
-            {{#if @model.authorBio}}
-              <div class='byline'>{{@model.authorBio.title}}</div>
+            {{#if @model.formattedAuthors}}
+              <div class='byline'>{{@model.formattedAuthors}}</div>
             {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
               <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
@@ -134,13 +134,9 @@ export class Review extends BlogPost {
             </p>
           {{/if}}
           <ul class='info'>
-            {{#if @model.authorBio}}
+            {{#if @model.formattedAuthors}}
               <li class='byline'>
-                <@fields.authorBio
-                  class='author'
-                  @format='atom'
-                  @displayContainer={{false}}
-                />
+                {{@model.formattedAuthors}}
               </li>
             {{/if}}
             {{#if @model.datePublishedIsoTimestamp}}
@@ -159,8 +155,8 @@ export class Review extends BlogPost {
             <@fields.userRating class='user-rating' />
           </div>
           <hr />
-          {{#if @model.authorBio}}
-            <@fields.authorBio @format='embedded' />
+          {{#if @model.authors}}
+            <@fields.authors @format='embedded' />
           {{/if}}
         </div>
       </article>

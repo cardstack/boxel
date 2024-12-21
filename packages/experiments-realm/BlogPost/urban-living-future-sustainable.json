@@ -28,6 +28,16 @@
         "links": {
           "self": "../BlogApp/ramped"
         }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {

@@ -15,6 +15,8 @@ import {
   getPromptParts,
   extractCardFragmentsFromEvents,
 } from './helpers';
+import { APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import {
   shouldSetRoomTitle,
   setTitle,
@@ -167,7 +169,7 @@ Common issues are:
         if (event.getType() !== 'm.room.message') {
           return; // only print messages
         }
-        if (event.getContent().msgtype === 'org.boxel.cardFragment') {
+        if (event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
           return; // don't respond to card fragments, we just gather these in our history
         }
 

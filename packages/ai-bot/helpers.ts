@@ -18,6 +18,13 @@ import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -93,7 +100,7 @@ export function extractCardFragmentsFromEvents(
   const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
   for (let event of eventList) {
     if (event.type === 'm.room.message') {
-      if (event.content.msgtype === 'org.boxel.cardFragment') {
+      if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
         fragments.set(event.event_id, event.content as CardFragmentContent);
       }
     }
@@ -138,10 +145,10 @@ export function constructHistory(
       continue;
     }
     let eventId = event.event_id!;
-    if (event.content.msgtype === 'org.boxel.cardFragment') {
+    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
       continue;
     }
-    if (event.content.msgtype === 'org.boxel.message') {
+    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       let { attachedCardsEventIds } = event.content.data;
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
         event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
@@ -176,7 +183,7 @@ function getEnabledSkills(
   cardFragments: Map<string, CardFragmentContent>,
 ): LooseCardResource[] {
   let skillsConfigEvent = eventlist.findLast(
-    (event) => event.type === 'com.cardstack.boxel.room.skills',
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
     return [];
@@ -274,7 +281,7 @@ export function getRelevantCards(
     }
     if (event.sender !== aiBotUserId) {
       let { content } = event;
-      if (content.msgtype === 'org.boxel.message') {
+      if (content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
         setRelevantCards(attachedCardMap, content.data?.attachedCards);
         if (content.data?.attachedCards) {
           mostRecentlyAttachedCard = getMostRecentlyAttachedCard(
@@ -308,7 +315,7 @@ function getLastUserMessage(
   const lastMessage = userMessages[userMessages.length - 1];
   if (
     lastMessage.type === 'm.room.message' &&
-    lastMessage.content.msgtype === 'org.boxel.message'
+    lastMessage.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE 
   ) {
     return lastMessage as CardMessageEvent;
   }
@@ -352,7 +359,7 @@ export function isCommandResultEvent(
   return (
     event.type === 'm.room.message' &&
     typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.commandResult'
+    event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE
   );
 }
 
@@ -475,7 +482,7 @@ export function getModifyPrompt(
         }
       } else {
         if (
-          event.content.msgtype === 'org.boxel.message' &&
+          event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
           event.content.data?.context?.openCardIds
         ) {
           body = `User message: ${body}
@@ -585,7 +592,7 @@ export function isCommandEvent(
   return (
     event.type === 'm.room.message' &&
     typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.command' &&
+    event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
     event.content.format === 'org.matrix.custom.html' &&
     typeof event.content.data === 'object' &&
     typeof event.content.data.toolCall === 'object'

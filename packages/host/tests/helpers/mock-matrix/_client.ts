@@ -4,6 +4,12 @@ import * as MatrixSDK from 'matrix-js-sdk';
 
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
+import {
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_REALMS_EVENT_TYPE,
+  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -57,7 +63,7 @@ export class MockClient implements ExtendedClient {
 
     this.emitEvent(
       new MatrixEvent({
-        type: 'com.cardstack.boxel.realms',
+        type: APP_BOXEL_REALMS_EVENT_TYPE,
         content: {
           realms: this.sdkOpts.activeRealms ?? [],
         },
@@ -109,8 +115,17 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  setAccountData<T>(_type: string, _data: T): Promise<{}> {
-    throw new Error('Method not implemented.');
+  setAccountData<T>(type: string, data: T): Promise<{}> {
+    if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
+      this.sdkOpts.activeRealms = (data as any).realms;
+    } else if (type === LEGACY_APP_BOXEL_REALMS_EVENT_TYPE) {
+      // nothing to do
+    } else {
+      throw new Error(
+        'Support for updating this event type in account data is not yet implemented in this mock.',
+      );
+    }
+    return Promise.resolve({});
   }
 
   getAccountData<T>(_type: string): Promise<T> {
@@ -405,9 +420,9 @@ export class MockClient implements ExtendedClient {
 
   private eventHandlerType(type: string) {
     switch (type) {
-      case 'com.cardstack.boxel.realms':
+      case APP_BOXEL_REALMS_EVENT_TYPE:
         return this.sdk.ClientEvent.AccountData;
-      case 'com.cardstack.boxel.room.skills':
+      case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case 'm.reaction':
       case 'm.room.create':
       case 'm.room.message':

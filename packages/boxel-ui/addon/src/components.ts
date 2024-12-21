@@ -38,6 +38,7 @@ import Modal from './components/modal/index.gts';
 import BoxelMultiSelect, {
   BoxelMultiSelectBasic,
 } from './components/multi-select/index.gts';
+import PhoneInput from './components/phone-input/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
 import ProgressRadial from './components/progress-radial/index.gts';
@@ -92,6 +93,7 @@ export {
   Menu,
   Message,
   Modal,
+  PhoneInput,
   Pill,
   ProgressBar,
   ProgressRadial,

@@ -20,12 +20,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
-import {
-  LooseSingleCardDocument,
-  getCards,
-  relativeURL,
-  ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
@@ -74,7 +69,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       searchKey: 'label',
       label: 'Status',
       codeRef: {
-        module: `${this.realmHref}productivity/task`,
+        module: new URL('./productivity/task', import.meta.url).href,
         name: 'Status',
       },
       options: () => TaskStatusField.values,
@@ -83,7 +78,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       searchKey: 'name',
       label: 'Assignee',
       codeRef: {
-        module: `${this.realmHref}productivity/task`,
+        module: new URL('./productivity/task', import.meta.url).href,
         name: 'TeamMember',
       },
       options: () => this.assigneeCards,
@@ -170,7 +165,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   get assignedTaskCodeRef() {
     return {
-      module: `${this.realmHref}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
+      module: new URL('./productivity/task', import.meta.url).href,
       name: 'Task',
     };
   }
@@ -188,12 +183,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       console.log('No project');
       return;
     }
-    let relativeTo = getRelativeUrl(
-      this.currentProject.id,
-      this.assignedTaskCodeRef,
-      this.realmURL,
-    );
-    everyArr.push({ eq: { 'project.id': relativeTo } });
+    everyArr.push({ eq: { 'project.id': this.currentProject.id } });
     this.filterTypes.forEach((filterType) => {
       let anyFilter = this.filterObject(filterType);
       if (anyFilter.length > 0) {
@@ -644,23 +634,4 @@ function removeFileExtension(cardUrl: string) {
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
-}
-
-// all search docs point to a relative link
-// we must derive the relative link based upon the code ref and the current realm
-function getRelativeUrl(
-  absoluteUrl: string, // absolute link from card model, eg http://localhost:4201/experiments/Project/51ca069b-1c55-4648-8654-bd82bf162f9d
-  codeRefToQuery: ResolvedCodeRef, // code ref to query eg {module: 'http://localhost:4201/experiments/productivity/task', name: 'Task'}
-  realmURL: URL, // realm url eg http://localhost:4201/experiments
-) {
-  let instanceDirectoryUrl = realmURL.href + codeRefToQuery.name + '/';
-  let relativeTo = relativeURL(
-    new URL(absoluteUrl),
-    new URL(instanceDirectoryUrl),
-    realmURL,
-  );
-  if (!relativeTo) {
-    throw new Error(`Missing relative url`);
-  }
-  return relativeTo;
 }
