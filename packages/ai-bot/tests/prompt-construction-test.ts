@@ -725,103 +725,6 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('If there are no functions in the last message from the user, store only searchTool', () => {
-    const history: DiscreteMatrixEvent[] = [
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          body: 'Just a regular message',
-          formatted_body: 'Just a regular message',
-          data: {
-            context: {
-              openCardIds: [],
-              tools: [],
-              submode: 'interact',
-            },
-          },
-        },
-        room_id: 'room1',
-        origin_server_ts: 1696813813167,
-        unsigned: {
-          age: 115498,
-          transaction_id: '2',
-        },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-        status: EventStatus.SENT,
-      },
-    ];
-    const functions = getTools(history, '@aibot:localhost');
-    assert.equal(functions.length, 1);
-    assert.deepEqual(functions[0], getSearchTool());
-  });
-
-  test('If a user stops sharing their context then ignore function calls with exception of searchTool', () => {
-    const history: DiscreteMatrixEvent[] = [
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
-          data: {
-            context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
-              tools: [
-                getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  attributes: {
-                    firstName: { type: 'string' },
-                  },
-                }),
-              ],
-              submode: 'interact',
-            },
-          },
-        },
-        room_id: 'room1',
-        origin_server_ts: 1696813813166,
-        unsigned: {
-          age: 115498,
-          transaction_id: '1',
-        },
-        event_id: '1',
-        status: EventStatus.SENT,
-      },
-      {
-        type: 'm.room.message',
-        sender: '@ian:localhost',
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          body: 'Just a regular message',
-          formatted_body: 'Just a regular message',
-          data: {
-            context: {
-              openCardIds: [],
-              tools: [],
-              submode: 'interact',
-            },
-          },
-        },
-        room_id: 'room1',
-        origin_server_ts: 1696813813167,
-        unsigned: {
-          age: 115498,
-          transaction_id: '2',
-        },
-        event_id: '2',
-        status: EventStatus.SENT,
-      },
-    ];
-    const functions = getTools(history, '@aibot:localhost');
-    assert.equal(functions.length, 1);
-    assert.deepEqual(functions[0], getSearchTool());
-  });
-
   test("Don't break when there is an older format type with open cards", () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -1235,6 +1138,28 @@ test('Has the skill card specified by the last state update, even if there are o
   assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
   assert.false(messages[0].content?.includes('SKILL_INSTRUCTIONS_V1'));
   assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));
+});
+
+test('if tool calls are required, ensure they are set', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/forced-function-call.json'),
+    ),
+  );
+
+  const { messages, tools, toolChoice } = getPromptParts(
+    eventList,
+    '@ai-bot:localhost',
+  );
+  assert.equal(messages.length, 2);
+  assert.equal(messages[1].role, 'user');
+  assert.true(tools.length === 1);
+  assert.deepEqual(toolChoice, {
+    type: 'function',
+    function: {
+      name: 'NeverCallThisPlease_hEhhctZntkzJkySR5Uvsq6',
+    },
+  });
 });
 
 test('Create search function calls', () => {
