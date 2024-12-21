@@ -315,7 +315,7 @@ function getLastUserMessage(
   const lastMessage = userMessages[userMessages.length - 1];
   if (
     lastMessage.type === 'm.room.message' &&
-    lastMessage.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE 
+    lastMessage.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
   ) {
     return lastMessage as CardMessageEvent;
   }
