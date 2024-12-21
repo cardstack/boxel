@@ -205,8 +205,8 @@ class TaskIsolated extends Component<typeof Task> {
         </div>
 
         <div class='right-column'>
-          <div class='assignees'>
-            <h4>Assignees</h4>
+          <div class='assignee'>
+            <h4>Assignee</h4>
 
             {{#if @model.assignee}}
               <@fields.assignee
