@@ -341,13 +341,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
   }
 
-  get showLoadingOfKanban() {
-    // We want to display the stale data when the kanban is non-empty
-    return (
-      this.cards && this.cards.isLoading && this.taskCollection.hasEmptyData
-    );
-  }
-
   <template>
     <div class='task-app'>
       {{#if (not this.currentProject.id)}}
