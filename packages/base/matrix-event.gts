@@ -3,6 +3,7 @@ import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import {
   FunctionToolCall,
   type AttributesSchema,
+  type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import {
   APP_BOXEL_CARD_FORMAT,
@@ -204,6 +205,7 @@ export interface CardMessageContent {
     context: {
       openCardIds?: string[];
       tools: Tool[];
+      toolChoice?: ToolChoice;
       submode?: string;
     };
   };

@@ -475,3 +475,13 @@ export interface FunctionToolCall {
   arguments: { [key: string]: any };
   type: 'function';
 }
+
+export type ToolChoice =
+  | 'none'
+  | 'auto'
+  | {
+      type: 'function';
+      function: {
+        name: string;
+      };
+    };
