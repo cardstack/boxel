@@ -110,7 +110,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       if (selectedItems.length === 0) return true;
       return selectedItems.some((item) => {
         if (filterType === 'status') {
-          return card.status.label === item.label;
+          return card.status?.label === item.label;
         } else if (filterType === 'assignee') {
           return card.assignee?.name === item.name;
         } else {
