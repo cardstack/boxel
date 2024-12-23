@@ -348,6 +348,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     return this.cards && this.cards.isLoading;
   }
 
+  get assigneeIsLoading() {
+    return (
+      this.selectedFilter === 'assignee' &&
+      this.assigneeQuery &&
+      this.assigneeQuery.isLoading
+    );
+  }
+
   <template>
     <div class='task-app'>
       {{#if (not this.currentProject.id)}}
@@ -364,6 +372,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
           {{#if this.selectedFilterConfig}}
             {{#let (this.selectedFilterConfig.options) as |options|}}
               <FilterDropdown
+                @isLoading={{this.assigneeIsLoading}}
                 @searchField={{this.selectedFilterConfig.searchKey}}
                 @options={{options}}
                 @realmURLs={{this.realmHrefs}}

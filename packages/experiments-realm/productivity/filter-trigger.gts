@@ -1,8 +1,11 @@
 import GlimmerComponent from '@glimmer/component';
 import { IconButton } from '@cardstack/boxel-ui/components';
 import ListFilter from '@cardstack/boxel-icons/list-filter';
+
 interface TriggerSignature {
-  Args: {};
+  Args: {
+    isLoading?: boolean;
+  };
   Element: HTMLDivElement;
 }
 
@@ -10,7 +13,13 @@ export class FilterTrigger extends GlimmerComponent<TriggerSignature> {
   <template>
     <div class='filter-trigger'>
       <IconButton @icon={{ListFilter}} width='13px' height='13px' />
-      <span class='filter-trigger-text'>Filter</span>
+      <span class='filter-trigger-text'>
+        {{#if this.args.isLoading}}
+          Loading...
+        {{else}}
+          Filter
+        {{/if}}
+      </span>
     </div>
 
     <style scoped>
