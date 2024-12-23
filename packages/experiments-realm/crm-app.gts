@@ -23,12 +23,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { AppCard, Tab } from './app-card';
-import {
-  Query,
-  CardError,
-  SupportedMimeType,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common';
+import { Query, CardError, SupportedMimeType } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
@@ -173,15 +168,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     return this.activeTab?.tabId ? this.activeTab.tabId.toLowerCase() : '';
   }
 
-  get activeTabRef() {
-    if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
-      return;
-    }
-    if (!this.currentRealm) {
-      return;
-    }
-    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
-  }
   setTabs(tabs: Tab[]) {
     this.args.model.tabs = tabs ?? [];
   }
