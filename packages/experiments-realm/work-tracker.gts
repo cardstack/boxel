@@ -10,7 +10,11 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
-import { DndItem, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  DndItem,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import {
   DndKanbanBoard,
   DndColumn,
@@ -344,11 +348,19 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
   }
 
+  @action viewCard() {
+    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+  }
+
   <template>
     <div class='task-app'>
       {{#if (not this.currentProject.id)}}
         <div class='disabled'>
-          Link a project to continue
+          {{#if @context.actions.viewCard}}
+            <BoxelButton @kind='primary' {{on 'click' this.viewCard}}>
+              Link a project to continue
+            </BoxelButton>
+          {{/if}}
         </div>
       {{/if}}
       <div class='filter-section'>
