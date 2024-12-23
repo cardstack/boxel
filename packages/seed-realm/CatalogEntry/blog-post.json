@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "BlogPost",
+      "description": "Catalog entry for BlogPost",
+      "isField": false,
+      "ref": {
+        "module": "../blog-post",
+        "name": "BlogPost"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

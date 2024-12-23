@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "User",
+      "description": "Catalog entry for User",
+      "ref": {
+        "name": "User",
+        "module": "../user"
+      },
+      "isField": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
