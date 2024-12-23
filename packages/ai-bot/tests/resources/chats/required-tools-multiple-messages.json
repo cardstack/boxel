@@ -1,0 +1,688 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006529,
+    "unsigned": {
+      "age": 156950
+    },
+    "event_id": "$hmHwUnPQsuAgD9Iap8zR8rs9Ri9mWBFlOdlIA1dB97E",
+    "user_id": "@admin:localhost",
+    "age": 156950
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "admin"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1734900006567,
+    "unsigned": {
+      "age": 156912
+    },
+    "event_id": "$cA_5R1J_Vlye7Mig_Zwsl3shPnJZQVS_teyy9GmdPBE",
+    "user_id": "@admin:localhost",
+    "age": 156912
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006598,
+    "unsigned": {
+      "age": 156881
+    },
+    "event_id": "$zAWGJUdrlqm6WZVuPCb0B3_FdvF89PgNeI0qOVBjGnE",
+    "user_id": "@admin:localhost",
+    "age": 156881
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#First%20level%20-%202024-12-22T20%3A40%3A06.507%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006612,
+    "unsigned": {
+      "age": 156867
+    },
+    "event_id": "$bgVy3pjLOUWZJhQiUoz_WJryHyhITNkkxGGSKmIgiYs",
+    "user_id": "@admin:localhost",
+    "age": 156867
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006613,
+    "unsigned": {
+      "age": 156866
+    },
+    "event_id": "$i3eTV12PGhg9FZtmyxgvYCZJpu2DulZ_OJFlRAdzP_c",
+    "user_id": "@admin:localhost",
+    "age": 156866
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006614,
+    "unsigned": {
+      "age": 156865
+    },
+    "event_id": "$u1y7pYwQppVayvH9aBVeNsik0Hjbpnw7piqfIr-3iX4",
+    "user_id": "@admin:localhost",
+    "age": 156865
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006615,
+    "unsigned": {
+      "age": 156864
+    },
+    "event_id": "$9Zy2xg5HOM3sGbi6h3Ak3DbBL8OS1SL4qkrLzq3PMmw",
+    "user_id": "@admin:localhost",
+    "age": 156864
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "First level"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006615,
+    "unsigned": {
+      "age": 156864
+    },
+    "event_id": "$G_01vmcAlmnbvsUhJyKa7iQQAVsCPTbiJHPHwJP1xHM",
+    "user_id": "@admin:localhost",
+    "age": 156864
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1734900006733,
+    "unsigned": {
+      "age": 156746
+    },
+    "event_id": "$dCKsP6lAy9NbW58ixtsZMMJrW3gLj2E-bUqa9Y8HsBI",
+    "user_id": "@admin:localhost",
+    "age": 156746
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006823,
+    "unsigned": {
+      "replaces_state": "$zAWGJUdrlqm6WZVuPCb0B3_FdvF89PgNeI0qOVBjGnE",
+      "prev_content": {
+        "users": {
+          "@admin:localhost": 100
+        },
+        "users_default": 0,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100
+        },
+        "events_default": 0,
+        "state_default": 50,
+        "ban": 50,
+        "kick": 50,
+        "redact": 50,
+        "invite": 0,
+        "historical": 100
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 156656
+    },
+    "event_id": "$zq5vw0vZaLf2gBO99OcpAQbyRJfWy0RNXiFDvrhdDWY",
+    "user_id": "@admin:localhost",
+    "age": 156656,
+    "replaces_state": "$zAWGJUdrlqm6WZVuPCb0B3_FdvF89PgNeI0qOVBjGnE",
+    "prev_content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    }
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1734900006839,
+    "unsigned": {
+      "replaces_state": "$dCKsP6lAy9NbW58ixtsZMMJrW3gLj2E-bUqa9Y8HsBI",
+      "prev_content": {
+        "membership": "invite",
+        "displayname": "aibot"
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 156640
+    },
+    "event_id": "$H_bkK6TxJ6knaArgX-z4ozQ0MHEzsW-84K0Nb-l4ajY",
+    "user_id": "@aibot:localhost",
+    "age": 156640,
+    "replaces_state": "$dCKsP6lAy9NbW58ixtsZMMJrW3gLj2E-bUqa9Y8HsBI",
+    "prev_content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "Alerting the user should only be done if requested",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>Alerting the user should only be done if requested</p>\n",
+      "clientGeneratedId": "a4108056-3f47-46cc-b979-cee8113925a6",
+      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":true}}"
+    },
+    "origin_server_ts": 1734900007008,
+    "unsigned": {
+      "age": 156471
+    },
+    "event_id": "$0kIzK4NOREAWSzK_EM5as1CdZ03TZkJ0PTXbLel7lgQ",
+    "user_id": "@admin:localhost",
+    "age": 156471
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Thinking...",
+      "msgtype": "m.text",
+      "formatted_body": "Thinking...",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Thinking...",
+        "msgtype": "m.text",
+        "formatted_body": "Thinking...",
+        "format": "org.matrix.custom.html"
+      }
+    },
+    "origin_server_ts": 1734900008837,
+    "unsigned": {
+      "age": 154642
+    },
+    "event_id": "$0rIdhh15SHHWqVJbKKGGpPP4SJG4ke9HXGRSLw8cHxY",
+    "user_id": "@aibot:localhost",
+    "age": 154642
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Alerting should only be triggered when explicitly requested by the user. Currently, there are no open cards, so no alerts are necessary.",
+      "msgtype": "app.boxel.command",
+      "formatted_body": "Alerting should only be triggered when explicitly requested by the user. Currently, there are no open cards, so no alerts are necessary.",
+      "format": "org.matrix.custom.html",
+      "data": "{\"eventId\":\"$0rIdhh15SHHWqVJbKKGGpPP4SJG4ke9HXGRSLw8cHxY\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_AHCj9YjOvc0UjmGLbWcAr3wR\",\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"arguments\":{\"description\":\"Alerting should only be triggered when explicitly requested by the user. Currently, there are no open cards, so no alerts are necessary.\",\"attributes\":{\"message\":\"Alerting should only be triggered by user request. No open cards are currently present.\"}}}}",
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$0rIdhh15SHHWqVJbKKGGpPP4SJG4ke9HXGRSLw8cHxY"
+      }
+    },
+    "origin_server_ts": 1734900011466,
+    "unsigned": {
+      "age": 152013
+    },
+    "event_id": "$pZ5t1hj93dVwVcrh60-XFNeSL4ztErK6J0wAYr9hI_0",
+    "user_id": "@aibot:localhost",
+    "age": 152013
+  },
+  {
+    "type": "m.reaction",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "m.relates_to": {
+        "event_id": "$pZ5t1hj93dVwVcrh60-XFNeSL4ztErK6J0wAYr9hI_0",
+        "key": "applied",
+        "rel_type": "m.annotation"
+      }
+    },
+    "origin_server_ts": 1734900014044,
+    "unsigned": {
+      "age": 149435
+    },
+    "event_id": "$jI5XfP6LMNeg_Da5kwxv_AAtuS5wORtgceUCaNH2EHI",
+    "user_id": "@admin:localhost",
+    "age": 149435
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "name": "Alert Users Only Upon Request"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900015205,
+    "unsigned": {
+      "replaces_state": "$G_01vmcAlmnbvsUhJyKa7iQQAVsCPTbiJHPHwJP1xHM",
+      "prev_content": {
+        "name": "First level"
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 148274
+    },
+    "event_id": "$np3vC8zbyM3btk_JKF26zsrLLv028hRq_73SCQ4Hu8s",
+    "user_id": "@aibot:localhost",
+    "age": 148274,
+    "replaces_state": "$G_01vmcAlmnbvsUhJyKa7iQQAVsCPTbiJHPHwJP1xHM",
+    "prev_content": {
+      "name": "First level"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\\\",\\\"attributes\\\":{\\\"roomId\\\":\\\"!WmvKSxVjxbOfvhZRJw:localhost\\\",\\\"title\\\":\\\"SEND FORCED FUNCTION\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/new-app-card-test/forcedfunctioncaller\\\",\\\"name\\\":\\\"MessageSender\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1734900034778,
+    "unsigned": {
+      "age": 128701
+    },
+    "event_id": "$zSyK_aqxFvxAeosa8ZUeSjEAG2g7pI0n1ZXb7UpNe20",
+    "user_id": "@admin:localhost",
+    "age": 128701
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "did you get requested to do that?",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>did you get requested to do that?</p>\n",
+      "clientGeneratedId": "ffc42b0c-40c0-4693-b005-bcffb4bd3168",
+      "data": "{\"attachedCardsEventIds\":[\"$zSyK_aqxFvxAeosa8ZUeSjEAG2g7pI0n1ZXb7UpNe20\"],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCard\",\"description\":\"Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"roomId\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"searchCard\",\"description\":\"Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"object\",\"properties\":{\"contains\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"title of the card\"}},\"required\":[\"title\"]},\"eq\":{\"type\":\"object\",\"properties\":{\"_cardType\":{\"type\":\"string\",\"description\":\"name of the card type\"}},\"required\":[\"_cardType\"]}}}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
+    },
+    "origin_server_ts": 1734900034846,
+    "unsigned": {
+      "age": 128633
+    },
+    "event_id": "$nKm7bMEAuUQC7Gvw0HF-VA8GA3hLFqO6ijr2WMVTSu8",
+    "user_id": "@admin:localhost",
+    "age": 128633
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Thinking...",
+      "msgtype": "m.text",
+      "formatted_body": "Thinking...",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Thinking...",
+        "msgtype": "m.text",
+        "formatted_body": "Thinking...",
+        "format": "org.matrix.custom.html"
+      }
+    },
+    "origin_server_ts": 1734900035846,
+    "unsigned": {
+      "age": 127633
+    },
+    "event_id": "$5Zv5JpFAwdAZ43dM4cphckaZNgGwxR6rsvV-IUu-MFQ",
+    "user_id": "@aibot:localhost",
+    "age": 127633
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "It",
+      "msgtype": "m.text",
+      "formatted_body": "It",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "It",
+        "msgtype": "m.text",
+        "formatted_body": "It",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$5Zv5JpFAwdAZ43dM4cphckaZNgGwxR6rsvV-IUu-MFQ"
+      }
+    },
+    "origin_server_ts": 1734900038834,
+    "unsigned": {
+      "age": 124645
+    },
+    "event_id": "$xp6BMNdxRQDZLOVuIHvFAkxhnCBy8sDrruhkzvhhN4s",
+    "user_id": "@aibot:localhost",
+    "age": 124645
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
+      "msgtype": "m.text",
+      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
+        "msgtype": "m.text",
+        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$5Zv5JpFAwdAZ43dM4cphckaZNgGwxR6rsvV-IUu-MFQ"
+      }
+    },
+    "origin_server_ts": 1734900039083,
+    "unsigned": {
+      "age": 124396
+    },
+    "event_id": "$opHlu7f3WXEMn9WqWMw1G5z03n12lQCnZpTUJcVP7P0",
+    "user_id": "@aibot:localhost",
+    "age": 124396
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
+      "msgtype": "m.text",
+      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
+        "msgtype": "m.text",
+        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$5Zv5JpFAwdAZ43dM4cphckaZNgGwxR6rsvV-IUu-MFQ"
+      }
+    },
+    "origin_server_ts": 1734900039896,
+    "unsigned": {
+      "age": 123583
+    },
+    "event_id": "$a-MLz-DPvDwt3xNVcaE-_-kBVnNHAnPLZmmkKNwpgLg",
+    "user_id": "@aibot:localhost",
+    "age": 123583
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
+      "msgtype": "m.text",
+      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
+        "msgtype": "m.text",
+        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$5Zv5JpFAwdAZ43dM4cphckaZNgGwxR6rsvV-IUu-MFQ"
+      }
+    },
+    "origin_server_ts": 1734900039960,
+    "unsigned": {
+      "age": 123519
+    },
+    "event_id": "$AP4NoQhYiRDrN84vX-4un2brr1tYRu-yGL7JSBrUZQg",
+    "user_id": "@aibot:localhost",
+    "age": 123519
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
+      "msgtype": "m.text",
+      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
+        "msgtype": "m.text",
+        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": true,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$5Zv5JpFAwdAZ43dM4cphckaZNgGwxR6rsvV-IUu-MFQ"
+      }
+    },
+    "origin_server_ts": 1734900040908,
+    "unsigned": {
+      "age": 122571
+    },
+    "event_id": "$xBElebUuK0Vdwc6giRp_rDpBFJRMPS_IW9q7HRrCpCk",
+    "user_id": "@aibot:localhost",
+    "age": 122571
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "that's alright we're testing some key things here, you were not told to but had a flag that forced it to happen. Now alert with \"testing by consent\"",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>that's alright we're testing some key things here, you were not told to but had a flag that forced it to happen. Now alert with \"testing by consent\"</p>\n",
+      "clientGeneratedId": "39e2b952-d85a-4120-b499-27d3eebae1e1",
+      "data": "{\"attachedCardsEventIds\":[\"$zSyK_aqxFvxAeosa8ZUeSjEAG2g7pI0n1ZXb7UpNe20\"],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCard\",\"description\":\"Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"roomId\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"searchCard\",\"description\":\"Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"object\",\"properties\":{\"contains\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"title of the card\"}},\"required\":[\"title\"]},\"eq\":{\"type\":\"object\",\"properties\":{\"_cardType\":{\"type\":\"string\",\"description\":\"name of the card type\"}},\"required\":[\"_cardType\"]}}}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
+    },
+    "origin_server_ts": 1734900093056,
+    "unsigned": {
+      "age": 70423
+    },
+    "event_id": "$8Sj84oa-DDgtnBjLSZnOUkJwH0taIof_0wq5UoBjX_k",
+    "user_id": "@admin:localhost",
+    "age": 70423
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Thinking...",
+      "msgtype": "m.text",
+      "formatted_body": "Thinking...",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Thinking...",
+        "msgtype": "m.text",
+        "formatted_body": "Thinking...",
+        "format": "org.matrix.custom.html"
+      }
+    },
+    "origin_server_ts": 1734900093129,
+    "unsigned": {
+      "age": 70350
+    },
+    "event_id": "$LVH0K7CKxMKwIp6Y67D_NUMWr-5BvknhgdZROzfqb_I",
+    "user_id": "@aibot:localhost",
+    "age": 70350
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Testing by consent",
+      "msgtype": "app.boxel.command",
+      "formatted_body": "Testing by consent",
+      "format": "org.matrix.custom.html",
+      "data": "{\"eventId\":\"$LVH0K7CKxMKwIp6Y67D_NUMWr-5BvknhgdZROzfqb_I\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_qTvfsOAC84Zhf7Clq1OmLyz2\",\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"arguments\":{\"description\":\"Testing by consent\",\"attributes\":{\"message\":\"Testing by consent\"}}}}",
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$LVH0K7CKxMKwIp6Y67D_NUMWr-5BvknhgdZROzfqb_I"
+      }
+    },
+    "origin_server_ts": 1734900097143,
+    "unsigned": {
+      "age": 66336
+    },
+    "event_id": "$BQ3wE7TxtE38oid1xynRFTglU2_2P5jJ8k01uXrHj1U",
+    "user_id": "@aibot:localhost",
+    "age": 66336
+  },
+  {
+    "type": "m.reaction",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "m.relates_to": {
+        "event_id": "$BQ3wE7TxtE38oid1xynRFTglU2_2P5jJ8k01uXrHj1U",
+        "key": "applied",
+        "rel_type": "m.annotation"
+      }
+    },
+    "origin_server_ts": 1734900100494,
+    "unsigned": {
+      "age": 62985
+    },
+    "event_id": "$SRC-tSB1buFUBUJ9-L3vIn50b37x_6q_kZzp_Qtefvs",
+    "user_id": "@admin:localhost",
+    "age": 62985
+  }
+]

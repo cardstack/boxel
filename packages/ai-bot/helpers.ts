@@ -6,7 +6,6 @@ import {
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
-  CardMessageEvent,
   CardFragmentContent,
   CommandEvent,
   CommandResultEvent,
@@ -302,44 +301,51 @@ export function getRelevantCards(
   };
 }
 
-function getLastUserMessage(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): CardMessageEvent | undefined {
-  const userMessages = history.filter((event) => event.sender !== aiBotUserId);
-  // Get the last message
-  if (userMessages.length === 0) {
-    // If the user has sent no messages, return undefined
-    return undefined;
-  }
-  const lastMessage = userMessages[userMessages.length - 1];
-  if (
-    lastMessage.type === 'm.room.message' &&
-    lastMessage.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
-  ) {
-    return lastMessage as CardMessageEvent;
-  }
-  return undefined;
-}
-
 export function getTools(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Tool[] {
-  const lastMessage = getLastUserMessage(history, aiBotUserId);
-  if (lastMessage && lastMessage.content.data?.context?.tools?.length) {
-    return lastMessage.content.data.context.tools;
+  // Build map directly from messages
+  let toolMap = new Map<string, Tool>();
+  for (let event of history) {
+    if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
+      continue;
+    }
+    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
+      let eventTools = event.content.data.context.tools;
+      if (eventTools?.length) {
+        for (let tool of eventTools) {
+          toolMap.set(tool.function.name, tool);
+        }
+      }
+    }
   }
-  return [];
+  return Array.from(toolMap.values()).sort((a, b) =>
+    a.function.name.localeCompare(b.function.name),
+  );
 }
 
 export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  let lastMessage = getLastUserMessage(history, aiBotUserId);
-  if (lastMessage && lastMessage.content.data?.context?.requireToolCall) {
-    let tools = lastMessage.content.data.context?.tools || [];
+  const userMessages = history.filter((event) => event.sender !== aiBotUserId);
+  if (userMessages.length === 0) {
+    // If the user has sent no messages, auto is safe
+    return 'auto';
+  }
+
+  const lastMessage = userMessages[userMessages.length - 1];
+  if (
+    lastMessage.type !== 'm.room.message' ||
+    lastMessage.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    // If the last message is not a user message, auto is safe
+    return 'auto';
+  }
+  let messageContext = lastMessage.content.data.context;
+  if (messageContext.requireToolCall) {
+    let tools = messageContext.tools || [];
     if (tools.length != 1) {
       throw new Error('Forced tool calls only work with a single tool');
     }

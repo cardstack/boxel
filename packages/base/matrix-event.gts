@@ -207,6 +207,7 @@ export interface CardMessageContent {
       tools: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
+      requireToolCall?: boolean;
     };
   };
 }
