@@ -332,12 +332,9 @@ export function getToolChoice(
   const lastUserMessage = history.findLast(
     (event) => event.sender !== aiBotUserId,
   );
-  if (!lastUserMessage) {
-    // If no user messages found, auto is safe
-    return 'auto';
-  }
 
   if (
+    !lastUserMessage ||
     lastUserMessage.type !== 'm.room.message' ||
     lastUserMessage.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
   ) {
