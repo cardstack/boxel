@@ -22,6 +22,7 @@ import { Author } from './author';
 import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
 import { User } from './user';
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -638,7 +639,14 @@ export class BlogPost extends CardDef {
   });
   @field wordCount = contains(NumberField, {
     computeVia: function (this: BlogPost) {
-      return this.body?.length;
+      if (!this.body) {
+        return 0;
+      }
+      const plainText = markdownToHtml(this.body).replace(
+        /<\/?[^>]+(>|$)/g,
+        '',
+      );
+      return plainText.trim().split(/\s+/).length;
     },
   });
   @field editors = linksToMany(User);
