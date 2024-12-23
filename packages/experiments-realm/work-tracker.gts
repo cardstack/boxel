@@ -580,7 +580,7 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
       {{@statusLabel}}
       <button class='create-new-task-button' {{on 'click' this.createNewTask}}>
         {{#let (@isCreateNewTaskLoading @statusLabel) as |isLoading|}}
-          {{#if isLoading}}
+          {{#if this.isLoading}}
             <LoadingIndicator class='loading' />
           {{else}}
             <IconPlus width='12px' height='12px' />
