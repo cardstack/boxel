@@ -82,6 +82,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
+  @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
@@ -98,6 +99,18 @@ export default class OperatorModeStateService extends Service {
     super(owner);
     this.reset.register(this);
   }
+
+  get aiAssistantOpen() {
+    return this._aiAssistantOpen;
+  }
+
+  set aiAssistantOpen(value: boolean) {
+    this._aiAssistantOpen = value;
+  }
+
+  toggleAiAssistant = () => {
+    this.aiAssistantOpen = !this.aiAssistantOpen;
+  };
 
   resetState() {
     this.state = new TrackedObject({
