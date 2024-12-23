@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "locale": "en-IN",
+      "sign": "₹",
+      "name": "Indian Rupee",
+      "symbol": "INR",
+      "logoURL": "https://i.imgur.com/sSUPndr.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../asset",
+        "name": "Currency"
+      }
+    }
+  }
+}
