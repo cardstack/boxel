@@ -187,7 +187,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     ).toHaveCount(1);
     await showAllCards(page);
     await expect(
-      page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
+      page.locator(
+        `[data-test-cards-grid-item="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
+      ),
     ).toHaveCount(1);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
@@ -262,10 +264,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     // assert that logged in user can navigate directly to card in private realm without
     // being asked to login
-    await page.goto(`${newRealmURL}hello-world`);
+    await page.goto(
+      `${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
+    );
     await expect(
-      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
-    ).toContainText('Hello World');
+      page.locator(
+        `[data-test-card="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
+      ),
+    ).toContainText('Some folks say');
 
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
@@ -273,12 +279,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedOut(page);
 
     await login(page, 'user1', 'mypassword1!', {
-      url: `${newRealmURL}hello-world`,
+      url: `${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
-      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+      page.locator(
+        `[data-test-card="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
+      ),
     ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');

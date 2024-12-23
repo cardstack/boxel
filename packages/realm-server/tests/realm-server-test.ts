@@ -3079,8 +3079,13 @@ module('Realm Server', function (hooks) {
         'seed file index.json exists',
       );
       assert.ok(
-        existsSync(join(realmPath, 'hello-world.json')),
-        'seed file hello-world.json exists',
+        existsSync(
+          join(
+            realmPath,
+            'HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json',
+          ),
+        ),
+        'seed file HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json exists',
       );
       assert.notOk(
         existsSync(join(realmPath, 'package.json')),
