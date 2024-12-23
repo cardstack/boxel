@@ -143,6 +143,11 @@ export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
         overflow-y: visible;
         padding-top: var(--boxel-sp-xs);
       }
+      .thumbnails button {
+        border: none;
+        padding: 0;
+        background: transparent;
+      }
       .thumbnails img {
         width: 50px;
         height: 50px;
