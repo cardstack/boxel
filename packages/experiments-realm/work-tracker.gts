@@ -348,10 +348,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
   }
 
-  get isLoading() {
-    return this.cards && this.cards.isLoading;
-  }
-
   get assigneeIsLoading() {
     return (
       this.selectedFilter === 'assignee' &&
@@ -373,10 +369,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
               Link a project to continue
             </BoxelButton>
           {{/if}}
-        </div>
-      {{else if this.isLoading}}
-        <div class='disabled'>
-          <LoadingIndicator @color='var(--boxel-light)' />
         </div>
       {{/if}}
       <div class='filter-section'>
