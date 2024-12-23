@@ -329,22 +329,24 @@ export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const userMessages = history.filter((event) => event.sender !== aiBotUserId);
-  if (userMessages.length === 0) {
-    // If the user has sent no messages, auto is safe
+  const lastUserMessage = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+  if (!lastUserMessage) {
+    // If no user messages found, auto is safe
     return 'auto';
   }
 
-  const lastMessage = userMessages[userMessages.length - 1];
   if (
-    lastMessage.type !== 'm.room.message' ||
-    lastMessage.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+    lastUserMessage.type !== 'm.room.message' ||
+    lastUserMessage.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
   ) {
     // If the last message is not a user message, auto is safe
     return 'auto';
   }
-  let messageContext = lastMessage.content.data.context;
-  if (messageContext.requireToolCall) {
+
+  const messageContext = lastUserMessage.content.data.context;
+  if (messageContext?.requireToolCall) {
     let tools = messageContext.tools || [];
     if (tools.length != 1) {
       throw new Error('Forced tool calls only work with a single tool');
