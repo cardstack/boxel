@@ -14,7 +14,7 @@ export class FilterTrigger extends GlimmerComponent<TriggerSignature> {
     <div class='filter-trigger'>
       <IconButton @icon={{ListFilter}} width='13px' height='13px' />
       <span class='filter-trigger-text'>
-        {{#if this.args.isLoading}}
+        {{#if @isLoading}}
           Loading...
         {{else}}
           Filter
