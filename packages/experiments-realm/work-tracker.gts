@@ -344,11 +344,19 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
   }
 
+  get isLoading() {
+    return this.cards.isLoading;
+  }
+
   <template>
     <div class='task-app'>
       {{#if (not this.currentProject.id)}}
         <div class='disabled'>
           Link a project to continue
+        </div>
+      {{else if this.isLoading}}
+        <div class='disabled'>
+          <LoadingIndicator @color='var(--boxel-light)' />
         </div>
       {{/if}}
       <div class='filter-section'>
