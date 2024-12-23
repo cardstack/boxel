@@ -125,8 +125,10 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           }
           const lastIndex = summary.id.lastIndexOf('/');
           let cardRef = {
-            module: new URL(summary.id.substring(0, lastIndex), import.meta.url)
-              .href,
+            module: new URL(
+              `./${summary.id.substring(0, lastIndex)}`,
+              import.meta.url,
+            ).href,
             name: summary.id.substring(lastIndex + 1),
           };
           filter.cardRef = cardRef;
