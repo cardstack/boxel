@@ -18,14 +18,14 @@ let component: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .disclaimer {
       position: fixed;
-      bottom: 0;
+      bottom: 2px;
       left: 50%;
       transform: translateX(-50%);
       width: 996px;
       text-align: center;
       color: white;
       z-index: var(--host-disclaimer-z-index);
-      max-width: 966px;
+      font-size: 0.7rem;
     }
 
     @media screen and (max-width: 1445px) {
