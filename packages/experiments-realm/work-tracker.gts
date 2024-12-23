@@ -348,6 +348,18 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     }
   }
 
+  get isLoading() {
+    return this.cards && this.cards.isLoading;
+  }
+
+  get assigneeIsLoading() {
+    return (
+      this.selectedFilter === 'assignee' &&
+      this.assigneeQuery &&
+      this.assigneeQuery.isLoading
+    );
+  }
+
   @action viewCard() {
     this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
   }
@@ -362,12 +374,17 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
             </BoxelButton>
           {{/if}}
         </div>
+      {{else if this.isLoading}}
+        <div class='disabled'>
+          <LoadingIndicator @color='var(--boxel-light)' />
+        </div>
       {{/if}}
       <div class='filter-section'>
         <div class='filter-dropdown-container'>
           {{#if this.selectedFilterConfig}}
             {{#let (this.selectedFilterConfig.options) as |options|}}
               <FilterDropdown
+                @isLoading={{this.assigneeIsLoading}}
                 @searchField={{this.selectedFilterConfig.searchKey}}
                 @options={{options}}
                 @realmURLs={{this.realmHrefs}}
