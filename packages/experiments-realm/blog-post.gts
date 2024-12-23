@@ -19,6 +19,7 @@ import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
 import NumberField from '../base/number';
 import { User } from './user';
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -570,7 +571,14 @@ export class BlogPost extends CardDef {
   });
   @field wordCount = contains(NumberField, {
     computeVia: function (this: BlogPost) {
-      return this.body?.trim().split(/\s+/).length;
+      if (!this.body) {
+        return 0;
+      }
+      const plainText = markdownToHtml(this.body).replace(
+        /<\/?[^>]+(>|$)/g,
+        '',
+      );
+      return plainText.trim().split(/\s+/).length;
     },
   });
   @field editors = linksToMany(User);
