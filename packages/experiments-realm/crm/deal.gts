@@ -55,7 +55,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
     );
   }
   get primaryContactName() {
-    console.log(this.args.fields.account?.primaryContact);
     return this.args.model.account?.primaryContact?.name;
   }
 
@@ -84,10 +83,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return this.args.model[realmURL]!;
   }
 
-  get realmHref() {
-    return this.realmURL.href;
-  }
-
   get realmHrefs() {
     return [this.realmURL?.href];
   }
@@ -96,7 +91,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return {
       filter: {
         type: {
-          module: `${this.realmHref}crm/deal`,
+          module: new URL('./crm/deal', import.meta.url).href,
           name: 'Deal',
         },
       },
@@ -116,14 +111,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
       (acc, deal: Deal) => acc + deal.computedValue.amount,
       0,
     );
-    nonZeroDeals.map((d) => console.log(d.computedValue.amount));
-    console.log('totalDealRevenue', totalDealRevenue);
     let avgDealSize = totalDealRevenue / nonZeroDeals.length;
-    console.log('avgDealSize', avgDealSize);
+
     if (this.args.model.computedValue?.amount) {
       let percentDiff =
         (this.args.model.computedValue?.amount - avgDealSize) / avgDealSize;
-      console.log('percentDiff', percentDiff);
       let positive = percentDiff >= 0 ? true : false;
       let summary = `${percentDiff.toFixed(2)}% ${
         positive ? 'above' : 'below'
