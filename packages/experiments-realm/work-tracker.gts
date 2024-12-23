@@ -345,7 +345,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   }
 
   get isLoading() {
-    return this.cards.isLoading;
+    return this.cards && this.cards.isLoading;
   }
 
   <template>
@@ -580,7 +580,7 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
       {{@statusLabel}}
       <button class='create-new-task-button' {{on 'click' this.createNewTask}}>
         {{#let (@isCreateNewTaskLoading @statusLabel) as |isLoading|}}
-          {{#if this.isLoading}}
+          {{#if isLoading}}
             <LoadingIndicator class='loading' />
           {{else}}
             <IconPlus width='12px' height='12px' />
