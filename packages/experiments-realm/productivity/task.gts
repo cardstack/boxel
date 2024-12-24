@@ -19,12 +19,7 @@ import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { User } from '../user';
-import {
-  Task,
-  BaseTaskStatusField,
-  BaseTaskPriority,
-  getDueDateStatus,
-} from '../task';
+import { Task, TaskStatusField, getDueDateStatus } from '../task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -462,7 +457,7 @@ class TaskIsolated extends Component<typeof WorkTask> {
   }
 }
 
-export class TaskStatusField extends BaseTaskStatusField {
+export class WorkTaskStatusField extends TaskStatusField {
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
@@ -507,11 +502,10 @@ export class TaskStatusField extends BaseTaskStatusField {
 export class WorkTask extends Task {
   static displayName = 'Work Task';
   static icon = CheckboxIcon;
-  @field priority = contains(BaseTaskPriority);
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
   @field children = linksToMany(() => WorkTask);
-  @field status = contains(TaskStatusField);
+  @field status = contains(WorkTaskStatusField);
 
   @field title = contains(StringField, {
     computeVia: function (this: WorkTask) {

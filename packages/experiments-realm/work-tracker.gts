@@ -26,7 +26,7 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { TaskStatusField, Project, WorkTask } from './productivity/task';
+import { WorkTaskStatusField, Project, WorkTask } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
@@ -64,7 +64,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         module: new URL('./productivity/task', import.meta.url).href,
         name: 'Status',
       },
-      options: () => TaskStatusField.values,
+      options: () => WorkTaskStatusField.values,
     },
     assignee: {
       searchKey: 'name',
@@ -131,7 +131,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   taskCollection = getTaskCardsResource(
     this,
     () => this.cardInstances,
-    () => TaskStatusField.values.map((status) => status.label) ?? [],
+    () => WorkTaskStatusField.values.map((status) => status.label) ?? [],
     () => this.hasColumnKey,
   );
 
@@ -224,7 +224,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return;
       }
 
-      let index = TaskStatusField.values.find((value) => {
+      let index = WorkTaskStatusField.values.find((value) => {
         return value.label === statusLabel;
       })?.index;
 
@@ -291,10 +291,10 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       cardInNewCol &&
       cardInNewCol.status.label !== targetColumnAfterDrag.title //not dragging to the same column
     ) {
-      let statusValue = TaskStatusField.values.find(
+      let statusValue = WorkTaskStatusField.values.find(
         (value) => value.label === targetColumnAfterDrag.title,
       );
-      cardInNewCol.status = new TaskStatusField(statusValue);
+      cardInNewCol.status = new WorkTaskStatusField(statusValue);
       await this.args.context?.actions?.saveCard?.(cardInNewCol);
     }
   }
