@@ -25,6 +25,7 @@ export interface BoxelIndexTable {
   fitted_html: Record<string, string> | null;
   isolated_html: string | null;
   atom_html: string | null;
+  icon_html: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
@@ -40,6 +41,7 @@ export interface CardTypeSummary {
   code_ref: string;
   display_name: string;
   total: number;
+  icon_html: string;
 }
 
 export interface RealmMetaTable {

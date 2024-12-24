@@ -23,6 +23,7 @@
    fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
+   icon_html TEXT,
    PRIMARY KEY ( url, realm_version, realm_url ) 
 );
 
