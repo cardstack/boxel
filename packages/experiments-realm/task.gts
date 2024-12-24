@@ -180,11 +180,14 @@ export class FittedTask extends Component<typeof Task> {
       </div>
 
       <footer>
-        <@fields.assignee
-          class='card-assignee'
-          @format='atom'
-          @displayContainer={{false}}
-        />
+        {{!TODO: Actually, this shudn't be needed. atom default templates can't handle null values }}
+        {{#if @model.assignee}}
+          <@fields.assignee
+            class='card-assignee'
+            @format='atom'
+            @displayContainer={{false}}
+          />
+        {{/if}}
       </footer>
     </div>
 
