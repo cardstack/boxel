@@ -29,9 +29,9 @@
           "self": "../BlogApp/ramped"
         }
       },
-      "categories": {
+      "categories.0": {
         "links": {
-          "self": null
+          "self": "../BlogCategory/cultural-scenes"
         }
       },
       "editors": {
