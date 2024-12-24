@@ -7,8 +7,6 @@ import { isTesting } from '@embroider/macros';
 
 import { stringify } from 'qs';
 
-import { v4 as uuidv4 } from 'uuid';
-
 import {
   SupportedMimeType,
   type LooseCardResource,
@@ -80,7 +78,6 @@ export default class CardService extends Service {
     Loader,
     Promise<typeof CardAPI>
   >;
-  declare clientRequestIds: Set<string>;
 
   constructor(owner: Owner) {
     super(owner);
@@ -102,7 +99,6 @@ export default class CardService extends Service {
 
   resetState() {
     this.subscriber = undefined;
-    this.clientRequestIds = new Set();
     this.loaderToCardAPILoadingCache = new WeakMap();
   }
 
@@ -118,13 +114,9 @@ export default class CardService extends Service {
     url: string | URL,
     args?: RequestInit,
   ): Promise<CardDocument | undefined> {
-    let clientRequestId = uuidv4();
-    this.clientRequestIds.add(clientRequestId);
-
     let response = await this.network.authedFetch(url, {
       headers: {
         Accept: SupportedMimeType.CardJson,
-        'X-Boxel-Client-Request-Id': clientRequestId,
       },
       ...args,
     });
