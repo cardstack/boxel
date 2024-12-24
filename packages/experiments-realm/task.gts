@@ -534,7 +534,7 @@ export class Task extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Task) {
-      return this.taskName;
+      return this.taskName ?? `Untitled ${this.constructor.displayName}`;
     },
   });
 
