@@ -30,7 +30,7 @@ import { WorkTaskStatusField, Project, WorkTask } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
-import getTaskCardsResource from './productivity/task-cards-resource';
+import getKanbanResource from './kanban-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -128,7 +128,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     return card.status?.label === key;
   };
 
-  taskCollection = getTaskCardsResource(
+  taskCollection = getKanbanResource(
     this,
     () => this.cardInstances,
     () => WorkTaskStatusField.values.map((status) => status.label) ?? [],
