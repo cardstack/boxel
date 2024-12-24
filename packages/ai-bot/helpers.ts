@@ -23,6 +23,7 @@ import {
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM_MODEL,
 } from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
@@ -87,7 +88,7 @@ export function getPromptParts(
   return {
     tools,
     messages,
-    model: 'openai/gpt-4o',
+    model: DEFAULT_LLM_MODEL,
     history,
     toolChoice: toolChoice,
   };

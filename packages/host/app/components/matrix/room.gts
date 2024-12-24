@@ -25,8 +25,9 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, BoxelSelect } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import { unixTime } from '@cardstack/runtime-common';
 
@@ -127,12 +128,34 @@ export default class Room extends Component<Signature> {
               @canSend={{this.canSend}}
               data-test-message-field={{@roomId}}
             />
-            <AiAssistantCardPicker
-              @autoAttachedCards={{this.autoAttachedCards}}
-              @cardsToAttach={{this.cardsToAttach}}
-              @chooseCard={{this.chooseCard}}
-              @removeCard={{this.removeCard}}
-            />
+            <div class='chat-input-area__bottom-section'>
+              <AiAssistantCardPicker
+                @autoAttachedCards={{this.autoAttachedCards}}
+                @cardsToAttach={{this.cardsToAttach}}
+                @chooseCard={{this.chooseCard}}
+                @removeCard={{this.removeCard}}
+              />
+              <BoxelSelect
+                class='available-llm-models'
+                @selected={{this.selectedLLMModel}}
+                @verticalPosition='above'
+                @onChange={{this.selectLLMModel}}
+                @options={{this.availableLLMModels}}
+                @matchTriggerWidth={{false}}
+                @disabled={{this.selectLLMModelTask.isRunning}}
+                @dropdownClass='available-llm-models__dropdown'
+                as |item|
+              >
+                <div class='llm-model'>
+                  <div class='check-mark'>
+                    {{#if (this.isSelectedModel item)}}
+                      <CheckMark width='12' height='12' />
+                    {{/if}}
+                  </div>
+                  <span class='model'>{{item}}</span>
+                </div>
+              </BoxelSelect>
+            </div>
           </div>
         </footer>
       </section>
@@ -168,11 +191,70 @@ export default class Room extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
+      .chat-input-area__bottom-section {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        padding-right: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxl);
+      }
+      .chat-input-area__bottom-section
+        :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute; /* This prevents layout shift when menu opens */
+      }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
+      }
+      .available-llm-models {
+        border: none;
+        padding: 0;
+        width: auto;
+        flex: 1;
+        padding-right: var(--boxel-sp-xxs);
+        cursor: pointer;
+        font:;
+      }
+      .available-llm-models :deep(.boxel-trigger) {
+        padding: 0;
+      }
+      .available-llm-models :deep(.boxel-trigger-content) {
+        flex: 1;
+      }
+      .llm-model {
+        display: grid;
+        grid-template-columns: 12px 1fr;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+      }
+      .available-llm-models :deep(.boxel-trigger-content .llm-model) {
+        grid-template-columns: 1fr;
+      }
+      .available-llm-models :deep(.boxel-trigger-content .check-mark) {
+        display: none;
+      }
+      .available-llm-models :deep(.boxel-trigger-content .model) {
+        text-align: right;
+      }
+      .check-mark {
+        height: 12px;
+      }
+      .model {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-wrap: nowrap;
+        color: var(--boxel-dark);
+        font: 600 var(--boxel-font-sm);
+      }
+
+      :global(
+          .available-llm-models__dropdown
+            .ember-power-select-option[aria-current='true']
+        ) {
+        background-color: var(--boxel-teal) !important;
       }
     </style>
   </template>
@@ -443,6 +525,28 @@ export default class Room extends Component<Signature> {
 
   private get skills(): Skill[] {
     return this.roomResource.skills;
+  }
+
+  @action
+  isSelectedModel(model: string) {
+    return this.selectedLLMModel === model;
+  }
+
+  private get selectedLLMModel() {
+    return this.roomResource.selectedLLMModel;
+  }
+
+  @action
+  private selectLLMModel(model: string) {
+    this.selectLLMModelTask.perform(model);
+  }
+
+  private selectLLMModelTask = restartableTask(async (model: string) => {
+    await this.matrixService.selectLLMModel(this.args.roomId, model);
+  });
+
+  private get availableLLMModels(): string[] {
+    return this.roomResource.availableLLMModels;
   }
 
   private get sortedSkills(): Skill[] {
