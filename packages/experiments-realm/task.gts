@@ -523,7 +523,7 @@ export class TaskPriority extends LooseGooseyField {
 }
 
 export class Task extends CardDef {
-  static displayName = 'Task Base';
+  static displayName = 'Task';
   @field taskName = contains(StringField);
   @field tags = linksToMany(() => Tag);
   @field dateRange = contains(DateRangeField);
