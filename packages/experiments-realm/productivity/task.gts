@@ -20,7 +20,7 @@ import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { User } from '../user';
 import {
-  TaskBase,
+  Task,
   BaseTaskStatusField,
   BaseTaskPriority,
   getDueDateStatus,
@@ -504,7 +504,7 @@ export class TaskStatusField extends BaseTaskStatusField {
   ];
 }
 
-export class WorkTask extends TaskBase {
+export class WorkTask extends Task {
   static displayName = 'Work Task';
   static icon = CheckboxIcon;
   @field priority = contains(BaseTaskPriority);

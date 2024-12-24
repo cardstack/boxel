@@ -102,7 +102,7 @@ export class BaseTaskStatusField extends LooseGooseyField {
   edit = BaseTaskStatusEdit;
 }
 
-export class FittedTask extends Component<typeof TaskBase> {
+export class FittedTask extends Component<typeof Task> {
   get visibleTags() {
     return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
   }
@@ -524,7 +524,7 @@ export class BaseTaskPriority extends LooseGooseyField {
   };
 }
 
-export class TaskBase extends CardDef {
+export class Task extends CardDef {
   static displayName = 'Task Base';
   @field taskName = contains(StringField);
   @field tags = linksToMany(() => Tag);
@@ -535,13 +535,13 @@ export class TaskBase extends CardDef {
   @field priority = contains(BaseTaskPriority);
 
   @field title = contains(StringField, {
-    computeVia: function (this: TaskBase) {
+    computeVia: function (this: Task) {
       return this.taskName;
     },
   });
 
   @field shortId = contains(StringField, {
-    computeVia: function (this: TaskBase) {
+    computeVia: function (this: Task) {
       if (this.id) {
         let id = shortenId(extractId(this.id));
         return id.toUpperCase();
