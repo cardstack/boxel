@@ -287,7 +287,10 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     let cardInNewCol = targetColumnAfterDrag.cards.find(
       (c: CardDef) => c.id === draggedCard.id,
     );
-    if (cardInNewCol) {
+    if (
+      cardInNewCol &&
+      cardInNewCol.status.label !== targetColumnAfterDrag.title //not dragging to the same column
+    ) {
       let statusValue = TaskStatusField.values.find(
         (value) => value.label === targetColumnAfterDrag.title,
       );
