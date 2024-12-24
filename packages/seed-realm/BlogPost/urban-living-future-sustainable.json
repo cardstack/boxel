@@ -29,9 +29,14 @@
           "self": "../BlogApp/ramped"
         }
       },
-      "categories": {
+      "categories.0": {
         "links": {
-          "self": null
+          "self": "../BlogCategory/city-design"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../BlogCategory/future-tech"
         }
       },
       "editors": {

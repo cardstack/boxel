@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Blog",
+      "title": "Blog App",
       "description": "Catalog entry for Blog App card",
       "isField": false,
       "ref": {

@@ -5,7 +5,7 @@ import { Format, type CardContext } from 'https://cardstack.com/base/card-api';
 import { type Query } from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -57,7 +57,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                     fieldName=undefined
                   }}
                   class='card'
-                  @displayBoundaries={{not (eq @selectedView 'card')}}
+                  @displayBoundaries={{true}}
                 >
                   <card.component />
                 </CardContainer>
