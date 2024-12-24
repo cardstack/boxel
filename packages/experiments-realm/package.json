@@ -18,7 +18,11 @@
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",
-    "lint:hbs:fix": "ember-template-lint . --fix"
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "copy-gts": "./scripts/copy-to-seed.sh gts",
+    "copy-json": "./scripts/copy-to-seed.sh json",
+    "copy-gts:force": "FORCE_COPY_TO_SEED=true ./scripts/copy-to-seed.sh gts",
+    "copy-json:force": "FORCE_COPY_TO_SEED=true ./scripts/copy-to-seed.sh json"
   },
   "volta": {
     "extends": "../../package.json"
