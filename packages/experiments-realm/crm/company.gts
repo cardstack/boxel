@@ -19,9 +19,9 @@ class ViewCompanyTemplate extends Component<typeof Company> {
         <:title>
           {{@model.name}}
         </:title>
-        <:thumbnail>
+        <:icon>
           <BuildingIcon />
-        </:thumbnail>
+        </:icon>
       </EntityDisplay>
     </div>
   </template>

@@ -102,9 +102,9 @@ export class PhoneField extends FieldDef {
             {{@model.number}}
           {{/if}}
         </:title>
-        <:thumbnail>
+        <:icon>
           <PhoneIcon class='icon' />
-        </:thumbnail>
+        </:icon>
       </EntityDisplay>
       <style scoped>
         .icon {
@@ -139,9 +139,9 @@ export class ContactPhoneNumber extends FieldDef {
             {{@model.phoneNumber.number}}
           {{/if}}
         </:title>
-        <:thumbnail>
+        <:icon>
           <PhoneIcon class='icon' />
-        </:thumbnail>
+        </:icon>
         <:tag>
           {{#if @model.type.label}}
             <Pill class='pill-gray'>

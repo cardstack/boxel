@@ -22,9 +22,9 @@ export class WebsiteField extends UrlField {
         <:title>
           {{domainWithPath @model}}
         </:title>
-        <:thumbnail>
+        <:icon>
           <WorldWwwIcon />
-        </:thumbnail>
+        </:icon>
       </EntityDisplay>
     </template>
   };

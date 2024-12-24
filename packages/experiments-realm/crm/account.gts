@@ -205,9 +205,9 @@ class IsolatedTemplate extends Component<typeof Account> {
               <:content>
                 <div class='activity-card-group'>
                   <EntityDisplay>
-                    <:thumbnail>
+                    <:icon>
                       <SquareUser />
-                    </:thumbnail>
+                    </:icon>
                     <:title>
                       Dmitri Petrov
                     </:title>
@@ -219,6 +219,7 @@ class IsolatedTemplate extends Component<typeof Account> {
                     <:thumbnail>
                       <Avatar
                         @thumbnailURL='https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2'
+                        class='avatar'
                       />
                     </:thumbnail>
                     <:title>
@@ -229,9 +230,9 @@ class IsolatedTemplate extends Component<typeof Account> {
                     </:content>
                   </EntityDisplay>
                   <EntityDisplay class='activity-time'>
-                    <:thumbnail>
+                    <:icon>
                       <CalendarTime />
-                    </:thumbnail>
+                    </:icon>
                     <:title>
                       May 15, 2024
                     </:title>
@@ -327,6 +328,11 @@ class IsolatedTemplate extends Component<typeof Account> {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-color-gray);
         margin-left: auto;
+      }
+      .avatar {
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
+        flex-shrink: 0;
       }
 
       @container activities-summary-card (max-width: 447px) {

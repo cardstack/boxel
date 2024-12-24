@@ -298,9 +298,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   <:title>
                     Notes
                   </:title>
-                  <:thumbnail>
+                  <:icon>
                     <Info class='info-icon' />
-                  </:thumbnail>
+                  </:icon>
                 </EntityDisplay>
 
                 {{#if @model.document}}
@@ -524,7 +524,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       .info-atom {
         width: fit-content;
-        display: inline-block;
+        display: inline-flex;
       }
       .header-icon {
         width: var(--boxel-icon-sm);
@@ -712,7 +712,7 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .info-atom {
         width: fit-content;
-        display: inline-block;
+        display: inline-flex;
       }
       /* deal details */
       .deal-details {

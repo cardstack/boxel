@@ -72,9 +72,9 @@ export class EmailField extends StringField {
           <:title>
             {{@model}}
           </:title>
-          <:thumbnail>
+          <:icon>
             <MailIcon class='icon' />
-          </:thumbnail>
+          </:icon>
         </EntityDisplay>
       {{/if}}
       <style scoped>
