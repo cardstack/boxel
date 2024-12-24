@@ -49,7 +49,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTaskTask"
       }
     }
   }

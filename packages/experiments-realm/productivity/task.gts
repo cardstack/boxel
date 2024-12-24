@@ -145,7 +145,7 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
-class TaskIsolated extends Component<typeof Task> {
+class TaskIsolated extends Component<typeof WorkTask> {
   get dueDate() {
     return this.args.model.dateRange?.end;
   }
@@ -504,17 +504,17 @@ export class TaskStatusField extends BaseTaskStatusField {
   ];
 }
 
-export class Task extends TaskBase {
-  static displayName = 'Task';
+export class WorkTask extends TaskBase {
+  static displayName = 'Work Task';
   static icon = CheckboxIcon;
   @field priority = contains(BaseTaskPriority);
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
-  @field children = linksToMany(() => Task);
+  @field children = linksToMany(() => WorkTask);
   @field status = contains(TaskStatusField);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Task) {
+    computeVia: function (this: WorkTask) {
       return this.taskName;
     },
   });
@@ -523,7 +523,7 @@ export class Task extends TaskBase {
   @field assignee = linksTo(() => TeamMember);
 
   @field shortId = contains(StringField, {
-    computeVia: function (this: Task) {
+    computeVia: function (this: WorkTask) {
       if (this.id) {
         let id = shortenId(extractId(this.id));
         let _shortId: string;

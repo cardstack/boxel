@@ -451,7 +451,7 @@ class EditPriority extends Component<typeof BaseTaskPriority> {
   <template>
     <div class='priority-field'>
       <RadioInput
-        @groupDescription='Select Task Priority'
+        @groupDescription='Select Work Task Priority'
         @items={{this.priorities}}
         @checkedId={{this.selectedPriority.label}}
         @orientation='horizontal'

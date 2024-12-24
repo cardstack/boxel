@@ -26,7 +26,7 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { TaskStatusField, Project, Task } from './productivity/task';
+import { TaskStatusField, Project, WorkTask } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
@@ -101,14 +101,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     if (!this.cards || !this.cards.instances) {
       return [];
     }
-    return this.cards.instances as Task[];
+    return this.cards.instances as WorkTask[];
   }
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
   }
 
-  @action showTaskCard(card: Task): boolean {
+  @action showTaskCard(card: WorkTask): boolean {
     return this.filterTypes.every((filterType: FilterType) => {
       let selectedItems = this.selectedItems.get(filterType) ?? [];
       if (selectedItems.length === 0) return true;
@@ -124,7 +124,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     });
   }
 
-  hasColumnKey = (card: Task, key: string) => {
+  hasColumnKey = (card: WorkTask, key: string) => {
     return card.status?.label === key;
   };
 
@@ -164,7 +164,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   get assignedTaskCodeRef() {
     return {
       module: new URL('./productivity/task', import.meta.url).href,
-      name: 'Task',
+      name: 'WorkTask',
     };
   }
 
