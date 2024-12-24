@@ -97,18 +97,10 @@ export default class CardPill extends Component<CardPillSignature> {
         display: none;
       }
       .card-content {
-        display: flex;
         max-width: 100px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-      }
-      .card-content > :deep(.atom-format) {
-        background: none;
-        border-radius: 0;
-        white-space: inherit;
-        overflow: inherit;
-        text-overflow: inherit;
       }
       .remove-button {
         --boxel-icon-button-width: var(--boxel-icon-sm);
