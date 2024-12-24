@@ -2,40 +2,41 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Embedded Template for Status and Priority",
-      "taskDetail": null,
-      "status": {
-        "index": 2,
-        "label": "Current Sprint"
-      },
       "priority": {
-        "index": null,
-        "label": null
+        "index": 3,
+        "label": "High"
       },
+      "status": {
+        "completed": false,
+        "index": 0,
+        "label": "Not Started"
+      },
+      "taskName": "Cleanup all the dbs",
       "dateRange": {
-        "start": "2024-11-18",
-        "end": "2024-11-19"
+        "start": null,
+        "end": null
       },
+      "taskDetail": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
-        }
-      },
       "project": {
         "links": {
-          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
         }
       },
       "team": {
         "links": {
-          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+          "self": null
         }
       },
       "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
         "links": {
           "self": null
         }
@@ -49,7 +50,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }

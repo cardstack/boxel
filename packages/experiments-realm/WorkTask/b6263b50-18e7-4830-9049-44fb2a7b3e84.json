@@ -2,28 +2,32 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": 0,
-        "label": "Low"
-      },
-      "status": {
-        "completed": false,
-        "index": null,
-        "label": "In Progress"
-      },
-      "taskName": "Add functionality where + opens create card modal with correct status",
-      "dateRange": {
-        "start": null,
-        "end": null
-      },
+      "taskName": "Fill up task board with realistic data",
       "taskDetail": null,
+      "status": {
+        "index": null,
+        "label": "Backlog"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dateRange": {
+        "start": "2024-11-19",
+        "end": "2024-11-20"
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
+        }
+      },
       "project": {
         "links": {
-          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       },
       "team": {
@@ -36,11 +40,6 @@
           "self": null
         }
       },
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
-        }
-      },
       "tags": {
         "links": {
           "self": null
@@ -50,7 +49,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }

@@ -2,19 +2,19 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Fill up task board with realistic data",
+      "taskName": "Embedded Template for Status and Priority",
       "taskDetail": null,
       "status": {
-        "index": 3,
-        "label": "In Progress"
+        "index": 2,
+        "label": "Current Sprint"
       },
       "priority": {
         "index": null,
         "label": null
       },
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2024-11-18",
+        "end": "2024-11-19"
       },
       "description": null,
       "thumbnailURL": null
@@ -22,7 +22,7 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
+          "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
         }
       },
       "project": {
@@ -49,7 +49,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }

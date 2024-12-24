@@ -7,17 +7,19 @@ import { Resource } from 'ember-resources';
 interface Args {
   named: {
     cards: CardDef[];
-    hasColumnKey: (card: any, key: string) => boolean;
+    hasColumnKey: <T extends CardDef>(card: T, key: string) => boolean;
     columnKeys: string[];
   };
 }
 
 // This is a resource because we have to
-// 1. to hold state of cards inside of the kanban board
-// 2. to order cards that are newly added to the kanban board
-class TaskCollection extends Resource<Args> {
+// 1. to hold state of cards inside of the kanban board without a flickering/ loading
+// 2. to maintain a natural order cards that are newly added to the kanban board
+// Note: this resource assumes that you have already loaded the cards and is unsuitable for pre-rendered cards
+class KanbanResource extends Resource<Args> {
   @tracked private data: Map<string, DndColumn> = new Map();
-  hasColumnKey?: (card: CardDef, key: string) => boolean = undefined;
+  hasColumnKey?: <T extends CardDef>(card: T, key: string) => boolean =
+    undefined;
 
   commit(cards: CardDef[], columnKeys: string[]) {
     columnKeys.forEach((key: string) => {
@@ -55,17 +57,20 @@ class TaskCollection extends Resource<Args> {
   }
 }
 
-export default function getTaskCardsResource(
+export default function getKanbanResource<T extends CardDef>(
   parent: object,
-  cards: () => CardDef[],
+  cards: () => T[],
   columnKeys: () => string[],
-  hasColumnKey: () => (card: any, key: string) => boolean,
+  hasColumnKey: () => (card: T, key: string) => boolean,
 ) {
-  return TaskCollection.from(parent, () => ({
+  return KanbanResource.from(parent, () => ({
     named: {
       cards: cards(),
       columnKeys: columnKeys(),
-      hasColumnKey: hasColumnKey(),
+      hasColumnKey: hasColumnKey() as <T extends CardDef>(
+        card: T,
+        key: string,
+      ) => boolean,
     },
   }));
 }

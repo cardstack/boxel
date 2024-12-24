@@ -2,29 +2,25 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Move cards-grid fitted template into a component that can be re-used",
-      "taskDetail": null,
-      "status": {
-        "index": 2,
-        "label": "Current Sprint"
-      },
       "priority": {
         "index": null,
         "label": null
       },
-      "dateRange": {
-        "start": null,
-        "end": null
+      "status": {
+        "completed": false,
+        "index": 0,
+        "label": "Backlog"
       },
+      "taskName": "Create RHS Sheet",
+      "dateRange": {
+        "start": "2024-12-01",
+        "end": "2024-12-08"
+      },
+      "taskDetail": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": null
-        }
-      },
       "project": {
         "links": {
           "self": null
@@ -32,12 +28,17 @@
       },
       "team": {
         "links": {
-          "self": null
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       },
       "children": {
         "links": {
           "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
         }
       },
       "tags": {
@@ -49,7 +50,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }

@@ -34,7 +34,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../task",
-        "name": "TaskBase"
+        "name": "Task"
       }
     }
   }

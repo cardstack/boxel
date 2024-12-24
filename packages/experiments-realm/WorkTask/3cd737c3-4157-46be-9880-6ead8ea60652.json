@@ -7,14 +7,13 @@
         "label": null
       },
       "status": {
-        "completed": false,
-        "index": 3,
-        "label": "In Progress"
+        "index": 2,
+        "label": "Current Sprint"
       },
-      "taskName": "Resolve bug where overlay only appears on certain cards",
+      "taskName": "Create kanban board",
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2024-11-06",
+        "end": "2025-02-04"
       },
       "taskDetail": null,
       "description": null,
@@ -38,7 +37,7 @@
       },
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
         }
       },
       "tags": {
@@ -50,7 +49,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }

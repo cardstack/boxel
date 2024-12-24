@@ -2,18 +2,18 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Incoporate Boxel Multi Select in Dropdown",
+      "taskName": "Drag and drop task",
       "taskDetail": null,
       "status": {
-        "index": 6,
-        "label": "Shipped"
+        "index": null,
+        "label": "Backlog"
       },
       "priority": {
         "index": null,
         "label": null
       },
       "dateRange": {
-        "start": "2024-11-07",
+        "start": "2024-11-20",
         "end": "2024-11-21"
       },
       "description": null,
@@ -35,21 +35,21 @@
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
         }
       },
-      "children": {
+      "children.0": {
         "links": {
-          "self": null
+          "self": "./3cd737c3-4157-46be-9880-6ead8ea60652"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }

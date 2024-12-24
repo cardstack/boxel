@@ -26,11 +26,11 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { TaskStatusField, Project, Task } from './productivity/task';
+import { WorkTaskStatusField, Project, WorkTask } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
-import getTaskCardsResource from './productivity/task-cards-resource';
+import getKanbanResource from './kanban-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -64,7 +64,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         module: new URL('./productivity/task', import.meta.url).href,
         name: 'Status',
       },
-      options: () => TaskStatusField.values,
+      options: () => WorkTaskStatusField.values,
     },
     assignee: {
       searchKey: 'name',
@@ -101,14 +101,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     if (!this.cards || !this.cards.instances) {
       return [];
     }
-    return this.cards.instances as Task[];
+    return this.cards.instances as WorkTask[];
   }
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
   }
 
-  @action showTaskCard(card: Task): boolean {
+  @action showTaskCard(card: WorkTask): boolean {
     return this.filterTypes.every((filterType: FilterType) => {
       let selectedItems = this.selectedItems.get(filterType) ?? [];
       if (selectedItems.length === 0) return true;
@@ -124,14 +124,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     });
   }
 
-  hasColumnKey = (card: Task, key: string) => {
+  hasColumnKey = (card: WorkTask, key: string) => {
     return card.status?.label === key;
   };
 
-  taskCollection = getTaskCardsResource(
+  taskCollection = getKanbanResource(
     this,
     () => this.cardInstances,
-    () => TaskStatusField.values.map((status) => status.label) ?? [],
+    () => WorkTaskStatusField.values.map((status) => status.label) ?? [],
     () => this.hasColumnKey,
   );
 
@@ -164,7 +164,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   get assignedTaskCodeRef() {
     return {
       module: new URL('./productivity/task', import.meta.url).href,
-      name: 'Task',
+      name: 'WorkTask',
     };
   }
 
@@ -224,7 +224,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return;
       }
 
-      let index = TaskStatusField.values.find((value) => {
+      let index = WorkTaskStatusField.values.find((value) => {
         return value.label === statusLabel;
       })?.index;
 
@@ -287,11 +287,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     let cardInNewCol = targetColumnAfterDrag.cards.find(
       (c: CardDef) => c.id === draggedCard.id,
     );
-    if (cardInNewCol) {
-      let statusValue = TaskStatusField.values.find(
+    if (
+      cardInNewCol &&
+      cardInNewCol.status.label !== targetColumnAfterDrag.title //not dragging to the same column
+    ) {
+      let statusValue = WorkTaskStatusField.values.find(
         (value) => value.label === targetColumnAfterDrag.title,
       );
-      cardInNewCol.status = new TaskStatusField(statusValue);
+      cardInNewCol.status = new WorkTaskStatusField(statusValue);
       await this.args.context?.actions?.saveCard?.(cardInNewCol);
     }
   }

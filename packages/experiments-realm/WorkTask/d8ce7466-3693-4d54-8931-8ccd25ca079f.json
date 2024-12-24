@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Fill up task board with realistic data",
+      "taskName": "Date Range Card",
       "taskDetail": null,
       "status": {
-        "index": null,
+        "index": 0,
         "label": "Backlog"
       },
       "priority": {
@@ -13,8 +13,8 @@
         "label": null
       },
       "dateRange": {
-        "start": "2024-11-19",
-        "end": "2024-11-20"
+        "start": "2024-11-13",
+        "end": "2024-12-17"
       },
       "description": null,
       "thumbnailURL": null
@@ -22,7 +22,7 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
       "project": {
@@ -32,7 +32,7 @@
       },
       "team": {
         "links": {
-          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       },
       "children": {
@@ -49,7 +49,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "Task"
+        "name": "WorkTask"
       }
     }
   }
