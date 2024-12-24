@@ -15,16 +15,19 @@ import {
   getPromptParts,
   extractCardFragmentsFromEvents,
 } from './helpers';
-import { APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_AVAILABLE_LLM_MODELS, APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
+import {
+  setLLMModels
+} from './lib/set-llm-models';
 import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient } from './lib/matrix';
+import { MatrixClient, sendEvent } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -98,6 +101,16 @@ class Assistant {
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
+
+  async setLLMModels(roomId: string) {
+    const response = await this.openai.models.list();
+    const models = response.data.map(data => data.id).join(',');
+
+    await sendEvent(this.client, roomId, 'm.room.message', {
+      body: models,
+      msgtype: APP_BOXEL_AVAILABLE_LLM_MODELS,
+    }, undefined);
+  }
 }
 
 let startTime = Date.now();
@@ -137,8 +150,9 @@ Common issues are:
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
-        .then(function () {
+        .then(async function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
+          await assistant.setLLMModels(member.roomId);
         })
         .catch(function (err) {
           log.info(

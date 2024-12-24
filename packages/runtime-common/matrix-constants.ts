@@ -8,3 +8,5 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const LEGACY_APP_BOXEL_REALMS_EVENT_TYPE = 'com.cardstack.boxel.realms';
+export const APP_BOXEL_AVAILABLE_LLM_MODELS =
+  'app.boxel.available-llm-models';
