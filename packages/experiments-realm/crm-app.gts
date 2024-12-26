@@ -449,7 +449,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 }
 
 export class CrmApp extends AppCard {
-  static displayName = 'Crm App';
+  static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';
   static isolated = CrmAppTemplate;
