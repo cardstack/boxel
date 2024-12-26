@@ -1,0 +1,303 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006529,
+    "unsigned": {
+      "age": 156950
+    },
+    "event_id": "$hmHwUnPQsuAgD9Iap8zR8rs9Ri9mWBFlOdlIA1dB97E",
+    "user_id": "@admin:localhost",
+    "age": 156950
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "admin"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1734900006567,
+    "unsigned": {
+      "age": 156912
+    },
+    "event_id": "$cA_5R1J_Vlye7Mig_Zwsl3shPnJZQVS_teyy9GmdPBE",
+    "user_id": "@admin:localhost",
+    "age": 156912
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006598,
+    "unsigned": {
+      "age": 156881
+    },
+    "event_id": "$zAWGJUdrlqm6WZVuPCb0B3_FdvF89PgNeI0qOVBjGnE",
+    "user_id": "@admin:localhost",
+    "age": 156881
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#First%20level%20-%202024-12-22T20%3A40%3A06.507%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006612,
+    "unsigned": {
+      "age": 156867
+    },
+    "event_id": "$bgVy3pjLOUWZJhQiUoz_WJryHyhITNkkxGGSKmIgiYs",
+    "user_id": "@admin:localhost",
+    "age": 156867
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006613,
+    "unsigned": {
+      "age": 156866
+    },
+    "event_id": "$i3eTV12PGhg9FZtmyxgvYCZJpu2DulZ_OJFlRAdzP_c",
+    "user_id": "@admin:localhost",
+    "age": 156866
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006614,
+    "unsigned": {
+      "age": 156865
+    },
+    "event_id": "$u1y7pYwQppVayvH9aBVeNsik0Hjbpnw7piqfIr-3iX4",
+    "user_id": "@admin:localhost",
+    "age": 156865
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006615,
+    "unsigned": {
+      "age": 156864
+    },
+    "event_id": "$9Zy2xg5HOM3sGbi6h3Ak3DbBL8OS1SL4qkrLzq3PMmw",
+    "user_id": "@admin:localhost",
+    "age": 156864
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "First level"
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006615,
+    "unsigned": {
+      "age": 156864
+    },
+    "event_id": "$G_01vmcAlmnbvsUhJyKa7iQQAVsCPTbiJHPHwJP1xHM",
+    "user_id": "@admin:localhost",
+    "age": 156864
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1734900006733,
+    "unsigned": {
+      "age": 156746
+    },
+    "event_id": "$dCKsP6lAy9NbW58ixtsZMMJrW3gLj2E-bUqa9Y8HsBI",
+    "user_id": "@admin:localhost",
+    "age": 156746
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1734900006823,
+    "unsigned": {
+      "replaces_state": "$zAWGJUdrlqm6WZVuPCb0B3_FdvF89PgNeI0qOVBjGnE",
+      "prev_content": {
+        "users": {
+          "@admin:localhost": 100
+        },
+        "users_default": 0,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100
+        },
+        "events_default": 0,
+        "state_default": 50,
+        "ban": 50,
+        "kick": 50,
+        "redact": 50,
+        "invite": 0,
+        "historical": 100
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 156656
+    },
+    "event_id": "$zq5vw0vZaLf2gBO99OcpAQbyRJfWy0RNXiFDvrhdDWY",
+    "user_id": "@admin:localhost",
+    "age": 156656,
+    "replaces_state": "$zAWGJUdrlqm6WZVuPCb0B3_FdvF89PgNeI0qOVBjGnE",
+    "prev_content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    }
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1734900006839,
+    "unsigned": {
+      "replaces_state": "$dCKsP6lAy9NbW58ixtsZMMJrW3gLj2E-bUqa9Y8HsBI",
+      "prev_content": {
+        "membership": "invite",
+        "displayname": "aibot"
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 156640
+    },
+    "event_id": "$H_bkK6TxJ6knaArgX-z4ozQ0MHEzsW-84K0Nb-l4ajY",
+    "user_id": "@aibot:localhost",
+    "age": 156640,
+    "replaces_state": "$dCKsP6lAy9NbW58ixtsZMMJrW3gLj2E-bUqa9Y8HsBI",
+    "prev_content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!WmvKSxVjxbOfvhZRJw:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "Alerting the user should only be done if requested",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>Alerting the user should only be done if requested</p>\n",
+      "clientGeneratedId": "a4108056-3f47-46cc-b979-cee8113925a6",
+      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":true}}"
+    },
+    "origin_server_ts": 1734900007008,
+    "unsigned": {
+      "age": 156471
+    },
+    "event_id": "$0kIzK4NOREAWSzK_EM5as1CdZ03TZkJ0PTXbLel7lgQ",
+    "user_id": "@admin:localhost",
+    "age": 156471
+  }
+]

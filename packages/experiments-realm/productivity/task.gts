@@ -19,12 +19,7 @@ import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { User } from '../user';
-import {
-  TaskBase,
-  BaseTaskStatusField,
-  BaseTaskPriority,
-  getDueDateStatus,
-} from '../task';
+import { Task, TaskStatusField, getDueDateStatus } from '../task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -145,7 +140,7 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
-class TaskIsolated extends Component<typeof Task> {
+class TaskIsolated extends Component<typeof WorkTask> {
   get dueDate() {
     return this.args.model.dateRange?.end;
   }
@@ -205,8 +200,8 @@ class TaskIsolated extends Component<typeof Task> {
         </div>
 
         <div class='right-column'>
-          <div class='assignees'>
-            <h4>Assignees</h4>
+          <div class='assignee'>
+            <h4>Assignee</h4>
 
             {{#if @model.assignee}}
               <@fields.assignee
@@ -462,7 +457,7 @@ class TaskIsolated extends Component<typeof Task> {
   }
 }
 
-export class TaskStatusField extends BaseTaskStatusField {
+export class WorkTaskStatusField extends TaskStatusField {
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
@@ -504,17 +499,16 @@ export class TaskStatusField extends BaseTaskStatusField {
   ];
 }
 
-export class Task extends TaskBase {
-  static displayName = 'Task';
+export class WorkTask extends Task {
+  static displayName = 'Work Task';
   static icon = CheckboxIcon;
-  @field priority = contains(BaseTaskPriority);
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
-  @field children = linksToMany(() => Task);
-  @field status = contains(TaskStatusField);
+  @field children = linksToMany(() => WorkTask);
+  @field status = contains(WorkTaskStatusField);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Task) {
+    computeVia: function (this: WorkTask) {
       return this.taskName;
     },
   });
@@ -523,7 +517,7 @@ export class Task extends TaskBase {
   @field assignee = linksTo(() => TeamMember);
 
   @field shortId = contains(StringField, {
-    computeVia: function (this: Task) {
+    computeVia: function (this: WorkTask) {
       if (this.id) {
         let id = shortenId(extractId(this.id));
         let _shortId: string;

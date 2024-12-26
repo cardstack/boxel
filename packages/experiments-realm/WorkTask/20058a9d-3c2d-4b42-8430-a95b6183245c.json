@@ -1,0 +1,71 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Port the already done work for CRM from fork into boxel ui design system",
+      "taskDetail": "https://github.com/tintinthong/boxel/pull/1 CRM for reference. This is the PR that is constantly merged in",
+      "status": {
+        "index": 2,
+        "label": "Current Sprint"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Medium"
+      },
+      "dateRange": {
+        "start": "2024-11-06",
+        "end": "2024-11-15"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children.0": {
+        "links": {
+          "self": "./20058a9d-3c2d-4b42-8430-a95b6183245c"
+        }
+      },
+      "children.1": {
+        "links": {
+          "self": "./9e23b8b5-d541-48ef-a652-e7afefb29777"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
+        }
+      },
+      "tags.2": {
+        "links": {
+          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "WorkTask"
+      }
+    }
+  }
+}

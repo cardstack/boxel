@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Move cards-grid fitted template into a component that can be re-used",
+      "taskDetail": null,
+      "status": {
+        "index": 2,
+        "label": "Current Sprint"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "project": {
+        "links": {
+          "self": null
+        }
+      },
+      "team": {
+        "links": {
+          "self": null
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "WorkTask"
+      }
+    }
+  }
+}
