@@ -1,14 +1,17 @@
 import GlimmerComponent from '@glimmer/component';
+import { or } from '@cardstack/boxel-ui/helpers';
+
 interface EntityDisplayArgs {
   Args: {
     center?: boolean;
     underline?: boolean;
   };
   Blocks: {
-    title: [];
-    thumbnail: [];
-    tag: [];
-    content: [];
+    title?: [];
+    thumbnail?: []; // we will always target thumbnail first if the user pass both thumbnail and icon blocks
+    icon?: [];
+    tag?: [];
+    content?: [];
   };
   Element: HTMLElement;
 }
@@ -27,21 +30,41 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
       class='entity-display {{if this.shouldAlignCenter "center"}}'
       ...attributes
     >
-      <div class='entity-thumbnail'>{{yield to='thumbnail'}}</div>
+      {{#if (or (has-block 'thumbnail') (has-block 'icon'))}}
+        {{#if (has-block 'thumbnail')}}
+          <div class='entity-thumbnail'>
+            {{yield to='thumbnail'}}
+          </div>
+        {{else if (has-block 'icon')}}
+          <div class='entity-icon'>
+            {{yield to='icon'}}
+          </div>
+        {{/if}}
+      {{/if}}
 
-      <div class='entity-info'>
-        <div class='entity-name-tag'>
-          <span class='entity-name {{if this.shouldUnderlineText "underline"}}'>
-            {{yield to='title'}}
-          </span>
+      {{#if (or (has-block 'title') (has-block 'tag') (has-block 'content'))}}
+        <div class='entity-info'>
+          <div class='entity-name-tag'>
+            {{#if (has-block 'title')}}
+              <span
+                class='entity-name {{if this.shouldUnderlineText "underline"}}'
+              >
+                {{yield to='title'}}
+              </span>
+            {{/if}}
 
-          {{yield to='tag'}}
+            {{#if (has-block 'tag')}}
+              {{yield to='tag'}}
+            {{/if}}
+          </div>
+
+          {{#if (has-block 'content')}}
+            <div class='entity-content'>
+              {{yield to='content'}}
+            </div>
+          {{/if}}
         </div>
-
-        <div class='entity-content'>
-          {{yield to='content'}}
-        </div>
-      </div>
+      {{/if}}
     </div>
     <style scoped>
       .entity-display {
@@ -52,16 +75,27 @@ export class EntityDisplay extends GlimmerComponent<EntityDisplayArgs> {
       .entity-display.center {
         align-items: center;
       }
+      /* always prioritize the thumbnail block, we dont control the default size of the thumbnail */
       .entity-thumbnail {
-        width: var(--entity-display-thumbnail-size, var(--boxel-icon-sm));
-        height: calc(
-          var(--entity-display-thumbnail-size, var(--boxel-icon-sm)) - 2px
-        );
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
         color: var(--entity-display-thumbnail-color, var(--boxel-600));
+        object-fit: cover;
+        border: none;
+        width: auto;
+        height: auto;
+      }
+      .entity-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: auto;
+        height: auto;
+        max-width: var(--entity-display-icon-size, var(--boxel-icon-sm));
+        max-height: var(--entity-display-icon-size, var(--boxel-icon-sm));
       }
       .entity-info {
         display: flex;
