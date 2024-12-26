@@ -275,7 +275,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       type: activeFilter.cardRef,
     };
 
-    // we can specify which folder we want to filter by to make the payload more optimized
+    // we can specify which data list/tab we want to filter by to make the payload more optimized
     // destructure the nested filter query code so make it more readable
     const accountFilter =
       activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
