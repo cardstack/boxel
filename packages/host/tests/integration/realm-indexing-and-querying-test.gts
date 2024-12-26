@@ -3401,6 +3401,12 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 { id: mangoID },
                 {
                   id: vanGoghID,
+                  firstName: 'Van Gogh',
+                  friends: [
+                    {
+                      id: hassanID,
+                    },
+                  ],
                 },
               ],
             },
