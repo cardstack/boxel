@@ -252,12 +252,9 @@ export class CurrentRun {
       if (
         !indexEntry ||
         indexEntry.type === 'error' ||
-        indexEntry.lastModified == null
+        indexEntry.lastModified == null ||
+        lastModified !== indexEntry.lastModified
       ) {
-        await this.batch.invalidate(new URL(url));
-        continue;
-      }
-      if (lastModified !== indexEntry.lastModified) {
         await this.batch.invalidate(new URL(url));
       }
     }
