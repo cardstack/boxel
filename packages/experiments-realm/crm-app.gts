@@ -32,6 +32,7 @@ import {
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -73,7 +74,55 @@ const DEAL_FILTERS: LayoutFilter[] = [
 const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
-    icon: ContactIcon,
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Overdue for Renewal',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Renewal Due Soon',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Recently Renewed',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Expiring Soon',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Inactive for X Days',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Follow-Up Required',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Pending Contract',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Account',
+    createNewButtonText: 'Create Account',
+  },
+  {
+    displayName: 'Next Review Scheduled',
+    icon: CalendarExclamation,
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
@@ -218,38 +267,55 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
-      return {
-        filter: {
-          on: this.activeFilter.cardRef,
-          every: [
-            { type: this.activeFilter.cardRef },
-            ...(this.searchKey !== ''
-              ? [
-                  {
-                    any: [
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          name: this.searchKey,
-                        },
-                      },
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          'company.name': this.searchKey,
-                        },
-                      },
-                    ],
+    const { loadAllFilters, activeFilter, activeTabId, searchKey } = this;
+
+    if (!loadAllFilters.isIdle || !activeFilter?.query) return;
+
+    const baseFilter = {
+      type: activeFilter.cardRef,
+    };
+
+    // we can specify which folder we want to filter by to make the payload more optimized
+    // destructure the nested filter query code so make it more readable
+    const accountFilter =
+      activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
+        ? [
+            {
+              every: [
+                {
+                  on: activeFilter.cardRef,
+                  eq: {
+                    'urgencyTag.label': activeFilter.displayName,
                   },
-                ]
-              : []),
-          ],
-        },
-        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
-      } as Query;
-    }
-    return;
+                },
+              ],
+            },
+          ]
+        : [];
+
+    const searchFilter = searchKey
+      ? [
+          {
+            any: [
+              {
+                on: activeFilter.cardRef,
+                contains: { name: searchKey },
+              },
+              {
+                on: activeFilter.cardRef,
+                contains: { 'company.name': searchKey },
+              },
+            ],
+          },
+        ]
+      : [];
+
+    return {
+      filter: {
+        on: activeFilter.cardRef,
+        every: [baseFilter, ...accountFilter, ...searchFilter],
+      },
+    } as Query;
   }
 
   get searchPlaceholder() {
@@ -265,6 +331,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.selectedView = id;
   }
   @action private onSort(option: SortOption) {
+    console.log('option', option);
     this.activeFilter.selectedSort = option;
     this.activeFilter = this.activeFilter;
   }

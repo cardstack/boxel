@@ -26,13 +26,22 @@
         },
         "poBoxNumber": null
       },
+      "urgencyTag": {
+        "index": 3,
+        "label": "Expiring Soon",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#FBC02D",
+          "backgroundColor": "#FFF9C4"
+        }
+      },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "company": {
         "links": {
-          "self": null
+          "self": "../Company/141f3e15-cfd5-4b61-bd4c-37ea31dbeeab"
         }
       },
       "primaryContact": {
