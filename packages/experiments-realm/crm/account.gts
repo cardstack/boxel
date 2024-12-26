@@ -26,7 +26,8 @@ import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import { LooseGooseyField } from '../loosey-goosey';
 import { StatusPill } from '../components/status-pill';
 import { Avatar, Pill, BoxelButton } from '@cardstack/boxel-ui/components';
-import { EntityDisplay } from '../components/entity-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
+import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 import ActivityCard from '../components/activity-card';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
@@ -204,42 +205,36 @@ class IsolatedTemplate extends Component<typeof Account> {
               </:description>
               <:content>
                 <div class='activity-card-group'>
-                  <EntityDisplay>
+                  <EntityDisplayWithIcon @title='Technova'>
                     <:icon>
                       <SquareUser />
                     </:icon>
-                    <:title>
-                      Dmitri Petrov
-                    </:title>
                     <:content>
                       Technova
                     </:content>
-                  </EntityDisplay>
-                  <EntityDisplay>
+                  </EntityDisplayWithIcon>
+                  <EntityDisplayWithThumbnail @title='Rep: Janus Dios'>
                     <:thumbnail>
                       <Avatar
                         @thumbnailURL='https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2'
                         class='avatar'
                       />
                     </:thumbnail>
-                    <:title>
-                      Rep: Janus Dios
-                    </:title>
                     <:content>
                       Sales Associate
                     </:content>
-                  </EntityDisplay>
-                  <EntityDisplay class='activity-time'>
+                  </EntityDisplayWithThumbnail>
+                  <EntityDisplayWithIcon
+                    class='activity-time'
+                    @title='May 15, 2024'
+                  >
                     <:icon>
                       <CalendarTime />
                     </:icon>
-                    <:title>
-                      May 15, 2024
-                    </:title>
                     <:content>
                       3:15pm
                     </:content>
-                  </EntityDisplay>
+                  </EntityDisplayWithIcon>
                 </div>
               </:content>
             </ActivityCard>

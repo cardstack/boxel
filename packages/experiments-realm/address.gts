@@ -7,7 +7,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import { CountryField } from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
-import { EntityDisplay } from './components/entity-display';
+import EntityDisplayWithIcon from './components/entity-icon-display';
 
 function getAddressRows(
   addressLine1: string | undefined,
@@ -39,14 +39,11 @@ class Atom extends Component<typeof Address> {
     );
   }
   <template>
-    <EntityDisplay>
-      <:title>
-        {{this.label}}
-      </:title>
+    <EntityDisplayWithIcon @title={{this.label}}>
       <:icon>
         <MapPinIcon />
       </:icon>
-    </EntityDisplay>
+    </EntityDisplayWithIcon>
   </template>
 }
 

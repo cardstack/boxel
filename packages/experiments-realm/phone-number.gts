@@ -8,7 +8,7 @@ import {
 import { LooseGooseyField, LooseyGooseyData } from './loosey-goosey';
 import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
-import { EntityDisplay } from './components/entity-display';
+import EntityDisplayWithIcon from './components/entity-icon-display';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -94,7 +94,7 @@ export class PhoneField extends FieldDef {
 
   static atom = class Atom extends Component<typeof PhoneField> {
     <template>
-      <EntityDisplay @underline={{false}}>
+      <EntityDisplayWithIcon @underline={{false}}>
         <:title>
           {{#if @model.countryCode}}
             +{{@model.countryCode}}{{@model.number}}
@@ -105,7 +105,7 @@ export class PhoneField extends FieldDef {
         <:icon>
           <PhoneIcon class='icon' />
         </:icon>
-      </EntityDisplay>
+      </EntityDisplayWithIcon>
       <style scoped>
         .icon {
           color: var(--boxel-400);
@@ -131,7 +131,7 @@ export class ContactPhoneNumber extends FieldDef {
 
   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
     <template>
-      <EntityDisplay @underline={{false}}>
+      <EntityDisplayWithIcon @underline={{false}}>
         <:title>
           {{#if @model.phoneNumber.countryCode}}
             +{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}
@@ -149,7 +149,7 @@ export class ContactPhoneNumber extends FieldDef {
             </Pill>
           {{/if}}
         </:tag>
-      </EntityDisplay>
+      </EntityDisplayWithIcon>
       <style scoped>
         .icon {
           color: var(--boxel-400);
