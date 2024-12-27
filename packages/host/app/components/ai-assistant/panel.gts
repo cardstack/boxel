@@ -376,9 +376,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private async enterRoomInitially() {
-    if (this.matrixService.currentRoomId) {
-      return;
-    }
     let persistedRoomId = window.localStorage.getItem(
       CurrentRoomIdPersistenceKey,
     );
@@ -544,7 +541,6 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
   }
 
   @action private setRoomToRename(room: SessionRoomData) {

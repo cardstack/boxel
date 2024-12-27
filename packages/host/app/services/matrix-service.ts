@@ -155,6 +155,11 @@ export default class MatrixService extends Service {
 
   set currentRoomId(value: string | undefined) {
     this._currentRoomId = value;
+    if (value) {
+      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
+    } else {
+      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+    }
   }
 
   get ready() {
