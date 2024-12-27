@@ -6,6 +6,7 @@ import {
   type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import {
+  APP_BOXEL_AVAILABLE_LLM_MODELS,
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
@@ -208,6 +209,7 @@ export interface CardMessageContent {
       toolChoice?: ToolChoice;
       submode?: string;
       requireToolCall?: boolean;
+      selectedLLMModel: string;
     };
   };
 }
@@ -235,6 +237,13 @@ export interface SkillsConfigEvent extends RoomStateEvent {
   content: {
     enabledEventIds: string[];
     disabledEventIds: string[];
+  };
+}
+
+export interface AvailableLLMModelsEvent extends RoomStateEvent {
+  type: typeof APP_BOXEL_AVAILABLE_LLM_MODELS;
+  content: {
+    models: string[];
   };
 }
 
@@ -278,4 +287,5 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent
-  | SkillsConfigEvent;
+  | SkillsConfigEvent
+  | AvailableLLMModelsEvent;

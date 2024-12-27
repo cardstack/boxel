@@ -12,6 +12,7 @@ import type {
   ReactionEvent,
   Tool,
   SkillsConfigEvent,
+CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -84,10 +85,11 @@ export function getPromptParts(
   let tools = getTools(history, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
+  let model = getSelectedLLMModel(history, aiBotUserId) ?? 'openai/gpt-4o';
   return {
     tools,
     messages,
-    model: 'openai/gpt-4o',
+    model,
     history,
     toolChoice: toolChoice,
   };
@@ -602,4 +604,16 @@ export function isCommandEvent(
     typeof event.content.data === 'object' &&
     typeof event.content.data.toolCall === 'object'
   );
+}
+
+export function getSelectedLLMModel(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) {
+  let lastMessageSentByTheUser = history.filter(event => event.type === 'm.room.message' 
+    && event.sender !== aiBotUserId 
+    && event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE).pop();
+  return lastMessageSentByTheUser 
+    ? (lastMessageSentByTheUser.content as CardMessageContent).data.context.selectedLLMModel : 
+    undefined;
 }

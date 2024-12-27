@@ -14,6 +14,13 @@ export interface MatrixClient {
     content: IContent,
   ): Promise<{ event_id: string }>;
 
+  sendStateEvent(
+    roomId: string,
+    eventType: string,
+    content: IContent,
+    stateKey: string,
+  ): Promise<{ event_id: string }>;
+
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
 }
 
@@ -35,6 +42,15 @@ export async function sendEvent(
   }
   log.debug('sending event', content);
   return await client.sendEvent(roomId, eventType, content);
+}
+
+export async function updateStateEvent(
+  client: MatrixClient,
+  roomId: string,
+  eventType: string,
+  content: IContent,
+) {
+  return await client.sendStateEvent(roomId, eventType, content, '');
 }
 
 export async function sendMessage(

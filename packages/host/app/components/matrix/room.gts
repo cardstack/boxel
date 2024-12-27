@@ -25,8 +25,13 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  BoxelButton,
+  BoxelDropdown,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { unixTime } from '@cardstack/runtime-common';
 
@@ -133,6 +138,20 @@ export default class Room extends Component<Signature> {
               @chooseCard={{this.chooseCard}}
               @removeCard={{this.removeCard}}
             />
+            <BoxelDropdown @contentClass='available-llm-models'>
+              <:trigger as |bindings|>
+                <BoxelButton class='sort-button' {{bindings}}>
+                  {{this.selectedLLMModel}}
+                  <DropdownArrowDown width='12px' height='12px' />
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  @closeMenu={{dd.close}}
+                  @items={{this.availableLLMModelsMenu}}
+                />
+              </:content>
+            </BoxelDropdown>
           </div>
         </footer>
       </section>
@@ -173,6 +192,11 @@ export default class Room extends Component<Signature> {
       }
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
+      }
+      :global(.available-llm-models) {
+        height: 100%;
+        overflow: scroll;
+        top: 0 !important;
       }
     </style>
   </template>
@@ -445,6 +469,21 @@ export default class Room extends Component<Signature> {
     return this.roomResource.skills;
   }
 
+  private get availableLLMModelsMenu() {
+    return this.availableLLMModels.map((model) => {
+      return new MenuItem(model, 'action', {
+        action: () => {
+          console.log(model);
+          this.matrixService.selectedLLMModels.set(this.args.roomId, model);
+        },
+      });
+    });
+  }
+
+  private get availableLLMModels(): string[] {
+    return this.roomResource.availableLLMModels;
+  }
+
   private get sortedSkills(): Skill[] {
     return [...this.skills].sort((a, b) => {
       // Not all of the skills have a title, so we use the skillEventId as a fallback
@@ -470,6 +509,13 @@ export default class Room extends Component<Signature> {
 
   private get cardsToAttach() {
     return this.matrixService.cardsToSend.get(this.args.roomId);
+  }
+
+  private get selectedLLMModel() {
+    return (
+      this.matrixService.selectedLLMModels.get(this.args.roomId) ??
+      this.availableLLMModels[0]
+    );
   }
 
   @action private resendLastMessage() {
@@ -577,6 +623,7 @@ export default class Room extends Component<Signature> {
           .topMostStackItems()
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
+        selectedLLMModels: this.selectedLLMModel ?? '',
       };
       try {
         await this.matrixService.sendMessage(

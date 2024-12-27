@@ -22,12 +22,9 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import {
-  setLLMModels
-} from './lib/set-llm-models';
 import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient, sendEvent } from './lib/matrix';
+import { MatrixClient, sendEvent, updateStateEvent } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -104,12 +101,11 @@ class Assistant {
 
   async setLLMModels(roomId: string) {
     const response = await this.openai.models.list();
-    const models = response.data.map(data => data.id).join(',');
+    const models = response.data.map(data => data.id);
 
-    await sendEvent(this.client, roomId, 'm.room.message', {
-      body: models,
-      msgtype: APP_BOXEL_AVAILABLE_LLM_MODELS,
-    }, undefined);
+    await updateStateEvent(this.client, roomId, APP_BOXEL_AVAILABLE_LLM_MODELS, {
+      models
+    });
   }
 }
 

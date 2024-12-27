@@ -211,6 +211,10 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
+  get availableLLMModels() {
+    return this.matrixRoom?.availableLLMModels ?? [];
+  }
+
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
     for (let event of this.events) {

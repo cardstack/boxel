@@ -2,9 +2,9 @@ import { tracked } from '@glimmer/tracking';
 
 import { type IEvent } from 'matrix-js-sdk';
 
-import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_AVAILABLE_LLM_MODELS, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { AvailableLLMModelsEvent, MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 import Mutex from '../mutex';
 
@@ -50,6 +50,13 @@ export default class Room {
         enabledEventIds: [],
         disabledEventIds: [],
       }
+    );
+  }
+
+  get availableLLMModels() {
+    let event = this._roomState?.events.get(APP_BOXEL_AVAILABLE_LLM_MODELS)?.get('')?.event;
+    return (
+      (event as AvailableLLMModelsEvent)?.content.models ?? []
     );
   }
 

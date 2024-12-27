@@ -99,6 +99,7 @@ const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
+  selectedLLMModels: string;
 };
 
 export default class MatrixService extends Service {
@@ -122,6 +123,7 @@ export default class MatrixService extends Service {
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  selectedLLMModels: TrackedMap<string, string> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -651,6 +653,7 @@ export default class MatrixService extends Service {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           submode,
+          selectedLLMModel: context?.selectedLLMModels,
         },
       },
     } as CardMessageContent);
