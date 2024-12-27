@@ -18,7 +18,7 @@ import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
-import { EntityDisplay } from '../components/entity-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
 import { LooseGooseyField } from '../loosey-goosey';
@@ -286,14 +286,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
             <footer class='next-steps'>
               <div class='next-steps-row'>
-                <EntityDisplay @center={{true}}>
-                  <:title>
-                    Notes
-                  </:title>
-                  <:thumbnail>
+                <EntityDisplayWithIcon @title='Notes' @center={{true}}>
+                  <:icon>
                     <Info class='info-icon' />
-                  </:thumbnail>
-                </EntityDisplay>
+                  </:icon>
+                </EntityDisplayWithIcon>
 
                 {{#if @model.document}}
                   <BoxelButton
@@ -516,7 +513,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       .info-atom {
         width: fit-content;
-        display: inline-block;
+        display: inline-flex;
       }
       .header-icon {
         width: var(--boxel-icon-sm);
@@ -704,7 +701,7 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .info-atom {
         width: fit-content;
-        display: inline-block;
+        display: inline-flex;
       }
       /* deal details */
       .deal-details {
