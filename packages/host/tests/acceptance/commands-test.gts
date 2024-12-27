@@ -602,9 +602,10 @@ module('Acceptance | Commands tests', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    await delay(500);
+
     assert.dom('[data-test-submode-switcher=interact]').exists();
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert
       .dom(
         '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -622,7 +623,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${testCard}.json`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-open-ai-assistant]');
+
     assert
       .dom(
         '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
