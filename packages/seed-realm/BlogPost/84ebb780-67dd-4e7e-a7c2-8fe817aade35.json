@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "An Installation That Stops Time: SoHo’s Latest Art Experience",
+      "slug": "soho-immersive-art",
+      "body": "Walking into *Temporal Echoes*, the latest exhibit at the Nocturne Gallery in SoHo, feels less like stepping into an art space and more like slipping into another dimension. The brainchild of installation artist Yara Fields, this immersive experience plays with light, sound, and space to distort your sense of time. Visitors are invited to wander through shifting rooms that blur the line between reality and imagination—a perfect antidote to the unrelenting pace of New York City.\n\n## Time as a Canvas\n\nAt its core, *Temporal Echoes* is an exploration of time’s elasticity. Each room in the installation offers a unique perspective: one is bathed in pulsating red light synced with a heartbeat-like rhythm, while another features walls lined with reflective surfaces, creating infinite illusions.\n\nThe centerpiece of the exhibit, *Chronos Corridor*, is a narrow passage lined with flickering LEDs that mimic the effect of time slowing down as you move through it. The experience is so surreal that many visitors leave the space wondering how long they were actually inside. Was it minutes? Hours? That uncertainty is exactly what Fields intended.\n\n“I wanted to create a space where time feels fluid,” Fields explained during a recent artist talk. “We live in a city that thrives on urgency, but what happens when you’re forced to pause and let go of the clock?”\n\n## SoHo as a Stage\n\nThe choice of SoHo as the exhibit’s location feels intentional. Long a haven for avant-garde art, the neighborhood’s cobblestone streets and historic lofts create a perfect backdrop for Fields’ vision. Nocturne Gallery itself is housed in a renovated industrial building, and its raw, open space amplifies the exhibit’s immersive qualities.\n\nThe exhibit also includes collaborations with local musicians and chefs, who have created performances and menu items inspired by the theme of time. On select evenings, visitors can enjoy live music featuring custom compositions that mimic the rhythm of the installation, followed by tasting menus where courses are served at deliberate intervals to play with perception.\n\n## Art Beyond the Visual\n\nWhat sets *Temporal Echoes* apart isn’t just its visual brilliance—it’s how the exhibit engages all the senses. The soundscapes, crafted by electronic musician Kai Rho, alternate between calming and disorienting. One room features the faint ticking of a clock, amplified until it feels oppressive, while another uses binaural beats to create a sense of weightlessness.\n\nThe exhibit is also interactive. Visitors are encouraged to leave their reflections on time in a digital journal accessible via QR codes throughout the space. These musings will eventually become part of a larger multimedia project by Fields, making every attendee a co-creator in the exploration.\n\n## A Moment Worth Experiencing\n\n*Temporal Echoes* is more than an art exhibit—it’s an experience that lingers long after you’ve left the gallery. Fields has managed to create a space where time doesn’t just slow down; it becomes something you can feel, touch, and even manipulate. It’s a reminder that art isn’t just something to look at—it’s something to live through.\n\nFor those seeking a break from the city’s relentless pace, this is a must-see. Just don’t forget to take a breath—and maybe leave your watch at home.",
+      "publishDate": "2024-12-19T05:00:00.000Z",
+      "featuredImage": {
+        "imageUrl": "https://boxel-images.boxel.ai/app-assets/blog-posts/soho.jpeg",
+        "credit": "Photo by Nocturne Gallery Soho",
+        "caption": "\"Temporal Echoes\" invites visitors to explore the fluidity of time through light and sound.",
+        "altText": "Immersive art installation in SoHo with glowing lights and reflective walls.",
+        "size": "cover",
+        "height": 400,
+        "width": null
+      },
+      "description": "Experience time like never before at \"Temporal Echoes\", a SoHo exhibit that combines light, sound, and space to immerse visitors in the fluidity of time.",
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/blog-posts/soho.jpeg"
+    },
+    "relationships": {
+      "authors.0": {
+        "links": {
+          "self": "../Author/dabb88a5-86b1-4e2d-92bb-b2941b1fd01b"
+        }
+      },
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../BlogCategory/cultural-scenes"
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-post",
+        "name": "BlogPost"
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { WebsiteField } from '../website';
 import { Address } from '../address';
-import { EntityDisplay } from '../components/entity-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 import {
   Component,
@@ -15,14 +15,11 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
     <div class='company-group'>
-      <EntityDisplay @underline={{true}}>
-        <:title>
-          {{@model.name}}
-        </:title>
-        <:thumbnail>
+      <EntityDisplayWithIcon @title={{@model.name}} @underline={{true}}>
+        <:icon>
           <BuildingIcon />
-        </:thumbnail>
-      </EntityDisplay>
+        </:icon>
+      </EntityDisplayWithIcon>
     </div>
   </template>
 }

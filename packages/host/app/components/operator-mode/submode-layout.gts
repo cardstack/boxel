@@ -37,6 +37,8 @@ import SearchSheet, {
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
+import Disclaimer from './disclaimer';
+
 import WorkspaceChooser from './workspace-chooser';
 
 import type MatrixService from '../../services/matrix-service';
@@ -239,6 +241,8 @@ export default class SubmodeLayout extends Component<Signature> {
   });
 
   <template>
+    <Disclaimer />
+
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'

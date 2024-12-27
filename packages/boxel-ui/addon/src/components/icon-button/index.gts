@@ -85,11 +85,6 @@ class IconButton extends Component<Signature> {
       .secondary:hover {
         background-color: var(--boxel-purple-800);
       }
-
-      .svg-icon {
-        width: auto;
-        height: auto;
-      }
     </style>
   </template>
 }

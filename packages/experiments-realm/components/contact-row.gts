@@ -1,5 +1,5 @@
 import { Avatar, Pill } from '@cardstack/boxel-ui/components';
-import { EntityDisplay } from './entity-display';
+import EntityDisplayWithThumbnail from './entity-thumbnail-display';
 import GlimmerComponent from '@glimmer/component';
 
 interface ContactRowArgs {
@@ -15,10 +15,7 @@ interface ContactRowArgs {
 
 export class ContactRow extends GlimmerComponent<ContactRowArgs> {
   <template>
-    <EntityDisplay>
-      <:title>
-        {{@name}}
-      </:title>
+    <EntityDisplayWithThumbnail @title={{@name}}>
       <:thumbnail>
         <Avatar
           @userID={{@userID}}
@@ -35,7 +32,7 @@ export class ContactRow extends GlimmerComponent<ContactRowArgs> {
           </Pill>
         {{/if}}
       </:tag>
-    </EntityDisplay>
+    </EntityDisplayWithThumbnail>
     <style scoped>
       .avatar {
         --profile-avatar-icon-size: 20px;
