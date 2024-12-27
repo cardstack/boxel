@@ -377,6 +377,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private async enterRoomInitially() {
+    if (this.matrixService.currentRoomId) {
+      return;
+    }
     let persistedRoomId = window.localStorage.getItem(
       CurrentRoomIdPersistenceKey,
     );
