@@ -261,6 +261,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         on: activeFilter.cardRef,
         every: [baseFilter, ...accountFilter, ...searchFilter],
       },
+      sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
     } as Query;
   }
 
