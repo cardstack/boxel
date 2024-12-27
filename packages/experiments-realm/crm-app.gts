@@ -33,6 +33,7 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import { urgencyTagValues } from './crm/account';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -71,6 +72,7 @@ const DEAL_FILTERS: LayoutFilter[] = [
     createNewButtonText: 'Create Deal',
   },
 ];
+// Map with urgencyTagValues array from crm/account.gts
 const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
@@ -78,54 +80,12 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
-  {
-    displayName: 'Overdue for Renewal',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Renewal Due Soon',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Recently Renewed',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Expiring Soon',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Inactive for X Days',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Follow-Up Required',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Pending Contract',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
-  {
-    displayName: 'Next Review Scheduled',
-    icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
-    createNewButtonText: 'Create Account',
-  },
+  ...urgencyTagValues.map((tag) => ({
+    displayName: tag.label,
+    icon: tag.icon,
+    cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
+    createNewButtonText: tag.value,
+  })),
 ];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
@@ -331,7 +291,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.selectedView = id;
   }
   @action private onSort(option: SortOption) {
-    console.log('option', option);
     this.activeFilter.selectedSort = option;
     this.activeFilter = this.activeFilter;
   }
