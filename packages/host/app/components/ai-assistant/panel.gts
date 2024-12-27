@@ -362,7 +362,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare router: RouterService;
   @service private declare commandService: CommandService;
 
-  // @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: SessionRoomData | undefined = undefined;
   @tracked private roomToDelete: SessionRoomData | undefined = undefined;

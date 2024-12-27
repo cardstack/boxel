@@ -363,7 +363,6 @@ class DashboardTab extends GlimmerComponent<{
     }
     let command = new CreateBoxelApp(commandContext, undefined);
     command.onRoomCreation = (roomId) => {
-      debugger;
       this.args.context?.actions?.openRoom(roomId);
     };
     this.isGenerating = true;
