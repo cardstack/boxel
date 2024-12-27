@@ -33,6 +33,8 @@ export default class CreateProductRequirementsInstance extends Command<
 > {
   inputType = CreateProductRequirementsInput;
 
+  onRoomCreation: ((roomId: string) => void) | null = null;
+
   get skillCard() {
     return new SkillCard({
       id: 'prd-helper-skill',
@@ -77,6 +79,11 @@ export default class CreateProductRequirementsInstance extends Command<
     let { roomId } = await createRoomCommand.execute({
       name: 'Product Requirements Doc Creation',
     });
+
+    if (this.onRoomCreation) {
+      this.onRoomCreation(roomId);
+    }
+
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandContext,
     );

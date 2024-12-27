@@ -362,6 +362,10 @@ class DashboardTab extends GlimmerComponent<{
       throw new Error('Missing commandContext');
     }
     let command = new CreateBoxelApp(commandContext, undefined);
+    command.onRoomCreation = (roomId) => {
+      debugger;
+      this.args.context?.actions?.openRoom(roomId);
+    };
     this.isGenerating = true;
     try {
       await command.execute(
@@ -471,6 +475,7 @@ class RequirementsTab extends GlimmerComponent<{
         if (!this.cardRef) {
           throw new Error('Can not create a card without a card ref.');
         }
+
         await this.args.context?.actions?.createCard?.(
           this.cardRef,
           this.args.currentRealm,

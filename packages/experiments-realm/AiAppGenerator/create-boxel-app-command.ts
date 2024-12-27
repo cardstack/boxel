@@ -16,12 +16,16 @@ export default class CreateBoxelApp extends Command<
   CardDef
 > {
   inputType = CreateProductRequirementsInput;
+  onRoomCreation: ((roomId: string) => void) | null = null;
 
   protected async run(input: CreateProductRequirementsInput): Promise<CardDef> {
     let createPRDCommand = new CreateProductRequirementsInstance(
       this.commandContext,
       undefined,
     );
+
+    createPRDCommand.onRoomCreation = this.onRoomCreation;
+
     let { productRequirements: prdCard, roomId } =
       await createPRDCommand.execute(input);
 

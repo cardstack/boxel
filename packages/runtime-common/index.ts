@@ -355,6 +355,7 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+  openRoom: (roomId: string) => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {
