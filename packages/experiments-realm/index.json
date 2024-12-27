@@ -1,10 +1,6 @@
 {
   "data": {
     "type": "card",
-    "attributes": {
-      "description": null,
-      "thumbnailURL": null
-    },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/cards-grid",
