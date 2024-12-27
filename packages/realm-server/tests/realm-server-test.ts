@@ -54,6 +54,7 @@ import {
   testRealmInfo,
   insertUser,
   insertPlan,
+  mtimes,
   fetchSubscriptionsByUserId,
   cleanWhiteSpace,
 } from './helpers';
@@ -152,6 +153,7 @@ module('Realm Server', function (hooks) {
   }
 
   let testRealm: Realm;
+  let testRealmPath: string;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
@@ -173,7 +175,11 @@ module('Realm Server', function (hooks) {
           copySync(join(__dirname, 'cards'), testRealmDir);
         }
         let virtualNetwork = createVirtualNetwork();
-        ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
+        ({
+          testRealm,
+          testRealmHttpServer,
+          testRealmDir: testRealmPath,
+        } = await runTestRealmServer({
           virtualNetwork,
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_1'),
@@ -208,6 +214,50 @@ module('Realm Server', function (hooks) {
   hooks.afterEach(async function () {
     await closeServer(testRealmHttpServer);
     resetCatalogRealms();
+  });
+
+  module('mtimes requests', function (hooks) {
+    setupPermissionedRealm(hooks, {
+      mary: ['read'],
+    });
+
+    test('non read permission GET /_mtimes', async function (assert) {
+      let response = await request
+        .get('/_mtimes')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', `Bearer ${createJWT(testRealm, 'not-mary')}`);
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+    });
+
+    test('read permission GET /_mtimes', async function (assert) {
+      let expectedMtimes = mtimes(testRealmPath, testRealmURL);
+      delete expectedMtimes[`${testRealmURL}.realm.json`];
+
+      let response = await request
+        .get('/_mtimes')
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'mary', ['read'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'mtimes',
+            id: testRealmHref,
+            attributes: {
+              mtimes: expectedMtimes,
+            },
+          },
+        },
+        'mtimes response is correct',
+      );
+    });
   });
 
   module('permissions requests', function (hooks) {

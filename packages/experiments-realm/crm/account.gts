@@ -26,7 +26,8 @@ import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import { LooseGooseyField } from '../loosey-goosey';
 import { StatusPill } from '../components/status-pill';
 import { Avatar, Pill, BoxelButton } from '@cardstack/boxel-ui/components';
-import { EntityDisplay } from '../components/entity-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
+import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 import ActivityCard from '../components/activity-card';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
@@ -283,41 +284,36 @@ class IsolatedTemplate extends Component<typeof Account> {
               </:description>
               <:content>
                 <div class='activity-card-group'>
-                  <EntityDisplay>
-                    <:thumbnail>
+                  <EntityDisplayWithIcon @title='Technova'>
+                    <:icon>
                       <SquareUser />
-                    </:thumbnail>
-                    <:title>
-                      Dmitri Petrov
-                    </:title>
+                    </:icon>
                     <:content>
                       Technova
                     </:content>
-                  </EntityDisplay>
-                  <EntityDisplay>
+                  </EntityDisplayWithIcon>
+                  <EntityDisplayWithThumbnail @title='Rep: Janus Dios'>
                     <:thumbnail>
                       <Avatar
                         @thumbnailURL='https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2'
+                        class='avatar'
                       />
                     </:thumbnail>
-                    <:title>
-                      Rep: Janus Dios
-                    </:title>
                     <:content>
                       Sales Associate
                     </:content>
-                  </EntityDisplay>
-                  <EntityDisplay class='activity-time'>
-                    <:thumbnail>
+                  </EntityDisplayWithThumbnail>
+                  <EntityDisplayWithIcon
+                    class='activity-time'
+                    @title='May 15, 2024'
+                  >
+                    <:icon>
                       <CalendarTime />
-                    </:thumbnail>
-                    <:title>
-                      May 15, 2024
-                    </:title>
+                    </:icon>
                     <:content>
                       3:15pm
                     </:content>
-                  </EntityDisplay>
+                  </EntityDisplayWithIcon>
                 </div>
               </:content>
             </ActivityCard>
@@ -406,6 +402,11 @@ class IsolatedTemplate extends Component<typeof Account> {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-color-gray);
         margin-left: auto;
+      }
+      .avatar {
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
+        flex-shrink: 0;
       }
 
       @container activities-summary-card (max-width: 447px) {

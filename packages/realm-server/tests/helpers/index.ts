@@ -1,4 +1,4 @@
-import { writeFileSync, writeJSONSync } from 'fs-extra';
+import { writeFileSync, writeJSONSync, readdirSync, statSync } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
@@ -14,14 +14,16 @@ import {
   maybeHandleScopedCSSRequest,
   insertPermissions,
   IndexWriter,
-  type MatrixConfig,
-  type QueuePublisher,
-  type QueueRunner,
-  type IndexRunner,
   asExpressions,
   query,
   insert,
   param,
+  unixTime,
+  RealmPaths,
+  type MatrixConfig,
+  type QueuePublisher,
+  type QueueRunner,
+  type IndexRunner,
 } from '@cardstack/runtime-common';
 import { dirSync } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
@@ -401,6 +403,7 @@ export async function runTestRealmServer({
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
   return {
+    testRealmDir,
     testRealm,
     testRealmServer,
     testRealmHttpServer,
@@ -493,4 +496,29 @@ export async function fetchSubscriptionsByUserId(
     status: result.status,
     stripeSubscriptionId: result.stripe_subscription_id,
   }));
+}
+
+export function mtimes(
+  path: string,
+  realmURL: URL,
+): { [path: string]: number } {
+  const mtimes: { [path: string]: number } = {};
+  let paths = new RealmPaths(realmURL);
+
+  function traverseDir(currentPath: string) {
+    const entries = readdirSync(currentPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(currentPath, entry.name);
+      if (entry.isDirectory()) {
+        traverseDir(fullPath);
+      } else if (entry.isFile()) {
+        const stats = statSync(fullPath);
+        mtimes[paths.fileURL(fullPath.substring(path.length)).href] = unixTime(
+          stats.mtime.getTime(),
+        );
+      }
+    }
+  }
+  traverseDir(path);
+  return mtimes;
 }

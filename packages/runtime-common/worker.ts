@@ -15,7 +15,6 @@ import {
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
-  type Relationship,
   type ResponseWithNodeStream,
 } from '.';
 import { MatrixClient } from './matrix-client';
@@ -36,11 +35,7 @@ export interface IndexResults {
 
 export interface Reader {
   readFile: (url: URL) => Promise<TextFileRef | undefined>;
-  directoryListing: (
-    url: URL,
-  ) => Promise<
-    { kind: 'directory' | 'file'; url: string; lastModified: number | null }[]
-  >;
+  mtimes: () => Promise<{ [url: string]: number }>;
 }
 
 export type RunnerRegistration = (
@@ -342,29 +337,20 @@ export function getReader(
       };
     },
 
-    directoryListing: async (url: URL) => {
-      let response = await _fetch(url, {
+    mtimes: async () => {
+      let response = await _fetch(`${realmURL.href}_mtimes`, {
         headers: {
-          Accept: SupportedMimeType.DirectoryListing,
+          Accept: SupportedMimeType.Mtimes,
         },
       });
       let {
-        data: { relationships: _relationships },
-      } = await response.json();
-      let relationships = _relationships as Record<string, Relationship>;
-      return Object.values(relationships).map((entry) =>
-        entry.meta!.kind === 'file'
-          ? {
-              url: entry.links.related!,
-              kind: 'file',
-              lastModified: (entry.meta?.lastModified ?? null) as number | null,
-            }
-          : {
-              url: entry.links.related!,
-              kind: 'directory',
-              lastModified: null,
-            },
-      );
+        data: {
+          attributes: { mtimes },
+        },
+      } = (await response.json()) as {
+        data: { attributes: { mtimes: { [url: string]: number } } };
+      };
+      return mtimes;
     },
   };
 }

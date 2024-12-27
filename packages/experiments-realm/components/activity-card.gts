@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { EntityDisplay } from './entity-display';
+import EntityDisplayWithThumbnail from './entity-thumbnail-display';
 
 interface ActivityCardArgs {
   Blocks: {
@@ -17,7 +17,7 @@ export default class ActivityCard extends GlimmerComponent<ActivityCardArgs> {
     <article class='activity-card' ...attributes>
       <header class='activity-card-header'>
         <div class='activity-card-title-desc-group'>
-          <EntityDisplay>
+          <EntityDisplayWithThumbnail>
             <:title>
               <span class='activity-card-title'>
                 {{yield to='title'}}
@@ -28,7 +28,7 @@ export default class ActivityCard extends GlimmerComponent<ActivityCardArgs> {
                 {{yield to='thumbnail'}}
               </span>
             </:thumbnail>
-          </EntityDisplay>
+          </EntityDisplayWithThumbnail>
 
           {{#if (has-block 'description')}}
             <p class='activity-card-description'>
