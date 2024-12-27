@@ -3038,4 +3038,27 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .doesNotHaveClass('opening-animation');
   });
+
+  test('close card should not trigger opening animation again', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+
+    await waitFor(`[data-test-stack-card-index="0"]`);
+    assert
+      .dom(`[data-test-stack-card-index="0"]`)
+      .doesNotHaveClass('opening-animation');
+  });
 });
