@@ -331,8 +331,7 @@ export default class InteractSubmode extends Component<Signature> {
       },
       openRoom: async (roomId: string): Promise<void> => {
         here.operatorModeStateService.aiAssistantOpen = true;
-        // wait until room is loaded
-        this.matrixService.currentRoomId = roomId;
+        here.matrixService.currentRoomId = roomId;
       },
     };
   }
