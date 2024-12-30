@@ -1071,7 +1071,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
     let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${packetId}"]`,
+      `[data-test-stack-card-index="1"] [data-test-card="${packetId}"]`,
     );
     await fillIn(
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
@@ -1085,7 +1085,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitUntil(() =>
       document
-        .querySelector(`[data-test-stack-card="${packetId}"]`)
+        .querySelector(`[data-test-card="${packetId}"]`)
         ?.textContent?.includes(
           'Everyone knows that Alice ran the show in the Brady household.',
         ),
