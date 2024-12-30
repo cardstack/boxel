@@ -79,7 +79,7 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     displayName: tag.label,
     icon: tag.icon,
     cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
-    createNewButtonText: tag.value,
+    createNewButtonText: tag.buttonText,
   })),
 ];
 
@@ -217,24 +217,19 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
     if (!loadAllFilters.isIdle || !activeFilter?.query) return;
 
-    const baseFilter = {
+    const defaultFilter = {
       type: activeFilter.cardRef,
     };
 
-    // we can specify which data list/tab we want to filter by to make the payload more optimized
-    // destructure the nested filter query code so make it more readable
+    // filter field value by CRM Account
     const accountFilter =
       activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
         ? [
             {
-              every: [
-                {
-                  on: activeFilter.cardRef,
-                  eq: {
-                    'urgencyTag.label': activeFilter.displayName,
-                  },
-                },
-              ],
+              on: activeFilter.cardRef,
+              eq: {
+                'urgencyTag.label': activeFilter.displayName,
+              },
             },
           ]
         : [];
@@ -259,7 +254,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     return {
       filter: {
         on: activeFilter.cardRef,
-        every: [baseFilter, ...accountFilter, ...searchFilter],
+        every: [defaultFilter, ...accountFilter, ...searchFilter],
       },
       sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
     } as Query;

@@ -45,7 +45,8 @@ export const urgencyTagValues = [
     index: 0,
     icon: ClockExclamation,
     label: 'Overdue for Renewal',
-    value: 'Create Account', // TODO: For the createNewButtonText usage in CRM App
+    value: 'overdue-for-renewal',
+    buttonText: 'Create Account', // TODO: For the createNewButtonText usage in CRM App
     colorScheme: {
       foregroundColor: '#D32F2F', // Dark Red
       backgroundColor: '#FFEBEE', // Light Red
@@ -55,7 +56,8 @@ export const urgencyTagValues = [
     index: 1,
     icon: Clock24,
     label: 'Renewal Due Soon',
-    value: 'Create Account',
+    value: 'renewal-due-soon',
+    buttonText: 'Create Account',
     colorScheme: {
       foregroundColor: '#F57C00', // Dark Orange
       backgroundColor: '#FFF3E0', // Light Orange
@@ -65,7 +67,8 @@ export const urgencyTagValues = [
     index: 2,
     icon: Handshake,
     label: 'Recently Renewed',
-    value: 'Create Account',
+    value: 'recently-renewed',
+    buttonText: 'Create Account',
     colorScheme: {
       foregroundColor: '#388E3C', // Dark Green
       backgroundColor: '#E8F5E9', // Light Green
@@ -75,7 +78,8 @@ export const urgencyTagValues = [
     index: 3,
     icon: ClockX,
     label: 'Expiring Soon',
-    value: 'Create Account',
+    value: 'expiring-soon',
+    buttonText: 'Create Account',
     colorScheme: {
       foregroundColor: '#FBC02D', // Dark Yellow
       backgroundColor: '#FFF9C4', // Light Yellow
@@ -85,7 +89,8 @@ export const urgencyTagValues = [
     index: 4,
     icon: ClockUp,
     label: 'Follow-Up Required',
-    value: 'Create Account',
+    value: 'follow-up-required',
+    buttonText: 'Create Account',
     colorScheme: {
       foregroundColor: '#1976D2', // Dark Blue
       backgroundColor: '#E3F2FD', // Light Blue
@@ -95,7 +100,8 @@ export const urgencyTagValues = [
     index: 5,
     icon: Contract,
     label: 'Pending Contract',
-    value: 'Create Account',
+    value: 'pending-contract',
+    buttonText: 'Create Account',
     colorScheme: {
       foregroundColor: '#512DA8', // Dark Purple
       backgroundColor: '#EDE7F6', // Light Purple
@@ -105,7 +111,8 @@ export const urgencyTagValues = [
     index: 6,
     icon: CalendarTime,
     label: 'Next Review Scheduled',
-    value: 'Create Account',
+    value: 'next-review-scheduled',
+    buttonText: 'Create Account',
     colorScheme: {
       foregroundColor: '#558B2F', // Dark Olive Green
       backgroundColor: '#F1F8E9', // Light Olive Green

@@ -29,6 +29,8 @@
       "urgencyTag": {
         "index": 1,
         "label": "Renewal Due Soon",
+        "value": "renewal-due-soon",
+        "buttonText": "Create Account",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#F57C00",

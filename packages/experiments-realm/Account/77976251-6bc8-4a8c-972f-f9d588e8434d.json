@@ -29,6 +29,8 @@
       "urgencyTag": {
         "index": 3,
         "label": "Expiring Soon",
+        "value": "expiring-soon",
+        "buttonText": "Create Account",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#FBC02D",
