@@ -198,30 +198,18 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let newCard = await here.cardService.createFromSerialized(
-          doc.data,
-          doc,
-          relativeTo,
-        );
-
         let newItem = new StackItem({
           owner: here,
-          card: newCard,
+          newCard: { doc, relativeTo },
           format: opts?.cardModeAfterCreation ?? 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
         });
 
-        // TODO: it is important saveModel happens after newItem because it
-        // looks like perhaps there is a race condition (or something else) when a
-        // new linked card is created, and when it is added to the stack and closed
-        // - the parent card is not updated with the new linked card
-        await here.cardService.saveModel(newCard);
-
         await newItem.ready();
         here.addToStack(newItem);
-        return newCard;
+        return newItem.card;
       },
       viewCard: async (
         cardOrURL: CardDef | URL,
@@ -233,9 +221,7 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let newItem = new StackItem({
           owner: here,
-          ...(cardOrURL instanceof URL
-            ? { url: cardOrURL }
-            : { card: cardOrURL }),
+          url: cardOrURL instanceof URL ? cardOrURL : new URL(cardOrURL.id),
           format,
           stackIndex,
         });
@@ -584,7 +570,7 @@ export default class InteractSubmode extends Component<Signature> {
               stackIndex + 1,
             );
           }
-          await this.publicAPI(this, 0).viewCard(card, 'isolated');
+          await this.publicAPI(this, 0).viewCard(new URL(card.id), 'isolated');
 
           // In case the right button was clicked, the card will be added to stack with index 1.
         } else if (
@@ -592,7 +578,7 @@ export default class InteractSubmode extends Component<Signature> {
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
           await this.publicAPI(this, this.stacks.length).viewCard(
-            card,
+            new URL(card.id),
             'isolated',
           );
         } else {
@@ -606,7 +592,10 @@ export default class InteractSubmode extends Component<Signature> {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(card, 'isolated');
+            await this.publicAPI(this, 0).viewCard(
+              new URL(card.id),
+              'isolated',
+            );
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -614,7 +603,7 @@ export default class InteractSubmode extends Component<Signature> {
               if (bottomMostItem) {
                 let stackItem = new StackItem({
                   owner: this,
-                  card,
+                  url: new URL(card.id),
                   format: 'isolated',
                   stackIndex,
                 });

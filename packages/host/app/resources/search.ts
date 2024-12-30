@@ -120,6 +120,15 @@ export class Search extends Resource<Args> {
     urlOrDoc: string | SingleCardDocument,
   ): CardResource {
     let url = asURL(urlOrDoc);
+    if (!url) {
+      throw new Error(
+        `bug: expected card doc to have an id: ${JSON.stringify(
+          urlOrDoc,
+          null,
+          2,
+        )}`,
+      );
+    }
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this.cardResources.set` below will not be an assertion.
     let resource = this.seenCard(url, false);

@@ -1501,6 +1501,68 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-workspace-chooser]').exists();
     });
 
+    test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
+      assert.expect(3);
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+          [{ id: `${testRealmURL}index`, format: 'isolated' }],
+        ],
+      });
+      let deferred = new Deferred<void>();
+      let saveCount = 0;
+      let petId: string | undefined;
+      this.onSave((id, json) => {
+        if (id.href.includes('Pet/')) {
+          petId = id.href;
+          saveCount++;
+          if (typeof json === 'string') {
+            throw new Error('expected JSON save data');
+          }
+          if (saveCount === 1) {
+            // first save is an empty card
+            assert.strictEqual(json.data.attributes?.name, null);
+          } else if (saveCount === 2) {
+            // second save is after a field has been filled in
+            assert.strictEqual(json.data.attributes?.name, 'Paper');
+            deferred.fulfill();
+          } else {
+            assert.ok(false, 'unexpected save of Pet card');
+          }
+        }
+      });
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-edit-button]`,
+      );
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-links-to-editor="pet"] [data-test-remove-card]`,
+      );
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-links-to-editor="pet"] [data-test-add-new]`,
+      );
+      await click(
+        `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
+      );
+      await click(`[data-test-card-catalog-go-button]`);
+      await fillIn(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-field="name"] input`,
+        'Paper',
+      );
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
+      );
+
+      await deferred.promise;
+      assert
+        .dom(`[data-test-card="${petId}"]`)
+        .includesText('Paper', 'the card is rendered correctly');
+    });
+
     test('visiting 2 stacks from differing realms', async function (assert) {
       setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
       await visitOperatorMode({

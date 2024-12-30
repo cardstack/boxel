@@ -452,12 +452,12 @@ export default class OperatorModeStateService extends Service {
   }
 
   async createStackItem(
-    card: CardDef,
+    url: URL,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
     let stackItem = new StackItem({
-      card,
+      url,
       stackIndex,
       owner: this,
       format,
@@ -609,10 +609,10 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  async openCardInInteractMode(card: CardDef) {
+  async openCardInInteractMode(url: URL) {
     this.clearStacks();
     let newItem = new StackItem({
-      card,
+      url,
       stackIndex: 0,
       owner: this, // We need to think for better owner
       format: 'isolated',
@@ -623,10 +623,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = restartableTask(async (realmUrl: string) => {
-    let card = await this.cardService.getCard(realmUrl); // Will return the workspace's index card
     let stackItem = new StackItem({
       owner: this,
-      card,
+      url: new URL(realmUrl),
       format: 'isolated',
       stackIndex: 0,
     });
@@ -640,7 +639,7 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(card!.id),
+        : new URL(realmUrl),
     );
 
     this.operatorModeController.workspaceChooserOpened = false;

@@ -93,7 +93,9 @@ export default class CardPreviewPanel extends Component<Signature> {
   }
 
   openInInteractMode = task(async () => {
-    await this.operatorModeStateService.openCardInInteractMode(this.args.card);
+    await this.operatorModeStateService.openCardInInteractMode(
+      new URL(this.args.card.id),
+    );
   });
 
   <template>
