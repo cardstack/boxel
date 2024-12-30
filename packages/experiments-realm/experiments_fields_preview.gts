@@ -1,7 +1,7 @@
 import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
 import { EmailField } from './email';
-import { PhoneField } from './phone';
+import { PhoneField } from './phone-number';
 import { UrlField } from './url';
 import { WebsiteField } from './website';
 import { Address as AddressField } from './address';

@@ -5,7 +5,7 @@
       "headline": "The Future of Urban Living: Skyscrapers or Sustainable Communities?",
       "slug": "urban-living-future-sustainable",
       "body": null,
-      "publishDate": null,
+      "publishDate": "2024-12-06T22:29:00.000Z",
       "featuredImage": {
         "imageUrl": null,
         "credit": null,
@@ -19,14 +19,34 @@
       "thumbnailURL": "https://images.unsplash.com/photo-1548182880-8b7b2af2caa2?q=80&w=2970&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     "relationships": {
-      "authorBio": {
+      "authors.0": {
         "links": {
-          "self": null
+          "self": "../Author/jane-doe"
+        }
+      },
+      "authors.1": {
+        "links": {
+          "self": "../Author/alice-enwunder"
+        }
+      },
+      "authors.2": {
+        "links": {
+          "self": "../Author/ad28d989-68a8-4bad-a8dc-05f9f724489c"
         }
       },
       "blog": {
         "links": {
           "self": "../BlogApp/ramped"
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
         }
       }
     },

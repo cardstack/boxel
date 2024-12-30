@@ -23,12 +23,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { AppCard, Tab } from './app-card';
-import {
-  Query,
-  CardError,
-  SupportedMimeType,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common';
+import { Query, CardError, SupportedMimeType } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
@@ -168,15 +163,10 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     );
   }
 
-  get activeTabRef() {
-    if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
-      return;
-    }
-    if (!this.currentRealm) {
-      return;
-    }
-    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
+  get activeTabClass() {
+    return this.activeTab?.tabId ? this.activeTab.tabId.toLowerCase() : '';
   }
+
   setTabs(tabs: Tab[]) {
     this.args.model.tabs = tabs ?? [];
   }
@@ -281,7 +271,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     </TabbedHeader>
 
     <Layout
-      class='crm-app'
+      class='crm-app {{this.activeTabClass}}'
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
@@ -442,18 +432,24 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         margin-left: auto;
       }
       /* Cards grid crm */
+      /* catch all tab */
       .crm-app :where(.card-view-container) {
         grid-template-columns: 1fr;
       }
-      .crm-app :where(.grid-view) {
-        --grid-card-min-width: 300px;
+      /* contact tab */
+      .crm-app.contact {
+        --grid-view-min-width: 300px;
+      }
+      /* deal tab */
+      .crm-app.deal {
+        --strip-view-min-width: 1fr;
       }
     </style>
   </template>
 }
 
 export class CrmApp extends AppCard {
-  static displayName = 'Crm App';
+  static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';
   static isolated = CrmAppTemplate;

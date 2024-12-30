@@ -34,7 +34,7 @@ import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 type LooseyGooseyDataWithCompleted = LooseyGooseyData & { completed: boolean };
 
-export class BaseTaskStatusEdit extends Component<typeof BaseTaskStatusField> {
+export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
   <template>
     <BoxelSelect
@@ -72,7 +72,7 @@ export class BaseTaskStatusEdit extends Component<typeof BaseTaskStatusField> {
   }
 }
 
-export class BaseTaskStatusField extends LooseGooseyField {
+export class TaskStatusField extends LooseGooseyField {
   @field completed = contains(BooleanField);
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
@@ -90,18 +90,17 @@ export class BaseTaskStatusField extends LooseGooseyField {
     },
   ];
 
-  static embedded = class Embedded extends Component<
-    typeof BaseTaskStatusField
-  > {
+  static embedded = class Embedded extends Component<typeof TaskStatusField> {
     <template>
       {{@model.label}}
     </template>
   };
 
-  static edit = BaseTaskStatusEdit;
+  //TODO: Not static. Need to improve ability to extend field templates
+  edit = TaskStatusEdit;
 }
 
-export class FittedTask extends Component<typeof TaskBase> {
+export class FittedTask extends Component<typeof Task> {
   get visibleTags() {
     return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
   }
@@ -181,11 +180,14 @@ export class FittedTask extends Component<typeof TaskBase> {
       </div>
 
       <footer>
-        <@fields.assignee
-          class='card-assignee'
-          @format='atom'
-          @displayContainer={{false}}
-        />
+        {{!TODO: Actually, this shudn't be needed. atom default templates can't handle null values }}
+        {{#if @model.assignee}}
+          <@fields.assignee
+            class='card-assignee'
+            @format='atom'
+            @displayContainer={{false}}
+          />
+        {{/if}}
       </footer>
     </div>
 
@@ -428,11 +430,11 @@ export class FittedTask extends Component<typeof TaskBase> {
   </template>
 }
 
-class EditPriority extends Component<typeof BaseTaskPriority> {
+class EditPriority extends Component<typeof TaskPriority> {
   @tracked label = this.args.model.label;
 
   get priorities() {
-    return BaseTaskPriority.values;
+    return TaskPriority.values;
   }
 
   get selectedPriority() {
@@ -450,7 +452,7 @@ class EditPriority extends Component<typeof BaseTaskPriority> {
   <template>
     <div class='priority-field'>
       <RadioInput
-        @groupDescription='Select Task Priority'
+        @groupDescription='Select Work Task Priority'
         @items={{this.priorities}}
         @checkedId={{this.selectedPriority.label}}
         @orientation='horizontal'
@@ -466,7 +468,7 @@ class EditPriority extends Component<typeof BaseTaskPriority> {
   </template>
 }
 
-export class BaseTaskPriority extends LooseGooseyField {
+export class TaskPriority extends LooseGooseyField {
   // loosey goosey pattern
   static values = [
     { index: 0, label: 'Lowest', icon: ChevronsDown },
@@ -488,8 +490,9 @@ export class BaseTaskPriority extends LooseGooseyField {
     },
   ];
 
-  static edit = EditPriority;
-  static embedded = class Embedded extends Component<typeof BaseTaskPriority> {
+  //TODO: Not static. Need to improve ability to extend field templates
+  edit = EditPriority;
+  static embedded = class Embedded extends Component<typeof TaskPriority> {
     <template>
       {{@model.label}}
     </template>
@@ -497,7 +500,7 @@ export class BaseTaskPriority extends LooseGooseyField {
 
   static atom = class Atom extends Component<typeof this> {
     get selectedPriority() {
-      return BaseTaskPriority.values.find((priority) => {
+      return TaskPriority.values.find((priority) => {
         return priority.label === this.args.model.label;
       });
     }
@@ -522,24 +525,24 @@ export class BaseTaskPriority extends LooseGooseyField {
   };
 }
 
-export class TaskBase extends CardDef {
-  static displayName = 'Task Base';
+export class Task extends CardDef {
+  static displayName = 'Task';
   @field taskName = contains(StringField);
   @field tags = linksToMany(() => Tag);
   @field dateRange = contains(DateRangeField);
-  @field status = contains(BaseTaskStatusField);
+  @field status = contains(TaskStatusField);
   @field taskDetail = contains(TextAreaCard);
   @field assignee = linksTo(() => User);
-  @field priority = contains(BaseTaskPriority);
+  @field priority = contains(TaskPriority);
 
   @field title = contains(StringField, {
-    computeVia: function (this: TaskBase) {
-      return this.taskName;
+    computeVia: function (this: Task) {
+      return this.taskName ?? `Untitled ${this.constructor.displayName}`;
     },
   });
 
   @field shortId = contains(StringField, {
-    computeVia: function (this: TaskBase) {
+    computeVia: function (this: Task) {
       if (this.id) {
         let id = shortenId(extractId(this.id));
         return id.toUpperCase();

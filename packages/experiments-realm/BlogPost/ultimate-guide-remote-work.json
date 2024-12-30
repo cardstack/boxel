@@ -19,7 +19,7 @@
       "thumbnailURL": "https://images.unsplash.com/photo-1614624532983-4ce03382d63d?q=80&w=3131&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     "relationships": {
-      "authorBio": {
+      "authors.0": {
         "links": {
           "self": "../Author/jane-doe"
         }
@@ -29,9 +29,14 @@
           "self": "../BlogApp/ramped"
         }
       },
-      "editors.0": {
+      "categories": {
         "links": {
-          "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
+          "self": null
+        }
+      },
+      "editors": {
+        "links": {
+          "self": null
         }
       }
     },

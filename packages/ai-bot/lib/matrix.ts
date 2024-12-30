@@ -3,6 +3,7 @@ import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -129,7 +130,7 @@ export const toMatrixMessageCommandContent = (
   const body = payload['description'] || 'Issuing command';
   let messageObject: IContent = {
     body: body,
-    msgtype: 'org.boxel.command',
+    msgtype: APP_BOXEL_COMMAND_MSGTYPE,
     formatted_body: body,
     format: 'org.matrix.custom.html',
     data: {

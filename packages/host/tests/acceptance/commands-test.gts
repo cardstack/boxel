@@ -19,6 +19,11 @@ import {
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
+import {
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
@@ -383,7 +388,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -432,7 +437,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -496,7 +501,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let toolName = boxelMessageData.context.tools[0].function.name;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Delaying 1 second',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'Delaying 1 second',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -561,7 +566,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -610,7 +615,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -684,7 +689,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -700,7 +705,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Update card',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'Update card',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({

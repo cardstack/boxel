@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "Cultural Scenes",
+      "shortName": "Culture",
+      "slug": "cultural-scenes",
+      "backgroundColor": "#c3fc33",
+      "textColor": null,
+      "description": "Capturing the vibrant art, food, and music of cities.",
+      "title": "Cultural Scenes",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}

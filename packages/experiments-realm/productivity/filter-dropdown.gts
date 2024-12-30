@@ -11,6 +11,7 @@ interface FilterDropdownSignature {
     selected: any;
     onChange: (value: any) => void;
     onClose: () => boolean | undefined;
+    isLoading?: boolean;
   };
   Blocks: {
     default: [any];
@@ -24,7 +25,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
       @options={{@options}}
       @selected={{@selected}}
       @onChange={{@onChange}}
-      @triggerComponent={{FilterTrigger}}
+      @triggerComponent={{(component FilterTrigger isLoading=@isLoading)}}
       @initiallyOpened={{true}}
       @searchEnabled={{true}}
       @searchField={{@searchField}}

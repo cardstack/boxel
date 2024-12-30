@@ -1,17 +1,20 @@
 import {
   Component,
   realmURL,
-  StringField,
-  contains,
   field,
   BaseDef,
   CardDef,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
-import { DndItem, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  DndItem,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import {
   DndKanbanBoard,
   DndColumn,
@@ -23,26 +26,26 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { TaskStatusField } from './productivity/task';
+import { WorkTaskStatusField, Project, WorkTask } from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
-import getTaskCardsResource from './productivity/task-cards-resource';
+import getKanbanResource from './kanban-resource';
 import { FilterDisplay } from './productivity/filter-display';
 import Checklist from '@cardstack/boxel-icons/checklist';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import User from '@cardstack/boxel-icons/user';
-import FolderGit from '@cardstack/boxel-icons/folder-git';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import type Owner from '@ember/owner';
 import {
   AnyFilter,
   CardTypeFilter,
   Query,
+  EqFilter,
 } from '@cardstack/runtime-common/query';
 
-type FilterType = 'status' | 'assignee' | 'project';
+type FilterType = 'status' | 'assignee';
 
 export interface SelectedItem {
   name?: string;
@@ -53,110 +56,84 @@ export interface SelectedItem {
 class WorkTrackerIsolated extends Component<typeof AppCard> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
-  private declare assigneeQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-    loaded: Promise<void>;
-  };
-  private declare projectQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-    loaded: Promise<void>;
-  };
   filters = {
     status: {
       searchKey: 'label',
       label: 'Status',
       codeRef: {
-        module: `${this.realmHref}productivity/task`,
+        module: new URL('./productivity/task', import.meta.url).href,
         name: 'Status',
       },
-      options: () => TaskStatusField.values,
+      options: () => WorkTaskStatusField.values,
     },
     assignee: {
       searchKey: 'name',
       label: 'Assignee',
       codeRef: {
-        module: `${this.realmHref}productivity/task`,
+        module: new URL('./productivity/task', import.meta.url).href,
         name: 'TeamMember',
       },
       options: () => this.assigneeCards,
-    },
-    project: {
-      searchKey: 'name',
-      label: 'Project',
-      codeRef: {
-        module: `${this.realmHref}productivity/task`,
-        name: 'Project',
-      },
-      options: () => this.projectCards,
     },
   };
   selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.initializeDropdownData.perform();
   }
 
   get filterTypes() {
     return Object.keys(this.filters) as FilterType[];
   }
 
-  taskCollection = getTaskCardsResource(
-    this,
-    () => this.getTaskQuery,
-    () => this.realmHref,
+  cards = getCards(this.getTaskQuery, this.realmHrefs, { isLive: true });
+
+  assigneeQuery = getCards(
+    {
+      filter: {
+        type: this.filters.assignee.codeRef,
+      },
+    },
+    this.realmHrefs,
+    { isLive: true },
   );
 
-  initializeDropdownData = restartableTask(async () => {
-    this.assigneeQuery = getCards(
-      {
-        filter: {
-          type: this.filters.assignee.codeRef,
-        },
-      },
-      this.realmHrefs,
-    );
-
-    this.projectQuery = getCards(
-      {
-        filter: {
-          type: this.filters.project.codeRef,
-        },
-      },
-      this.realmHrefs,
-    );
-    await this.assigneeQuery.loaded;
-    await this.projectQuery.loaded;
-  });
+  get cardInstances() {
+    if (!this.cards || !this.cards.instances) {
+      return [];
+    }
+    return this.cards.instances as WorkTask[];
+  }
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
   }
 
-  get projectCards() {
-    return this.projectQuery.instances;
-  }
-
-  filterObject(filterType: FilterType) {
-    let selectedItems = this.selectedItems.get(filterType) ?? [];
-    return selectedItems.map((item) => {
-      if (filterType === 'status') {
-        return {
-          eq: {
-            'status.label': item.label,
-          },
-        };
-      } else {
-        let key = filterType + '.name';
-        return {
-          eq: {
-            [key]: item.name,
-          },
-        };
-      }
+  @action showTaskCard(card: WorkTask): boolean {
+    return this.filterTypes.every((filterType: FilterType) => {
+      let selectedItems = this.selectedItems.get(filterType) ?? [];
+      if (selectedItems.length === 0) return true;
+      return selectedItems.some((item) => {
+        if (filterType === 'status') {
+          return card.status?.label === item.label;
+        } else if (filterType === 'assignee') {
+          return card.assignee?.name === item.name;
+        } else {
+          return false;
+        }
+      });
     });
   }
+
+  hasColumnKey = (card: WorkTask, key: string) => {
+    return card.status?.label === key;
+  };
+
+  taskCollection = getKanbanResource(
+    this,
+    () => this.cardInstances,
+    () => WorkTaskStatusField.values.map((status) => status.label) ?? [],
+    () => this.hasColumnKey,
+  );
 
   get selectedFilterConfig() {
     if (this.selectedFilter === undefined) {
@@ -186,22 +163,26 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   get assignedTaskCodeRef() {
     return {
-      module: `${this.realmHref}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
-      name: 'Task',
+      module: new URL('./productivity/task', import.meta.url).href,
+      name: 'WorkTask',
     };
   }
 
-  get getTaskQuery(): Query {
-    let everyArr: (AnyFilter | CardTypeFilter)[] = [];
-    this.filterTypes.forEach((filterType) => {
-      let anyFilter = this.filterObject(filterType);
-      if (anyFilter.length > 0) {
-        everyArr.push({
-          any: anyFilter,
-        } as AnyFilter);
-      }
-    });
+  get currentProject() {
+    return this.args.model.project;
+  }
 
+  get getTaskQuery(): Query {
+    let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
+    if (!this.realmURL) {
+      throw new Error('No realm url');
+    }
+    if (!this.currentProject || !this.currentProject.id) {
+      console.log('No project');
+      everyArr.push({ eq: { 'project.id': null } });
+    } else {
+      everyArr.push({ eq: { 'project.id': this.currentProject.id } });
+    }
     return (
       everyArr.length > 0
         ? {
@@ -243,7 +224,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return;
       }
 
-      let index = TaskStatusField.values.find((value) => {
+      let index = WorkTaskStatusField.values.find((value) => {
         return value.label === statusLabel;
       })?.index;
 
@@ -272,7 +253,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
             },
             project: {
               links: {
-                self: null,
+                self: this.currentProject.id ?? null,
               },
             },
           },
@@ -299,18 +280,23 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
 
   @action async onMoveCardMutation(
     draggedCard: DndItem,
-    targetCard: DndItem | undefined,
-    sourceColumnAfterDrag: DndColumn,
+    _targetCard: DndItem | undefined,
+    _sourceColumnAfterDrag: DndColumn,
     targetColumnAfterDrag: DndColumn,
   ) {
-    let updatedCard = this.taskCollection.update(
-      draggedCard,
-      targetCard,
-      sourceColumnAfterDrag,
-      targetColumnAfterDrag,
+    let cardInNewCol = targetColumnAfterDrag.cards.find(
+      (c: CardDef) => c.id === draggedCard.id,
     );
-    //TODO: save the card!
-    await this.args.context?.actions?.saveCard?.(updatedCard);
+    if (
+      cardInNewCol &&
+      cardInNewCol.status.label !== targetColumnAfterDrag.title //not dragging to the same column
+    ) {
+      let statusValue = WorkTaskStatusField.values.find(
+        (value) => value.label === targetColumnAfterDrag.title,
+      );
+      cardInNewCol.status = new WorkTaskStatusField(statusValue);
+      await this.args.context?.actions?.saveCard?.(cardInNewCol);
+    }
   }
 
   @action onSelectFilter(item: FilterType) {
@@ -360,20 +346,40 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return RectangleEllipsis;
       case 'assignee':
         return User;
-      case 'project':
-        return FolderGit;
       default:
         return undefined;
     }
   }
 
+  get assigneeIsLoading() {
+    return (
+      this.selectedFilter === 'assignee' &&
+      this.assigneeQuery &&
+      this.assigneeQuery.isLoading
+    );
+  }
+
+  @action viewCard() {
+    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+  }
+
   <template>
     <div class='task-app'>
+      {{#if (not this.currentProject.id)}}
+        <div class='disabled'>
+          {{#if @context.actions.viewCard}}
+            <BoxelButton @kind='primary' {{on 'click' this.viewCard}}>
+              Link a project to continue
+            </BoxelButton>
+          {{/if}}
+        </div>
+      {{/if}}
       <div class='filter-section'>
         <div class='filter-dropdown-container'>
           {{#if this.selectedFilterConfig}}
             {{#let (this.selectedFilterConfig.options) as |options|}}
               <FilterDropdown
+                @isLoading={{this.assigneeIsLoading}}
                 @searchField={{this.selectedFilterConfig.searchKey}}
                 @options={{options}}
                 @realmURLs={{this.realmHrefs}}
@@ -440,6 +446,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         <DndKanbanBoard
           @columns={{this.taskCollection.columns}}
           @onMove={{this.onMoveCardMutation}}
+          @displayCard={{this.showTaskCard}}
         >
           <:header as |column|>
             <ColumnHeader
@@ -463,7 +470,6 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
                 <CardComponent class='card' />
               </div>
             {{/let}}
-
           </:card>
         </DndKanbanBoard>
       </div>
@@ -484,8 +490,23 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         position: relative;
         flex-direction: column;
         font: var(--boxel-font);
-        margin-left: var(--boxel-sp);
+        padding-left: var(--boxel-sp);
         height: 100%;
+      }
+      .disabled {
+        position: absolute;
+        top: 0%;
+        left: 0%;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(38 38 38 / 50%);
+        z-index: 10; /*TODO: Resolve z-index with drag and drop. This has to be greater than --draggable-overlay-z-index + 1*/
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 500;
       }
       .filter-section {
         display: flex;
@@ -611,11 +632,7 @@ export class WorkTracker extends AppCard {
   static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
   static isolated = WorkTrackerIsolated;
-  @field title = contains(StringField, {
-    computeVia: function (this: WorkTracker) {
-      return 'Work Tracker';
-    },
-  });
+  @field project = linksTo(() => Project);
 }
 
 function removeFileExtension(cardUrl: string) {

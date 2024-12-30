@@ -13,6 +13,7 @@
   --host-search-sheet-z-index: 300;
 
   --host-workspace-chooser-z-index: 200;
+  --host-disclaimer-z-index: 201;
 }
 
 .error {

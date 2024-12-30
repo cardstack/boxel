@@ -19,12 +19,27 @@
       "thumbnailURL": "https://images.unsplash.com/photo-1551422788-18e2a1f5bb88?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     "relationships": {
-      "authorBio": {
+      "authors.0": {
         "links": {
           "self": "../Author/alice-enwunder"
         }
       },
+      "authors.1": {
+        "links": {
+          "self": "../Author/3a655a91-98b5-4f33-a071-b62d39218b33"
+        }
+      },
+      "authors.2": {
+        "links": {
+          "self": "../Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7"
+        }
+      },
       "blog": {
+        "links": {
+          "self": null
+        }
+      },
+      "editors": {
         "links": {
           "self": null
         }

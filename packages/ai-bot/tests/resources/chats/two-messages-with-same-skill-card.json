@@ -171,8 +171,8 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.cardFragment",
-      "format": "org.boxel.card",
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"https://cardstack.com/base/SkillCard/card-editing\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\\\\\\"patchCard\\\\\\\" function to make the change.\\\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\\\n- If you do not call patchCard, the user will not see the change.\\\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn't given you access.\\\\n- NEVER tell the user to use patchCard; you should always do it for them.\\\\n- If the user wants to search for a card instance, AND the \\\\\\\"searchCard\\\\\\\" function is available, you MUST use the \\\\\\\"searchCard\\\\\\\" function to find the card instance.\\\\nOnly recommend one searchCard function at a time.\\\\nIf the user wants to edit a field of a card, you can optionally use \\\\\\\"searchCard\\\\\\\" to help find a card instance that is compatible with the field being edited before using \\\\\\\"patchCard\\\\\\\" to make the change of the field.\\\\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.\\\\n- If the user wants to generate an app module, AND the \\\\\\\"generateAppModule\\\\\\\" function is available, you MUST use the \\\\\\\"generateAppModule\\\\\\\" function to create the card source.\\\",\\\"title\\\":\\\"Card Editing\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
@@ -304,8 +304,8 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.cardFragment",
-      "format": "org.boxel.card",
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"skill-card-1\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_INSTRUCTIONS_V1\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
@@ -319,7 +319,7 @@
     "age": 15812
   },
   {
-    "type": "com.cardstack.boxel.room.skills",
+    "type": "app.boxel.room.skills",
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
@@ -336,7 +336,7 @@
     "age": 15819
   },
   {
-    "type": "com.cardstack.boxel.room.skills",
+    "type": "app.boxel.room.skills",
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
@@ -371,7 +371,7 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.message",
+      "msgtype": "app.boxel.message",
       "body": "This is a message after a skill card with an id",
       "format": "org.matrix.custom.html",
       "formatted_body": "<p>This is a message after a skill card with an id</p>\n",
@@ -391,8 +391,8 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.cardFragment",
-      "format": "org.boxel.card",
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"skill-card-1\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_INSTRUCTIONS_V2\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
@@ -410,7 +410,7 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "org.boxel.message",
+      "msgtype": "app.boxel.message",
       "body": "A second message with a card with the same id",
       "format": "org.matrix.custom.html",
       "formatted_body": "<p>A second message with a card with the same id</p>\n",
@@ -426,7 +426,7 @@
     "age": 15532
   },
   {
-    "type": "com.cardstack.boxel.room.skills",
+    "type": "app.boxel.room.skills",
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {

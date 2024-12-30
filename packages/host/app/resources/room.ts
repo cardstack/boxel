@@ -9,6 +9,11 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import type {
   CardFragmentContent,
   CommandEvent,
@@ -286,14 +291,14 @@ export class RoomResource extends Resource<Args> {
     if (this._messageCache.has(effectiveEventId) && !update) {
       return;
     }
-    if (event.content.msgtype === 'org.boxel.cardFragment') {
+    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
       if (!this._fragmentCache.has(effectiveEventId)) {
         this._fragmentCache.set(effectiveEventId, event.content);
       }
       return;
     }
-    if (event.content.msgtype === 'org.boxel.commandResult') {
-      // Legacy data
+    if (event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE) {
+      //don't display command result in the room as a message
       return;
     }
 

@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Skill Card",
+      "description": "Catalog entry for Skill card",
+      "isField": false,
+      "ref": {
+        "module": "../skill-card",
+        "name": "SkillCard"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
