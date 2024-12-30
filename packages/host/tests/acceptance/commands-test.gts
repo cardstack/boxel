@@ -12,10 +12,7 @@ import {
 
 import { module, test } from 'qunit';
 
-import {
-  BoxelInputValidationState,
-  GridContainer,
-} from '@cardstack/boxel-ui/components';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
@@ -25,6 +22,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -59,7 +57,6 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 
 let matrixRoomId = '';
 module('Acceptance | Commands tests', function (hooks) {
@@ -765,7 +762,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, 'org.boxel.message');
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
@@ -798,7 +795,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Inspecting the current UI state',
-      msgtype: 'org.boxel.command',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       formatted_body: 'Inspecting the current UI state',
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
@@ -824,6 +821,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
       .containsText('Inspecting the current UI state');
+    await this.pauseTest();
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();

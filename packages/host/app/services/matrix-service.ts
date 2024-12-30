@@ -40,6 +40,7 @@ import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -61,13 +62,10 @@ import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
-  CommandReactionEventContent,
-  MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
-import type {
   CardMessageContent,
   CardFragmentContent,
-  ReactionEventContent,
+  CommandResultContent,
+  MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -489,7 +487,7 @@ export default class MatrixService extends Service {
   async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
+    content: CardMessageContent | CardFragmentContent | CommandResultContent,
   ) {
     let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -514,22 +512,26 @@ export default class MatrixService extends Service {
     if (resultCard) {
       [resultCardEventId] = await this.addCardsToRoom([resultCard], roomId);
     }
-    let content: CommandReactionEventContent = {
-      msgtype: 'org.boxel.command_result',
+    let content: CommandResultContent = {
+      msgtype: APP_BOXEL_COMMAND_RESULT_MSGTYPE,
       'm.relates_to': {
         event_id: invokedToolFromEventId,
         key: 'applied',
         rel_type: 'm.annotation',
       },
       data: {
-        card_event_id: resultCardEventId ?? null,
+        cardEventId: resultCardEventId ?? undefined,
       },
     };
     try {
-      return await this.sendEvent(roomId, 'm.reaction', content);
+      return await this.sendEvent(
+        roomId,
+        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        content,
+      );
     } catch (e) {
       throw new Error(
-        `Error sending command result reaction event: ${
+        `Error sending command result event: ${
           'message' in (e as Error) ? (e as Error).message : e
         }`,
       );
@@ -1177,10 +1179,10 @@ export default class MatrixService extends Service {
         )) as DiscreteMatrixEvent;
         if (
           fragmentEvent.type !== 'm.room.message' ||
-          fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+          fragmentEvent.content.msgtype !== APP_BOXEL_CARDFRAGMENT_MSGTYPE
         ) {
           throw new Error(
-            `Expected event ${currentFragmentId} to be 'org.boxel.card' but was ${JSON.stringify(
+            `Expected event ${currentFragmentId} to be ${APP_BOXEL_CARDFRAGMENT_MSGTYPE} but was ${JSON.stringify(
               fragmentEvent,
             )}`,
           );
@@ -1196,10 +1198,10 @@ export default class MatrixService extends Service {
       } else {
         if (
           fragmentEvent.type !== 'm.room.message' ||
-          fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+          fragmentEvent.content.msgtype !== APP_BOXEL_CARDFRAGMENT_MSGTYPE
         ) {
           throw new Error(
-            `Expected event to be 'org.boxel.cardFragment' but was ${JSON.stringify(
+            `Expected event to be '${APP_BOXEL_CARDFRAGMENT_MSGTYPE}' but was ${JSON.stringify(
               fragmentEvent,
             )}`,
           );
@@ -1262,16 +1264,16 @@ export default class MatrixService extends Service {
       }
     } else if (
       roomData &&
-      event.type === 'm.reaction' &&
-      event.content?.msgtype === 'org.boxel.command_result'
+      event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+      event.content?.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE
     ) {
       let data = (
         typeof event.content.data === 'string'
           ? JSON.parse(event.content.data)
           : event.content.data
-      ) as CommandReactionEventContent['data'];
-      if (data.card_event_id) {
-        this.ensureCardFragmentsLoaded(data.card_event_id, roomData);
+      ) as CommandResultContent['data'];
+      if (data.cardEventId) {
+        this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
       }
     } else if (
       event.type === 'm.room.message' &&

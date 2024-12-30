@@ -8,6 +8,7 @@ import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -20,10 +21,10 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CommandEvent,
-  CommandReactionEventContent,
+  CommandResultEvent,
+  CommandResultContent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
-  ReactionEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { RoomMember } from './member';
@@ -138,30 +139,30 @@ export default class MessageBuilder {
     let annotation = this.builderContext.events.find((e: any) => {
       let r = e.content['m.relates_to'];
       return (
-        e.type === 'm.reaction' &&
-        e.content.msgtype === 'org.boxel.command_result' &&
+        e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
         r?.rel_type === 'm.annotation' &&
         (r?.event_id === event.content.data.eventId ||
           r?.event_id === event.event_id ||
           r?.event_id === this.builderContext.effectiveEventId)
       );
-    }) as ReactionEvent | undefined;
+    }) as CommandResultEvent | undefined;
     let status: CommandStatus = 'ready';
-    let reactionContent = annotation?.content as
-      | CommandReactionEventContent
+    let commandResultContent = annotation?.content as
+      | CommandResultContent
       | undefined;
-    if (reactionContent && reactionContent['m.relates_to'].key === 'applied') {
+    if (commandResultContent?.['m.relates_to']?.key === 'applied') {
       status = 'applied';
     }
-    let commandResultCardId: string | undefined =
-      reactionContent?.data.card_event_id ?? undefined;
+    let commandResultCardEventId: string | undefined =
+      commandResultContent?.data.cardEventId ?? undefined;
     let messageCommand = new MessageCommand(
       command.id,
       command.name,
       command.arguments,
       this.builderContext.effectiveEventId,
       status,
-      commandResultCardId,
+      commandResultCardEventId,
       getOwner(this)!,
     );
     return messageCommand;

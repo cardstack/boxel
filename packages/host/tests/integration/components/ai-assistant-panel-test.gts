@@ -19,6 +19,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -1907,16 +1908,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    let commandReactionEvents = getRoomEvents(roomId).filter(
+    let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === 'm.reaction' &&
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type === 'm.annotation' &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
-      commandReactionEvents.length,
+      commandResultEvents.length,
       0,
-      'reaction event is not dispatched',
+      'command result event is not dispatched',
     );
 
     await settled();
@@ -1931,16 +1932,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandReactionEvents = await getRoomEvents(roomId).filter(
+    commandResultEvents = await getRoomEvents(roomId).filter(
       (event) =>
-        event.type === 'm.reaction' &&
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type === 'm.annotation' &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
-      commandReactionEvents.length,
+      commandResultEvents.length,
       1,
-      'reaction event is dispatched',
+      'command result event is dispatched',
     );
   });
 
@@ -2060,9 +2061,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         e.content['m.relates_to']?.rel_type === 'm.annotation',
     ) as CommandResultEvent;
     let serializedResults =
-      typeof commandResultEvent?.content?.result === 'string'
-        ? JSON.parse(commandResultEvent.content.result)
-        : commandResultEvent.content.result;
+      typeof commandResultEvent?.content?.data.card === 'string'
+        ? JSON.parse(commandResultEvent.content.data.card)
+        : commandResultEvent.content.data.card;
     serializedResults = Array.isArray(serializedResults)
       ? serializedResults
       : [];
@@ -2120,9 +2121,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         e.content['m.relates_to']?.rel_type === 'm.annotation',
     ) as CommandResultEvent;
     let serializedResults =
-      typeof commandResultEvent?.content?.result === 'string'
-        ? JSON.parse(commandResultEvent.content.result)
-        : commandResultEvent.content.result;
+      typeof commandResultEvent?.content?.data.card === 'string'
+        ? JSON.parse(commandResultEvent.content.data.card)
+        : commandResultEvent.content.data.card;
     serializedResults = Array.isArray(serializedResults)
       ? serializedResults
       : [];

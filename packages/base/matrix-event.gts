@@ -9,6 +9,7 @@ import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -146,26 +147,6 @@ export interface CommandMessageContent {
   };
 }
 
-export interface ReactionEvent extends BaseMatrixEvent {
-  type: 'm.reaction';
-  content: ReactionEventContent;
-}
-
-export interface ReactionEventContent {
-  'm.relates_to': {
-    event_id: string;
-    key: string;
-    rel_type: 'm.annotation';
-  };
-}
-
-export type CommandReactionEventContent = ReactionEventContent & {
-  msgtype: 'org.boxel.command_result';
-  data: {
-    card_event_id: string | null;
-  };
-};
-
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
@@ -246,7 +227,7 @@ export interface SkillsConfigEvent extends RoomStateEvent {
 }
 
 export interface CommandResultEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
+  type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
   content: CommandResultContent;
   unsigned: {
     age: number;
@@ -265,10 +246,14 @@ export interface CommandResultContent {
       event_id: string;
     };
   };
-  formatted_body: string;
-  body: string;
+  data: {
+    // we use this field over the wire since the matrix message protocol
+    // limits us to 65KB per message
+    cardEventId?: string;
+    // we materialize this field on the server
+    card?: LooseSingleCardDocument;
+  };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_MSGTYPE;
-  result: any;
 }
 
 export type MatrixEvent =
@@ -277,7 +262,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
-  | ReactionEvent
+  | CommandResultEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

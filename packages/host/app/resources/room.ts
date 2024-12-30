@@ -9,15 +9,11 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import {
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   CardFragmentContent,
   CommandEvent,
-  CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
@@ -251,7 +247,7 @@ export class RoomResource extends Resource<Args> {
 
   private async loadRoomMessage(
     roomId: string,
-    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
+    event: MessageEvent | CommandEvent | CardMessageEvent,
     index: number,
   ) {
     let effectiveEventId = event.event_id;
@@ -297,11 +293,6 @@ export class RoomResource extends Resource<Args> {
       }
       return;
     }
-    if (event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE) {
-      //don't display command result in the room as a message
-      return;
-    }
-
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
