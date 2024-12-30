@@ -79,10 +79,10 @@ export default class CreateProductRequirementsInstance extends Command<
       name: 'Product Requirements Doc Creation',
     });
 
-    let openAiPanelRoomCommand = new OpenAiAssistantRoomCommand(
+    let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
       this.commandContext,
     );
-    await openAiPanelRoomCommand.execute({
+    await openAiAssistantRoomCommand.execute({
       roomId,
     });
 
