@@ -468,6 +468,7 @@ export function getCard(
     named: {
       urlOrDoc: urlOrDoc(),
       isLive: opts?.isLive ? opts.isLive() : true,
+      relativeTo: opts?.relativeTo,
       onCardInstanceChange: opts?.onCardInstanceChange
         ? opts.onCardInstanceChange()
         : undefined,
@@ -511,11 +512,15 @@ function processCardError(url: URL | undefined, error: any): CardErrors {
           errors: [
             {
               id: url?.href,
-              status: error.status,
-              title: status.message[error.status] ?? `HTTP ${error.status}`,
-              message: `Received HTTP ${error.status} from server ${
-                error.responseText ?? ''
-              }`.trim(),
+              status: error.status ?? 500,
+              title: error.status
+                ? status.message[error.status]
+                : error.message,
+              message: error.status
+                ? `Received HTTP ${error.status} from server ${
+                    error.responseText ?? ''
+                  }`.trim()
+                : `${error.message}: ${error.stack}`,
               realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
               meta: {
                 lastKnownGoodHtml: null,

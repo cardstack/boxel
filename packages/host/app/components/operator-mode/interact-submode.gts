@@ -208,6 +208,16 @@ export default class InteractSubmode extends Component<Signature> {
         });
 
         await newItem.ready();
+        if (newItem.cardError) {
+          console.error(
+            `Encountered error creating card:\n${JSON.stringify(
+              doc,
+              null,
+              2,
+            )}\nError: ${JSON.stringify(newItem.cardError, null, 2)}`,
+          );
+          return undefined;
+        }
         here.addToStack(newItem);
         return newItem.card;
       },
