@@ -570,7 +570,7 @@ export default class InteractSubmode extends Component<Signature> {
               stackIndex + 1,
             );
           }
-          await this.publicAPI(this, 0).viewCard(new URL(card.id), 'isolated');
+          await this.publicAPI(this, 0).viewCard(card, 'isolated');
 
           // In case the right button was clicked, the card will be added to stack with index 1.
         } else if (
@@ -578,7 +578,7 @@ export default class InteractSubmode extends Component<Signature> {
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
           await this.publicAPI(this, this.stacks.length).viewCard(
-            new URL(card.id),
+            card,
             'isolated',
           );
         } else {
@@ -592,10 +592,7 @@ export default class InteractSubmode extends Component<Signature> {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(
-              new URL(card.id),
-              'isolated',
-            );
+            await this.publicAPI(this, 0).viewCard(card, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {

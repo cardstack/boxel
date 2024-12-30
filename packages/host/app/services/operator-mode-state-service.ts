@@ -623,9 +623,10 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = restartableTask(async (realmUrl: string) => {
+    let url = new URL(`${realmUrl}index`);
     let stackItem = new StackItem({
       owner: this,
-      url: new URL(realmUrl),
+      url,
       format: 'isolated',
       stackIndex: 0,
     });
@@ -639,7 +640,7 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(realmUrl),
+        : url,
     );
 
     this.operatorModeController.workspaceChooserOpened = false;
