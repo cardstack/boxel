@@ -547,12 +547,9 @@ export default class InteractSubmode extends Component<Signature> {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
+      let url = new URL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
-        let card = await this.cardService.getCard(cardId);
-        if (!card) {
-          return;
-        }
 
         // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
         // and the card will be added to stack with index 0. shiftStack executes this logic.
@@ -560,6 +557,15 @@ export default class InteractSubmode extends Component<Signature> {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
+          let newItem = new StackItem({
+            owner: this,
+            url,
+            format: 'isolated',
+            stackIndex: 0,
+          });
+          // it's important that we await the stack item readiness _before_
+          // we mutate the stack, otherwise there are very odd visual artifacts
+          await newItem.ready();
           for (
             let stackIndex = this.stacks.length - 1;
             stackIndex >= 0;
@@ -570,15 +576,14 @@ export default class InteractSubmode extends Component<Signature> {
               stackIndex + 1,
             );
           }
-          await this.publicAPI(this, 0).viewCard(card, 'isolated');
-
+          this.addToStack(newItem);
           // In case the right button was clicked, the card will be added to stack with index 1.
         } else if (
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
           await this.publicAPI(this, this.stacks.length).viewCard(
-            card,
+            url,
             'isolated',
           );
         } else {
@@ -592,7 +597,7 @@ export default class InteractSubmode extends Component<Signature> {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(card, 'isolated');
+            await this.publicAPI(this, 0).viewCard(url, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -600,7 +605,7 @@ export default class InteractSubmode extends Component<Signature> {
               if (bottomMostItem) {
                 let stackItem = new StackItem({
                   owner: this,
-                  url: new URL(card.id),
+                  url,
                   format: 'isolated',
                   stackIndex,
                 });

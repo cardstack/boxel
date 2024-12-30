@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -10,8 +9,6 @@ import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import { ArrowLeft, ArrowRight } from '@cardstack/boxel-ui/icons';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
-
-import { task } from 'ember-concurrency';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -36,54 +33,52 @@ const RIGHT = 1;
 
 export default class CopyButton extends Component<Signature> {
   <template>
-    {{#if this.loadStackItems.isIdle}}
-      {{#if (gt this.stacks.length 1)}}
-        {{#if this.state}}
-          <BoxelButton
-            class='copy-button'
-            @kind={{this.buttonKind}}
-            @loading={{@isCopying}}
-            @size='tall'
-            {{on
-              'click'
-              (fn
-                @copy
-                this.state.sources
-                this.state.sourceItem
-                this.state.destinationItem
-              )
-            }}
-            data-test-copy-button={{this.state.direction}}
-          >
-            {{#if @isCopying}}
-              <span class='copy-text'>
-                Copying
-                {{this.state.sources.length}}
-                {{#if (gt this.state.sources.length 1)}}
-                  Cards
-                {{else}}
-                  Card
-                {{/if}}
-              </span>
-            {{else}}
-              {{#if (eq this.state.direction 'left')}}
-                <ArrowLeft class='arrow-icon' width='18px' height='18px' />
+    {{#if (gt this.stacks.length 1)}}
+      {{#if this.state}}
+        <BoxelButton
+          class='copy-button'
+          @kind={{this.buttonKind}}
+          @loading={{@isCopying}}
+          @size='tall'
+          {{on
+            'click'
+            (fn
+              @copy
+              this.state.sources
+              this.state.sourceItem
+              this.state.destinationItem
+            )
+          }}
+          data-test-copy-button={{this.state.direction}}
+        >
+          {{#if @isCopying}}
+            <span class='copy-text'>
+              Copying
+              {{this.state.sources.length}}
+              {{#if (gt this.state.sources.length 1)}}
+                Cards
+              {{else}}
+                Card
               {{/if}}
-              <span class='copy-text'>
-                Copy
-                {{this.state.sources.length}}
-                {{#if (gt this.state.sources.length 1)}}
-                  Cards
-                {{else}}
-                  Card
-                {{/if}}
-              </span>
-              {{#if (eq this.state.direction 'right')}}
-                <ArrowRight class='arrow-icon' width='18px' height='18px' />
-              {{/if}}
+            </span>
+          {{else}}
+            {{#if (eq this.state.direction 'left')}}
+              <ArrowLeft class='arrow-icon' width='18px' height='18px' />
             {{/if}}
-          </BoxelButton>
-        {{/if}}
+            <span class='copy-text'>
+              Copy
+              {{this.state.sources.length}}
+              {{#if (gt this.state.sources.length 1)}}
+                Cards
+              {{else}}
+                Card
+              {{/if}}
+            </span>
+            {{#if (eq this.state.direction 'right')}}
+              <ArrowRight class='arrow-icon' width='18px' height='18px' />
+            {{/if}}
+          {{/if}}
+        </BoxelButton>
       {{/if}}
     {{/if}}
     <style scoped>
@@ -106,16 +101,6 @@ export default class CopyButton extends Component<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.loadStackItems.perform();
-  }
-
-  private loadStackItems = task(async () => {
-    let stackItems = this.operatorModeStateService.topMostStackItems();
-    await Promise.all(stackItems.map((i) => i.ready()));
-  });
 
   private get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -168,9 +153,6 @@ export default class CopyButton extends Component<Signature> {
         // eslint-disable-next-line no-case-declarations
         let sourceItem =
           topMostStackItems[indexCardIndicies[0] === LEFT ? RIGHT : LEFT];
-        if (sourceItem == null) {
-          return undefined;
-        }
         return {
           direction: indexCardIndicies[0] === LEFT ? 'left' : 'right',
           sources: [sourceItem.card],
