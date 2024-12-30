@@ -972,6 +972,7 @@ module('Integration | operator-mode', function (hooks) {
       .includesText('Person');
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
@@ -1586,6 +1587,10 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-stack-card-index="1"]'),
+    );
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
