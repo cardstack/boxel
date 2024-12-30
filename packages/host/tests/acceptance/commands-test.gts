@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
-import OpenAAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -275,7 +275,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let openAiAssistantRoomCommand = new OpenAAssistantRoomCommand(
+          let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
             commandContext,
           );
           await openAiAssistantRoomCommand.execute({
@@ -353,7 +353,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('OpenAAssistantRoomCommand opens the AI assistant room', async function (assert) {
+  test('OpenAiAssistantRoomCommand opens the AI assistant room', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}Person/hassan`, format: 'isolated' }]],
     });
