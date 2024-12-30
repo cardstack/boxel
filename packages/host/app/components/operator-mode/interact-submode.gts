@@ -329,10 +329,6 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      openRoom: async (roomId: string): Promise<void> => {
-        here.operatorModeStateService.aiAssistantOpen = true;
-        here.matrixService.currentRoomId = roomId;
-      },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);

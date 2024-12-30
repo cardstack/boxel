@@ -362,9 +362,7 @@ class DashboardTab extends GlimmerComponent<{
       throw new Error('Missing commandContext');
     }
     let command = new CreateBoxelApp(commandContext, undefined);
-    command.onRoomCreation = (roomId) => {
-      this.args.context?.actions?.openRoom(roomId);
-    };
+
     this.isGenerating = true;
     try {
       await command.execute(

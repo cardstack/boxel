@@ -14,6 +14,7 @@ import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
 import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
@@ -32,8 +33,6 @@ export default class CreateProductRequirementsInstance extends Command<
   CreateProductRequirementsResult
 > {
   inputType = CreateProductRequirementsInput;
-
-  onRoomCreation: ((roomId: string) => void) | null = null;
 
   get skillCard() {
     return new SkillCard({
@@ -80,9 +79,12 @@ export default class CreateProductRequirementsInstance extends Command<
       name: 'Product Requirements Doc Creation',
     });
 
-    if (this.onRoomCreation) {
-      this.onRoomCreation(roomId);
-    }
+    let openAiPanelRoomCommand = new OpenAiAssistantRoomCommand(
+      this.commandContext,
+    );
+    await openAiPanelRoomCommand.execute({
+      roomId,
+    });
 
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandContext,

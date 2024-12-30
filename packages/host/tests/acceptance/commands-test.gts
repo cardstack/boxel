@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import OpenAAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -268,6 +269,19 @@ module('Acceptance | Commands tests', function (hooks) {
           });
           await sleepCommand.execute(new ScheduleMeetingInput());
         };
+        runOpenAiAssistantRoomCommand = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+          let openAiAssistantRoomCommand = new OpenAAssistantRoomCommand(
+            commandContext,
+          );
+          await openAiAssistantRoomCommand.execute({
+            roomId: 'mock_room_1',
+          });
+        };
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -301,6 +315,10 @@ module('Acceptance | Commands tests', function (hooks) {
             {{on 'click' this.runDelayCommandViaAiAssistant}}
             data-test-delay-button
           >Delay with autoExecute</button>
+          <button
+            {{on 'click' this.runOpenAiAssistantRoomCommand}}
+            data-test-open-ai-assistant-room-button
+          >Open AI Assistant Room</button>
         </template>
       };
     }
@@ -333,6 +351,22 @@ module('Acceptance | Commands tests', function (hooks) {
         },
       },
     });
+  });
+
+  test('OpenAAssistantRoomCommand opens the AI assistant room', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}Person/hassan`, format: 'isolated' }]],
+    });
+
+    await click('[data-test-schedule-meeting-button]');
+    await click('[data-test-open-ai-assistant-room-button]');
+
+    await waitFor('[data-room-settled]');
+    await waitFor('[data-test-room-name="AI Assistant Room"]');
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .includesText('Change the topic of the meeting to "Meeting with Hassan"');
   });
 
   test('a command sent via SendAiAssistantMessageCommand with autoExecute flag is automatically executed by the bot, panel closed', async function (assert) {
