@@ -208,30 +208,33 @@ export function getContainsManyComponent({
                 {{unless arrayField.children.length "empty"}}'
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}
+              ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <div
-                  class='boxel-contents-only'
+                <span
+                  class='containsMany-item'
                   data-test-plural-view-item={{i}}
                 >
                   <Item
                     @format={{getPluralChildFormat effectiveFormat model}}
                   />
-                </div>
+                </span>
               {{/each}}
             </div>
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>
       <style scoped>
-        .containsMany-field.edit-format {
-          padding: var(--boxel-sp-sm);
-          background-color: var(--boxel-100);
-          border: none !important;
-          border-radius: var(--boxel-border-radius);
-        }
-        .containsMany-field.atom-format {
-          display: contents;
+        @layer {
+          .containsMany-field.edit-format {
+            padding: var(--boxel-sp-sm);
+            background-color: var(--boxel-100);
+            border: none !important;
+            border-radius: var(--boxel-border-radius);
+          }
+          .containsMany-field.atom-format {
+            display: contents;
+          }
         }
       </style>
     </template>;

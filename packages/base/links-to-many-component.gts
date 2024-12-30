@@ -432,23 +432,25 @@ export function getLinksToManyComponent({
         {{/if}}
       </DefaultFormatsConsumer>
       <style scoped>
-        .linksToMany-field.fitted-effectiveFormat
-          > .linksToMany-item
-          + .linksToMany-item,
-        .linksToMany-field.embedded-effectiveFormat
-          > .linksToMany-item
-          + .linksToMany-item {
-          margin-top: var(--boxel-sp);
-        }
-        .linksToMany-field.atom-effectiveFormat.display-container-false {
-          display: contents;
-        }
-        .linksToMany-field.atom-effectiveFormat.display-container-true {
-          display: inline-flex;
-          gap: var(--boxel-sp-sm);
-          padding: var(--boxel-sp-sm);
-          border: var(--boxel-border);
-          border-radius: var(--boxel-border-radius);
+        @layer {
+          .linksToMany-field.fitted-effectiveFormat
+            > .linksToMany-item
+            + .linksToMany-item,
+          .linksToMany-field.embedded-effectiveFormat
+            > .linksToMany-item
+            + .linksToMany-item {
+            margin-top: var(--boxel-sp);
+          }
+          .linksToMany-field.atom-effectiveFormat.display-container-false {
+            display: contents;
+          }
+          .linksToMany-field.atom-effectiveFormat.display-container-true {
+            display: inline-flex;
+            gap: var(--boxel-sp-sm);
+            padding: var(--boxel-sp-sm);
+            border: var(--boxel-border);
+            border-radius: var(--boxel-border-radius);
+          }
         }
       </style>
     </template>
