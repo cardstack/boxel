@@ -36,7 +36,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
-import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { removeFileExtension } from '../search-sheet/utils';
 
@@ -548,23 +547,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
     ) => {
       let cardId =
         typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-
       let canWrite = this.realm.canWrite(cardId);
-
       format = canWrite ? format : 'isolated';
-
-      let card: CardDef | undefined;
-      try {
-        if (typeof cardDefOrId === 'string') {
-          card = await this.cardService.getCard(cardId);
-        } else {
-          card = cardDefOrId;
-        }
-      } catch (e) {
-        console.error(`can't load card: ${cardId}`);
-      }
-
-      await this.args.publicAPI.viewCard(card ?? new URL(cardId), format, {
+      await this.args.publicAPI.viewCard(new URL(cardId), format, {
         fieldType,
         fieldName,
       });
