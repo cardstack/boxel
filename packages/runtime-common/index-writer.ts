@@ -454,6 +454,7 @@ export class Batch {
   ): Promise<
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
   > {
+    let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
       type: 'instance' | 'module' | 'error';
@@ -488,6 +489,11 @@ export class Batch {
       results = [...results, ...rows];
       pageNumber++;
     } while (rows.length === pageSize);
+    console.log(
+      `time to determine items that reference ${resolvedPath} ${
+        Date.now() - start
+      } ms`,
+    );
     return results.map(({ url, file_alias, type }) => ({
       url,
       alias: file_alias,
