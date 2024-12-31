@@ -171,10 +171,6 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   }
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
-    console.log(
-      'getSelectedDeclarationAsCodeRef',
-      this.args.selectedDeclaration,
-    );
     if (!this.args.selectedDeclaration?.exportName) {
       return {
         name: '',
@@ -191,7 +187,6 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   }
 
   private get boxelSpecQuery(): Query {
-    console.log('boxelSpecQuery', this.getSelectedDeclarationAsCodeRef);
     return {
       filter: {
         on: catalogEntryRef,
@@ -213,7 +208,6 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   });
 
   get boxelSpecInstances() {
-    console.log('boxelSpecInstances', this.boxelSpecSearch.instances);
     return this.boxelSpecSearch.instances as CatalogEntry[];
   }
 
