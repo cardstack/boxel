@@ -458,11 +458,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get selectedDeclaration() {
-    if (
-      !this.isModule ||
-      this.moduleContentsResource.moduleError ||
-      this.moduleContentsResource.isLoading //Ensures the returned declaration is after the module has loaded
-    ) {
+    if (!this.isModule || this.moduleContentsResource.moduleError) {
       return undefined;
     }
     if (this._selectedDeclaration) {
@@ -471,6 +467,13 @@ export default class CodeSubmode extends Component<Signature> {
       // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
+  }
+
+  get showBoxelSpecPreview() {
+    return (
+      !this.moduleContentsResource.isLoading &&
+      this.selectedDeclaration?.exportName
+    );
   }
 
   private get selectedCardOrField() {
@@ -944,7 +947,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.selectedDeclaration.exportName}}
+                      {{#if this.showBoxelSpecPreview}}
                         <BoxelSpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @createFile={{perform this.createFile}}
