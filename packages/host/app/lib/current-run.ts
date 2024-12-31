@@ -118,21 +118,43 @@ export class CurrentRun {
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from scratch indexing`);
+    console.log(
+      `starting from scratch indexing for realm ${current.realmURL.href}`,
+    );
 
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
+    console.log(
+      `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+    );
+    let invalidateStart = Date.now();
     await current.discoverInvalidations(current.realmURL, mtimes);
+    console.log(
+      `completed invalidations in ${Date.now() - invalidateStart} ms`,
+    );
     let invalidations = current.batch.invalidations.map(
       (href) => new URL(href),
     );
 
     await current.whileIndexing(async () => {
+      let visitStart = Date.now();
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
+      console.log(`completed index visit in ${Date.now() - visitStart} ms`);
+      let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
+      console.log(
+        `completed index finalization in ${Date.now() - finalizeStart} ms`,
+      );
       current.stats.totalIndexEntries = totalIndexEntries;
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
+      console.log(
+        `completed from scratch indexing for realm ${
+          current.realmURL.href
+        } in ${Date.now() - start} ms`,
+      );
     });
     return {
       invalidations: [...(invalidations ?? [])].map((url) => url.href),
@@ -231,15 +253,22 @@ export class CurrentRun {
     indexMtimes: LastModifiedTimes,
   ): Promise<void> {
     log.debug(`discovering invalidations in dir ${url.href}`);
+    console.log(`discovering invalidations in dir ${url.href}`);
+    let ignoreStart = Date.now();
     let ignorePatterns = await this.#reader.readFile(
       new URL('.gitignore', url),
     );
+    console.log(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
+    let mtimesStart = Date.now();
     let filesystemMtimes = await this.#reader.mtimes();
+    console.log(
+      `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
+    );
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
       if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
         // Only allow json and executable files to be invalidated so that we
@@ -255,7 +284,11 @@ export class CurrentRun {
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {
+        let invalidationStart = Date.now();
         await this.batch.invalidate(new URL(url));
+        console.log(
+          `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
+        );
       }
     }
   }
