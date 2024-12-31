@@ -125,6 +125,12 @@ export class CatalogEntry extends CardDef {
                 {{@model.ref.name}}
               </div>
             </div>
+            <div class='row-code-ref'>
+              <div class='row-code-ref-label'>Realm Name</div>
+              <div class='row-code-ref-value box'>
+                {{@model.realmName}}
+              </div>
+            </div>
           </div>
         </div>
       </div>
