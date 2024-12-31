@@ -12,6 +12,7 @@ import BooleanField from './boolean';
 import CodeRef from './code-ref';
 import MarkdownField from './markdown';
 
+import GlimmerComponent from '@glimmer/component';
 import BoxModel from '@cardstack/boxel-icons/box-model';
 import BookOpenText from '@cardstack/boxel-icons/book-open-text';
 import LayersSubtract from '@cardstack/boxel-icons/layers-subtract';
@@ -41,12 +42,14 @@ export class CatalogEntry extends CardDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <header class='title'>
-        <@fields.title />
-      </header>
-      <p class='description' data-test-description>
-        <@fields.description />
-      </p>
+      <CatalogEntryContainer class='fitted'>
+        <header class='title'>
+          <@fields.title />
+        </header>
+        <p class='description' data-test-description>
+          <@fields.description />
+        </p>
+      </CatalogEntryContainer>
       <style scoped>
         .fitted > * {
           white-space: nowrap;
@@ -182,4 +185,29 @@ export class CatalogEntry extends CardDef {
       </style>
     </template>
   };
+}
+
+interface Signature {
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
+}
+
+class CatalogEntryContainer extends GlimmerComponent<Signature> {
+  <template>
+    <div class='entry' ...attributes>
+      {{yield}}
+    </div>
+    <style scoped>
+      .entry {
+        display: grid;
+        gap: 3px;
+        font: var(--boxel-font-sm);
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
 }
