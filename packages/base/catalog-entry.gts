@@ -3,7 +3,6 @@ import {
   field,
   Component,
   CardDef,
-  FieldDef,
   relativeTo,
   realmInfo,
   linksToMany,
@@ -33,17 +32,12 @@ export class CatalogEntry extends CardDef {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
-  @field demo = contains(FieldDef);
   @field realmName = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return this[realmInfo]?.name;
     },
   });
   @field examples = linksToMany(CardDef);
-
-  get showDemo() {
-    return !this.isField;
-  }
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>

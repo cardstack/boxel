@@ -10,13 +10,6 @@
         "name": "Person"
       }
     },
-    "relationships": {
-      "demo.pet": {
-        "links": {
-          "self": "../Pet/1"
-        }
-      }
-    },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
