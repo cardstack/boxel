@@ -81,7 +81,9 @@ export class Search extends Resource<Args> {
 
   @cached
   get instances() {
-    return [...this.currentResults.values()].map((r) => r.card) as CardDef[]; // empty results are filtered out already
+    return [...this.currentResults.values()]
+      .filter((r) => r.card)
+      .map((r) => r.card) as CardDef[];
   }
 
   @cached
