@@ -785,8 +785,6 @@ export class ${className} extends ${exportName} {
   });
 
   private createBoxelSpecInstance = restartableTask(async () => {
-    //this overwrites existing catalog entry
-    //is it ok if the ref is absolute??
     if (!this.currentRequest) {
       throw new Error(
         `Cannot createCardInstance when there is no this.currentRequest`,
