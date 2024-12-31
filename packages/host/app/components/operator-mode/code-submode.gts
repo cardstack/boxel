@@ -65,6 +65,7 @@ import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
+import BoxelSpecPreview from './code-submode/boxel-spec-preview';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
@@ -93,7 +94,7 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem = 'schema-editor' | null;
+type SelectedAccordionItem = 'schema-editor' | 'boxel-spec-preview' | null;
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -457,7 +458,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get selectedDeclaration() {
-    if (!this.isModule || this.moduleContentsResource.moduleError) {
+    if (
+      !this.isModule ||
+      this.moduleContentsResource.moduleError ||
+      this.moduleContentsResource.isLoading //Ensures the returned declaration is after the module has loaded
+    ) {
       return undefined;
     }
     if (this._selectedDeclaration) {
@@ -939,6 +944,35 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                      {{#if this.selectedDeclaration.exportName}}
+                        <BoxelSpecPreview
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @createFile={{perform this.createFile}}
+                          as |BoxelSpecPreviewTitle BoxelSpecPreviewContent|
+                        >
+                          <A.Item
+                            class='accordion-item'
+                            @contentClass='accordion-item-content'
+                            @onClick={{fn
+                              this.selectAccordionItem
+                              'boxel-spec-preview'
+                            }}
+                            @isOpen={{eq
+                              this.selectedAccordionItem
+                              'boxel-spec-preview'
+                            }}
+                          >
+                            <:title>
+                              <BoxelSpecPreviewTitle />
+                            </:title>
+                            <:content>
+                              <BoxelSpecPreviewContent
+                                class='accordion-content'
+                              />
+                            </:content>
+                          </A.Item>
+                        </BoxelSpecPreview>
+                      {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}
                     <Accordion as |A|>
