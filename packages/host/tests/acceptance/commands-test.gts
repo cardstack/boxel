@@ -23,6 +23,7 @@ import {
 
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -269,6 +270,7 @@ module('Acceptance | Commands tests', function (hooks) {
           });
           await sleepCommand.execute(new ScheduleMeetingInput());
         };
+
         runWhatSubmodeAmIIn = async () => {
           let commandContext = this.args.context?.commandContext;
           if (!commandContext) {
@@ -281,10 +283,10 @@ module('Acceptance | Commands tests', function (hooks) {
           let { roomId } = await createAIAssistantRoomCommand.execute({
             name: 'Submode Check',
           });
-          let getBoxelUIStateCommand = new GetBoxelUIStateCommand(
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
             commandContext,
           );
-          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+          let getBoxelUIStateCommand = new GetBoxelUIStateCommand(
             commandContext,
           );
           await sendAiAssistantMessageCommand.execute({
@@ -293,6 +295,22 @@ module('Acceptance | Commands tests', function (hooks) {
             commands: [{ command: getBoxelUIStateCommand, autoExecute: true }],
           });
         };
+
+        runOpenAiAssistantRoomCommand = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+
+          let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+            commandContext,
+          );
+          await openAiAssistantRoomCommand.execute({
+            roomId: 'mock_room_1',
+          });
+        };
+
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -330,6 +348,10 @@ module('Acceptance | Commands tests', function (hooks) {
             {{on 'click' this.runWhatSubmodeAmIIn}}
             data-test-what-submode-am-i-in
           >What submode and I in?</button>
+          <button
+            {{on 'click' this.runOpenAiAssistantRoomCommand}}
+            data-test-open-ai-assistant-room-button
+          >Open AI Assistant Room</button>
         </template>
       };
     }
@@ -362,6 +384,22 @@ module('Acceptance | Commands tests', function (hooks) {
         },
       },
     });
+  });
+
+  test('OpenAiAssistantRoomCommand opens the AI assistant room', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}Person/hassan`, format: 'isolated' }]],
+    });
+
+    await click('[data-test-schedule-meeting-button]');
+    await click('[data-test-open-ai-assistant-room-button]');
+
+    await waitFor('[data-room-settled]');
+    await waitFor('[data-test-room-name="AI Assistant Room"]');
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .includesText('Change the topic of the meeting to "Meeting with Hassan"');
   });
 
   test('a command sent via SendAiAssistantMessageCommand with autoExecute flag is automatically executed by the bot, panel closed', async function (assert) {
@@ -631,9 +669,10 @@ module('Acceptance | Commands tests', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    await delay(500);
+
     assert.dom('[data-test-submode-switcher=interact]').exists();
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert
       .dom(
         '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -651,7 +690,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${testCard}.json`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-open-ai-assistant]');
+
     assert
       .dom(
         '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -821,7 +860,6 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
       .containsText('Inspecting the current UI state');
-    await this.pauseTest();
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();

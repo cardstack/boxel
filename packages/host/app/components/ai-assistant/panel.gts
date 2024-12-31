@@ -179,9 +179,9 @@ export default class AiAssistantPanel extends Component<Signature> {
           </div>
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
-          {{#if this.currentRoomId}}
+          {{#if this.matrixService.currentRoomId}}
             <Room
-              @roomId={{this.currentRoomId}}
+              @roomId={{this.matrixService.currentRoomId}}
               @monacoSDK={{this.monacoSDK}}
             />
           {{/if}}
@@ -362,7 +362,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare router: RouterService;
   @service private declare commandService: CommandService;
 
-  @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: SessionRoomData | undefined = undefined;
   @tracked private roomToDelete: SessionRoomData | undefined = undefined;
@@ -403,14 +402,14 @@ export default class AiAssistantPanel extends Component<Signature> {
         ]);
       }
       if (roomToEnter) {
-        this.currentRoomId = roomToEnter.roomId;
+        this.matrixService.currentRoomId = roomToEnter.roomId;
         return;
       }
     }
 
     let latestRoom = this.latestRoom;
     if (latestRoom) {
-      this.currentRoomId = latestRoom.roomId;
+      this.matrixService.currentRoomId = latestRoom.roomId;
       return;
     }
 
@@ -423,8 +422,8 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private get roomResource() {
-    return this.currentRoomId
-      ? this.roomResources.get(this.currentRoomId)
+    return this.matrixService.currentRoomId
+      ? this.roomResources.get(this.matrixService.currentRoomId)
       : undefined;
   }
 
@@ -464,7 +463,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     } catch (e) {
       console.log(e);
       this.displayRoomError = true;
-      this.currentRoomId = undefined;
+      this.matrixService.currentRoomId = undefined;
     }
   });
 
@@ -538,11 +537,10 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action
   private enterRoom(roomId: string, hidePastSessionsList = true) {
-    this.currentRoomId = roomId;
+    this.matrixService.currentRoomId = roomId;
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
   }
 
   @action private setRoomToRename(room: SessionRoomData) {
@@ -591,7 +589,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
-      if (this.currentRoomId === roomId) {
+      if (this.matrixService.currentRoomId === roomId) {
         window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
@@ -624,7 +622,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private get isReady() {
     return Boolean(
-      this.currentRoomId && this.maybeMonacoSDK && this.doCreateRoom.isIdle,
+      this.matrixService.currentRoomId &&
+        this.maybeMonacoSDK &&
+        this.doCreateRoom.isIdle,
     );
   }
 }
