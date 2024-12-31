@@ -8,6 +8,7 @@ exports.up = (pgm) => {
   pgm.createIndex('boxel_index', 'types', { method: 'gin' });
   pgm.createIndex('boxel_index', 'fitted_html', { method: 'gin' });
   pgm.createIndex('boxel_index', 'embedded_html', { method: 'gin' });
+  pgm.createIndex('boxel_index', 'search_doc', { method: 'gin' });
 };
 
 exports.down = (pgm) => {
@@ -20,4 +21,5 @@ exports.down = (pgm) => {
   pgm.dropIndex('boxel_index', 'types');
   pgm.dropIndex('boxel_index', 'fitted_html');
   pgm.dropIndex('boxel_index', 'embedded_html');
+  pgm.dropIndex('boxel_index', 'search_doc');
 };
