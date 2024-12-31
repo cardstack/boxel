@@ -447,9 +447,6 @@ export function getLinksToManyComponent({
           .linksToMany-field.atom-effectiveFormat.display-container-true {
             display: inline-flex;
             gap: var(--boxel-sp-sm);
-            padding: var(--boxel-sp-sm);
-            border: var(--boxel-border);
-            border-radius: var(--boxel-border-radius);
           }
         }
       </style>

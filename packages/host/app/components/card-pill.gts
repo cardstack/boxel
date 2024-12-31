@@ -54,7 +54,7 @@ export default class CardPill extends Component<CardPillSignature> {
       </:iconLeft>
       <:default>
         <div class='card-content' title={{@card.title}}>
-          <this.component @format='atom' @displayContainer={{false}} />
+          {{@card.title}}
         </div>
       </:default>
       <:iconRight>
@@ -89,6 +89,7 @@ export default class CardPill extends Component<CardPillSignature> {
         --boxel-realm-icon-size: var(--pill-icon-size);
         border: 1px solid var(--boxel-400);
         height: var(--pill-height, 1.875rem);
+        overflow: hidden;
       }
       .is-autoattached {
         border-style: dashed;
@@ -98,6 +99,7 @@ export default class CardPill extends Component<CardPillSignature> {
       }
       .card-content {
         max-width: 100px;
+        max-height: 100%;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
