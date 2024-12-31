@@ -114,6 +114,7 @@ export default class MatrixService extends Service {
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
+  @tracked private _currentRoomId: string | undefined;
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -146,6 +147,19 @@ export default class MatrixService extends Service {
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
     this.currentUserEventReadReceipts.set(eventId, receipt);
+  }
+
+  get currentRoomId(): string | undefined {
+    return this._currentRoomId;
+  }
+
+  set currentRoomId(value: string | undefined) {
+    this._currentRoomId = value;
+    if (value) {
+      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
+    } else {
+      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+    }
   }
 
   get ready() {

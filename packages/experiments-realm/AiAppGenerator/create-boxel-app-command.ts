@@ -22,6 +22,7 @@ export default class CreateBoxelApp extends Command<
       this.commandContext,
       undefined,
     );
+
     let { productRequirements: prdCard, roomId } =
       await createPRDCommand.execute(input);
 

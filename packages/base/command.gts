@@ -113,3 +113,7 @@ export class SendAiAssistantMessageInput extends CardDef {
 export class SendAiAssistantMessageResult extends CardDef {
   @field eventId = contains(StringField);
 }
+
+export class OpenAiAssistantRoomInput extends CardDef {
+  @field roomId = contains(StringField);
+}
