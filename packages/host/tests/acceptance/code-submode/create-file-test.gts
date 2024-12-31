@@ -249,7 +249,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
         )
-        .exists({ count: 3 });
+        .exists({ count: 4 });
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
