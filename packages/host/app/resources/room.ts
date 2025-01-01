@@ -298,6 +298,7 @@ export class RoomResource extends Resource<Args> {
       userId: event.sender,
     });
     let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+      roomId,
       effectiveEventId,
       author,
       index,
@@ -377,7 +378,7 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  private serializedCardFromFragments = (eventId: string) => {
+  public serializedCardFromFragments = (eventId: string) => {
     let fragments: CardFragmentContent[] = [];
     let currentFragment: string | undefined = eventId;
     do {

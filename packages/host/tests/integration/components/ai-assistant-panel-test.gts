@@ -32,8 +32,6 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
-import type { CommandResultEvent } from 'https://cardstack.com/base/matrix-event';
-
 import {
   percySnapshot,
   testRealmURL,
@@ -2008,7 +2006,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     commandResultEvents = await getRoomEvents(roomId).filter(
       (event) =>
-        event.type === 'm.room.message' &&
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
         typeof event.content === 'object' &&
         event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
     );
@@ -2052,25 +2050,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-boxel-command-result]');
     await waitFor('.result-list li:nth-child(2)');
-    let commandResultEvent = (await getRoomEvents(roomId)).find(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation',
-    ) as CommandResultEvent;
-    let serializedResults =
-      typeof commandResultEvent?.content?.data.card === 'string'
-        ? JSON.parse(commandResultEvent.content.data.card)
-        : commandResultEvent.content.data.card;
-    serializedResults = Array.isArray(serializedResults)
-      ? serializedResults
-      : [];
-    assert.equal(serializedResults.length, 2, 'number of search results');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
+    await this.pauseTest();
     assert
       .dom('[data-test-command-result-header]')
       .containsText('Search Results 2 Results');
@@ -2112,22 +2097,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-boxel-command-result]');
     await waitFor('.result-list li:nth-child(1)');
-    let commandResultEvent = (await getRoomEvents(roomId)).find(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation',
-    ) as CommandResultEvent;
-    let serializedResults =
-      typeof commandResultEvent?.content?.data.card === 'string'
-        ? JSON.parse(commandResultEvent.content.data.card)
-        : commandResultEvent.content.data.card;
-    serializedResults = Array.isArray(serializedResults)
-      ? serializedResults
-      : [];
-    assert.equal(serializedResults.length, 1, 'number of search results');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
@@ -2171,7 +2142,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-boxel-command-result]');
     await waitFor('.result-list li:nth-child(5)');
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
@@ -2247,7 +2218,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]';
     assert.dom(rightStackItem).doesNotExist();
 
-    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click(
+      '[data-test-boxel-command-result] [data-test-more-options-button]',
+    );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
@@ -2324,7 +2297,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
       '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]';
     assert.dom(stackItem).doesNotExist();
 
-    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click(
+      '[data-test-boxel-command-result] [data-test-more-options-button]',
+    );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${stackItem} [data-test-boxel-card-header-title]`)

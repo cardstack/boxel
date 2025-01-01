@@ -1,25 +1,15 @@
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
-import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import {
-  BoxelDropdown,
-  Button,
-  FieldContainer,
-  Header,
-  IconButton,
-  Menu,
-} from '@cardstack/boxel-ui/components';
-import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  ArrowLeft,
   IconMinusCircle,
   IconPlus,
   IconSearchThick,
-  ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
-import { getCard } from '@cardstack/runtime-common';
+import { getCard, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
@@ -30,8 +20,8 @@ import {
   field,
   type CardContext,
   type Format,
+  FieldDef,
 } from './card-api';
-import { CommandObjectField } from './command';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -46,6 +36,10 @@ interface ResourceListSignature {
   resources: AttachedCardResource[];
   format: Format;
   context?: CardContext;
+}
+
+export class JsonField extends FieldDef {
+  static [primitive]: Record<string, any>;
 }
 
 class ResourceList extends GlimmerComponent<ResourceListSignature> {
@@ -117,7 +111,9 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
   </template>
 }
 
-class CommandResultEmbeddedView extends Component<typeof CommandResult> {
+class SearchCardsResultEmbeddedView extends Component<
+  typeof SearchCardsResult
+> {
   @tracked showAllResults = false;
 
   @cached
@@ -181,74 +177,25 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
   }
 
   <template>
-    <div class='command-result' data-test-command-result>
-      <Header
-        @title='Search Results'
-        @subtitle='{{this.numberOfCards}} {{if
-          (eq this.numberOfCards 1)
-          "Result"
-          "Results"
-        }}'
-        @hasBottomBorder={{true}}
-        class='header'
-        data-test-command-result-header
-      >
-        <:icon>
-          <div class='search-icon-container'>
-            <IconSearchThick width='16' height='16' />
-          </div>
-        </:icon>
-        <:actions>
-          <BoxelDropdown>
-            <:trigger as |bindings|>
-              <IconButton
-                @icon={{ThreeDotsHorizontal}}
-                @width='20px'
-                @height='20px'
-                class='icon-button'
-                aria-label='Options'
-                data-test-more-options-button
-                {{bindings}}
-              />
-            </:trigger>
-            <:content as |dd|>
-              <Menu
-                class='options-menu'
-                @items={{array
-                  (menuItem
-                    'Copy to Workspace' this.copyToWorkspace icon=ArrowLeft
-                  )
-                }}
-                @closeMenu={{dd.close}}
-              />
-            </:content>
-          </BoxelDropdown>
-        </:actions>
-      </Header>
-      <div class='body'>
-        <ResourceList @resources={{this.attachedResources}} @format='atom' />
-        <div class='footer'>
-          {{#if this.numberOfCardsGreaterThanPaginateSize}}
-            <Button
-              @size='small'
-              class='toggle-show'
-              {{on 'click' this.toggleShow}}
-              data-test-toggle-show-button
-            >
-              {{#if this.showAllResults}}
-                <IconMinusCircle
-                  width='11px'
-                  height='11px'
-                  role='presentation'
-                />
-              {{else}}
-                <IconPlus width='11px' height='11px' role='presentation' />
-              {{/if}}
+    <div class='command-result'>
+      <ResourceList @resources={{this.attachedResources}} @format='atom' />
+      <div class='footer'>
+        {{#if this.numberOfCardsGreaterThanPaginateSize}}
+          <Button
+            @size='small'
+            class='toggle-show'
+            {{on 'click' this.toggleShow}}
+            data-test-toggle-show-button
+          >
+            {{#if this.showAllResults}}
+              <IconMinusCircle width='11px' height='11px' role='presentation' />
+            {{else}}
+              <IconPlus width='11px' height='11px' role='presentation' />
+            {{/if}}
 
-              {{this.toggleShowText}}
-            </Button>
-          {{/if}}
-        </div>
+            {{this.toggleShowText}}
+          </Button>
+        {{/if}}
       </div>
     </div>
     <style scoped>
@@ -257,36 +204,6 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
-      }
-      .search-icon-container {
-        background-color: var(--boxel-border-color);
-        display: flex;
-        padding: var(--boxel-sp-xxxs);
-        border-radius: var(--boxel-border-radius-sm);
-      }
-      .header {
-        --boxel-label-color: var(--boxel-450);
-        --boxel-label-font: 600 var(--boxel-font-xs);
-        --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
-          var(--left-padding);
-      }
-      .header :deep(.content) {
-        gap: 0;
-      }
-      .icon-button {
-        --icon-color: var(--boxel-dark);
-      }
-      .icon-button:hover {
-        --icon-color: var(--boxel-highlight);
-      }
-      .options-menu :deep(.boxel-menu__item__content) {
-        padding-right: var(--boxel-sp-xxs);
-        padding-left: var(--boxel-sp-xxs);
-      }
-      .options-menu :deep(.check-icon) {
-        display: none;
-      }
-      .body {
         display: flex;
         flex-direction: column;
         font-weight: 600;
@@ -322,22 +239,9 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       }
     </style>
   </template>
-
-  @action async copyToWorkspace() {
-    let newCard = await this.args.context?.actions?.copyCard?.(
-      this.args.model as CardDef,
-    );
-    if (!newCard) {
-      console.error('Could not copy card to workspace.');
-      return;
-    }
-    this.args.context?.actions?.viewCard(newCard, 'isolated', {
-      openCardInRightMostStack: true,
-    });
-  }
 }
 
-class CommandResultIsolated extends CommandResultEmbeddedView {
+class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
   <template>
     <section class='command-result' data-test-command-result-isolated>
       <header>
@@ -350,9 +254,6 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
       <div class='fields'>
         <FieldContainer @label='Description'>
           {{@model.description}}
-        </FieldContainer>
-        <FieldContainer @label='Filter'>
-          <pre>{{this.filterString}}</pre>
         </FieldContainer>
         <FieldContainer @label='Results' class='results'>
           <ResourceList
@@ -393,38 +294,17 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
   </template>
 
   @tracked showAllResults = true;
-
-  get filterString() {
-    if (!this.args.model.toolCallArgs?.attributes.filter) {
-      return;
-    }
-    return JSON.stringify(
-      this.args.model.toolCallArgs.attributes.filter,
-      null,
-      2,
-    );
-  }
 }
 
-export class CommandResult extends CardDef {
-  static displayName = 'Command Result';
-  @field toolCallName = contains(StringField);
-  @field toolCallId = contains(StringField);
-  @field toolCallArgs = contains(CommandObjectField);
+export class SearchCardsResult extends CardDef {
+  static displayName = 'Search Results';
+  static icon = IconSearchThick;
   @field cardIds = containsMany(StringField);
+  static embedded = SearchCardsResultEmbeddedView;
+  static isolated = SearchCardsResultIsolatedView;
   @field title = contains(StringField, {
-    computeVia: function (this: CommandResult) {
-      return this.toolCallName === 'searchCard'
-        ? 'Search Results'
-        : 'Command Result';
+    computeVia: function (this: SearchCardsResult) {
+      return 'Search Results';
     },
   });
-  @field description = contains(StringField, {
-    computeVia: function (this: CommandResult) {
-      return this.toolCallArgs?.description;
-    },
-  });
-
-  static embedded = CommandResultEmbeddedView;
-  static isolated = CommandResultIsolated;
 }

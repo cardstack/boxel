@@ -14,43 +14,14 @@ import {
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import { SkillCard } from './skill-card';
+import { JsonField } from './command-result';
+import { SearchCardsResult } from './command-result';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
-
-class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
-  <template>
-    <pre>{{this.stringValue}}</pre>
-    <style scoped>
-      pre {
-        margin: 0;
-        white-space: pre-wrap;
-      }
-    </style>
-  </template>
-
-  get stringValue() {
-    return JSON.stringify(this.args.model, null, 2);
-  }
-}
-
-export class CommandObjectField extends FieldDef {
-  static [primitive]: Record<string, any>;
-  static [queryableValue](value: Record<string, any> | undefined) {
-    return Boolean(value) && typeof value === 'object'
-      ? JSON.stringify(value)
-      : undefined;
-  }
-  static edit = CommandObjectFieldTemplate;
-  static embedded = CommandObjectFieldTemplate;
-}
 
 export class SaveCardInput extends CardDef {
   @field realm = contains(StringField);
   @field card = linksTo(CardDef);
-}
-
-class JsonField extends FieldDef {
-  static [primitive]: Record<string, any>;
 }
 
 export class PatchCardInput extends CardDef {
@@ -114,16 +85,21 @@ export class SendAiAssistantMessageResult extends CardDef {
   @field eventId = contains(StringField);
 }
 
-<<<<<<< HEAD
 export class GetBoxelUIStateResult extends CardDef {
   @field submode = contains(StringField);
   //TODO expand this to include more of the UI state:
   // - open cards
   // - current room ID
-}
-
-export class SearchCardsResult extends CardDef {
-  @field cardDocs = containsMany(JsonField);
+  static embedded = class Embedded extends Component<
+    typeof GetBoxelUIStateResult
+  > {
+    <template>
+      <div>
+        <h2>Boxel UI State</h2>
+        <div>Submode: {{@model.submode}}</div>
+      </div>
+    </template>
+  };
 }
 
 export class LegacyGenerateAppModuleResult extends CardDef {
@@ -134,3 +110,5 @@ export class LegacyGenerateAppModuleResult extends CardDef {
 export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
 }
+
+export { SearchCardsResult };

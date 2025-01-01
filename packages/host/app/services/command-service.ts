@@ -171,15 +171,13 @@ export default class CommandService extends Service {
             ),
           ),
         );
-        let resultCardDocs = await Promise.all(
-          instances.map((c) => this.cardService.serializeCard(c)),
-        );
         let commandModule = await this.loaderService.loader.import<
           typeof BaseCommandModule
         >(`${baseRealm.url}command`);
         let { SearchCardsResult } = commandModule;
         resultCard = new SearchCardsResult({
-          cardDocs: resultCardDocs,
+          cardIds: instances.map((c) => c.id),
+          description: `Query: ${JSON.stringify(query)}`,
         });
       } else if (command.name === 'generateAppModule') {
         let realmURL = this.operatorModeStateService.realmURL;

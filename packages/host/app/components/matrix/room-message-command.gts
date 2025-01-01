@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
@@ -11,10 +10,20 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { resource, use } from 'ember-resources';
 
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import { TrackedObject } from 'tracked-built-ins';
+
+import {
+  Button,
+  CardContainer,
+  CardHeader,
+} from '@cardstack/boxel-ui/components';
+
+import { MenuItem, cn } from '@cardstack/boxel-ui/helpers';
+import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+
+import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
@@ -25,8 +34,11 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
+import Preview from '../preview';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -84,16 +96,16 @@ export default class RoomMessageCommand extends Component<Signature> {
     }
   }
 
-  private get getCommandResultComponent() {
-    let commandResultCardEventId =
-      this.args.messageCommand?.commandResultCardEventId;
-    if (!commandResultCardEventId) {
-      return undefined;
+  @use private commandResultCard = resource(() => {
+    let initialState = { card: undefined } as { card: CardDef | undefined };
+    let state = new TrackedObject(initialState);
+    if (this.args.messageCommand.commandResultCardDoc !== undefined) {
+      this.args.messageCommand.getCommandResultCard().then((card) => {
+        state.card = card;
+      });
     }
-    // TODO: load the card from the the room (commandResultCardEventId)
-    return undefined;
-    // return commandResult.constructor.getComponent(commandResult);
-  }
+    return state;
+  });
 
   // TODO need to reevalutate this modifier--do we want to hijack the scroll
   // when the user views the code?
@@ -124,6 +136,38 @@ export default class RoomMessageCommand extends Component<Signature> {
     if (!isVerticallyInView) {
       element.scrollIntoView({ block: 'end' });
     }
+  }
+
+  private get headerTitle() {
+    if (this.commandResultCard.card) {
+      return cardTypeDisplayName(this.commandResultCard.card);
+    }
+    return '';
+  }
+
+  private get moreOptionsMenuItems() {
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy to Workspace', 'action', {
+        action: () => this.copyToWorkspace(),
+        icon: ArrowLeft,
+      }),
+    ];
+    return menuItems;
+  }
+
+  @action async copyToWorkspace() {
+    debugger;
+    //TODO: refactor to a command
+    // let newCard = await this.args.context?.actions?.copyCard?.(
+    //   this.commandResultCard.card as CardDef,
+    // );
+    // if (!newCard) {
+    //   console.error('Could not copy card to workspace.');
+    //   return;
+    // }
+    // this.args.context?.actions?.viewCard(newCard, 'isolated', {
+    //   openCardInRightMostStack: true,
+    // });
   }
 
   <template>
@@ -184,11 +228,25 @@ export default class RoomMessageCommand extends Component<Signature> {
           />
         </div>
       {{/if}}
-      {{#let this.getCommandResultComponent as |Component|}}
-        {{#if Component}}
-          <Component @format='embedded' />
-        {{/if}}
-      {{/let}}
+      {{#if this.commandResultCard.card}}
+        <CardContainer
+          @displayBoundaries={{false}}
+          class='command-result-card-preview'
+        >
+          <CardHeader
+            @cardTypeDisplayName={{this.headerTitle}}
+            @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+            @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+            class='header'
+            data-test-command-result-header
+          />
+          <Preview
+            @card={{this.commandResultCard.card}}
+            @format='embedded'
+            data-test-boxel-command-result
+          />
+        </CardContainer>
+      {{/if}}
     </div>
     <style scoped>
       .is-pending .view-code-button,
@@ -212,6 +270,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .view-code-button:hover:not(:disabled) {
         filter: brightness(1.1);
+      }
+      .command-result-card-preview {
+        margin-top: var(--boxel-sp);
       }
       .preview-code {
         --spacing: var(--boxel-sp-sm);
@@ -242,6 +303,28 @@ export default class RoomMessageCommand extends Component<Signature> {
         height: var(--monaco-container-height);
         min-height: 7rem;
         max-height: 30vh;
+      }
+      .header {
+        --boxel-label-color: var(--boxel-450);
+        --boxel-label-font: 600 var(--boxel-font-xs);
+        --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
+          var(--left-padding);
+      }
+      .header :deep(.content) {
+        gap: 0;
+      }
+      .icon-button {
+        --icon-color: var(--boxel-dark);
+      }
+      .icon-button:hover {
+        --icon-color: var(--boxel-highlight);
+      }
+      .options-menu :deep(.boxel-menu__item__content) {
+        padding-right: var(--boxel-sp-xxs);
+        padding-left: var(--boxel-sp-xxs);
+      }
+      .options-menu :deep(.check-icon) {
+        display: none;
       }
     </style>
   </template>

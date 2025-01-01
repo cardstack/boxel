@@ -865,6 +865,6 @@ module('Acceptance | Commands tests', function (hooks) {
       .exists();
     assert
       .dom('[data-test-message-idx="1"] [data-test-boxel-command-result]')
-      .containsText('Submode: Interact');
+      .containsText('Submode: interact');
   });
 });

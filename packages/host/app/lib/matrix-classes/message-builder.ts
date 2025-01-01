@@ -40,6 +40,7 @@ export default class MessageBuilder {
     private event: MessageEvent | CommandEvent | CardMessageEvent,
     owner: Owner,
     private builderContext: {
+      roomId: string;
       effectiveEventId: string;
       author: RoomMember;
       index: number;
@@ -54,6 +55,7 @@ export default class MessageBuilder {
 
   private get coreMessageArgs() {
     return new Message({
+      roomId: this.builderContext.roomId,
       author: this.builderContext.author,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
@@ -115,25 +117,25 @@ export default class MessageBuilder {
 
   async buildMessage(): Promise<Message> {
     let { event } = this;
-    let messageArgs = this.coreMessageArgs;
-    messageArgs.errorMessage = this.errorMessage;
+    let message = this.coreMessageArgs;
+    message.errorMessage = this.errorMessage;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      messageArgs.clientGeneratedId = this.clientGeneratedId;
-      messageArgs.attachedCardIds = this.attachedCardIds;
+      message.clientGeneratedId = this.clientGeneratedId;
+      message.attachedCardIds = this.attachedCardIds;
     } else if (event.content.msgtype === 'm.text') {
-      messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+      message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
     } else if (
       event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
       event.content.data.toolCall
     ) {
-      messageArgs.formattedMessage = this.formattedMessageForCommand;
-      messageArgs.command = await this.buildMessageCommand();
-      messageArgs.isStreamingFinished = true;
+      message.formattedMessage = this.formattedMessageForCommand;
+      message.command = await this.buildMessageCommand(message);
+      message.isStreamingFinished = true;
     }
-    return messageArgs;
+    return message;
   }
 
-  private async buildMessageCommand() {
+  private async buildMessageCommand(message: Message) {
     let event = this.event as CommandEvent;
     let command = event.content.data.toolCall;
     let annotation = this.builderContext.events.find((e: any) => {
@@ -157,6 +159,7 @@ export default class MessageBuilder {
     let commandResultCardEventId: string | undefined =
       commandResultContent?.data.cardEventId ?? undefined;
     let messageCommand = new MessageCommand(
+      message,
       command.id,
       command.name,
       command.arguments,

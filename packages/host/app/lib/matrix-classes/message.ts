@@ -20,6 +20,7 @@ type AttachedCardResource = {
 type RoomMessageInterface = RoomMessageRequired & RoomMessageOptional;
 
 interface RoomMessageRequired {
+  roomId: string;
   author: RoomMember;
   created: Date;
   updated: Date;
@@ -56,6 +57,7 @@ export class Message implements RoomMessageInterface {
   updated: Date;
   eventId: string;
   message: string;
+  roomId: string;
 
   constructor(init: RoomMessageInterface) {
     Object.assign(this, init);
@@ -66,6 +68,7 @@ export class Message implements RoomMessageInterface {
     this.created = init.created;
     this.updated = init.updated;
     this.status = init.status;
+    this.roomId = init.roomId;
   }
   get isRetryable() {
     return (
