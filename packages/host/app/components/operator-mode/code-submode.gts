@@ -951,6 +951,7 @@ export default class CodeSubmode extends Component<Signature> {
                         <BoxelSpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @createFile={{perform this.createFile}}
+                          @isCreateModalShown={{bool this.isCreateModalOpen}}
                           as |BoxelSpecPreviewTitle BoxelSpecPreviewContent|
                         >
                           <A.Item

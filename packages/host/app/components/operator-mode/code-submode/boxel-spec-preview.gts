@@ -31,6 +31,7 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { type FileType } from '../create-file-modal';
 
 import type { WithBoundArgs } from '@glint/template';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Element: HTMLElement;
@@ -44,6 +45,7 @@ interface Signature {
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
+    isCreateModalShown: boolean;
   };
   Blocks: {
     default: [
@@ -55,6 +57,7 @@ interface Signature {
         | 'selectedInstance'
         | 'createBoxelSpec'
         | 'selectBoxelSpec'
+        | 'isCreateModalShown'
       >,
     ];
   };
@@ -94,6 +97,7 @@ interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
     showCreateBoxelSpecIntent: boolean;
+    isCreateModalShown: boolean;
     boxelSpecInstances: CatalogEntry[];
     selectedInstance: CatalogEntry | null;
     createBoxelSpec: () => void;
@@ -108,7 +112,11 @@ const BoxelSpecPreviewContent: TemplateOnlyComponent<ContentSignature> =
         <div class='create-boxel-spec-intent-message'>
           Create a Boxel Specification to be able to create new instances
         </div>
-        <BoxelButton @kind='primary' {{on 'click' @createBoxelSpec}}>
+        <BoxelButton
+          @kind='primary'
+          disabled={{@isCreateModalShown}}
+          {{on 'click' @createBoxelSpec}}
+        >
           Create Boxel Spec
         </BoxelButton>
       {{else}}
@@ -157,17 +165,11 @@ const BoxelSpecPreviewContent: TemplateOnlyComponent<ContentSignature> =
 export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare realmServer: RealmServerService;
   @tracked selectedInstance: CatalogEntry | null = this.boxelSpecInstances[0];
 
-  get realmURL() {
-    return this.realm.realmOfURL(this.operatorModeStateService.state.codePath!);
-  }
-
   get realms() {
-    if (!this.realmURL) {
-      return [];
-    }
-    return [this.realmURL.href];
+    return this.realmServer.availableRealmURLs;
   }
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
@@ -256,6 +258,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
           selectedInstance=this.selectedInstance
           createBoxelSpec=this.createBoxelSpec
           selectBoxelSpec=this.selectBoxelSpec
+          isCreateModalShown=@isCreateModalShown
         )
       }}
     {{/if}}
