@@ -243,6 +243,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           <Preview
             @card={{this.commandResultCard.card}}
             @format='embedded'
+            @displayContainer={{false}}
             data-test-boxel-command-result
           />
         </CardContainer>
