@@ -60,11 +60,6 @@ class IsolatedTemplate extends Component<typeof Account> {
           <:content>
             <div class='description content-container'>
               {{#if @model.primaryContact}}
-                <@fields.primaryContact
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='primary-contact'
-                />
                 <div class='tag-container'>
                   <@fields.statusTag @format='atom' />
                   <@fields.urgencyTag @format='atom' />
@@ -351,6 +346,68 @@ class IsolatedTemplate extends Component<typeof Account> {
   </template>
 }
 
+class FittedTemplate extends Component<typeof Account> {
+  <template>
+    <AccountPageLayout class='account-page-layout-fitted'>
+      <:header>
+        <AccountHeader
+          class='account-header-fitted'
+          @logoURL={{@model.thumbnailURL}}
+          @name={{@model.name}}
+        >
+          <:name>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name default-value'>Missing Account Name</h1>
+            {{/if}}
+          </:name>
+        </AccountHeader>
+      </:header>
+      <:summary>
+        {{#if @model.primaryContact}}
+          <div class='tag-container'>
+            <@fields.statusTag @format='atom' />
+            <@fields.urgencyTag @format='atom' />
+          </div>
+        {{/if}}
+      </:summary>
+    </AccountPageLayout>
+
+    <style scoped>
+      .account-page-layout-fitted {
+        padding: var(--boxel-sp-sm) !important;
+        height: 100%;
+      }
+      .account-header-fitted {
+        gap: var(--boxel-sp-sm);
+        --account-header-logo-size: 40px;
+      }
+      .account-name {
+        font: 600 var(--boxel-font-sm);
+        margin: 0;
+      }
+      .description {
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content-container {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .tag-container {
+        margin-top: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+    </style>
+  </template>
+}
+
 class UrgencyTag extends LooseGooseyField {
   static icon = CalendarExclamation;
   static displayName = 'CRM Urgency Tag';
@@ -474,6 +531,7 @@ export class Account extends CardDef {
   });
 
   static isolated = IsolatedTemplate;
+  static fitted = FittedTemplate;
 }
 
 interface AccountPageLayoutArgs {

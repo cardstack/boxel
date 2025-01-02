@@ -42,8 +42,8 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
       }
       .account-header-logo {
         flex-shrink: 0;
-        width: 60px;
-        height: 60px;
+        width: var(--account-header-logo-size, 60px);
+        height: var(--account-header-logo-size, 60px);
         object-fit: cover;
         border-radius: var(--boxel-border-radius-xl);
       }
