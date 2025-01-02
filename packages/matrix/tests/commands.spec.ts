@@ -4,7 +4,6 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
 } from '../helpers/matrix-constants';
 
 import {
@@ -323,10 +322,12 @@ test.describe('Commands', () => {
     await expect(async () => {
       let events = await getRoomEvents('user1', 'pass', room1);
       let commandResultEvent = (events as any).find(
-        (e: any) => e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
       await expect(commandResultEvent).toBeDefined();
-      await expect(commandResultEvent.content.data.cardEventId).toBeDefined();
+      await expect(
+        JSON.parse(commandResultEvent.content.data).cardEventId,
+      ).toBeDefined();
     }).toPass();
   });
 

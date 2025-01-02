@@ -114,7 +114,7 @@ export default class CommandService extends Service {
   }
 
   //TODO: Convert to non-EC async method after fixing CS-6987
-  run = task(async (command: MessageCommand, roomId: string) => {
+  run = task(async (command: MessageCommand) => {
     let { payload, eventId } = command;
     let resultCard: CardDef | undefined;
     try {
@@ -177,7 +177,7 @@ export default class CommandService extends Service {
         let { SearchCardsResult } = commandModule;
         resultCard = new SearchCardsResult({
           cardIds: instances.map((c) => c.id),
-          description: `Query: ${JSON.stringify(query)}`,
+          description: `Query: ${JSON.stringify(query.filter, null, 2)}`,
         });
       } else if (command.name === 'generateAppModule') {
         let realmURL = this.operatorModeStateService.realmURL;
@@ -219,7 +219,7 @@ export default class CommandService extends Service {
         );
       }
       await this.matrixService.sendCommandResultEvent(
-        roomId,
+        command.message.roomId,
         eventId,
         resultCard,
       );

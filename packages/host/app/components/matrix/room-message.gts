@@ -80,9 +80,12 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   run = task(async () => {
+    if (!this.args.message.command) {
+      throw new Error('No command to run');
+    }
     return this.commandService.run
       .unlinked()
-      .perform(this.args.message.command, this.args.roomId);
+      .perform(this.args.message.command);
   });
 
   <template>

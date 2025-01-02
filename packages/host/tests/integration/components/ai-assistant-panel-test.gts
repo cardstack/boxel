@@ -2055,10 +2055,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
-    await this.pauseTest();
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 2 Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
+
+    assert.dom('.result-list li').exists({ count: 2 });
 
     assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
     assert.dom('.result-list li:nth-child(2)').containsText('Mango');
@@ -2097,14 +2098,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-boxel-command-result]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-boxel-card-header-title]',
+    );
     await waitFor('.result-list li:nth-child(1)');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 1 Result');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
 
     assert.dom('.result-list li:nth-child(1)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
@@ -2207,8 +2210,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 8 Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
 
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
@@ -2219,25 +2222,28 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(rightStackItem).doesNotExist();
 
     await click(
-      '[data-test-boxel-command-result] [data-test-more-options-button]',
+      '[data-test-command-result-container] [data-test-more-options-button]',
     );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Command Result');
+      .hasText('Search Results');
 
     const savedCardId = document
       .querySelector(rightStackItem)
       ?.getAttribute('data-stack-card');
     const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
     assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
-    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 3 });
+    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 2 });
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
-      .hasText(`Description ${toolArgs.description}`);
-    assert
-      .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
+      .hasText(
+        `Description Query: ${JSON.stringify(
+          toolArgs.attributes.filter,
+          null,
+          2,
+        )}`,
+      );
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
@@ -2286,9 +2292,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 8 Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
 
+    assert
+      .dom(
+        '[data-test-command-result-container] [data-test-toggle-show-button]',
+      )
+      .containsText('Show 3 more results');
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
     assert.dom(`${resultListItem}:nth-child(5)`).containsText('Ian');
@@ -2298,25 +2309,28 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(stackItem).doesNotExist();
 
     await click(
-      '[data-test-boxel-command-result] [data-test-more-options-button]',
+      '[data-test-command-result-container] [data-test-more-options-button]',
     );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${stackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Command Result');
+      .hasText('Search Results');
 
     const savedCardId = document
       .querySelector(stackItem)
       ?.getAttribute('data-stack-card');
     const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
     assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
-    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 3 });
+    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 2 });
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
-      .hasText(`Description ${toolArgs.description}`);
-    assert
-      .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
+      .hasText(
+        `Description Query: ${JSON.stringify(
+          toolArgs.attributes.filter,
+          null,
+          2,
+        )}`,
+      );
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });

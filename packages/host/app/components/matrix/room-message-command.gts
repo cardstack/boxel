@@ -25,6 +25,8 @@ import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -156,18 +158,15 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   @action async copyToWorkspace() {
-    debugger;
-    //TODO: refactor to a command
-    // let newCard = await this.args.context?.actions?.copyCard?.(
-    //   this.commandResultCard.card as CardDef,
-    // );
-    // if (!newCard) {
-    //   console.error('Could not copy card to workspace.');
-    //   return;
-    // }
-    // this.args.context?.actions?.viewCard(newCard, 'isolated', {
-    //   openCardInRightMostStack: true,
-    // });
+    let { commandContext } = this.commandService;
+    const { newCard } = await new CopyCardCommand(commandContext).execute({
+      sourceCard: this.commandResultCard.card as CardDef,
+    });
+
+    let showCardCommand = new ShowCardCommand(commandContext);
+    await showCardCommand.execute({
+      cardToShow: newCard,
+    });
   }
 
   <template>
@@ -232,6 +231,7 @@ export default class RoomMessageCommand extends Component<Signature> {
         <CardContainer
           @displayBoundaries={{false}}
           class='command-result-card-preview'
+          data-test-command-result-container
         >
           <CardHeader
             @cardTypeDisplayName={{this.headerTitle}}

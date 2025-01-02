@@ -1,18 +1,16 @@
 import {
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
   linksTo,
   linksToMany,
-  primitive,
-  queryableValue,
 } from './card-api';
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
+import NumberField from './number';
 import { SkillCard } from './skill-card';
 import { JsonField } from './command-result';
 import { SearchCardsResult } from './command-result';
@@ -22,6 +20,16 @@ export type CommandStatus = 'applied' | 'ready' | 'applying';
 export class SaveCardInput extends CardDef {
   @field realm = contains(StringField);
   @field card = linksTo(CardDef);
+}
+
+export class CopyCardInput extends CardDef {
+  @field sourceCard = linksTo(CardDef);
+  @field targetRealmUrl = contains(StringField);
+  @field targetStackIndex = contains(NumberField);
+}
+
+export class CopyCardResult extends CardDef {
+  @field newCard = linksTo(CardDef);
 }
 
 export class PatchCardInput extends CardDef {
