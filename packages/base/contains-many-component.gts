@@ -70,6 +70,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
           <AddButton
             class='add-new'
             @variant='full-width'
+            @iconWidth='12px'
+            @iconHeight='12px'
             {{on 'click' this.add}}
             data-test-add-new
           >
@@ -82,6 +84,10 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     <style scoped>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-lg);
+      }
+      .contains-many-editor
+        :deep(.compound-field.edit-format .add-button--full-width) {
+        border: var(--boxel-border);
       }
       .list {
         list-style: none;
@@ -211,14 +217,11 @@ export function getContainsManyComponent({
               ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <span
-                  class='containsMany-item'
-                  data-test-plural-view-item={{i}}
-                >
+                <div class='containsMany-item' data-test-plural-view-item={{i}}>
                   <Item
                     @format={{getPluralChildFormat effectiveFormat model}}
                   />
-                </span>
+                </div>
               {{/each}}
             </div>
           {{/let}}
@@ -234,6 +237,9 @@ export function getContainsManyComponent({
           }
           .containsMany-field.atom-format {
             display: contents;
+          }
+          .containsMany-field.atom-format > .containsMany-item {
+            display: inline;
           }
         }
       </style>

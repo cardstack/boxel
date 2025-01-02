@@ -196,6 +196,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         <AddButton
           class='add-new'
           @variant='full-width'
+          @iconWidth='12px'
+          @iconHeight='12px'
           {{on 'click' @add}}
           data-test-add-new
         >
@@ -318,6 +320,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-light);
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
       }

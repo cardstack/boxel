@@ -247,10 +247,7 @@ export function getBoxComponent(
                   @value={{defaultFieldFormats effectiveFormats.fieldDef}}
                 >
                   <div
-                    class={{if
-                      (eq effectiveFormats.fieldDef 'atom')
-                      'boxel-contents-only'
-                    }}
+                    class='compound-field {{effectiveFormats.fieldDef}}-format'
                     data-test-compound-field-format={{effectiveFormats.fieldDef}}
                     data-test-compound-field-component
                     {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
@@ -338,6 +335,9 @@ export function getBoxComponent(
       }
       .field-component-card.atom-format > :deep(*) {
         vertical-align: middle;
+      }
+      .compound-field.atom-format {
+        display: inline;
       }
     </style>
   </template>;
