@@ -21,7 +21,7 @@ import {
   type CardContext,
   type Format,
   FieldDef,
-} from './card-api';
+} from '../card-api';
 
 type AttachedCardResource = {
   card: CardDef | undefined;

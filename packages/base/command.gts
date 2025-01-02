@@ -12,8 +12,7 @@ import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import NumberField from './number';
 import { SkillCard } from './skill-card';
-import { JsonField } from './command-result';
-import { SearchCardsResult } from './command-result';
+import { JsonField, SearchCardsResult } from './commands/search-card-result';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
