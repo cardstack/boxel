@@ -594,7 +594,7 @@ class FittedTemplate extends Component<typeof Deal> {
         </AccountHeader>
 
         <div class='deal-status'>
-          {{@model.status.label}}
+          <@fields.status @format='atom' @displayContainer={{false}} />
         </div>
       </header>
 
@@ -828,6 +828,24 @@ export const dealStatusValues = [
 class DealStatus extends LooseGooseyField {
   static displayName = 'CRM Deal Status';
   static values = dealStatusValues;
+
+  static atom = class Atom extends Component<typeof this> {
+    get statusData() {
+      return dealStatusValues.find(
+        (status) => status.label === this.args.model.label,
+      );
+    }
+
+    <template>
+      {{#if @model.label}}
+        <EntityDisplayWithIcon @title={{@model.label}}>
+          <:icon>
+            {{this.statusData.icon}}
+          </:icon>
+        </EntityDisplayWithIcon>
+      {{/if}}
+    </template>
+  };
 }
 
 export class DealPriority extends LooseGooseyField {
