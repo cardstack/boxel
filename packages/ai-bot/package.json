@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "^11.2.2",
+    "@types/qunit": "^2.19.12",
     "@types/sinonjs__fake-timers": "^8.1.5",
     "qunit": "^2.18.0"
   },

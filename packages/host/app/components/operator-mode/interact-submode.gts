@@ -32,6 +32,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
@@ -420,28 +421,19 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private _copyCard = dropTask(
-    async (card: CardDef, stackIndex: number, done: Deferred<CardDef>) => {
+    async (
+      sourceCard: CardDef,
+      stackIndex: number,
+      done: Deferred<CardDef>,
+    ) => {
       let newCard: CardDef | undefined;
       try {
-        // use existing card in stack to determine realm url,
-        // otherwise use user's first writable realm
-        let topCard =
-          this.operatorModeStateService.topMostStackItems()[stackIndex]?.card;
-        let realmURL: URL | undefined;
-        if (topCard) {
-          let url = await this.cardService.getRealmURL(topCard);
-          // open card might be from a realm in which we don't have write permissions
-          if (url && this.realm.canWrite(url.href)) {
-            realmURL = url;
-          }
-        }
-        if (!realmURL) {
-          if (!this.realm.defaultWritableRealm) {
-            throw new Error('Could not find a writable realm');
-          }
-          realmURL = new URL(this.realm.defaultWritableRealm.path);
-        }
-        newCard = await this.cardService.copyCard(card, realmURL);
+        let { commandContext } = this.commandService;
+        const result = await new CopyCardCommand(commandContext).execute({
+          sourceCard,
+          targetStackIndex: stackIndex,
+        });
+        newCard = result.newCard;
       } catch (e) {
         done.reject(e);
       } finally {
@@ -475,7 +467,12 @@ export default class InteractSubmode extends Component<Signature> {
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCard: CardDef | undefined;
         for (let [index, card] of sources.entries()) {
-          let newCard = await this.cardService.copyCard(card, realmURL);
+          let { newCard } = await new CopyCardCommand(
+            this.commandService.commandContext,
+          ).execute({
+            sourceCard: card,
+            targetRealmUrl: realmURL.href,
+          });
           if (index === 0) {
             scrollToCard = newCard; // we scroll to the first card lexically by title
           }

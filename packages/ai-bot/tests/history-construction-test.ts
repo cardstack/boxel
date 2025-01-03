@@ -10,7 +10,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { type IRoomEvent } from 'matrix-js-sdk';
+import { EventStatus, type IRoomEvent } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 module('constructHistory', () => {
@@ -38,6 +38,7 @@ module('constructHistory', () => {
         unsigned: {
           age: 1000,
         },
+        status: EventStatus.SENT,
       },
       {
         type: 'm.room.join_rules',
@@ -50,6 +51,7 @@ module('constructHistory', () => {
         unsigned: {
           age: 1001,
         },
+        status: EventStatus.SENT,
       },
       {
         type: 'm.room.member',
@@ -65,6 +67,7 @@ module('constructHistory', () => {
         unsigned: {
           age: 1002,
         },
+        status: EventStatus.SENT,
       },
     ];
 
@@ -74,7 +77,7 @@ module('constructHistory', () => {
   });
 
   test('should return an array with a single message event when the input array contains only one message event', () => {
-    const eventlist: DiscreteMatrixEvent[] = [
+    const eventlist: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -100,7 +103,7 @@ module('constructHistory', () => {
   });
 
   test('should return an array with all message events when the input array contains multiple message events', () => {
-    const history: DiscreteMatrixEvent[] = [
+    const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -160,7 +163,7 @@ module('constructHistory', () => {
   });
 
   test('should return an array with all message events when the input array contains multiple events with the same origin_server_ts', () => {
-    const history: DiscreteMatrixEvent[] = [
+    const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -220,7 +223,7 @@ module('constructHistory', () => {
   });
 
   test('should return an array of DiscreteMatrixEvent objects with no duplicates based on event_id even when m.relates_to is present and include senders and origin_server_ts', () => {
-    const history: DiscreteMatrixEvent[] = [
+    const history: IRoomEvent[] = [
       // this event will _not_ replace event_id 2 since it's timestamp is before event_id 2
       {
         event_id: '1',

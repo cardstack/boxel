@@ -8,20 +8,19 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
-  CommandResultEvent,
-  ReactionEvent,
   Tool,
   SkillsConfigEvent,
+  CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
+import { APP_BOXEL_COMMAND_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -140,6 +139,15 @@ export function constructHistory(
       }
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
+    if (event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE) {
+      let { cardEventId } = event.content.data;
+      if (cardEventId) {
+        event.content.data.card = serializedCardFromFragments(
+          cardEventId,
+          cardFragments,
+        );
+      }
+    }
     if (event.type !== 'm.room.message') {
       continue;
     }
@@ -358,48 +366,11 @@ export function getToolChoice(
   return 'auto';
 }
 
-export function isCommandResultEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandResultEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE
-  );
-}
-
-export function isReactionEvent(
-  event: DiscreteMatrixEvent,
-): event is ReactionEvent {
-  return (
-    event.type === 'm.reaction' &&
-    event.content['m.relates_to'].rel_type === 'm.annotation'
-  );
-}
-
-function getReactionStatus(
-  commandEvent: DiscreteMatrixEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  let maybeReactionEvent = history.find((e) => {
-    if (
-      isReactionEvent(e) &&
-      e.content['m.relates_to']?.event_id === commandEvent.event_id
-    ) {
-      return true;
-    }
-    return false;
-  });
-  return maybeReactionEvent && isReactionEvent(maybeReactionEvent)
-    ? maybeReactionEvent.content['m.relates_to'].key
-    : undefined;
-}
-
 function getCommandResult(
   commandEvent: CommandEvent,
   history: DiscreteMatrixEvent[],
 ) {
-  let maybeCommandResultEvent = history.find((e) => {
+  let commandResultEvent = history.find((e) => {
     if (
       isCommandResultEvent(e) &&
       e.content['m.relates_to']?.event_id === commandEvent.event_id
@@ -407,11 +378,8 @@ function getCommandResult(
       return true;
     }
     return false;
-  });
-  return maybeCommandResultEvent &&
-    isCommandResultEvent(maybeCommandResultEvent)
-    ? maybeCommandResultEvent.content.result
-    : undefined;
+  }) as CommandResultEvent | undefined;
+  return commandResultEvent;
 }
 
 function toToolCall(event: CommandEvent): ChatCompletionMessageToolCall {
@@ -429,21 +397,23 @@ function toPromptMessageWithToolResult(
   event: CommandEvent,
   history: DiscreteMatrixEvent[],
 ): OpenAIPromptMessage {
-  let commandResult = getCommandResult(event as CommandEvent, history);
+  let commandResult = getCommandResult(event, history);
+  let content = 'pending';
   if (commandResult) {
-    return {
-      role: 'tool',
-      content: commandResult,
-      tool_call_id: event.content.data.toolCall.id,
-    };
-  } else {
-    let reactionStatus = getReactionStatus(event, history);
-    return {
-      role: 'tool',
-      content: reactionStatus ?? 'pending',
-      tool_call_id: event.content.data.toolCall.id,
-    };
+    let status = commandResult.content['m.relates_to']?.key;
+    if (commandResult.content.data.card) {
+      content = `Command ${status}, with result card: ${JSON.stringify(
+        commandResult.content.data.card,
+      )}.\n`;
+    } else {
+      content = `Command ${status}.\n`;
+    }
   }
+  return {
+    role: 'tool',
+    content,
+    tool_call_id: event.content.data.toolCall.id,
+  };
 }
 
 export function getModifyPrompt(
@@ -570,24 +540,13 @@ export function cleanContent(content: string) {
   return content.trim();
 }
 
-export const isCommandReactionEvent = (event?: MatrixEvent) => {
+export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
   if (event === undefined) {
     return false;
   }
-  let content = event.getContent();
   return (
-    event.getType() === 'm.reaction' &&
-    content['m.relates_to']?.rel_type === 'm.annotation'
-  );
-};
-
-export const isCommandReactionStatusApplied = (event?: MatrixEvent) => {
-  if (event === undefined) {
-    return false;
-  }
-  let content = event.getContent();
-  return (
-    isCommandReactionEvent(event) && content['m.relates_to']?.key === 'applied'
+    isCommandResultEvent(event.event as DiscreteMatrixEvent) &&
+    event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
 
@@ -601,5 +560,17 @@ export function isCommandEvent(
     event.content.format === 'org.matrix.custom.html' &&
     typeof event.content.data === 'object' &&
     typeof event.content.data.toolCall === 'object'
+  );
+}
+
+export function isCommandResultEvent(
+  event?: DiscreteMatrixEvent,
+): event is CommandResultEvent {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+    event.content['m.relates_to']?.rel_type === 'm.annotation'
   );
 }

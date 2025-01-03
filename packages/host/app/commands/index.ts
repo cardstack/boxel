@@ -1,6 +1,7 @@
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
 import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
+import * as CopyCardCommandModule from './copy-card';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardCommandModule from './patch-card';
@@ -16,6 +17,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/add-skills-to-room',
     AddSkillsToRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-card',
+    CopyCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',

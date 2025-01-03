@@ -24,6 +24,7 @@ interface Signature {
     field?: Field;
     codeRef?: ResolvedCodeRef;
     cardContext?: Record<string, any>;
+    displayContainer?: boolean;
   };
 }
 
@@ -46,7 +47,7 @@ export default class Preview extends Component<Signature> {
   }
 
   <template>
-    <this.renderedCard ...attributes />
+    <this.renderedCard @displayContainer={{@displayContainer}} ...attributes />
   </template>
 
   get renderedCard() {
