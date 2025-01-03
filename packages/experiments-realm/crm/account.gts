@@ -437,6 +437,145 @@ class IsolatedTemplate extends Component<typeof Account> {
   </template>
 }
 
+class FittedTemplate extends Component<typeof Account> {
+  <template>
+    <AccountPageLayout class='account-page-layout-fitted'>
+      <:header>
+        <AccountHeader
+          class='account-header-fitted'
+          @logoURL={{@model.thumbnailURL}}
+          @name={{@model.name}}
+        >
+          <:name>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name default-value'>Missing Account Name</h1>
+            {{/if}}
+          </:name>
+        </AccountHeader>
+      </:header>
+      <:summary>
+        {{#if @model.primaryContact}}
+          <div class='tag-container'>
+            <@fields.statusTag @format='atom' />
+            <@fields.urgencyTag @format='atom' />
+          </div>
+        {{/if}}
+      </:summary>
+    </AccountPageLayout>
+
+    <style scoped>
+      .account-page-layout-fitted {
+        --account-page-layout-padding: var(--boxel-sp-sm);
+        height: 100%;
+      }
+      .account-header-fitted {
+        gap: var(--boxel-sp-sm);
+        --account-header-logo-size: 40px;
+      }
+      .account-name {
+        font: 600 var(--boxel-font);
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+      .description {
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content-container {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .tag-container {
+        margin-top: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card (2.0 < aspect-ratio) and (height <= 57px) {
+        .account-page-layout-fitted {
+          --account-page-layout-padding: var(--boxel-sp-xs);
+        }
+        .account-header-fitted {
+          --account-header-logo-display: none;
+        }
+      }
+    </style>
+  </template>
+}
+
 class UrgencyTag extends LooseGooseyField {
   static icon = CalendarExclamation;
   static displayName = 'CRM Urgency Tag';
@@ -495,6 +634,7 @@ export class Account extends CardDef {
   });
 
   static isolated = IsolatedTemplate;
+  static fitted = FittedTemplate;
 }
 
 interface AccountPageLayoutArgs {
@@ -520,7 +660,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         width: 100%;
-        padding: 20px;
+        padding: var(--account-page-layout-padding, 20px);
         box-sizing: border-box;
       }
     </style>
