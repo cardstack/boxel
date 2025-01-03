@@ -33,6 +33,92 @@ import PlusIcon from '@cardstack/boxel-icons/plus';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 import SquareUser from '@cardstack/boxel-icons/square-user';
 import CalendarTime from '@cardstack/boxel-icons/calendar-time';
+import ClockExclamation from '@cardstack/boxel-icons/clock-exclamation';
+import Clock24 from '@cardstack/boxel-icons/clock-24';
+import Handshake from '@cardstack/boxel-icons/handshake';
+import ClockX from '@cardstack/boxel-icons/clock-x';
+import ClockUp from '@cardstack/boxel-icons/clock-up';
+import Contract from '@cardstack/boxel-icons/contract';
+
+export const urgencyTagValues = [
+  {
+    index: 0,
+    icon: ClockExclamation,
+    label: 'Overdue for Renewal',
+    value: 'overdue-for-renewal',
+    buttonText: 'Create Account', // TODO: For the createNewButtonText usage in CRM App
+    colorScheme: {
+      foregroundColor: '#D32F2F', // Dark Red
+      backgroundColor: '#FFEBEE', // Light Red
+    },
+  },
+  {
+    index: 1,
+    icon: Clock24,
+    label: 'Renewal Due Soon',
+    value: 'renewal-due-soon',
+    buttonText: 'Create Account',
+    colorScheme: {
+      foregroundColor: '#F57C00', // Dark Orange
+      backgroundColor: '#FFF3E0', // Light Orange
+    },
+  },
+  {
+    index: 2,
+    icon: Handshake,
+    label: 'Recently Renewed',
+    value: 'recently-renewed',
+    buttonText: 'Create Account',
+    colorScheme: {
+      foregroundColor: '#388E3C', // Dark Green
+      backgroundColor: '#E8F5E9', // Light Green
+    },
+  },
+  {
+    index: 3,
+    icon: ClockX,
+    label: 'Expiring Soon',
+    value: 'expiring-soon',
+    buttonText: 'Create Account',
+    colorScheme: {
+      foregroundColor: '#FBC02D', // Dark Yellow
+      backgroundColor: '#FFF9C4', // Light Yellow
+    },
+  },
+  {
+    index: 4,
+    icon: ClockUp,
+    label: 'Follow-Up Required',
+    value: 'follow-up-required',
+    buttonText: 'Create Account',
+    colorScheme: {
+      foregroundColor: '#1976D2', // Dark Blue
+      backgroundColor: '#E3F2FD', // Light Blue
+    },
+  },
+  {
+    index: 5,
+    icon: Contract,
+    label: 'Pending Contract',
+    value: 'pending-contract',
+    buttonText: 'Create Account',
+    colorScheme: {
+      foregroundColor: '#512DA8', // Dark Purple
+      backgroundColor: '#EDE7F6', // Light Purple
+    },
+  },
+  {
+    index: 6,
+    icon: CalendarTime,
+    label: 'Next Review Scheduled',
+    value: 'next-review-scheduled',
+    buttonText: 'Create Account',
+    colorScheme: {
+      foregroundColor: '#558B2F', // Dark Olive Green
+      backgroundColor: '#F1F8E9', // Light Olive Green
+    },
+  },
+];
 
 class IsolatedTemplate extends Component<typeof Account> {
   get hasCompanyInfo() {
@@ -354,72 +440,7 @@ class IsolatedTemplate extends Component<typeof Account> {
 class UrgencyTag extends LooseGooseyField {
   static icon = CalendarExclamation;
   static displayName = 'CRM Urgency Tag';
-  static values = [
-    {
-      index: 0,
-      label: 'Overdue for Renewal',
-      colorScheme: {
-        foregroundColor: '#D32F2F', // Dark Red
-        backgroundColor: '#FFEBEE', // Light Red
-      },
-    },
-    {
-      index: 1,
-      label: 'Renewal Due Soon',
-      colorScheme: {
-        foregroundColor: '#F57C00', // Dark Orange
-        backgroundColor: '#FFF3E0', // Light Orange
-      },
-    },
-    {
-      index: 2,
-      label: 'Recently Renewed',
-      colorScheme: {
-        foregroundColor: '#388E3C', // Dark Green
-        backgroundColor: '#E8F5E9', // Light Green
-      },
-    },
-    {
-      index: 3,
-      label: 'Expiring Soon',
-      colorScheme: {
-        foregroundColor: '#FBC02D', // Dark Yellow
-        backgroundColor: '#FFF9C4', // Light Yellow
-      },
-    },
-    {
-      index: 4,
-      label: 'Inactive for X Days',
-      colorScheme: {
-        foregroundColor: '#757575', // Dark Grey
-        backgroundColor: '#E0E0E0', // Light Grey
-      },
-    },
-    {
-      index: 5,
-      label: 'Follow-Up Required',
-      colorScheme: {
-        foregroundColor: '#1976D2', // Dark Blue
-        backgroundColor: '#E3F2FD', // Light Blue
-      },
-    },
-    {
-      index: 6,
-      label: 'Pending Contract',
-      colorScheme: {
-        foregroundColor: '#512DA8', // Dark Purple
-        backgroundColor: '#EDE7F6', // Light Purple
-      },
-    },
-    {
-      index: 7,
-      label: 'Next Review Scheduled',
-      colorScheme: {
-        foregroundColor: '#558B2F', // Dark Olive Green
-        backgroundColor: '#F1F8E9', // Light Olive Green
-      },
-    },
-  ];
+  static values = urgencyTagValues;
 
   static atom = class Atom extends Component<typeof this> {
     <template>
