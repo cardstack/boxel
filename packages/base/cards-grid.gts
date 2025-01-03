@@ -41,11 +41,12 @@ import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import Captions from '@cardstack/boxel-icons/captions';
 import CardsIcon from '@cardstack/boxel-icons/cards';
 import { registerDestructor } from '@ember/destroyable';
+import GlimmerComponent from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
+import { htmlSafe } from '@ember/template';
 
-type IconComponent = typeof Captions;
 interface SortOption {
   displayName: string;
   sort: Query['sort'];
@@ -306,22 +307,25 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  filters: { displayName: string; icon: IconComponent; query: any }[] =
-    new TrackedArray([
-      {
-        displayName: 'All Cards',
-        icon: CardsIcon,
-        query: {
-          filter: {
-            not: {
-              eq: {
-                _cardType: 'Cards Grid',
-              },
+  filters: {
+    displayName: string;
+    icon: ComponentLike;
+    query: any;
+  }[] = new TrackedArray([
+    {
+      displayName: 'All Cards',
+      icon: CardsIcon,
+      query: {
+        filter: {
+          not: {
+            eq: {
+              _cardType: 'Cards Grid',
             },
           },
         },
       },
-    ]);
+    },
+  ]);
 
   private viewOptions = [
     { id: 'strip', icon: IconList },
@@ -424,7 +428,7 @@ class Isolated extends Component<typeof CardsGrid> {
     }
     let cardTypeSummaries = (await response.json()).data as {
       id: string;
-      attributes: { displayName: string; total: number };
+      attributes: { displayName: string; total: number; iconHTML: string };
     }[];
     let excludedCardTypeIds = [
       `${baseRealm.url}card-api/CardDef`,
@@ -441,7 +445,7 @@ class Isolated extends Component<typeof CardsGrid> {
       const lastIndex = summary.id.lastIndexOf('/');
       this.filters.push({
         displayName: summary.attributes.displayName,
-        icon: Captions,
+        icon: generateIconComponent(summary.attributes.iconHTML),
         query: {
           filter: {
             type: {
@@ -492,4 +496,22 @@ export class CardsGrid extends CardDef {
 }
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
+interface Signature {
+  Element: HTMLElement;
+}
+
+function generateIconComponent(iconHTML: string) {
+  let updatedIconHtml = iconHTML
+    .replace(/\swidth="[^"]*"/, '')
+    .replace(/\sheight="[^"]*"/, '')
+    .replace('<svg', '<svg style="width: 100%; height: 100%;"');
+  return class extends GlimmerComponent<Signature> {
+    <template>
+      <div ...attributes>
+        {{htmlSafe updatedIconHtml}}
+      </div>
+    </template>
+  };
 }
