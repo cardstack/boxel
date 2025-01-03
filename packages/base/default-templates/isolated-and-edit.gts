@@ -43,13 +43,18 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
       .default-card-template.edit
-        > .boxel-field
         > :deep(
-          *:nth-child(2):not(.links-to-many-editor):not(
-              .contains-many-editor
-            ):not(.links-to-editor)
+          .boxel-field
+            > .content
+            > *:not(.links-to-many-editor):not(.contains-many-editor):not(
+              .links-to-editor
+            )
         ) {
         padding-right: var(--boxel-icon-lg);
+      }
+      .default-card-template.edit
+        > :deep(.boxel-field > .content > *:not(.links-to-many-editor)) {
+        padding-left: var(--boxel-icon-lg);
       }
     </style>
   </template>

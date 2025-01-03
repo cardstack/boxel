@@ -86,10 +86,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     </PermissionsConsumer>
     <style scoped>
       .links-to-editor {
-        --remove-icon-size: var(--boxel-icon-lg);
         position: relative;
         display: grid;
-        grid-template-columns: 1fr var(--remove-icon-size);
+        grid-template-columns: 1fr max-content;
       }
       .links-to-editor > :deep(.boxel-card-container.embedded-format) {
         order: -1;

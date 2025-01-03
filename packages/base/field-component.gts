@@ -247,6 +247,7 @@ export function getBoxComponent(
                   @value={{defaultFieldFormats effectiveFormats.fieldDef}}
                 >
                   <div
+                    class='compound-field {{effectiveFormats.fieldDef}}-format'
                     data-test-compound-field-format={{effectiveFormats.fieldDef}}
                     data-test-compound-field-component
                     {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
@@ -323,13 +324,20 @@ export function getBoxComponent(
         overflow: hidden;
       }
 
-      /*
-        TODO: regarding the atom format styling below, we probably want to refactor to move
-        any styles that effect the inside of the card boundary into the CardDef's atom template
-      */
+      .field-component-card.atom-format.display-container-false {
+        display: contents;
+      }
       .field-component-card.atom-format.display-container-true {
-        padding: 4px var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
+        display: inline-block;
+        width: auto;
+        height: auto;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+      }
+      .field-component-card.atom-format > :deep(*) {
+        vertical-align: middle;
+      }
+      .compound-field.atom-format {
+        display: inline;
       }
     </style>
   </template>;

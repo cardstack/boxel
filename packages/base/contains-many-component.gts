@@ -70,6 +70,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
           <AddButton
             class='add-new'
             @variant='full-width'
+            @iconWidth='12px'
+            @iconHeight='12px'
             {{on 'click' this.add}}
             data-test-add-new
           >
@@ -82,6 +84,10 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     <style scoped>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-lg);
+      }
+      .contains-many-editor
+        :deep(.compound-field.edit-format .add-button--full-width) {
+        border: var(--boxel-border);
       }
       .list {
         list-style: none;
@@ -208,9 +214,10 @@ export function getContainsManyComponent({
                 {{unless arrayField.children.length "empty"}}'
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}
+              ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <div data-test-plural-view-item={{i}}>
+                <div class='containsMany-item' data-test-plural-view-item={{i}}>
                   <Item
                     @format={{getPluralChildFormat effectiveFormat model}}
                   />
@@ -221,11 +228,19 @@ export function getContainsManyComponent({
         {{/if}}
       </DefaultFormatsConsumer>
       <style scoped>
-        .containsMany-field.edit-format {
-          padding: var(--boxel-sp-sm);
-          background-color: var(--boxel-100);
-          border: none !important;
-          border-radius: var(--boxel-border-radius);
+        @layer {
+          .containsMany-field.edit-format {
+            padding: var(--boxel-sp-sm);
+            background-color: var(--boxel-100);
+            border: none !important;
+            border-radius: var(--boxel-border-radius);
+          }
+          .containsMany-field.atom-format {
+            display: contents;
+          }
+          .containsMany-field.atom-format > .containsMany-item {
+            display: inline;
+          }
         }
       </style>
     </template>;
