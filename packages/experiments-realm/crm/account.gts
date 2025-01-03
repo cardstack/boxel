@@ -376,7 +376,7 @@ class FittedTemplate extends Component<typeof Account> {
 
     <style scoped>
       .account-page-layout-fitted {
-        padding: var(--boxel-sp-sm) !important;
+        --account-page-layout-padding: var(--boxel-sp-sm);
         height: 100%;
       }
       .account-header-fitted {
@@ -384,8 +384,13 @@ class FittedTemplate extends Component<typeof Account> {
         --account-header-logo-size: 40px;
       }
       .account-name {
-        font: 600 var(--boxel-font-sm);
+        font: 600 var(--boxel-font);
         margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
       }
       .description {
         font: 500 var(--boxel-font-sm);
@@ -403,6 +408,69 @@ class FittedTemplate extends Component<typeof Account> {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
+      }
+
+      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
+        .account-name {
+          font: 600 var(--boxel-font-sm);
+        }
+        .tag-container {
+          display: none;
+        }
       }
     </style>
   </template>
@@ -557,7 +625,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         width: 100%;
-        padding: 20px;
+        padding: var(--account-page-layout-padding, 20px);
         box-sizing: border-box;
       }
     </style>
