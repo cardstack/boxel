@@ -29,6 +29,7 @@ import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import { urgencyTagValues } from './crm/account';
+import { dealStatusValues } from './crm/deal';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -66,6 +67,12 @@ const DEAL_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Deal',
     createNewButtonText: 'Create Deal',
   },
+  ...dealStatusValues.map((status) => ({
+    displayName: status.label,
+    icon: status.icon,
+    cardTypeName: 'CRM Deal',
+    createNewButtonText: status.buttonText,
+  })),
 ];
 // Map with urgencyTagValues array from crm/account.gts
 const ACCOUNT_FILTERS: LayoutFilter[] = [
@@ -234,6 +241,19 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           ]
         : [];
 
+    // filter field value by CRM Deal
+    const dealFilter =
+      activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'status.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
     const searchFilter = searchKey
       ? [
           {
@@ -254,7 +274,12 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     return {
       filter: {
         on: activeFilter.cardRef,
-        every: [defaultFilter, ...accountFilter, ...searchFilter],
+        every: [
+          defaultFilter,
+          ...accountFilter,
+          ...dealFilter,
+          ...searchFilter,
+        ],
       },
       sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
     } as Query;
