@@ -48,7 +48,7 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
         border-radius: var(--boxel-border-radius-xl);
       }
       .default-icon-container {
-        display: flex;
+        display: var(--account-header-logo-display, flex);
         align-items: center;
         justify-content: center;
         background-color: var(--boxel-200);

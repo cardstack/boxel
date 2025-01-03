@@ -60,6 +60,11 @@ class IsolatedTemplate extends Component<typeof Account> {
           <:content>
             <div class='description content-container'>
               {{#if @model.primaryContact}}
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                  class='primary-contact'
+                />
                 <div class='tag-container'>
                   <@fields.statusTag @format='atom' />
                   <@fields.urgencyTag @format='atom' />
@@ -470,6 +475,15 @@ class FittedTemplate extends Component<typeof Account> {
         }
         .tag-container {
           display: none;
+        }
+      }
+
+      @container fitted-card (2.0 < aspect-ratio) and (height <= 57px) {
+        .account-page-layout-fitted {
+          --account-page-layout-padding: var(--boxel-sp-xs);
+        }
+        .account-header-fitted {
+          --account-header-logo-display: none;
         }
       }
     </style>
