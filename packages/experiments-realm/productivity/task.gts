@@ -457,7 +457,7 @@ class TaskIsolated extends Component<typeof SprintTask> {
   }
 }
 
-export class WorkTaskStatusField extends TaskStatusField {
+export class SprintTaskStatusField extends TaskStatusField {
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
@@ -505,7 +505,7 @@ export class SprintTask extends Task {
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
   @field subtasks = linksToMany(() => SprintTask);
-  @field status = contains(WorkTaskStatusField);
+  @field status = contains(SprintTaskStatusField);
 
   @field title = contains(StringField, {
     computeVia: function (this: SprintTask) {
