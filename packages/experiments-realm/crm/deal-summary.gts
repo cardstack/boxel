@@ -27,7 +27,6 @@ export class DealSummary extends Component<Signature> {
   }
 
   get deals() {
-    console.log('deals', this.args.deals);
     return this.args.deals;
   }
 
