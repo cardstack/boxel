@@ -23,13 +23,20 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { AppCard, Tab } from './app-card';
-import { Query, CardError, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  Query,
+  CardError,
+  SupportedMimeType,
+  getCards,
+} from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
+import type { Deal } from './crm/deal';
+import DealSummary from './crm/deal-summary';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -101,12 +108,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
+    this.loadDealCards.perform();
   }
   //tabs
   @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
   @tracked private searchKey = '';
+  @tracked private deals: Deal[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -152,6 +161,20 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     }
   });
 
+  private loadDealCards = restartableTask(async () => {
+    if (!this.query || this.activeTabId !== 'Deal') {
+      return;
+    }
+
+    const result = getCards(this.query, this.realmHrefs, {
+      isLive: true,
+    });
+
+    await result.loaded;
+    this.deals = result.instances as Deal[];
+    return result;
+  });
+
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
   }
@@ -165,6 +188,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
+    this.loadDealCards.perform();
   }
   get headerColor() {
     return (
@@ -193,6 +217,9 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   }
   private get realms() {
     return [this.currentRealm!];
+  }
+  get realmHrefs() {
+    return [this.currentRealm!.href];
   }
 
   //create
@@ -360,6 +387,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
+        {{#if (eq this.activeTabId 'Deal')}}
+          <div class='content-header-deal-summary'>
+            <DealSummary @deals={{this.deals}} />
+          </div>
+        {{/if}}
         <div class='search-bar content-header-row-2'>
           <SearchInput
             @placeholder={{this.searchPlaceholder}}
@@ -419,6 +451,10 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       }
       .content-header-row-1 {
         margin-top: var(--boxel-sp-xs);
+      }
+      .content-header-deal-summary {
+        width: 100%;
+        margin-top: var(--boxel-sp-lg);
       }
       .content-header-row-2 {
         margin-top: var(--boxel-sp-lg);
