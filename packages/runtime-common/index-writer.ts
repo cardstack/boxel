@@ -337,23 +337,25 @@ export class Batch {
       ),
     ]);
 
-    let columns = (await this.#dbAdapter.getColumnNames('boxel_index')).map(
-      (c) => [c],
-    );
-    let names = flattenDeep(columns);
-    await this.#query([
-      'INSERT INTO boxel_index',
-      ...addExplicitParens(separatedByCommas(columns)),
-      'SELECT',
-      ...separatedByCommas(columns),
-      'FROM boxel_index_working',
-      'WHERE url in',
-      ...addExplicitParens(
-        separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
-      ),
-      'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
-      ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
-    ] as Expression);
+    if (this.#invalidations.size > 0) {
+      let columns = (await this.#dbAdapter.getColumnNames('boxel_index')).map(
+        (c) => [c],
+      );
+      let names = flattenDeep(columns);
+      await this.#query([
+        'INSERT INTO boxel_index',
+        ...addExplicitParens(separatedByCommas(columns)),
+        'SELECT',
+        ...separatedByCommas(columns),
+        'FROM boxel_index_working',
+        'WHERE url in',
+        ...addExplicitParens(
+          separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
+        ),
+        'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
+        ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+      ] as Expression);
+    }
   }
 
   private async pruneObsoleteEntries() {
