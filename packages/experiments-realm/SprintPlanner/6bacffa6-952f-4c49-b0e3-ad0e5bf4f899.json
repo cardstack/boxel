@@ -23,7 +23,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../work-tracker",
+        "module": "../sprint-planner",
         "name": "SprintPlanner"
       }
     }
