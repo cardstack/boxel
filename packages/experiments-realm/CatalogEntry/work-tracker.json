@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Work Tracker",
-      "description": "Catalog entry for Work Tracker App card",
+      "title": "Sprint Planner",
+      "description": "Catalog entry for Sprint Planner App card",
       "isField": false,
       "ref": {
         "module": "../work-tracker",
