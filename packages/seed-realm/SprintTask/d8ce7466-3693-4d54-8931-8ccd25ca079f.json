@@ -9,42 +9,47 @@
         "completed": false
       },
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2024-11-13",
+        "end": "2024-12-17"
       },
       "priority": {
-        "index": 3,
-        "label": "High"
+        "index": 0,
+        "label": "Lowest"
       },
-      "name": "Cleanup all the dbs",
-      "details": null,
+      "name": "Build Date Range Card",
+      "details": "",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       },
       "team": {
         "links": {
-          "self": null
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       },
-      "subtasks": {
+      "subtasks.0": {
         "links": {
-          "self": null
+          "self": "./a1fd93a9-6b00-4b79-8d97-6c34c3a19cc3"
+        }
+      },
+      "subtasks.1": {
+        "links": {
+          "self": "./d9fdfbbc-fb17-41d9-90a2-c5765819930b"
         }
       },
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
         }
       }
     },

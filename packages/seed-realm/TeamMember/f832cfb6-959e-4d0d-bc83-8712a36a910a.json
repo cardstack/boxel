@@ -2,21 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Engineering Team Sprint",
+      "name": "Burcu",
+      "email": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "project": {
+      "team": {
         "links": {
-          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../sprint-planner",
-        "name": "SprintPlanner"
+        "module": "../productivity/task",
+        "name": "TeamMember"
       }
     }
   }

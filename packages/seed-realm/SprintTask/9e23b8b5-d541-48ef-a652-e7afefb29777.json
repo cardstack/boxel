@@ -3,28 +3,28 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 3,
-        "label": "In Progress",
-        "color": "#FFB74D",
-        "completed": false
+        "index": 6,
+        "label": "Shipped",
+        "color": "#66BB6A",
+        "completed": true
       },
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2024-11-07",
+        "end": "2024-11-21"
       },
       "priority": {
-        "index": 0,
-        "label": "Low"
+        "index": null,
+        "label": null
       },
-      "name": "Add functionality where + opens create card modal with correct status",
-      "details": null,
+      "name": "Incoporate Boxel Multi Select in Dropdown",
+      "details": "Integrate Boxel's multi-select dropdown component to be more unified with the single-select dropdown.\n\nThe trigger component should share the same designs.",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       },
       "team": {
@@ -39,7 +39,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
+          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
         }
       },
       "tags": {
