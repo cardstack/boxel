@@ -297,7 +297,7 @@ export class Batch {
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type = ', param('instance')],
         ['i.types IS NOT NULL'],
-        ['i.is_deleted != true'],
+        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,
     ] as Expression);

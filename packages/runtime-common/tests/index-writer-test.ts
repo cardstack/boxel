@@ -1136,7 +1136,7 @@ const tests = Object.freeze({
     });
 
     let results = await adapter.execute(
-      `SELECT value FROM realm_meta r INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url WHERE r.realm_url = $1 AND r.realm_version = 1`,
+      `SELECT value FROM realm_meta r WHERE r.realm_url = $1`,
       {
         bind: [testRealmURL],
         coerceTypes: {
@@ -1153,7 +1153,7 @@ const tests = Object.freeze({
     await batch.done();
 
     results = await adapter.execute(
-      `SELECT value FROM realm_meta r INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url WHERE r.realm_url = $1`,
+      `SELECT value FROM realm_meta r WHERE r.realm_url = $1`,
       {
         bind: [testRealmURL],
         coerceTypes: {
@@ -1254,7 +1254,7 @@ const tests = Object.freeze({
     await batch.done();
 
     results = await adapter.execute(
-      `SELECT value FROM realm_meta r INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url WHERE r.realm_url = $1`,
+      `SELECT value FROM realm_meta r WHERE r.realm_url = $1`,
       {
         bind: [testRealmURL],
         coerceTypes: {
