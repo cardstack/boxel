@@ -11,7 +11,7 @@
         "index": 3,
         "label": "In Progress"
       },
-      "taskName": "Resolve bug where overlay only appears on certain cards",
+      "name": "Resolve bug where overlay only appears on certain cards",
       "dateRange": {
         "start": null,
         "end": null

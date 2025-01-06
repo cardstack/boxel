@@ -151,8 +151,8 @@ export class FittedTask extends Component<typeof Task> {
       </header>
 
       <div class='card-info'>
-        {{#if @model.taskName}}
-          <h3 class='task-title'>{{@model.taskName}}</h3>
+        {{#if @model.name}}
+          <h3 class='task-title'>{{@model.name}}</h3>
         {{/if}}
 
         <div class='date-info-container'>
@@ -534,7 +534,7 @@ export class Task extends Todo {
 
   @field title = contains(StringField, {
     computeVia: function (this: Task) {
-      return this.taskName ?? `Untitled ${this.constructor.displayName}`;
+      return this.name ?? `Untitled ${this.constructor.displayName}`;
     },
   });
 

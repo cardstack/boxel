@@ -11,7 +11,7 @@
         "index": 0,
         "label": "Not Started"
       },
-      "taskName": "Cleanup all the dbs",
+      "name": "Cleanup all the dbs",
       "dateRange": {
         "start": null,
         "end": null

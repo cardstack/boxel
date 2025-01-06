@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Port the already done work for CRM from fork into boxel ui design system",
+      "name": "Port the already done work for CRM from fork into boxel ui design system",
       "taskDetail": "https://github.com/tintinthong/boxel/pull/1 CRM for reference. This is the PR that is constantly merged in",
       "status": {
         "index": 2,

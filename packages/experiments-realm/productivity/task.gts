@@ -161,7 +161,7 @@ class TaskIsolated extends Component<typeof SprintTask> {
     <div class='task-container'>
       <header>
         <div class='left-column'>
-          <h2 class='task-title'>{{@model.taskName}}</h2>
+          <h2 class='task-title'>{{@model.name}}</h2>
           <div class='status-label'>
             <span class='text-gray'>in</span>
             {{@model.status.label}}
@@ -509,7 +509,7 @@ export class SprintTask extends Task {
 
   @field title = contains(StringField, {
     computeVia: function (this: SprintTask) {
-      return this.taskName;
+      return this.name;
     },
   });
 

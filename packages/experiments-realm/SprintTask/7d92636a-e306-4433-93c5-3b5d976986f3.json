@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Drag and drop task",
+      "name": "Drag and drop task",
       "taskDetail": null,
       "status": {
         "index": null,

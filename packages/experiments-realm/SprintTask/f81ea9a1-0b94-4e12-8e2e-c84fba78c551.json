@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Move cards-grid fitted template into a component that can be re-used",
+      "name": "Move cards-grid fitted template into a component that can be re-used",
       "taskDetail": null,
       "status": {
         "index": 2,

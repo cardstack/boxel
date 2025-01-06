@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Make fitted / embeddedd view for task",
+      "name": "Make fitted / embeddedd view for task",
       "taskDetail": null,
       "status": {
         "index": 2,

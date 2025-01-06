@@ -11,7 +11,7 @@
         "index": 1,
         "label": "Next Sprint"
       },
-      "taskName": "Create Tag List",
+      "name": "Create Tag List",
       "dateRange": {
         "start": null,
         "end": null

@@ -10,7 +10,7 @@
         "index": 2,
         "label": "Current Sprint"
       },
-      "taskName": "Create kanban board",
+      "name": "Create kanban board",
       "dateRange": {
         "start": "2024-11-06",
         "end": "2025-02-04"

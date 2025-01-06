@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Date Range Card",
+      "name": "Date Range Card",
       "taskDetail": null,
       "status": {
         "index": 0,

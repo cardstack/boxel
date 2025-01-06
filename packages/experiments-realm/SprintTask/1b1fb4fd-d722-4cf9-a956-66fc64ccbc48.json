@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Embedded Template for Status and Priority",
+      "name": "Embedded Template for Status and Priority",
       "taskDetail": null,
       "status": {
         "index": 2,

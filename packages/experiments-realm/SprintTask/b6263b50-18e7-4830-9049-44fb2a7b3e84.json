@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Fill up task board with realistic data",
+      "name": "Fill up task board with realistic data",
       "taskDetail": null,
       "status": {
         "index": null,

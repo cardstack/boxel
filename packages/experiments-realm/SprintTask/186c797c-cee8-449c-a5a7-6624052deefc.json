@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Pair with Lucas to complete demo",
+      "name": "Pair with Lucas to complete demo",
       "taskDetail": "By Tuesday, we should have a demo that completes everything",
       "status": {
         "index": 2,

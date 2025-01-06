@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": null,
+      "name": null,
       "dateRange": {
         "start": null,
         "end": null

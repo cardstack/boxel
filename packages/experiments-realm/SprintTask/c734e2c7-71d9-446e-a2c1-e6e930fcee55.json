@@ -11,7 +11,7 @@
         "index": null,
         "label": "In Progress"
       },
-      "taskName": "Add functionality where + opens create card modal with correct status",
+      "name": "Add functionality where + opens create card modal with correct status",
       "dateRange": {
         "start": null,
         "end": null
