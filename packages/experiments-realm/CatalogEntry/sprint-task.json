@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Work Tracker",
-      "description": "Catalog entry for Work Tracker App card",
-      "isField": false,
+      "title": "Sprint Task",
+      "description": "Catalog entry for Sprint Task",
       "ref": {
-        "module": "../work-tracker",
-        "name": "WorkTracker"
-      }
+        "name": "SprintTask",
+        "module": "../sprint-task"
+      },
+      "isField": false
     },
     "meta": {
       "adoptsFrom": {

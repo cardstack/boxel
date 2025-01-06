@@ -27,6 +27,9 @@ import { Query, CardError, SupportedMimeType } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import { urgencyTagValues } from './crm/account';
+import { dealStatusValues } from './crm/deal';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -64,14 +67,27 @@ const DEAL_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Deal',
     createNewButtonText: 'Create Deal',
   },
+  ...dealStatusValues.map((status) => ({
+    displayName: status.label,
+    icon: status.icon,
+    cardTypeName: 'CRM Deal',
+    createNewButtonText: status.buttonText,
+  })),
 ];
+// Map with urgencyTagValues array from crm/account.gts
 const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
-    icon: ContactIcon,
+    icon: CalendarExclamation,
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
+  ...urgencyTagValues.map((tag) => ({
+    displayName: tag.label,
+    icon: tag.icon,
+    cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
+    createNewButtonText: tag.buttonText,
+  })),
 ];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
@@ -204,38 +220,69 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
-      return {
-        filter: {
-          on: this.activeFilter.cardRef,
-          every: [
-            { type: this.activeFilter.cardRef },
-            ...(this.searchKey !== ''
-              ? [
-                  {
-                    any: [
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          name: this.searchKey,
-                        },
-                      },
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          'company.name': this.searchKey,
-                        },
-                      },
-                    ],
-                  },
-                ]
-              : []),
-          ],
-        },
-        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
-      } as Query;
-    }
-    return;
+    const { loadAllFilters, activeFilter, activeTabId, searchKey } = this;
+
+    if (!loadAllFilters.isIdle || !activeFilter?.query) return;
+
+    const defaultFilter = {
+      type: activeFilter.cardRef,
+    };
+
+    // filter field value by CRM Account
+    const accountFilter =
+      activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'urgencyTag.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
+    // filter field value by CRM Deal
+    const dealFilter =
+      activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'status.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
+    const searchFilter = searchKey
+      ? [
+          {
+            any: [
+              {
+                on: activeFilter.cardRef,
+                contains: { name: searchKey },
+              },
+              {
+                on: activeFilter.cardRef,
+                contains: { 'company.name': searchKey },
+              },
+            ],
+          },
+        ]
+      : [];
+
+    return {
+      filter: {
+        on: activeFilter.cardRef,
+        every: [
+          defaultFilter,
+          ...accountFilter,
+          ...dealFilter,
+          ...searchFilter,
+        ],
+      },
+      sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
+    } as Query;
   }
 
   get searchPlaceholder() {

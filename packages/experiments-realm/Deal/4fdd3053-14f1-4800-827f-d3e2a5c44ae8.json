@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
+      "name": "Demo Deal Name",
       "status": {
         "index": 1,
         "label": "Proposal",

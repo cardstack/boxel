@@ -18,6 +18,16 @@ export default class DefaultAtomViewTemplate extends GlimmerComponent<{
       : `Untitled ${this.args.model.constructor.displayName}`;
   }
   <template>
-    {{this.text}}
+    <span class='atom-default-template'>
+      {{this.text}}
+    </span>
+    <style scoped>
+      @layer {
+        .atom-default-template {
+          font: 600 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+      }
+    </style>
   </template>
 }

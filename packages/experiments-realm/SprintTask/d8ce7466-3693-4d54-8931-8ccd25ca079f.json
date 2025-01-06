@@ -2,28 +2,29 @@
   "data": {
     "type": "card",
     "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-11-13",
+        "end": "2024-12-17"
+      },
       "priority": {
         "index": null,
         "label": null
       },
-      "status": {
-        "completed": false,
-        "index": 0,
-        "label": "Backlog"
-      },
-      "taskName": "Create RHS Sheet",
-      "dateRange": {
-        "start": "2024-12-01",
-        "end": "2024-12-08"
-      },
-      "taskDetail": null,
+      "name": "Build Date Range Card",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "project": {
         "links": {
-          "self": null
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       },
       "team": {
@@ -31,14 +32,14 @@
           "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       },
-      "children": {
+      "subtasks": {
         "links": {
           "self": null
         }
       },
       "assignee": {
         "links": {
-          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
       "tags": {
@@ -50,7 +51,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "WorkTask"
+        "name": "SprintTask"
       }
     }
   }

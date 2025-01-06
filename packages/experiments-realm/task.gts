@@ -1,14 +1,14 @@
 import {
-  CardDef,
   StringField,
   contains,
   field,
   linksTo,
   linksToMany,
   Component,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 
-import TextAreaCard from 'https://cardstack.com/base/text-area';
 import BooleanField from 'https://cardstack.com/base/boolean';
 
 import DateRangeField from './date-range-field';
@@ -17,7 +17,6 @@ import { User } from './user';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 
-import { LooseGooseyField, type LooseyGooseyData } from './loosey-goosey';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -31,8 +30,7 @@ import GlimmerComponent from '@glimmer/component';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
-
-type LooseyGooseyDataWithCompleted = LooseyGooseyData & { completed: boolean };
+import { Todo } from './todo';
 
 export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
@@ -56,14 +54,14 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
 
   // This ensures you get values from the class the instance is created
   get statuses() {
-    return (this.args.model.constructor as any)
-      .values as LooseyGooseyDataWithCompleted[];
+    return (this.args.model.constructor as any).values as TaskStatusField[];
   }
 
-  @action onSelectStatus(status: LooseyGooseyData): void {
+  @action onSelectStatus(status: TaskStatusField): void {
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;
+    this.args.model.color = this.selectedStatus?.color;
     this.args.model.completed = this.selectedStatus?.completed;
   }
 
@@ -72,7 +70,10 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   }
 }
 
-export class TaskStatusField extends LooseGooseyField {
+export class TaskStatusField extends FieldDef {
+  @field index = contains(NumberField); //sorting order
+  @field label = contains(StringField);
+  @field color = contains(StringField);
   @field completed = contains(BooleanField);
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
@@ -97,7 +98,7 @@ export class TaskStatusField extends LooseGooseyField {
   };
 
   //TODO: Not static. Need to improve ability to extend field templates
-  edit = TaskStatusEdit;
+  static edit = TaskStatusEdit;
 }
 
 export class FittedTask extends Component<typeof Task> {
@@ -152,8 +153,8 @@ export class FittedTask extends Component<typeof Task> {
       </header>
 
       <div class='card-info'>
-        {{#if @model.taskName}}
-          <h3 class='task-title'>{{@model.taskName}}</h3>
+        {{#if @model.name}}
+          <h3 class='task-title'>{{@model.name}}</h3>
         {{/if}}
 
         <div class='date-info-container'>
@@ -201,7 +202,7 @@ export class FittedTask extends Component<typeof Task> {
 
       .task-completion-status {
         --boxel-circle-size: 14px;
-        --boxel-border-radius: var(--boxel-border-radius-lg);
+        --boxel-border-radius: var(--boxel-border-radius-xxs);
       }
 
       .task-card {
@@ -443,7 +444,7 @@ class EditPriority extends Component<typeof TaskPriority> {
     });
   }
 
-  @action handlePriorityChange(priority: LooseyGooseyData): void {
+  @action handlePriorityChange(priority: TaskPriority): void {
     this.label = priority.label;
     this.args.model.label = this.selectedPriority?.label;
     this.args.model.index = this.selectedPriority?.index;
@@ -452,7 +453,7 @@ class EditPriority extends Component<typeof TaskPriority> {
   <template>
     <div class='priority-field'>
       <RadioInput
-        @groupDescription='Select Work Task Priority'
+        @groupDescription='Select Task Priority'
         @items={{this.priorities}}
         @checkedId={{this.selectedPriority.label}}
         @orientation='horizontal'
@@ -468,7 +469,9 @@ class EditPriority extends Component<typeof TaskPriority> {
   </template>
 }
 
-export class TaskPriority extends LooseGooseyField {
+export class TaskPriority extends FieldDef {
+  @field index = contains(NumberField); //sorting order
+  @field label = contains(StringField);
   // loosey goosey pattern
   static values = [
     { index: 0, label: 'Lowest', icon: ChevronsDown },
@@ -490,8 +493,7 @@ export class TaskPriority extends LooseGooseyField {
     },
   ];
 
-  //TODO: Not static. Need to improve ability to extend field templates
-  edit = EditPriority;
+  static edit = EditPriority;
   static embedded = class Embedded extends Component<typeof TaskPriority> {
     <template>
       {{@model.label}}
@@ -525,19 +527,17 @@ export class TaskPriority extends LooseGooseyField {
   };
 }
 
-export class Task extends CardDef {
+export class Task extends Todo {
   static displayName = 'Task';
-  @field taskName = contains(StringField);
   @field tags = linksToMany(() => Tag);
   @field dateRange = contains(DateRangeField);
   @field status = contains(TaskStatusField);
-  @field taskDetail = contains(TextAreaCard);
   @field assignee = linksTo(() => User);
   @field priority = contains(TaskPriority);
 
   @field title = contains(StringField, {
     computeVia: function (this: Task) {
-      return this.taskName ?? `Untitled ${this.constructor.displayName}`;
+      return this.name ?? `Untitled ${this.constructor.displayName}`;
     },
   });
 
@@ -617,7 +617,7 @@ export class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusS
         --circle-size: var(--boxel-circle-size, 20px);
         --border-radius: var(
           --boxel-border-radius,
-          var(--boxel-border-radius-xs)
+          var(--boxel-border-radius-xxs)
         );
         display: inline-flex;
         align-items: center;

@@ -2,21 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": 1,
-        "label": "Medium"
-      },
       "status": {
         "completed": false,
-        "index": 1,
-        "label": "Next Sprint"
+        "index": 3,
+        "label": "In Progress",
+        "color": "#FFB74D"
       },
-      "taskName": "Pill Picker Example",
       "dateRange": {
-        "start": "2024-12-08",
-        "end": "2024-12-10"
+        "start": null,
+        "end": null
       },
-      "taskDetail": "Use multi-select but for pills",
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Resolve bug where overlay only appears on certain cards",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
@@ -31,7 +32,7 @@
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
         }
       },
-      "children": {
+      "subtasks": {
         "links": {
           "self": null
         }
@@ -41,26 +42,16 @@
           "self": null
         }
       },
-      "tags.0": {
+      "tags": {
         "links": {
-          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
-        }
-      },
-      "tags.1": {
-        "links": {
-          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
-        }
-      },
-      "tags.2": {
-        "links": {
-          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
+          "self": null
         }
       }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "WorkTask"
+        "name": "SprintTask"
       }
     }
   }
