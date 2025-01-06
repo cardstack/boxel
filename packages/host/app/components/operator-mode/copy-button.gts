@@ -32,10 +32,6 @@ const LEFT = 0;
 const RIGHT = 1;
 
 export default class CopyButton extends Component<Signature> {
-  @service declare loaderService: LoaderService;
-  @service declare cardService: CardService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-
   <template>
     {{#if (gt this.stacks.length 1)}}
       {{#if this.state}}
@@ -102,15 +98,19 @@ export default class CopyButton extends Component<Signature> {
     </style>
   </template>
 
-  get stacks() {
+  @service private declare loaderService: LoaderService;
+  @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+
+  private get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
   }
 
-  get buttonKind() {
+  private get buttonKind() {
     return this.args.isCopying ? 'primary-dark' : 'primary';
   }
 
-  get state() {
+  private get state() {
     // Need to have 2 stacks in order for a copy button to exist
     if (this.stacks.length < 2) {
       return undefined;

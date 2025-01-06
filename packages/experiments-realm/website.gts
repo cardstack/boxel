@@ -1,7 +1,7 @@
 import WorldWwwIcon from '@cardstack/boxel-icons/world-www';
 import { UrlField } from './url';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { EntityDisplay } from './components/entity-display';
+import EntityDisplayWithIcon from './components/entity-icon-display';
 
 const domainWithPath = (urlString: string | null) => {
   if (!urlString) {
@@ -18,14 +18,11 @@ export class WebsiteField extends UrlField {
 
   static atom = class Atom extends Component<typeof WebsiteField> {
     <template>
-      <EntityDisplay>
-        <:title>
-          {{domainWithPath @model}}
-        </:title>
-        <:thumbnail>
+      <EntityDisplayWithIcon @title={{domainWithPath @model}}>
+        <:icon>
           <WorldWwwIcon />
-        </:thumbnail>
-      </EntityDisplay>
+        </:icon>
+      </EntityDisplayWithIcon>
     </template>
   };
 

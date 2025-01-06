@@ -972,6 +972,7 @@ module('Integration | operator-mode', function (hooks) {
       .includesText('Person');
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
@@ -1048,7 +1049,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     let authorId = [...savedCards].find((k) => k.includes('Author'))!;
     await waitFor(
-      `[data-test-stack-card-index="3"][data-test-stack-card="${authorId}"]`,
+      `[data-test-stack-card-index="3"] [data-test-card="${authorId}"]`,
     );
     await fillIn(
       '[data-test-field="lastName"] [data-test-boxel-input]',
@@ -1070,7 +1071,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
     let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${packetId}"]`,
+      `[data-test-stack-card-index="1"] [data-test-card="${packetId}"]`,
     );
     await fillIn(
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
@@ -1084,7 +1085,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitUntil(() =>
       document
-        .querySelector(`[data-test-stack-card="${packetId}"]`)
+        .querySelector(`[data-test-card="${packetId}"]`)
         ?.textContent?.includes(
           'Everyone knows that Alice ran the show in the Brady household.',
         ),
@@ -1198,7 +1199,7 @@ module('Integration | operator-mode', function (hooks) {
 
     let authorId = [...savedCards].find((k) => k.includes('Author'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${authorId}"]`,
+      `[data-test-stack-card-index="1"] [data-test-card="${authorId}"]`,
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
@@ -1401,7 +1402,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     let petId = [...savedCards].find((k) => k.includes('Pet'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${petId}"]`,
+      `[data-test-stack-card-index="1"] [data-test-card="${petId}"]`,
     );
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
@@ -1443,7 +1444,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     let petId = [...savedCards].find((k) => k.includes('Pet'))!;
     await waitFor(
-      `[data-test-stack-card-index="1"][data-test-stack-card="${petId}"]`,
+      `[data-test-stack-card-index="1"] [data-test-card="${petId}"]`,
     );
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
@@ -1586,6 +1587,10 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-stack-card-index="1"]'),
+    );
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
@@ -3036,6 +3041,29 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .doesNotHaveClass('opening-animation');
+  });
+
+  test('close card should not trigger opening animation again', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+
+    await waitFor(`[data-test-stack-card-index="0"]`);
+    assert
+      .dom(`[data-test-stack-card-index="0"]`)
       .doesNotHaveClass('opening-animation');
   });
 });

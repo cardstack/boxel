@@ -82,6 +82,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
+  @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
@@ -98,6 +99,18 @@ export default class OperatorModeStateService extends Service {
     super(owner);
     this.reset.register(this);
   }
+
+  get aiAssistantOpen() {
+    return this._aiAssistantOpen;
+  }
+
+  set aiAssistantOpen(value: boolean) {
+    this._aiAssistantOpen = value;
+  }
+
+  toggleAiAssistant = () => {
+    this.aiAssistantOpen = !this.aiAssistantOpen;
+  };
 
   resetState() {
     this.state = new TrackedObject({
@@ -452,12 +465,12 @@ export default class OperatorModeStateService extends Service {
   }
 
   async createStackItem(
-    card: CardDef,
+    url: URL,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
     let stackItem = new StackItem({
-      card,
+      url,
       stackIndex,
       owner: this,
       format,
@@ -609,10 +622,10 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  async openCardInInteractMode(card: CardDef) {
+  async openCardInInteractMode(url: URL) {
     this.clearStacks();
     let newItem = new StackItem({
-      card,
+      url,
       stackIndex: 0,
       owner: this, // We need to think for better owner
       format: 'isolated',
@@ -623,10 +636,10 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = restartableTask(async (realmUrl: string) => {
-    let card = await this.cardService.getCard(realmUrl); // Will return the workspace's index card
+    let url = new URL(`${realmUrl}index`);
     let stackItem = new StackItem({
       owner: this,
-      card,
+      url,
       format: 'isolated',
       stackIndex: 0,
     });
@@ -640,7 +653,7 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(card!.id),
+        : url,
     );
 
     this.operatorModeController.workspaceChooserOpened = false;

@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-12-01",
+        "end": "2024-12-08"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Create RHS Sheet",
+      "details": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": null
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

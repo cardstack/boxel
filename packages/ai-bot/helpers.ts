@@ -3,7 +3,7 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import { getSearchTool } from '@cardstack/runtime-common/helpers/ai';
+import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -17,6 +17,13 @@ import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -51,7 +58,7 @@ export interface PromptParts {
   messages: OpenAIPromptMessage[];
   model: string;
   history: DiscreteMatrixEvent[];
-  toolChoice: 'auto' | 'none';
+  toolChoice: ToolChoice;
 }
 
 export type Message = CommandMessage | TextMessage;
@@ -75,13 +82,14 @@ export function getPromptParts(
   );
   let skills = getEnabledSkills(eventList, cardFragments);
   let tools = getTools(history, aiBotUserId);
+  let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
   return {
     tools,
     messages,
     model: 'openai/gpt-4o',
     history,
-    toolChoice: 'auto',
+    toolChoice: toolChoice,
   };
 }
 
@@ -91,7 +99,7 @@ export function extractCardFragmentsFromEvents(
   const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
   for (let event of eventList) {
     if (event.type === 'm.room.message') {
-      if (event.content.msgtype === 'org.boxel.cardFragment') {
+      if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
         fragments.set(event.event_id, event.content as CardFragmentContent);
       }
     }
@@ -136,10 +144,10 @@ export function constructHistory(
       continue;
     }
     let eventId = event.event_id!;
-    if (event.content.msgtype === 'org.boxel.cardFragment') {
+    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
       continue;
     }
-    if (event.content.msgtype === 'org.boxel.message') {
+    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       let { attachedCardsEventIds } = event.content.data;
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
         event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
@@ -174,7 +182,7 @@ function getEnabledSkills(
   cardFragments: Map<string, CardFragmentContent>,
 ): LooseCardResource[] {
   let skillsConfigEvent = eventlist.findLast(
-    (event) => event.type === 'com.cardstack.boxel.room.skills',
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
     return [];
@@ -272,7 +280,7 @@ export function getRelevantCards(
     }
     if (event.sender !== aiBotUserId) {
       let { content } = event;
-      if (content.msgtype === 'org.boxel.message') {
+      if (content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
         setRelevantCards(attachedCardMap, content.data?.attachedCards);
         if (content.data?.attachedCards) {
           mostRecentlyAttachedCard = getMostRecentlyAttachedCard(
@@ -297,27 +305,57 @@ export function getTools(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Tool[] {
-  // TODO: there should be no default tools defined in the ai-bot, tools must be determined by the host
-  let searchTool = getSearchTool();
-  let tools = [searchTool as Tool];
-  // Just get the users messages
-  const userMessages = history.filter((event) => event.sender !== aiBotUserId);
-  // Get the last message
-  if (userMessages.length === 0) {
-    // If the user has sent no messages, return tools that are available by default
-    return tools;
+  // Build map directly from messages
+  let toolMap = new Map<string, Tool>();
+  for (let event of history) {
+    if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
+      continue;
+    }
+    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
+      let eventTools = event.content.data.context.tools;
+      if (eventTools?.length) {
+        for (let tool of eventTools) {
+          toolMap.set(tool.function.name, tool);
+        }
+      }
+    }
   }
-  const lastMessage = userMessages[userMessages.length - 1];
+  return Array.from(toolMap.values()).sort((a, b) =>
+    a.function.name.localeCompare(b.function.name),
+  );
+}
+
+export function getToolChoice(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): ToolChoice {
+  const lastUserMessage = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+
   if (
-    lastMessage.type === 'm.room.message' &&
-    lastMessage.content.msgtype === 'org.boxel.message' &&
-    lastMessage.content.data?.context?.tools?.length
+    !lastUserMessage ||
+    lastUserMessage.type !== 'm.room.message' ||
+    lastUserMessage.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
   ) {
-    return lastMessage.content.data.context.tools;
-  } else {
-    // If it's a different message type, or there are no tools, return tools that are available by default
-    return tools;
+    // If the last message is not a user message, auto is safe
+    return 'auto';
   }
+
+  const messageContext = lastUserMessage.content.data.context;
+  if (messageContext?.requireToolCall) {
+    let tools = messageContext.tools || [];
+    if (tools.length != 1) {
+      throw new Error('Forced tool calls only work with a single tool');
+    }
+    return {
+      type: 'function',
+      function: {
+        name: tools[0].function.name,
+      },
+    };
+  }
+  return 'auto';
 }
 
 export function isCommandResultEvent(
@@ -326,7 +364,7 @@ export function isCommandResultEvent(
   return (
     event.type === 'm.room.message' &&
     typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.commandResult'
+    event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE
   );
 }
 
@@ -449,7 +487,7 @@ export function getModifyPrompt(
         }
       } else {
         if (
-          event.content.msgtype === 'org.boxel.message' &&
+          event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
           event.content.data?.context?.openCardIds
         ) {
           body = `User message: ${body}
@@ -489,7 +527,7 @@ export function getModifyPrompt(
 
   if (tools.length == 0) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached. However, you are allowed to search for cards.';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [
@@ -559,7 +597,7 @@ export function isCommandEvent(
   return (
     event.type === 'm.room.message' &&
     typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.command' &&
+    event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
     event.content.format === 'org.matrix.custom.html' &&
     typeof event.content.data === 'object' &&
     typeof event.content.data.toolCall === 'object'

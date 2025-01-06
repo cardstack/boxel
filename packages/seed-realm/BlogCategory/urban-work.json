@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "Urban Work",
+      "shortName": "Work",
+      "slug": "urban-work",
+      "backgroundColor": "#ff7f00",
+      "textColor": "#fff",
+      "description": "Exploring work trends in the evolving city landscape.",
+      "title": "Work",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}

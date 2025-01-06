@@ -38,6 +38,17 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
+  APP_BOXEL_CARD_FORMAT,
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_REALMS_EVENT_TYPE,
+  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
+import {
   type Submode,
   Submodes,
 } from '@cardstack/host/components/submode-switcher';
@@ -84,7 +95,6 @@ const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
-export const SKILLS_STATE_EVENT_TYPE = 'com.cardstack.boxel.room.skills';
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -104,6 +114,7 @@ export default class MatrixService extends Service {
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
+  @tracked private _currentRoomId: string | undefined;
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -136,6 +147,19 @@ export default class MatrixService extends Service {
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
     this.currentUserEventReadReceipts.set(eventId, receipt);
+  }
+
+  get currentRoomId(): string | undefined {
+    return this._currentRoomId;
+  }
+
+  set currentRoomId(value: string | undefined) {
+    this._currentRoomId = value;
+    if (value) {
+      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
+    } else {
+      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+    }
   }
 
   get ready() {
@@ -172,7 +196,7 @@ export default class MatrixService extends Service {
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
-          if (e.event.type == 'com.cardstack.boxel.realms') {
+          if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
             await this.realmServer.setAvailableRealmURLs(
               e.event.content.realms,
             );
@@ -324,10 +348,10 @@ export default class MatrixService extends Service {
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
-        'com.cardstack.boxel.realms',
+        APP_BOXEL_REALMS_EVENT_TYPE,
       )) ?? {};
     realms.push(personalRealmURL.href);
-    await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
+    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, { realms });
     await this.realmServer.setAvailableRealmURLs(realms);
   }
 
@@ -401,7 +425,35 @@ export default class MatrixService extends Service {
         await this._client.startClient();
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
-        }>('com.cardstack.boxel.realms');
+        }>(APP_BOXEL_REALMS_EVENT_TYPE);
+        // TODO: remove this once we've migrated all users
+        // TEMPORARY MIGRATION CODE
+        if (!accountDataContent?.realms?.length) {
+          console.log(
+            'You currently have no realms set, checking your old realms',
+          );
+          try {
+            accountDataContent = await this._client.getAccountDataFromServer<{
+              realms: string[];
+            }>(LEGACY_APP_BOXEL_REALMS_EVENT_TYPE);
+          } catch (e) {
+            // throws if nothing at this key
+          }
+          if (accountDataContent?.realms) {
+            console.log('Migrating your old realms to the new format');
+            await this._client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+              realms: accountDataContent.realms,
+            });
+            console.log('Removing your old realms data');
+            await this._client.setAccountData(
+              LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+              {},
+            );
+          } else {
+            console.log('No old realms found');
+          }
+        }
+        // END OF TEMPORARY MIGRATION CODE
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );
@@ -505,7 +557,7 @@ export default class MatrixService extends Service {
       },
       body,
       formatted_body: html,
-      msgtype: 'org.boxel.commandResult',
+      msgtype: APP_BOXEL_COMMAND_RESULT_MSGTYPE,
       result: jsonStringResult,
     };
     try {
@@ -602,7 +654,7 @@ export default class MatrixService extends Service {
     );
 
     await this.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.message',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
@@ -634,8 +686,8 @@ export default class MatrixService extends Service {
     for (let index = fragments.length - 1; index >= 0; index--) {
       let cardFragment = fragments[index];
       let response = await this.sendEvent(roomId, 'm.room.message', {
-        msgtype: 'org.boxel.cardFragment' as const,
-        format: 'org.boxel.card' as const,
+        msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+        format: APP_BOXEL_CARD_FORMAT,
         body: `card fragment ${index + 1} of ${fragments.length}`,
         formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
         data: {
@@ -1180,7 +1232,7 @@ export default class MatrixService extends Service {
     if (
       roomData &&
       event.type === 'm.room.message' &&
-      event.content?.msgtype === 'org.boxel.message' &&
+      event.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
       event.content.data
     ) {
       let data = (
@@ -1206,10 +1258,10 @@ export default class MatrixService extends Service {
               )) as DiscreteMatrixEvent;
               if (
                 fragmentEvent.type !== 'm.room.message' ||
-                fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+                fragmentEvent.content.msgtype !== APP_BOXEL_CARDFRAGMENT_MSGTYPE
               ) {
                 throw new Error(
-                  `Expected event ${currentFragmentId} to be 'org.boxel.card' but was ${JSON.stringify(
+                  `Expected event ${currentFragmentId} to be '${APP_BOXEL_CARDFRAGMENT_MSGTYPE}' but was ${JSON.stringify(
                     fragmentEvent,
                   )}`,
                 );
@@ -1225,10 +1277,10 @@ export default class MatrixService extends Service {
             } else {
               if (
                 fragmentEvent.type !== 'm.room.message' ||
-                fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+                fragmentEvent.content.msgtype !== APP_BOXEL_CARDFRAGMENT_MSGTYPE
               ) {
                 throw new Error(
-                  `Expected event to be 'org.boxel.cardFragment' but was ${JSON.stringify(
+                  `Expected event to be '${APP_BOXEL_CARDFRAGMENT_MSGTYPE}' but was ${JSON.stringify(
                     fragmentEvent,
                   )}`,
                 );
@@ -1241,7 +1293,7 @@ export default class MatrixService extends Service {
       }
     } else if (
       event.type === 'm.room.message' &&
-      event.content?.msgtype === 'org.boxel.realm-server-event'
+      event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
       await this.realmServer.handleEvent(event);
     }
@@ -1249,7 +1301,7 @@ export default class MatrixService extends Service {
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.msgtype === 'org.boxel.command'
+      event.content?.msgtype === APP_BOXEL_COMMAND_MSGTYPE
     ) {
       this.commandService.executeCommandEventIfNeeded(event);
     }

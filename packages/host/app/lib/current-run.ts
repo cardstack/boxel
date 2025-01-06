@@ -234,7 +234,7 @@ export class CurrentRun {
 
   private async discoverInvalidations(
     url: URL,
-    mtimes: LastModifiedTimes,
+    indexMtimes: LastModifiedTimes,
   ): Promise<void> {
     log.debug(`discovering invalidations in dir ${url.href}`);
     let ignorePatterns = await this.#reader.readFile(
@@ -245,35 +245,23 @@ export class CurrentRun {
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
-    let entries = await this.#reader.directoryListing(url);
-
-    for (let { url, kind, lastModified } of entries) {
-      let innerURL = new URL(url);
-      if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
+    let filesystemMtimes = await this.#reader.mtimes();
+    for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
+      if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
+        // Only allow json and executable files to be invalidated so that we
+        // don't end up with invalidated files that weren't meant to be indexed
+        // (images, etc)
         continue;
       }
+      let indexEntry = indexMtimes.get(url);
 
-      if (kind === 'directory') {
-        await this.discoverInvalidations(innerURL, mtimes);
-      } else {
-        if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
-          // Only allow json and executable files to be invalidated so that we don't end up with invalidated files that weren't meant to be indexed (images, etc)
-          continue;
-        }
-
-        let indexEntry = mtimes.get(innerURL.href);
-        if (
-          !indexEntry ||
-          indexEntry.type === 'error' ||
-          indexEntry.lastModified == null
-        ) {
-          await this.batch.invalidate(innerURL);
-          continue;
-        }
-
-        if (lastModified !== indexEntry.lastModified) {
-          await this.batch.invalidate(innerURL);
-        }
+      if (
+        !indexEntry ||
+        indexEntry.type === 'error' ||
+        indexEntry.lastModified == null ||
+        lastModified !== indexEntry.lastModified
+      ) {
+        await this.batch.invalidate(new URL(url));
       }
     }
   }

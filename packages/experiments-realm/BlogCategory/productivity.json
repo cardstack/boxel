@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "Productivity",
+      "shortName": "Productivity",
+      "slug": "productivity",
+      "backgroundColor": "#14539A",
+      "textColor": "white",
+      "description": "Tips and tricks for better organization and effectiveness at work",
+      "title": "Productivity",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}

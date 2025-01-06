@@ -11,6 +11,7 @@ interface FilterDropdownSignature {
     selected: any;
     onChange: (value: any) => void;
     onClose: () => boolean | undefined;
+    isLoading?: boolean;
   };
   Blocks: {
     default: [any];
@@ -20,11 +21,11 @@ interface FilterDropdownSignature {
 export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
   <template>
     <BoxelMultiSelectBasic
-      class='work-tracker-multi-select'
+      class='filter-multi-select'
       @options={{@options}}
       @selected={{@selected}}
       @onChange={{@onChange}}
-      @triggerComponent={{FilterTrigger}}
+      @triggerComponent={{(component FilterTrigger isLoading=@isLoading)}}
       @initiallyOpened={{true}}
       @searchEnabled={{true}}
       @searchField={{@searchField}}
@@ -38,7 +39,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
     </BoxelMultiSelectBasic>
 
     <style scoped>
-      .work-tracker-multi-select {
+      .filter-multi-select {
         border: none;
       }
       .filter-option {

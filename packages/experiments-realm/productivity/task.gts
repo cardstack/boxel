@@ -19,12 +19,7 @@ import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { User } from '../user';
-import {
-  TaskBase,
-  BaseTaskStatusField,
-  BaseTaskPriority,
-  getDueDateStatus,
-} from '../task';
+import { Task, TaskStatusField, getDueDateStatus } from '../task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -145,7 +140,7 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
-class TaskIsolated extends Component<typeof Task> {
+class TaskIsolated extends Component<typeof SprintTask> {
   get dueDate() {
     return this.args.model.dateRange?.end;
   }
@@ -166,7 +161,7 @@ class TaskIsolated extends Component<typeof Task> {
     <div class='task-container'>
       <header>
         <div class='left-column'>
-          <h2 class='task-title'>{{@model.taskName}}</h2>
+          <h2 class='task-title'>{{@model.name}}</h2>
           <div class='status-label'>
             <span class='text-gray'>in</span>
             {{@model.status.label}}
@@ -197,16 +192,16 @@ class TaskIsolated extends Component<typeof Task> {
       <div class='task-info'>
         <div class='left-column'>
           <h4>Description</h4>
-          {{#if @model.taskDetail}}
-            <p>{{@model.taskDetail}}</p>
+          {{#if @model.details}}
+            <p>{{@model.details}}</p>
           {{else}}
             <span class='no-data-found-txt'>No Task Description Provided</span>
           {{/if}}
         </div>
 
         <div class='right-column'>
-          <div class='assignees'>
-            <h4>Assignees</h4>
+          <div class='assignee'>
+            <h4>Assignee</h4>
 
             {{#if @model.assignee}}
               <@fields.assignee
@@ -270,10 +265,10 @@ class TaskIsolated extends Component<typeof Task> {
       <hr class='task-divider border-white' />
 
       <div class='task-subtasks'>
-        <h4>Subtasks ({{@model.children.length}})</h4>
+        <h4>Subtasks ({{@model.subtasks.length}})</h4>
 
-        {{#if @model.children}}
-          <@fields.children @format='fitted' />
+        {{#if @model.subtasks}}
+          <@fields.subtasks @format='fitted' />
         {{else}}
           <span class='no-data-found-txt'>No Subtasks Found</span>
         {{/if}}
@@ -430,7 +425,7 @@ class TaskIsolated extends Component<typeof Task> {
 
   get progress() {
     if (!this.hasChildren) return 0;
-    const shippedCount = this.args.model.children!.filter(
+    const shippedCount = this.args.model.subtasks!.filter(
       (child) => child.status.label === 'Shipped',
     ).length;
 
@@ -446,23 +441,23 @@ class TaskIsolated extends Component<typeof Task> {
   }
 
   get hasChildren() {
-    return this.args.model.children && this.args.model.children.length > 0;
+    return this.args.model.subtasks && this.args.model.subtasks.length > 0;
   }
 
   get childrenCount() {
-    return this.args.model.children ? this.args.model.children.length : 0;
+    return this.args.model.subtasks ? this.args.model.subtasks.length : 0;
   }
 
   get shippedCount() {
-    return this.args.model.children
-      ? this.args.model.children.filter(
+    return this.args.model.subtasks
+      ? this.args.model.subtasks.filter(
           (child) => child.status.label === 'Shipped',
         ).length
       : 0;
   }
 }
 
-export class TaskStatusField extends BaseTaskStatusField {
+export class SprintTaskStatusField extends TaskStatusField {
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
@@ -504,18 +499,17 @@ export class TaskStatusField extends BaseTaskStatusField {
   ];
 }
 
-export class Task extends TaskBase {
-  static displayName = 'Task';
+export class SprintTask extends Task {
+  static displayName = 'Sprint Task';
   static icon = CheckboxIcon;
-  @field priority = contains(BaseTaskPriority);
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
-  @field children = linksToMany(() => Task);
-  @field status = contains(TaskStatusField);
+  @field subtasks = linksToMany(() => SprintTask);
+  @field status = contains(SprintTaskStatusField);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Task) {
-      return this.taskName;
+    computeVia: function (this: SprintTask) {
+      return this.name;
     },
   });
 
@@ -523,7 +517,7 @@ export class Task extends TaskBase {
   @field assignee = linksTo(() => TeamMember);
 
   @field shortId = contains(StringField, {
-    computeVia: function (this: Task) {
+    computeVia: function (this: SprintTask) {
       if (this.id) {
         let id = shortenId(extractId(this.id));
         let _shortId: string;

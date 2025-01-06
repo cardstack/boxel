@@ -18,7 +18,7 @@ import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
-import { EntityDisplay } from '../components/entity-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 import { htmlSafe } from '@ember/template';
 import { concat } from '@ember/helper';
 import { LooseGooseyField } from '../loosey-goosey';
@@ -32,6 +32,11 @@ import { Contact } from './contact';
 import { ContactRow } from '../components/contact-row';
 import Users from '@cardstack/boxel-icons/users';
 import World from '@cardstack/boxel-icons/world';
+import FilterSearch from '@cardstack/boxel-icons/filter-search';
+import FilePen from '@cardstack/boxel-icons/file-pen';
+import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
+import Award from '@cardstack/boxel-icons/award';
+import AwardOff from '@cardstack/boxel-icons/award-off';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { Document } from './document';
@@ -55,7 +60,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
     );
   }
   get primaryContactName() {
-    console.log(this.args.fields.account?.primaryContact);
     return this.args.model.account?.primaryContact?.name;
   }
 
@@ -84,10 +88,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return this.args.model[realmURL]!;
   }
 
-  get realmHref() {
-    return this.realmURL.href;
-  }
-
   get realmHrefs() {
     return [this.realmURL?.href];
   }
@@ -96,7 +96,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return {
       filter: {
         type: {
-          module: `${this.realmHref}crm/deal`,
+          module: new URL('./crm/deal', import.meta.url).href,
           name: 'Deal',
         },
       },
@@ -116,14 +116,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
       (acc, deal: Deal) => acc + deal.computedValue.amount,
       0,
     );
-    nonZeroDeals.map((d) => console.log(d.computedValue.amount));
-    console.log('totalDealRevenue', totalDealRevenue);
     let avgDealSize = totalDealRevenue / nonZeroDeals.length;
-    console.log('avgDealSize', avgDealSize);
+
     if (this.args.model.computedValue?.amount) {
       let percentDiff =
         (this.args.model.computedValue?.amount - avgDealSize) / avgDealSize;
-      console.log('percentDiff', percentDiff);
       let positive = percentDiff >= 0 ? true : false;
       let summary = `${percentDiff.toFixed(2)}% ${
         positive ? 'above' : 'below'
@@ -294,14 +291,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
             <footer class='next-steps'>
               <div class='next-steps-row'>
-                <EntityDisplay @center={{true}}>
-                  <:title>
-                    Notes
-                  </:title>
-                  <:thumbnail>
+                <EntityDisplayWithIcon @title='Notes' @center={{true}}>
+                  <:icon>
                     <Info class='info-icon' />
-                  </:thumbnail>
-                </EntityDisplay>
+                  </:icon>
+                </EntityDisplayWithIcon>
 
                 {{#if @model.document}}
                   <BoxelButton
@@ -459,7 +453,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .info-container {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: start;
         gap: var(--boxel-sp-xxs);
       }
       .summary-title {
@@ -524,7 +518,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       .info-atom {
         width: fit-content;
-        display: inline-block;
+        display: inline-flex;
       }
       .header-icon {
         width: var(--boxel-icon-sm);
@@ -536,50 +530,322 @@ class IsolatedTemplate extends Component<typeof Deal> {
   </template>
 }
 
+class FittedTemplate extends Component<typeof Deal> {
+  get logoURL() {
+    return (
+      this.args.model.thumbnailURL ?? this.args.model.account?.thumbnailURL
+    );
+  }
+
+  get primaryContactName() {
+    return this.args.model.account?.primaryContact?.name;
+  }
+
+  get hasCompanyInfo() {
+    return (
+      this.args.model?.account?.website ||
+      this.args.model?.account?.headquartersAddress
+    );
+  }
+
+  get hasValueBreakdown() {
+    return (
+      this.args.model.valueBreakdown &&
+      this.args.model.valueBreakdown.length > 0
+    );
+  }
+
+  get hasStakeholders() {
+    return (
+      this.args.model.primaryStakeholder ||
+      (this.args.model.stakeholders?.length ?? 0) > 0
+    );
+  }
+
+  <template>
+    <article class='fitted-deal-card'>
+      <header class='deal-header'>
+        <AccountHeader
+          @logoURL={{this.logoURL}}
+          @name={{@model.name}}
+          class='crm-account-header'
+        >
+          <:name>
+            {{#if @model.name}}
+              <h1 class='account-name'>{{@model.name}}</h1>
+            {{else}}
+              <h1 class='account-name default-value'>Missing Deal Name</h1>
+            {{/if}}
+          </:name>
+          <:content>
+            <div class='account-info'>
+              <@fields.company
+                @format='atom'
+                @displayContainer={{false}}
+                class='info-atom'
+              />
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+                class='info-atom'
+              />
+            </div>
+          </:content>
+        </AccountHeader>
+
+        <div class='deal-status'>
+          <@fields.status @format='atom' @displayContainer={{false}} />
+        </div>
+      </header>
+
+      <div class='deal-content'>
+        <div class='deal-details'>
+          <div class='deal-field'>
+            <label>Current Value:</label>
+            <@fields.computedValue class='highlight-value' @format='atom' />
+          </div>
+
+          <div class='deal-field'>
+            <label>Close Date</label>
+            <div class='highlight-value'>
+              <@fields.closeDate @format='atom' />
+            </div>
+          </div>
+
+          {{#if @model.healthScore}}
+            <div class='deal-field'>
+              <label>Health Score</label>
+              <div class='progress-container'>
+                <CrmProgressBar
+                  @value={{@model.healthScore}}
+                  @max={{100}}
+                  @color='var(--boxel-green)'
+                />
+                <div class='highlight-value'>
+                  {{@model.healthScore}}
+                </div>
+              </div>
+            </div>
+          {{/if}}
+        </div>
+
+        <div class='event-details'>
+          {{! just serve the placeholder for grid system ,pending event card - https://linear.app/cardstack/issue/CS-7691/add-event-card }}
+        </div>
+      </div>
+
+    </article>
+
+    <style scoped>
+      h1,
+      p {
+        margin: 0;
+      }
+      label {
+        color: var(--boxel-500);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+      }
+      .default-value {
+        color: var(--boxel-400);
+      }
+      .fitted-deal-card {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        grid-template-areas:
+          'deal-header'
+          'deal-content';
+        grid-template-rows: max-content auto;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+      .deal-header {
+        grid-area: deal-header;
+        display: grid;
+        grid-template-areas: 'crm-account-header deal-status';
+        grid-template-columns: 75% auto;
+        align-items: start;
+        gap: var(--boxel-sp-lg);
+      }
+      .deal-content {
+        grid-area: deal-content;
+        display: grid;
+        grid-template-areas: 'deal-details event-details';
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-lg);
+        margin-top: auto;
+      }
+      .crm-account-header {
+        grid-area: crm-account-header;
+        overflow: hidden;
+      }
+      .deal-status {
+        grid-area: deal-status;
+        margin-left: auto;
+      }
+      .account-name {
+        font-size: var(--boxel-font-size-med);
+        font-weight: 600;
+      }
+      .account-info {
+        display: flex;
+        align-items: start;
+        gap: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .account-name,
+      .account-info:deep(.entity-name) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+        width: 100%;
+      }
+      .info-atom {
+        width: fit-content;
+        display: inline-flex;
+      }
+      /* deal details */
+      .deal-details {
+        grid-area: deal-details;
+        display: flex;
+        gap: var(--boxel-sp-lg);
+      }
+      .deal-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .highlight-value {
+        font-weight: 600;
+        font-size: calc(var(--boxel-font-size) - 1px);
+      }
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .event-details {
+        grid-area: event-details;
+        background-color: var(--boxel-300);
+      }
+      /* Catch all because deal is too dense*/
+      @container fitted-card (height < 180px) {
+        .fitted-deal-card {
+          grid-template-areas: 'deal-header';
+          grid-template-rows: auto;
+          padding: var(--boxel-sp-sm);
+        }
+        .deal-content {
+          display: none;
+        }
+
+        .deal-header {
+          grid-area: deal-header;
+          display: grid;
+          grid-template-areas: 'crm-account-header';
+          grid-template-columns: 1fr;
+          align-items: start;
+          gap: var(--boxel-sp-lg);
+        }
+        .deal-status {
+          display: none;
+        }
+
+        .deal-header:deep(.account-header-logo) {
+          width: 40px;
+          height: 40px;
+        }
+        .account-name {
+          font-size: var(--boxel-font-size-sm);
+        }
+      }
+    </style>
+  </template>
+}
+
+export const dealStatusValues = [
+  {
+    index: 0,
+    icon: FilterSearch,
+    label: 'Discovery',
+    value: 'discovery',
+    buttonText: 'Create Deal', // TODO: For the createNewButtonText usage in CRM App
+    colorScheme: {
+      foregroundColor: '#D32F2F', // Dark Red
+      backgroundColor: '#FFEBEE', // Light Red
+    },
+  },
+  {
+    index: 1,
+    icon: FilePen,
+    label: 'Proposal',
+    value: 'proposal',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: 'var(--boxel-lilac)',
+    },
+  },
+  {
+    index: 2,
+    icon: ArrowLeftRight,
+    label: 'Negotiation',
+    value: 'negotiation',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: '#FFF3E0', // light orange
+    },
+  },
+  {
+    index: 3,
+    icon: Award,
+    label: 'Closed Won',
+    value: 'closed-won',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: '#E8F5E9', // light green
+    },
+  },
+  {
+    index: 4,
+    icon: AwardOff,
+    label: 'Closed Lost',
+    value: 'closed-lost',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: '#FFEBEE', // light red
+    },
+  },
+];
+
 class DealStatus extends LooseGooseyField {
   static displayName = 'CRM Deal Status';
-  static values = [
-    {
-      index: 0,
-      label: 'Discovery',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#E3F2FD',
-      },
-    },
-    {
-      index: 1,
-      label: 'Proposal',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: 'var(--boxel-lilac)',
-      },
-    },
-    {
-      index: 2,
-      label: 'Negotiation',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#FFF3E0', // light orange
-      },
-    },
-    {
-      index: 3,
-      label: 'Closed Won',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#E8F5E9', // light green
-      },
-    },
-    {
-      index: 4,
-      label: 'Closed Lost',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#FFEBEE', // light red
-      },
-    },
-  ];
+  static values = dealStatusValues;
+
+  static atom = class Atom extends Component<typeof this> {
+    get statusData() {
+      return dealStatusValues.find(
+        (status) => status.label === this.args.model.label,
+      );
+    }
+
+    <template>
+      {{#if @model.label}}
+        <EntityDisplayWithIcon @title={{@model.label}}>
+          <:icon>
+            {{this.statusData.icon}}
+          </:icon>
+        </EntityDisplayWithIcon>
+      {{/if}}
+    </template>
+  };
 }
 
 export class DealPriority extends LooseGooseyField {
@@ -717,6 +983,7 @@ export class Deal extends CardDef {
     },
   });
   static isolated = IsolatedTemplate;
+  static fitted = FittedTemplate;
 }
 
 interface DealPageLayoutArgs {

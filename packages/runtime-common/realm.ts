@@ -349,6 +349,7 @@ export class Realm {
         this.patchCard.bind(this),
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
+      .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
         '/_search-prerendered',
@@ -1649,6 +1650,57 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async realmMtimes(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let mtimes: { [path: string]: number } = {};
+    let traverse = async (currentPath = '') => {
+      const entries = this.#adapter.readdir(currentPath);
+
+      for await (const entry of entries) {
+        let innerPath = join(currentPath, entry.name);
+        let innerURL =
+          entry.kind === 'directory'
+            ? this.paths.directoryURL(innerPath)
+            : this.paths.fileURL(innerPath);
+        if (await this.isIgnored(innerURL)) {
+          continue;
+        }
+        if (entry.kind === 'directory') {
+          await traverse(innerPath);
+        } else if (entry.kind === 'file') {
+          let mtime = await this.#adapter.lastModified(innerPath);
+          if (mtime != null) {
+            mtimes[innerURL.href] = mtime;
+          }
+        }
+      }
+    };
+
+    await traverse();
+
+    return createResponse({
+      body: JSON.stringify(
+        {
+          data: {
+            id: this.url,
+            type: 'mtimes',
+            attributes: {
+              mtimes,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      init: {
+        headers: { 'content-type': SupportedMimeType.Mtimes },
       },
       requestContext,
     });

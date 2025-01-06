@@ -1,5 +1,5 @@
 import StringField from 'https://cardstack.com/base/string';
-import { PhoneField } from '../phone';
+import { ContactPhoneNumber } from '../phone-number';
 import { EmailField } from '../email';
 import { ContactLinkField } from '../fields/contact-link';
 import {
@@ -19,6 +19,7 @@ import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import { LooseGooseyField } from '../loosey-goosey';
+import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -185,7 +186,7 @@ class FittedTemplate extends Component<typeof Contact> {
         grid-area: avatar-group-container;
       }
       .avatar-group-container
-        :where(.avatar-info .company-group .entity-name-tag) {
+        :where(.avatar-info .company-group .entity-title-tag-container) {
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -220,22 +221,6 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .avatar-group-container :where(.avatar-thumbnail) {
         --profile-avatar-icon-size: 55px;
-      }
-
-      @container fitted-card (height < 300px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'links'
-            'status';
-          grid-template-rows: max-content max-content auto;
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 55px;
-        }
-        .contact-info {
-          display: none;
-        }
       }
 
       /* Catch all because contact info is too dense*/
@@ -625,16 +610,17 @@ class AtomTemplate extends Component<typeof Contact> {
   }
   <template>
     <div class='contact'>
-      {{#if @model.id}}
-        <Avatar
-          @userID={{@model.id}}
-          @displayName={{@model.name}}
-          @thumbnailURL={{@model.thumbnailURL}}
-          @isReady={{true}}
-          class='avatar'
-        />
-      {{/if}}
-      <span class='name'>{{this.label}}</span>
+      <EntityDisplayWithThumbnail @title={{this.label}} @underline={{true}}>
+        <:thumbnail>
+          <Avatar
+            @userID={{@model.id}}
+            @displayName={{@model.name}}
+            @thumbnailURL={{@model.thumbnailURL}}
+            @isReady={{true}}
+            class='avatar'
+          />
+        </:thumbnail>
+      </EntityDisplayWithThumbnail>
     </div>
     <style scoped>
       .contact {
@@ -644,15 +630,9 @@ class AtomTemplate extends Component<typeof Contact> {
         min-width: 0; /* Helps with text overflow */
       }
       .avatar {
-        --profile-avatar-icon-size: 30px;
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
-      }
-      .name {
-        text-decoration: underline;
-        flex: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
     </style>
   </template>
@@ -701,8 +681,8 @@ export class Contact extends CardDef {
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);
   @field secondaryEmail = contains(EmailField);
-  @field phoneMobile = contains(PhoneField);
-  @field phoneOffice = contains(PhoneField);
+  @field phoneMobile = contains(ContactPhoneNumber);
+  @field phoneOffice = contains(ContactPhoneNumber);
   @field socialLinks = containsMany(SocialLinkField);
   @field statusTag = contains(StatusTagField); //this is an empty field that gets computed in subclasses
 

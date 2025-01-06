@@ -1,4 +1,7 @@
-import { type Deferred, apiFor } from '@cardstack/runtime-common';
+import {
+  type Deferred,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import {
   type CardResource,
@@ -6,14 +9,13 @@ import {
 } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 interface Args {
   format: Format;
   owner: object;
   request?: Deferred<CardDef | undefined>;
   stackIndex: number;
-  card?: CardDef;
+  newCard?: { doc: LooseSingleCardDocument; relativeTo: URL | undefined };
   url?: URL;
   cardResource?: CardResource;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
@@ -25,39 +27,32 @@ export class StackItem {
   stackIndex: number;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
   private owner: object;
-  private newCard?: CardDef;
   private cardResource?: CardResource;
-  private newCardApiPromise: Promise<typeof CardAPI> | undefined;
-  private newCardApi: typeof CardAPI | undefined;
 
   constructor(args: Args) {
     let {
       format,
       request,
       stackIndex,
-      card,
+      newCard,
       url,
       cardResource,
       isLinkedCard,
       owner,
     } = args;
-    if (!card && !cardResource && !url) {
+    if (!newCard && !cardResource && !url) {
       throw new Error(
-        `Cannot create a StackItem without a 'card' or a 'cardResource' or a 'url'`,
+        `Cannot create a StackItem without a 'newCard' or a 'cardResource' or a 'url'`,
       );
     }
     if (cardResource) {
       this.cardResource = cardResource;
-    } else if (card?.id) {
-      // if the card is not actually new--load a resource instead
-      this.cardResource = getCard(owner, () => card!.id);
     } else if (url) {
       this.cardResource = getCard(owner, () => url!.href);
-    } else if (card) {
-      this.newCard = card;
-      this.newCardApiPromise = apiFor(this.card).then(
-        (api) => (this.newCardApi = api),
-      );
+    } else if (newCard) {
+      this.cardResource = getCard(owner, () => newCard!.doc, {
+        relativeTo: newCard.relativeTo,
+      });
     }
 
     this.format = format;
@@ -68,16 +63,11 @@ export class StackItem {
   }
 
   get url() {
-    return (
-      (this.cardResource?.url ? new URL(this.cardResource.url) : undefined) ??
-      (this.newCard?.id ? new URL(this.newCard.id) : undefined)
-    );
+    return this.cardResource?.url ? new URL(this.cardResource.url) : undefined;
   }
 
   get card(): CardDef {
-    if (this.newCard) {
-      return this.newCard;
-    } else if (this.cardResource) {
+    if (this.cardResource) {
       if (!this.cardResource.card) {
         throw new Error(`The CardResource for this StackItem has no card set`);
       }
@@ -88,9 +78,7 @@ export class StackItem {
   }
 
   get title() {
-    if (this.newCard) {
-      return this.newCard.title;
-    } else if (this.cardResource?.card) {
+    if (this.cardResource?.card) {
       return this.cardResource.card.title;
     }
     return undefined;
@@ -127,7 +115,7 @@ export class StackItem {
   }
 
   get api() {
-    let api = this.cardResource?.api ?? this.newCardApi;
+    let api = this.cardResource?.api;
     if (!api) {
       throw new Error(
         `API for stack item is not available yet--use this.ready() to wait for API availability`,
@@ -137,22 +125,14 @@ export class StackItem {
   }
 
   async ready() {
-    await Promise.all([this.cardResource?.loaded, this.newCardApiPromise]);
+    await this.cardResource?.loaded;
   }
 
   clone(args: Partial<Args>) {
-    let {
-      card,
-      format,
-      request,
-      isLinkedCard,
-      owner,
-      cardResource,
-      stackIndex,
-    } = this;
+    let { format, request, isLinkedCard, owner, cardResource, stackIndex } =
+      this;
     return new StackItem({
       cardResource,
-      card,
       format,
       request,
       isLinkedCard,

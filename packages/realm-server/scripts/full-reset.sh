@@ -26,5 +26,5 @@ cd "${CURRENT_DIR}"
 echo "
 WARNING: Any matrix server authorization tokens cached in the browser's localstorage are now invalid. Make sure to clear browser localstorage. Also make sure to execute the following in the browser after logging in as 'user' to add the experiments realm:
 
-window['@cardstack/host'].lookup('service:matrix-service')._client.setAccountData('com.cardstack.boxel.realms', {realms: ['http://localhost:4201/experiments/']})
+window['@cardstack/host'].lookup('service:matrix-service')._client.setAccountData('app.boxel.realms', {realms: ['http://localhost:4201/experiments/']})
 "
