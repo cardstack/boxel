@@ -2,20 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": null,
       "dateRange": {
         "start": null,
         "end": null
       },
       "status": {
-        "index": 1,
-        "label": "In Progress"
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
       },
-      "taskDetail": null,
       "priority": {
         "index": 1,
         "label": "Low"
       },
+      "name": "Renew Google Play Data Agreement",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },

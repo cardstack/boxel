@@ -17,14 +17,14 @@
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../work-tracker",
-        "name": "WorkTracker"
+        "module": "../sprint-planner",
+        "name": "SprintPlanner"
       }
     }
   }
