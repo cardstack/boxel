@@ -8,6 +8,6 @@ import TextAreaCard from 'https://cardstack.com/base/text-area';
 
 export class Todo extends CardDef {
   static displayName = 'Todo';
-  @field taskName = contains(StringField);
-  @field taskDetail = contains(TextAreaCard);
+  @field name = contains(StringField);
+  @field details = contains(TextAreaCard);
 }
