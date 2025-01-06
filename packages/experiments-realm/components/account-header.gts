@@ -19,7 +19,9 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
       {{#if @logoURL}}
         <img src={{@logoURL}} alt={{@name}} class='account-header-logo' />
       {{else}}
-        <ImageIcon class='account-header-logo default-icon-container' />
+        <div class='account-header-logo default-icon-container'>
+          <ImageIcon width='24' height='24' />
+        </div>
       {{/if}}
       <div class='account-header-info'>
         {{#if (has-block 'name')}}
@@ -40,16 +42,23 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
       }
       .account-header-logo {
         flex-shrink: 0;
-        width: 60px;
-        height: 60px;
+        width: var(--account-header-logo-size, 60px);
+        height: var(--account-header-logo-size, 60px);
         object-fit: cover;
         border-radius: var(--boxel-border-radius-xl);
       }
       .default-icon-container {
+        display: var(--account-header-logo-display, flex);
+        align-items: center;
+        justify-content: center;
         background-color: var(--boxel-200);
         color: var(--boxel-400);
+        padding: 5px;
       }
       .account-header-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
         min-width: 0;
         width: 100%;
         overflow: hidden;

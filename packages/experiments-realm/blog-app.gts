@@ -4,7 +4,6 @@ import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { TrackedArray } from 'tracked-built-ins';
 
 import {
   CardDef,
@@ -16,10 +15,10 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import {
-  CardError,
   getCard,
-  SupportedMimeType,
   type LooseSingleCardDocument,
+  ResolvedCodeRef,
+  TypedFilter,
 } from '@cardstack/runtime-common';
 import {
   type SortOption,
@@ -45,58 +44,6 @@ import BlogAppIcon from '@cardstack/boxel-icons/notebook';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
 import type { BlogPost } from './blog-post';
-
-export const SORT_OPTIONS: SortOption[] = [
-  {
-    id: 'datePubDesc',
-    displayName: 'Date Published',
-    sort: [
-      {
-        by: 'createdAt',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    id: 'lastUpdatedDesc',
-    displayName: 'Last Updated',
-    sort: [
-      {
-        by: 'lastModified',
-        direction: 'desc',
-      },
-    ],
-  },
-  {
-    id: 'cardTitleAsc',
-    displayName: 'A-Z',
-    sort: sortByCardTitleAsc,
-  },
-];
-
-const FILTERS: LayoutFilter[] = [
-  {
-    displayName: 'Blog Posts',
-    icon: BlogPostIcon,
-    cardTypeName: 'Blog Post',
-    createNewButtonText: 'Post',
-    showAdminData: true,
-    sortOptions: SORT_OPTIONS,
-  },
-  {
-    displayName: 'Author Bios',
-    icon: AuthorIcon,
-    cardTypeName: 'Author',
-    createNewButtonText: 'Author',
-  },
-  {
-    displayName: 'Categories',
-    icon: CategoriesIcon,
-    cardTypeName: 'Category',
-    createNewButtonText: 'Category',
-    isCreateNewDisabled: true, // TODO: Category cards
-  },
-];
 
 export const toISOString = (datetime: Date) => datetime.toISOString();
 
@@ -273,6 +220,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
             @query={{this.query}}
             @realms={{this.realms}}
+            class={{this.gridClass}}
           >
             <:meta as |card|>
               {{#if this.showAdminData}}
@@ -303,17 +251,61 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
+      :deep(.categories-grid) {
+        --card-view-height: 150px;
+      }
     </style>
   </template>
 
-  filters: LayoutFilter[] = new TrackedArray(this.args.model.filters);
-
   @tracked private selectedView: ViewOption = 'card';
-  @tracked private activeFilter: LayoutFilter = this.filters[0];
+  @tracked private activeFilter: LayoutFilter;
+  @tracked private filters: LayoutFilter[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.loadCardTypes.perform();
+    this.setFilters();
+    this.activeFilter = this.filters[0];
+  }
+
+  private get gridClass() {
+    let displayName = this.activeFilter.displayName;
+    let gridName =
+      displayName === 'Blog Posts'
+        ? 'blog-posts-grid'
+        : displayName === 'Author Bios'
+        ? 'author-bios-grid'
+        : displayName === 'Categories'
+        ? 'categories-grid'
+        : '';
+    return gridName ? `bordered-items ${gridName}` : '';
+  }
+
+  private setFilters() {
+    let blogId = this.args.model.id;
+
+    let makeQuery = (codeRef: ResolvedCodeRef) => {
+      if (!blogId) {
+        throw new Error('Missing blog id');
+      }
+
+      return {
+        filter: {
+          on: codeRef,
+          eq: { 'blog.id': blogId },
+        },
+      };
+    };
+
+    this.filters =
+      this.args.model.filters?.map((filter) => {
+        if (!filter.query && filter.cardRef) {
+          return {
+            ...filter,
+            query: makeQuery(filter.cardRef),
+          };
+        }
+        return filter;
+      }) ?? [];
   }
 
   private get selectedSort() {
@@ -332,56 +324,11 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private get query() {
-    if (this.loadCardTypes.isIdle && this.activeFilter.query) {
-      return {
-        ...this.activeFilter.query,
-        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
-      };
-    }
-    return undefined;
+    return {
+      ...this.activeFilter.query,
+      sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
+    };
   }
-
-  private loadCardTypes = restartableTask(async () => {
-    let url = `${this.realms[0]}_types`;
-    let response = await fetch(url, {
-      headers: {
-        Accept: SupportedMimeType.CardTypeSummary,
-      },
-    });
-    if (!response.ok) {
-      let err = await CardError.fromFetchResponse(url, response);
-      throw err;
-    }
-    let cardTypeSummaries = (await response.json()).data as {
-      id: string;
-      attributes: { displayName: string; total: number };
-    }[];
-
-    for (let filter of this.filters) {
-      let summary = cardTypeSummaries.find(
-        (s) => s.attributes.displayName === filter.cardTypeName,
-      );
-      if (!summary) {
-        return;
-      }
-      const lastIndex = summary.id.lastIndexOf('/');
-      let cardRef = {
-        module: summary.id.substring(0, lastIndex),
-        name: summary.id.substring(lastIndex + 1),
-      };
-      filter.cardRef = cardRef;
-
-      if (!this.args.model.id) {
-        throw new Error(`Missing card id`);
-      }
-      filter.query = {
-        filter: {
-          on: cardRef,
-          eq: { 'blog.id': this.args.model.id },
-        },
-      };
-    }
-  });
 
   @action private onChangeView(id: ViewOption) {
     this.selectedView = id;
@@ -401,9 +348,13 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
   }
 
   private createCard = restartableTask(async () => {
-    let ref = this.activeFilter.cardRef;
+    if (!this.activeFilter?.query?.filter) {
+      throw new Error('Missing active filter');
+    }
+    let ref = (this.activeFilter.query.filter as TypedFilter).on;
+
     if (!ref) {
-      return;
+      throw new Error('Missing card ref');
     }
     let currentRealm = this.realms[0];
     let doc: LooseSingleCardDocument = {
@@ -437,7 +388,81 @@ export class BlogApp extends CardDef {
   static icon = BlogAppIcon;
   static prefersWideFormat = true;
   static headerColor = '#fff500';
-  filters = FILTERS;
+
+  static sortOptionList: SortOption[] = [
+    {
+      id: 'datePubDesc',
+      displayName: 'Date Published',
+      sort: [
+        {
+          on: {
+            module: new URL('./blog-post', import.meta.url).href,
+            name: 'BlogPost',
+          },
+          by: 'publishDate',
+          direction: 'desc',
+        },
+      ],
+    },
+    {
+      id: 'lastUpdatedDesc',
+      displayName: 'Last Updated',
+      sort: [
+        {
+          by: 'lastModified',
+          direction: 'desc',
+        },
+      ],
+    },
+    {
+      id: 'cardTitleAsc',
+      displayName: 'A-Z',
+      sort: sortByCardTitleAsc,
+    },
+  ];
+
+  static filterList: LayoutFilter[] = [
+    {
+      displayName: 'Blog Posts',
+      icon: BlogPostIcon,
+      cardTypeName: 'Blog Post',
+      createNewButtonText: 'Post',
+      showAdminData: true,
+      sortOptions: BlogApp.sortOptionList,
+      cardRef: {
+        name: 'BlogPost',
+        module: new URL('./blog-post', import.meta.url).href,
+      },
+    },
+    {
+      displayName: 'Author Bios',
+      icon: AuthorIcon,
+      cardTypeName: 'Author',
+      createNewButtonText: 'Author',
+      cardRef: {
+        name: 'Author',
+        module: new URL('./author', import.meta.url).href,
+      },
+    },
+    {
+      displayName: 'Categories',
+      icon: CategoriesIcon,
+      cardTypeName: 'Category',
+      createNewButtonText: 'Category',
+      cardRef: {
+        name: 'BlogCategory',
+        module: new URL('./blog-category', import.meta.url).href,
+      },
+    },
+  ];
+
+  get filters(): LayoutFilter[] {
+    if (this.constructor && 'filterList' in this.constructor) {
+      return this.constructor.filterList as LayoutFilter[];
+    }
+    return BlogApp.filterList;
+  }
+
   static isolated = BlogAppTemplate;
   static fitted = class Fitted extends Component<typeof this> {
     <template>

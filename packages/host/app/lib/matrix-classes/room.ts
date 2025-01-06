@@ -2,7 +2,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { type IEvent } from 'matrix-js-sdk';
 
-import { SKILLS_STATE_EVENT_TYPE } from '@cardstack/host/services/matrix-service';
+import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -45,8 +45,8 @@ export default class Room {
 
   get skillsConfig() {
     return (
-      this._roomState?.events.get(SKILLS_STATE_EVENT_TYPE)?.get('')?.event
-        .content ?? {
+      this._roomState?.events.get(APP_BOXEL_ROOM_SKILLS_EVENT_TYPE)?.get('')
+        ?.event.content ?? {
         enabledEventIds: [],
         disabledEventIds: [],
       }

@@ -23,15 +23,13 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { AppCard, Tab } from './app-card';
-import {
-  Query,
-  CardError,
-  SupportedMimeType,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common';
+import { Query, CardError, SupportedMimeType } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import { urgencyTagValues } from './crm/account';
+import { dealStatusValues } from './crm/deal';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -69,14 +67,27 @@ const DEAL_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Deal',
     createNewButtonText: 'Create Deal',
   },
+  ...dealStatusValues.map((status) => ({
+    displayName: status.label,
+    icon: status.icon,
+    cardTypeName: 'CRM Deal',
+    createNewButtonText: status.buttonText,
+  })),
 ];
+// Map with urgencyTagValues array from crm/account.gts
 const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
-    icon: ContactIcon,
+    icon: CalendarExclamation,
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
+  ...urgencyTagValues.map((tag) => ({
+    displayName: tag.label,
+    icon: tag.icon,
+    cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
+    createNewButtonText: tag.buttonText,
+  })),
 ];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
@@ -168,15 +179,10 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     );
   }
 
-  get activeTabRef() {
-    if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
-      return;
-    }
-    if (!this.currentRealm) {
-      return;
-    }
-    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
+  get activeTabClass() {
+    return this.activeTab?.tabId ? this.activeTab.tabId.toLowerCase() : '';
   }
+
   setTabs(tabs: Tab[]) {
     this.args.model.tabs = tabs ?? [];
   }
@@ -214,38 +220,69 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
-      return {
-        filter: {
-          on: this.activeFilter.cardRef,
-          every: [
-            { type: this.activeFilter.cardRef },
-            ...(this.searchKey !== ''
-              ? [
-                  {
-                    any: [
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          name: this.searchKey,
-                        },
-                      },
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          'company.name': this.searchKey,
-                        },
-                      },
-                    ],
-                  },
-                ]
-              : []),
-          ],
-        },
-        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
-      } as Query;
-    }
-    return;
+    const { loadAllFilters, activeFilter, activeTabId, searchKey } = this;
+
+    if (!loadAllFilters.isIdle || !activeFilter?.query) return;
+
+    const defaultFilter = {
+      type: activeFilter.cardRef,
+    };
+
+    // filter field value by CRM Account
+    const accountFilter =
+      activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'urgencyTag.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
+    // filter field value by CRM Deal
+    const dealFilter =
+      activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'status.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
+    const searchFilter = searchKey
+      ? [
+          {
+            any: [
+              {
+                on: activeFilter.cardRef,
+                contains: { name: searchKey },
+              },
+              {
+                on: activeFilter.cardRef,
+                contains: { 'company.name': searchKey },
+              },
+            ],
+          },
+        ]
+      : [];
+
+    return {
+      filter: {
+        on: activeFilter.cardRef,
+        every: [
+          defaultFilter,
+          ...accountFilter,
+          ...dealFilter,
+          ...searchFilter,
+        ],
+      },
+      sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
+    } as Query;
   }
 
   get searchPlaceholder() {
@@ -281,7 +318,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     </TabbedHeader>
 
     <Layout
-      class='crm-app'
+      class='crm-app {{this.activeTabClass}}'
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
@@ -442,18 +479,24 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         margin-left: auto;
       }
       /* Cards grid crm */
+      /* catch all tab */
       .crm-app :where(.card-view-container) {
         grid-template-columns: 1fr;
       }
-      .crm-app :where(.grid-view) {
-        --grid-card-min-width: 300px;
+      /* contact tab */
+      .crm-app.contact {
+        --grid-view-min-width: 300px;
+      }
+      /* deal tab */
+      .crm-app.deal {
+        --strip-view-min-width: 1fr;
       }
     </style>
   </template>
 }
 
 export class CrmApp extends AppCard {
-  static displayName = 'Crm App';
+  static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';
   static isolated = CrmAppTemplate;

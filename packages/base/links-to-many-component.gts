@@ -440,6 +440,9 @@ export function getLinksToManyComponent({
       <style scoped>
         .linksToMany-field.fitted-effectiveFormat
           > .linksToMany-item
+          + .linksToMany-item,
+        .linksToMany-field.embedded-effectiveFormat
+          > .linksToMany-item
           + .linksToMany-item {
           margin-top: var(--boxel-sp);
         }

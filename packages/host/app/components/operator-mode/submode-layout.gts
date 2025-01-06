@@ -26,7 +26,7 @@ import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
-import ENV from '@cardstack/host/config/environment';
+
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -37,12 +37,12 @@ import SearchSheet, {
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
+import Disclaimer from './disclaimer';
+
 import WorkspaceChooser from './workspace-chooser';
 
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-const { APP } = ENV;
 
 interface Signature {
   Element: HTMLDivElement;
@@ -83,7 +83,6 @@ type PanelWidths = {
 };
 
 export default class SubmodeLayout extends Component<Signature> {
-  @tracked private isAiAssistantVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
@@ -115,7 +114,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   private get aiAssistantVisibilityClass() {
-    return this.isAiAssistantVisible
+    return this.operatorModeStateService.aiAssistantOpen
       ? 'ai-assistant-open'
       : 'ai-assistant-closed';
   }
@@ -157,11 +156,6 @@ export default class SubmodeLayout extends Component<Signature> {
     }
 
     this.operatorModeStateService.updateSubmode(submode);
-  }
-
-  @action
-  private toggleChat() {
-    this.isAiAssistantVisible = !this.isAiAssistantVisible;
   }
 
   @action private closeSearchSheet() {
@@ -247,6 +241,8 @@ export default class SubmodeLayout extends Component<Signature> {
   });
 
   <template>
+    <Disclaimer />
+
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'
@@ -313,23 +309,21 @@ export default class SubmodeLayout extends Component<Signature> {
             @onCardSelect={{this.handleCardSelectFromSearch}}
             @onInputInsertion={{this.storeSearchElement}}
           />
-          {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+          {{#if (not @hideAiAssistant)}}
             <AiAssistantToast
-              @hide={{this.isAiAssistantVisible}}
-              @onViewInChatClick={{this.toggleChat}}
+              @hide={{this.operatorModeStateService.aiAssistantOpen}}
+              @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
             />
             <AiAssistantButton
               class='chat-btn'
-              @isActive={{this.isAiAssistantVisible}}
-              {{on 'click' this.toggleChat}}
+              @isActive={{this.operatorModeStateService.aiAssistantOpen}}
+              {{on 'click' this.operatorModeStateService.toggleAiAssistant}}
             />
           {{/if}}
         </ResizablePanel>
         {{#if
           (and
-            APP.experimentalAIEnabled
-            (not @hideAiAssistant)
-            this.isAiAssistantVisible
+            (not @hideAiAssistant) this.operatorModeStateService.aiAssistantOpen
           )
         }}
           <ResizablePanel
@@ -338,7 +332,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @collapsible={{false}}
           >
             <AiAssistantPanel
-              @onClose={{this.toggleChat}}
+              @onClose={{this.operatorModeStateService.toggleAiAssistant}}
               @resizeHandle={{ResizeHandle}}
               class='ai-assistant-panel
                 {{if this.workspaceChooserOpened "left-border"}}'
