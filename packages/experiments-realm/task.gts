@@ -202,7 +202,7 @@ export class FittedTask extends Component<typeof Task> {
 
       .task-completion-status {
         --boxel-circle-size: 14px;
-        --boxel-border-radius: var(--boxel-border-radius-lg);
+        --boxel-border-radius: var(--boxel-border-radius-xxs);
       }
 
       .task-card {
@@ -617,7 +617,7 @@ export class TaskCompletionStatus extends GlimmerComponent<TaskCompletionStatusS
         --circle-size: var(--boxel-circle-size, 20px);
         --border-radius: var(
           --boxel-border-radius,
-          var(--boxel-border-radius-xs)
+          var(--boxel-border-radius-xxs)
         );
         display: inline-flex;
         align-items: center;
