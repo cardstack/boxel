@@ -2,20 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": 1,
-        "label": "Medium"
-      },
       "status": {
         "completed": false,
         "index": 1,
-        "label": "Next Sprint"
+        "label": "Next Sprint",
+        "color": "#64B5F6"
       },
-      "name": "Pill Picker Example",
       "dateRange": {
         "start": "2024-12-08",
         "end": "2024-12-10"
       },
+      "priority": {
+        "index": 1,
+        "label": "Medium"
+      },
+      "name": "Pill Picker Example",
       "details": "Use multi-select but for pills",
       "description": null,
       "thumbnailURL": null

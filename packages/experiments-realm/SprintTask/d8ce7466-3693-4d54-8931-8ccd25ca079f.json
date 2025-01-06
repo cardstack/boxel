@@ -2,29 +2,26 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Date Range Card",
-      "details": null,
       "status": {
         "index": 0,
-        "label": "Backlog"
-      },
-      "priority": {
-        "index": null,
-        "label": null
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
       },
       "dateRange": {
         "start": "2024-11-13",
         "end": "2024-12-17"
       },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Build Date Range Card",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
-        }
-      },
       "project": {
         "links": {
           "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
@@ -38,6 +35,11 @@
       "subtasks": {
         "links": {
           "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
       "tags": {

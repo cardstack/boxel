@@ -2,20 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": 0,
-        "label": "Low"
-      },
       "status": {
-        "completed": false,
-        "index": null,
-        "label": "In Progress"
+        "index": 3,
+        "label": "In Progress",
+        "color": "#FFB74D",
+        "completed": false
       },
-      "name": "Add functionality where + opens create card modal with correct status",
       "dateRange": {
         "start": null,
         "end": null
       },
+      "priority": {
+        "index": 0,
+        "label": "Low"
+      },
+      "name": "Add functionality where + opens create card modal with correct status",
       "details": null,
       "description": null,
       "thumbnailURL": null

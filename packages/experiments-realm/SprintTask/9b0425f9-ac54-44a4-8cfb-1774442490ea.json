@@ -2,20 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": 3,
-        "label": "High"
-      },
       "status": {
-        "completed": false,
         "index": 0,
-        "label": "Not Started"
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
       },
-      "name": "Cleanup all the dbs",
       "dateRange": {
         "start": null,
         "end": null
       },
+      "priority": {
+        "index": 3,
+        "label": "High"
+      },
+      "name": "Cleanup all the dbs",
       "details": null,
       "description": null,
       "thumbnailURL": null

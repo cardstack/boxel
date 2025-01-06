@@ -2,29 +2,26 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Make fitted / embeddedd view for task",
-      "details": null,
       "status": {
-        "index": 2,
-        "label": "In Progress"
-      },
-      "priority": {
-        "index": 2,
-        "label": "High"
+        "completed": false,
+        "index": 3,
+        "label": "In Progress",
+        "color": "#FFB74D"
       },
       "dateRange": {
         "start": "2024-11-19",
         "end": "2024-11-30"
       },
+      "priority": {
+        "index": 2,
+        "label": "High"
+      },
+      "name": "Make fitted / embeddedd view for task",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": null
-        }
-      },
       "project": {
         "links": {
           "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
@@ -36,6 +33,11 @@
         }
       },
       "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
         "links": {
           "self": null
         }

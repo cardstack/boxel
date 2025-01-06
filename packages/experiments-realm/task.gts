@@ -5,7 +5,9 @@ import {
   linksTo,
   linksToMany,
   Component,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 
 import BooleanField from 'https://cardstack.com/base/boolean';
 
@@ -15,7 +17,6 @@ import { User } from './user';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 
-import { LooseGooseyField, type LooseyGooseyData } from './loosey-goosey';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -30,8 +31,6 @@ import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { Todo } from './todo';
-
-type LooseyGooseyDataWithCompleted = LooseyGooseyData & { completed: boolean };
 
 export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
@@ -55,14 +54,14 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
 
   // This ensures you get values from the class the instance is created
   get statuses() {
-    return (this.args.model.constructor as any)
-      .values as LooseyGooseyDataWithCompleted[];
+    return (this.args.model.constructor as any).values as TaskStatusField[];
   }
 
-  @action onSelectStatus(status: LooseyGooseyData): void {
+  @action onSelectStatus(status: TaskStatusField): void {
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;
+    this.args.model.color = this.selectedStatus?.color;
     this.args.model.completed = this.selectedStatus?.completed;
   }
 
@@ -71,7 +70,10 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   }
 }
 
-export class TaskStatusField extends LooseGooseyField {
+export class TaskStatusField extends FieldDef {
+  @field index = contains(NumberField); //sorting order
+  @field label = contains(StringField);
+  @field color = contains(StringField);
   @field completed = contains(BooleanField);
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
@@ -96,7 +98,7 @@ export class TaskStatusField extends LooseGooseyField {
   };
 
   //TODO: Not static. Need to improve ability to extend field templates
-  edit = TaskStatusEdit;
+  static edit = TaskStatusEdit;
 }
 
 export class FittedTask extends Component<typeof Task> {
@@ -442,7 +444,7 @@ class EditPriority extends Component<typeof TaskPriority> {
     });
   }
 
-  @action handlePriorityChange(priority: LooseyGooseyData): void {
+  @action handlePriorityChange(priority: TaskPriority): void {
     this.label = priority.label;
     this.args.model.label = this.selectedPriority?.label;
     this.args.model.index = this.selectedPriority?.index;
@@ -467,7 +469,9 @@ class EditPriority extends Component<typeof TaskPriority> {
   </template>
 }
 
-export class TaskPriority extends LooseGooseyField {
+export class TaskPriority extends FieldDef {
+  @field index = contains(NumberField); //sorting order
+  @field label = contains(StringField);
   // loosey goosey pattern
   static values = [
     { index: 0, label: 'Lowest', icon: ChevronsDown },
@@ -489,8 +493,7 @@ export class TaskPriority extends LooseGooseyField {
     },
   ];
 
-  //TODO: Not static. Need to improve ability to extend field templates
-  edit = EditPriority;
+  static edit = EditPriority;
   static embedded = class Embedded extends Component<typeof TaskPriority> {
     <template>
       {{@model.label}}

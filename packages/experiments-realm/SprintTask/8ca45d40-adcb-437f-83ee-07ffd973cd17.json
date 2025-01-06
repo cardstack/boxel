@@ -2,20 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": null,
-        "label": null
-      },
       "status": {
         "completed": false,
         "index": 3,
-        "label": "In Progress"
+        "label": "In Progress",
+        "color": "#FFB74D"
       },
-      "name": "Resolve bug where overlay only appears on certain cards",
       "dateRange": {
         "start": null,
         "end": null
       },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Resolve bug where overlay only appears on certain cards",
       "details": null,
       "description": null,
       "thumbnailURL": null

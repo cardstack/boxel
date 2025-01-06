@@ -2,29 +2,26 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Move cards-grid fitted template into a component that can be re-used",
-      "details": null,
       "status": {
+        "completed": false,
         "index": 2,
-        "label": "Current Sprint"
-      },
-      "priority": {
-        "index": null,
-        "label": null
+        "label": "Current Sprint",
+        "color": "#00BCD4"
       },
       "dateRange": {
         "start": null,
         "end": null
       },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Move cards-grid fitted template into a component that can be re-used",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": null
-        }
-      },
       "project": {
         "links": {
           "self": null
@@ -36,6 +33,11 @@
         }
       },
       "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
         "links": {
           "self": null
         }

@@ -2,19 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": null,
-        "label": null
-      },
       "status": {
-        "index": 2,
-        "label": "Current Sprint"
+        "completed": false,
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5"
       },
-      "name": "Create kanban board",
       "dateRange": {
         "start": "2024-11-06",
         "end": "2025-02-04"
       },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Create kanban board",
       "details": null,
       "description": null,
       "thumbnailURL": null

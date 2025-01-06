@@ -2,20 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "priority": {
-        "index": null,
-        "label": null
-      },
       "status": {
         "completed": false,
         "index": 1,
-        "label": "Next Sprint"
+        "label": "Next Sprint",
+        "color": "#64B5F6"
       },
-      "name": "Create Tag List",
       "dateRange": {
         "start": null,
         "end": null
       },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Create Tag List",
       "details": null,
       "description": null,
       "thumbnailURL": null

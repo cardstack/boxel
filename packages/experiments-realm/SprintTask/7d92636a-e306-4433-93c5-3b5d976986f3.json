@@ -2,29 +2,26 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Drag and drop task",
-      "details": null,
       "status": {
-        "index": null,
-        "label": "Backlog"
-      },
-      "priority": {
-        "index": null,
-        "label": null
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
       },
       "dateRange": {
         "start": "2024-11-20",
         "end": "2024-11-21"
       },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Drag and drop task",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
-        }
-      },
       "project": {
         "links": {
           "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
@@ -38,6 +35,11 @@
       "subtasks.0": {
         "links": {
           "self": "./3cd737c3-4157-46be-9880-6ead8ea60652"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
         }
       },
       "tags.0": {
