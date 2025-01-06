@@ -24,7 +24,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../work-tracker",
-        "name": "WorkTracker"
+        "name": "SprintPlanner"
       }
     }
   }

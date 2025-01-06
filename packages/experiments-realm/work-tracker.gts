@@ -626,7 +626,7 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
   }
 }
 
-export class WorkTracker extends AppCard {
+export class SprintPlanner extends AppCard {
   static displayName = 'Work Tracker';
   static icon = Checklist;
   static headerColor = '#ff7f7b';
