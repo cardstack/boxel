@@ -500,7 +500,7 @@ export class WorkTaskStatusField extends TaskStatusField {
 }
 
 export class SprintTask extends Task {
-  static displayName = 'Work Task';
+  static displayName = 'Sprint Task';
   static icon = CheckboxIcon;
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
