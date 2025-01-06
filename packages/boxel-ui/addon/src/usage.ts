@@ -38,6 +38,7 @@ import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
+import ColorPickerUsage from './components/color-picker/usage.gts';
 
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
@@ -77,4 +78,5 @@ export const ALL_USAGE_COMPONENTS = [
   ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
   ['ViewSelector', ViewSelectorUsage],
+  ['ColorPicker', ColorPickerUsage],
 ];
