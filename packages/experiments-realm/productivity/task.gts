@@ -265,10 +265,10 @@ class TaskIsolated extends Component<typeof SprintTask> {
       <hr class='task-divider border-white' />
 
       <div class='task-subtasks'>
-        <h4>Subtasks ({{@model.children.length}})</h4>
+        <h4>Subtasks ({{@model.subtasks.length}})</h4>
 
-        {{#if @model.children}}
-          <@fields.children @format='fitted' />
+        {{#if @model.subtasks}}
+          <@fields.subtasks @format='fitted' />
         {{else}}
           <span class='no-data-found-txt'>No Subtasks Found</span>
         {{/if}}
@@ -425,7 +425,7 @@ class TaskIsolated extends Component<typeof SprintTask> {
 
   get progress() {
     if (!this.hasChildren) return 0;
-    const shippedCount = this.args.model.children!.filter(
+    const shippedCount = this.args.model.subtasks!.filter(
       (child) => child.status.label === 'Shipped',
     ).length;
 
@@ -441,16 +441,16 @@ class TaskIsolated extends Component<typeof SprintTask> {
   }
 
   get hasChildren() {
-    return this.args.model.children && this.args.model.children.length > 0;
+    return this.args.model.subtasks && this.args.model.subtasks.length > 0;
   }
 
   get childrenCount() {
-    return this.args.model.children ? this.args.model.children.length : 0;
+    return this.args.model.subtasks ? this.args.model.subtasks.length : 0;
   }
 
   get shippedCount() {
-    return this.args.model.children
-      ? this.args.model.children.filter(
+    return this.args.model.subtasks
+      ? this.args.model.subtasks.filter(
           (child) => child.status.label === 'Shipped',
         ).length
       : 0;
@@ -504,7 +504,7 @@ export class SprintTask extends Task {
   static icon = CheckboxIcon;
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
-  @field children = linksToMany(() => SprintTask);
+  @field subtasks = linksToMany(() => SprintTask);
   @field status = contains(WorkTaskStatusField);
 
   @field title = contains(StringField, {

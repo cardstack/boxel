@@ -35,7 +35,7 @@
           "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       },
-      "children": {
+      "subtasks": {
         "links": {
           "self": null
         }
