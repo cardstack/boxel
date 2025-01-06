@@ -169,6 +169,7 @@ export class Batch {
             source: entry.source,
             last_modified: entry.lastModified,
             resource_created_at: entry.resourceCreatedAt,
+            error_doc: null,
           }
         : entry.type === 'module'
         ? {
@@ -181,6 +182,7 @@ export class Batch {
               entry.source,
               new RealmPaths(this.realmURL).local(url),
             ),
+            error_doc: null,
           }
         : {
             types: entry.types,
@@ -337,6 +339,7 @@ export class Batch {
       ),
     ]);
 
+    let working = await this.#query(['select * from boxel_index_working']);
     if (this.#invalidations.size > 0) {
       let columns = (await this.#dbAdapter.getColumnNames('boxel_index')).map(
         (c) => [c],
@@ -348,14 +351,24 @@ export class Batch {
         'SELECT',
         ...separatedByCommas(columns),
         'FROM boxel_index_working',
-        'WHERE url in',
-        ...addExplicitParens(
-          separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
-        ),
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url in',
+            ...addExplicitParens(
+              separatedByCommas(
+                [...this.#invalidations].map((i) => [param(i)]),
+              ),
+            ),
+          ],
+        ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
     }
+    let production = await this.#query(['select * from boxel_index']);
+    let foo = 'bar';
   }
 
   private async pruneObsoleteEntries() {
