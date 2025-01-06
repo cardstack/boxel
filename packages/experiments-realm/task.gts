@@ -1,5 +1,4 @@
 import {
-  CardDef,
   StringField,
   contains,
   field,
@@ -8,7 +7,6 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 
-import TextAreaCard from 'https://cardstack.com/base/text-area';
 import BooleanField from 'https://cardstack.com/base/boolean';
 
 import DateRangeField from './date-range-field';
@@ -31,6 +29,7 @@ import GlimmerComponent from '@glimmer/component';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
+import { Todo } from './todo';
 
 type LooseyGooseyDataWithCompleted = LooseyGooseyData & { completed: boolean };
 
@@ -525,13 +524,11 @@ export class TaskPriority extends LooseGooseyField {
   };
 }
 
-export class Task extends CardDef {
+export class Task extends Todo {
   static displayName = 'Task';
-  @field taskName = contains(StringField);
   @field tags = linksToMany(() => Tag);
   @field dateRange = contains(DateRangeField);
   @field status = contains(TaskStatusField);
-  @field taskDetail = contains(TextAreaCard);
   @field assignee = linksTo(() => User);
   @field priority = contains(TaskPriority);
 
