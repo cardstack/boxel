@@ -50,7 +50,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "WorkTask"
+        "name": "SprintTask"
       }
     }
   }
