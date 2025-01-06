@@ -3,10 +3,10 @@
     "type": "card",
     "attributes": {
       "status": {
-        "completed": false,
         "index": 1,
         "label": "Next Sprint",
-        "color": "#64B5F6"
+        "color": "#64B5F6",
+        "completed": false
       },
       "dateRange": {
         "start": "2024-12-08",
@@ -16,8 +16,8 @@
         "index": 1,
         "label": "Medium"
       },
-      "name": "Pill Picker Example",
-      "details": "Use multi-select but for pills",
+      "name": "Create Pill Picker Example",
+      "details": "Implementation of a multi-select component using pills UI pattern, intended for use in the multi-filter feature. Users can select multiple pills simultaneously.\n\n**Note:** *This ticket is no longer relevant*",
       "description": null,
       "thumbnailURL": null
     },
@@ -39,22 +39,12 @@
       },
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/f832cfb6-959e-4d0d-bc83-8712a36a910a"
         }
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
-        }
-      },
-      "tags.1": {
-        "links": {
           "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
-        }
-      },
-      "tags.2": {
-        "links": {
-          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
         }
       }
     },

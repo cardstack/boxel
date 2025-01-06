@@ -3,10 +3,10 @@
     "type": "card",
     "attributes": {
       "status": {
-        "completed": false,
         "index": 3,
         "label": "In Progress",
-        "color": "#FFB74D"
+        "color": "#FFB74D",
+        "completed": false
       },
       "dateRange": {
         "start": "2024-11-19",
@@ -17,7 +17,7 @@
         "label": "High"
       },
       "name": "Make fitted / embeddedd view for task",
-      "details": null,
+      "details": "Implement a responsive task view that adapts to its container size using container queries (@container), allowing tasks to be embedded in different contexts while maintaining proper layout and readability. This will ensure consistent display whether tasks appear in boards, lists, or as embedded components.",
       "description": null,
       "thumbnailURL": null
     },
@@ -39,12 +39,12 @@
       },
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
         }
       }
     },

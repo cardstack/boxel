@@ -3,21 +3,21 @@
     "type": "card",
     "attributes": {
       "status": {
-        "completed": false,
-        "index": 3,
-        "label": "In Progress",
-        "color": "#FFB74D"
+        "index": 2,
+        "label": "Current Sprint",
+        "color": "#00BCD4",
+        "completed": false
       },
       "dateRange": {
         "start": null,
         "end": null
       },
       "priority": {
-        "index": null,
-        "label": null
+        "index": 4,
+        "label": "Highest"
       },
       "name": "Fill up task board with realistic data",
-      "details": null,
+      "details": "### Objective\nPopulate the task board with realistic sample data that demonstrates the full capabilities of our markdown and task tracking features.\n\n#### Requirements\n- [ ] Add variety of task statuses (Todo, In Progress, Done)\n- [ ] Include tasks with different priority levels\n- [ ] Create sample tasks with rich markdown content\n- [ ] Add realistic date ranges and deadlines",
       "description": null,
       "thumbnailURL": null
     },
@@ -42,9 +42,9 @@
           "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/6d80a75f-71bb-474f-979d-ef4bc571ad63"
         }
       }
     },

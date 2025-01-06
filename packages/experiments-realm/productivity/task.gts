@@ -193,7 +193,7 @@ class TaskIsolated extends Component<typeof SprintTask> {
         <div class='left-column'>
           <h4>Description</h4>
           {{#if @model.details}}
-            <p>{{@model.details}}</p>
+            <@fields.details />
           {{else}}
             <span class='no-data-found-txt'>No Task Description Provided</span>
           {{/if}}

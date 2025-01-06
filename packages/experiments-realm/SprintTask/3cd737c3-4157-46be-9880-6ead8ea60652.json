@@ -3,10 +3,10 @@
     "type": "card",
     "attributes": {
       "status": {
-        "completed": false,
-        "index": 0,
-        "label": "Not Started",
-        "color": "#B0BEC5"
+        "index": 6,
+        "label": "Shipped",
+        "color": "#66BB6A",
+        "completed": true
       },
       "dateRange": {
         "start": "2024-11-06",
@@ -16,8 +16,8 @@
         "index": null,
         "label": null
       },
-      "name": "Create kanban board",
-      "details": null,
+      "name": "Build Kanban Board Component",
+      "details": "Implement drag and drop functionality using ember-modifier-drag-and-drop:\n\n- Install addon and implement TypeScript interfaces for events/data transfer\n- Create reusable drag/drop modifiers with visual feedback and preview\n- Add validation logic and write tests",
       "description": null,
       "thumbnailURL": null
     },
