@@ -339,7 +339,6 @@ export class Batch {
       ),
     ]);
 
-    let working = await this.#query(['select * from boxel_index_working']);
     if (this.#invalidations.size > 0) {
       let columns = (await this.#dbAdapter.getColumnNames('boxel_index')).map(
         (c) => [c],
@@ -367,8 +366,6 @@ export class Batch {
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
     }
-    let production = await this.#query(['select * from boxel_index']);
-    let foo = 'bar';
   }
 
   private async pruneObsoleteEntries() {
