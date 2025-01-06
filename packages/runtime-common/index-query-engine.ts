@@ -531,8 +531,6 @@ export class IndexQueryEngine {
     let results = (await this.#query([
       `SELECT value
        FROM realm_meta rm
-       INNER JOIN realm_versions rv
-       ON rm.realm_url = rv.realm_url AND rm.realm_version = rv.current_version
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
     ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
