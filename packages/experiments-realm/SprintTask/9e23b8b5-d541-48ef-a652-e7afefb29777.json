@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Incoporate Boxel Multi Select in Dropdown",
-      "taskDetail": null,
+      "details": null,
       "status": {
         "index": 6,
         "label": "Shipped"

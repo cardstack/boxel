@@ -233,7 +233,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
           type: 'card',
           attributes: {
             name: null,
-            taskDetail: null,
+            details: null,
             status: {
               index,
               label: statusLabel,

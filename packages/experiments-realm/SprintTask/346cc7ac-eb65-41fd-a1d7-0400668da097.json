@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Make fitted / embeddedd view for task",
-      "taskDetail": null,
+      "details": null,
       "status": {
         "index": 2,
         "label": "In Progress"

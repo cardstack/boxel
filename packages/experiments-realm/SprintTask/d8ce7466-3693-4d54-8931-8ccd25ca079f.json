@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Date Range Card",
-      "taskDetail": null,
+      "details": null,
       "status": {
         "index": 0,
         "label": "Backlog"

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Fill up task board with realistic data",
-      "taskDetail": null,
+      "details": null,
       "status": {
         "index": 3,
         "label": "In Progress"
