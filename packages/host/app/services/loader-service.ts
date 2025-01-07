@@ -10,6 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import config from '@cardstack/host/config/environment';
 import NetworkService from '@cardstack/host/services/network';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
@@ -53,11 +54,11 @@ export default class LoaderService extends Service {
       if (
         !response.ok &&
         req.url.startsWith(
-          'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/',
+          `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/`,
         )
       ) {
         req = new Request(
-          'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/error-404.js',
+          `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/error-404.js`,
           req,
         );
         response = await next(req);
