@@ -71,7 +71,7 @@ export default class RenderService extends Service {
   renderError: Error | undefined;
   owner: Owner = getOwner(this)!;
 
-  async renderCard(params: RenderCardParams): Promise<string> {
+  renderCard = async (params: RenderCardParams): Promise<string> => {
     let {
       card,
       visit,
