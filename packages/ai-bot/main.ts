@@ -16,10 +16,10 @@ import {
   extractCardFragmentsFromEvents,
 } from './helpers';
 import {
-  APP_BOXEL_AVAILABLE_LLM_MODELS,
+  APP_BOXEL_SUPPORTED_LLM_LIST,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_SELECTED_LLM_MODEL,
-  DEFAULT_LLM_MODEL,
+  APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -104,28 +104,23 @@ class Assistant {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
 
-  async setLLMModels(roomId: string) {
+  async setActiveAndSupportedLLM(roomId: string) {
     const response = await this.openai.models.list();
     const models = response.data.map((data) => data.id);
 
-    await updateStateEvent(
-      this.client,
-      roomId,
-      APP_BOXEL_AVAILABLE_LLM_MODELS,
-      {
-        models,
-      },
-    );
+    await updateStateEvent(this.client, roomId, APP_BOXEL_SUPPORTED_LLM_LIST, {
+      models,
+    });
 
-    // set default selected LLM model
-    await updateStateEvent(this.client, roomId, APP_BOXEL_SELECTED_LLM_MODEL, {
-      model: DEFAULT_LLM_MODEL,
+    // set default selected LLM
+    await updateStateEvent(this.client, roomId, APP_BOXEL_ACTIVE_LLM, {
+      model: DEFAULT_LLM,
     });
   }
 }
 
 let startTime = Date.now();
-let selectedLLMModels: Map<string, string> = new Map();
+let activeLLMs: Map<string, string> = new Map();
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
@@ -164,7 +159,7 @@ Common issues are:
         .joinRoom(member.roomId)
         .then(async function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
-          await assistant.setLLMModels(member.roomId);
+          await assistant.setActiveAndSupportedLLM(member.roomId);
         })
         .catch(function (err) {
           log.info(
@@ -192,8 +187,8 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (event.getType() === APP_BOXEL_SELECTED_LLM_MODEL) {
-          selectedLLMModels.set(room!.roomId, event.getContent().model);
+        if (event.getType() === APP_BOXEL_ACTIVE_LLM) {
+          activeLLMs.set(room!.roomId, event.getContent().model);
           return;
         }
         if (event.getType() !== 'm.room.message') {
@@ -224,8 +219,7 @@ Common issues are:
           []) as DiscreteMatrixEvent[];
         try {
           promptParts = getPromptParts(eventList, aiBotUserId);
-          promptParts.model =
-            selectedLLMModels.get(room!.roomId) ?? promptParts.model;
+          promptParts.model = activeLLMs.get(room!.roomId) ?? promptParts.model;
         } catch (e) {
           log.error(e);
           responder.finalize(

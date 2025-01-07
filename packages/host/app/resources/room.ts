@@ -12,7 +12,7 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
-  DEFAULT_LLM_MODEL,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -212,12 +212,12 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
-  get availableLLMModels() {
-    return this.matrixRoom?.availableLLMModels ?? [];
+  get supportedLLMs() {
+    return this.matrixRoom?.supportedLLMs ?? [];
   }
 
-  get selectedLLMModel() {
-    return this.matrixRoom?.selectedLLMModel ?? DEFAULT_LLM_MODEL;
+  get activeLLM() {
+    return this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
 
   private async loadFromEvents(roomId: string) {

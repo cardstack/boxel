@@ -8,7 +8,7 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const LEGACY_APP_BOXEL_REALMS_EVENT_TYPE = 'com.cardstack.boxel.realms';
-export const APP_BOXEL_AVAILABLE_LLM_MODELS = 'app.boxel.available-llm-models';
-export const APP_BOXEL_SELECTED_LLM_MODEL = 'app.boxel.selected-llm-model';
+export const APP_BOXEL_SUPPORTED_LLM_LIST = 'app.boxel.supported-llm-list';
+export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
 
-export const DEFAULT_LLM_MODEL = 'openai/gpt-4o';
+export const DEFAULT_LLM = 'openai/gpt-4o';

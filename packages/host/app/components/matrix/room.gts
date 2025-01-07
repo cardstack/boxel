@@ -137,18 +137,18 @@ export default class Room extends Component<Signature> {
               />
               <BoxelSelect
                 class='available-llm-models'
-                @selected={{this.selectedLLMModel}}
+                @selected={{this.activeLLM}}
                 @verticalPosition='above'
-                @onChange={{this.selectLLMModel}}
-                @options={{this.availableLLMModels}}
+                @onChange={{this.selectLLM}}
+                @options={{this.supportedLLMs}}
                 @matchTriggerWidth={{false}}
-                @disabled={{this.isLLMModelSelectionDisabled}}
+                @disabled={{this.isLLMSelectionDisabled}}
                 @dropdownClass='available-llm-models__dropdown'
                 as |item|
               >
                 <div class='llm-model'>
                   <div class='check-mark'>
-                    {{#if (this.isSelectedLLMModel item)}}
+                    {{#if (this.isActiveLLM item)}}
                       <CheckMark width='12' height='12' />
                     {{/if}}
                   </div>
@@ -536,31 +536,29 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  isSelectedLLMModel(model: string) {
-    return this.selectedLLMModel === model;
+  isActiveLLM(model: string) {
+    return this.activeLLM === model;
   }
 
-  private get isLLMModelSelectionDisabled() {
-    return (
-      this.selectLLMModelTask.isRunning || this.availableLLMModels.length <= 0
-    );
+  private get isLLMSelectionDisabled() {
+    return this.selectLLMTask.isRunning || this.supportedLLMs.length <= 0;
   }
 
-  private get selectedLLMModel() {
-    return this.roomResource.selectedLLMModel;
+  private get activeLLM() {
+    return this.roomResource.activeLLM;
   }
 
   @action
-  private selectLLMModel(model: string) {
-    this.selectLLMModelTask.perform(model);
+  private selectLLM(model: string) {
+    this.selectLLMTask.perform(model);
   }
 
-  private selectLLMModelTask = restartableTask(async (model: string) => {
-    await this.matrixService.selectLLMModel(this.args.roomId, model);
+  private selectLLMTask = restartableTask(async (model: string) => {
+    await this.matrixService.selectLLM(this.args.roomId, model);
   });
 
-  private get availableLLMModels(): string[] {
-    return this.roomResource.availableLLMModels;
+  private get supportedLLMs(): string[] {
+    return this.roomResource.supportedLLMs;
   }
 
   private get sortedSkills(): Skill[] {
