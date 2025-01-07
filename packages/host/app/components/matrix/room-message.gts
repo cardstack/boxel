@@ -39,6 +39,8 @@ interface Signature {
     setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
     isPending?: boolean;
+    isDisplayingCode: boolean;
+    onToggleViewCode: () => void;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -127,9 +129,10 @@ export default class RoomMessage extends Component<Signature> {
             @runCommand={{perform this.run}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
+            @isDisplayingCode={{@isDisplayingCode}}
+            @onToggleViewCode={{@onToggleViewCode}}
             @monacoSDK={{@monacoSDK}}
             @currentEditor={{@currentEditor}}
-            @setCurrentEditor={{@setCurrentEditor}}
             @failedCommandState={{this.failedCommandState}}
             @isError={{bool this.errorMessage}}
           />

@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { cached, tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
@@ -51,10 +51,11 @@ interface Signature {
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
+    isDisplayingCode: boolean;
     failedCommandState: Error | undefined;
     monacoSDK: MonacoSDK;
+    onToggleViewCode: () => void;
     currentEditor: number | undefined;
-    setCurrentEditor: (editor: number | undefined) => void;
   };
 }
 
@@ -62,8 +63,6 @@ export default class RoomMessageCommand extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
-
-  @tracked private isDisplayingCode = false;
 
   editorDisplayOptions: MonacoEditorOptions = {
     wordWrap: 'on',
@@ -89,13 +88,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       return 'failed';
     }
     return this.args.messageCommand?.status ?? 'ready';
-  }
-
-  @action private viewCodeToggle() {
-    this.isDisplayingCode = !this.isDisplayingCode;
-    if (this.isDisplayingCode) {
-      this.args.setCurrentEditor(this.args.messageIndex);
-    }
   }
 
   @use private commandResultCard = resource(() => {
@@ -180,12 +172,12 @@ export default class RoomMessageCommand extends Component<Signature> {
       >
         <Button
           class='view-code-button'
-          {{on 'click' this.viewCodeToggle}}
-          @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
+          {{on 'click' @onToggleViewCode}}
+          @kind={{if @isDisplayingCode 'primary-dark' 'secondary-dark'}}
           @size='extra-small'
           data-test-view-code-button
         >
-          {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
+          {{if @isDisplayingCode 'Hide Code' 'View Code'}}
         </Button>
         <ApplyButton
           @state={{this.applyButtonState}}
@@ -193,7 +185,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           data-test-command-apply={{this.applyButtonState}}
         />
       </div>
-      {{#if this.isDisplayingCode}}
+      {{#if @isDisplayingCode}}
         <div class='preview-code'>
           <Button
             class='copy-to-clipboard-button'
