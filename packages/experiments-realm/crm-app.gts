@@ -289,10 +289,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
                 on: activeFilter.cardRef,
                 contains: { name: searchKey },
               },
-              {
-                on: activeFilter.cardRef,
-                contains: { 'company.name': searchKey },
-              },
             ],
           },
         ]
