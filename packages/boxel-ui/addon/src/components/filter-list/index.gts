@@ -43,9 +43,8 @@ export default class FilterList extends Component<Signature> {
           data-test-boxel-filter-list-button={{filter.displayName}}
         >
           {{#if (isIconString filter.icon)}}
-            {{convertSVGString
-              filter.icon
-              'filter-list__icon'
+            {{htmlSafe
+              (addClassToSVG filter.icon 'filter-list__icon')
             }}{{filter.displayName}}
           {{else}}
             <filter.icon
@@ -90,15 +89,10 @@ export default class FilterList extends Component<Signature> {
   </template>
 }
 
-function convertSVGString(svgString: string, className: string) {
-  return htmlSafe(
-    svgString
-      .replace(
-        /<svg\b([^>]*)\sclass="([^"]*)"/,
-        `<svg$1 class="$2 ${className}"`,
-      )
-      .replace(/<svg\b([^>]*)>/, `<svg$1 class="${className}">`),
-  );
+function addClassToSVG(svgString: string, className: string) {
+  return svgString
+    .replace(/<svg\b([^>]*)\sclass="([^"]*)"/, `<svg$1 class="$2 ${className}"`)
+    .replace(/<svg\b([^>]*)>/, `<svg$1 class="${className}">`);
 }
 
 function isIconString(icon: FilterListIcon | string): icon is string {
