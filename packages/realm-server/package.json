@@ -14,6 +14,7 @@
     "@types/eventsource": "^1.1.11",
     "@types/flat": "^5.0.5",
     "@types/fs-extra": "^9.0.13",
+    "@types/js-yaml": "^4.0.9",
     "@types/jsdom": "^21.1.1",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/koa": "^2.13.5",
@@ -41,6 +42,7 @@
     "flat": "^5.0.2",
     "fs-extra": "^10.1.0",
     "http-server": "^14.1.1",
+    "js-yaml": "^4.1.0",
     "jsdom": "^21.1.1",
     "jsonwebtoken": "^9.0.2",
     "koa": "^2.14.1",
@@ -96,6 +98,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
+    "lint:test-shards": "ts-node --transpileOnly scripts/lint-test-shards.ts",
     "full-reset": "./scripts/full-reset.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
