@@ -51,7 +51,20 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
+  pgm.dropIndex('boxel_index_working', ['realm_version']);
+  pgm.dropIndex('boxel_index_working', ['realm_url']);
+  pgm.dropIndex('boxel_index_working', ['file_alias']);
+  pgm.dropIndex('boxel_index_working', ['resource_created_at']);
+  pgm.dropIndex('boxel_index_working', ['last_modified']);
+  pgm.dropIndex('boxel_index_working', 'type');
+  pgm.dropIndex('boxel_index_working', ['url', 'realm_version']);
+  pgm.dropIndex('boxel_index_working', 'deps');
+  pgm.dropIndex('boxel_index_working', 'types');
+  pgm.dropIndex('boxel_index_working', 'fitted_html');
+  pgm.dropIndex('boxel_index_working', 'embedded_html');
+  pgm.dropIndex('boxel_index_working', 'search_doc');
   pgm.dropTable('boxel_index_working', { cascade: true });
+
   pgm.dropConstraint('boxel_index', 'boxel_index_pkey');
   pgm.addConstraint('boxel_index', 'boxel_index_pkey', {
     primaryKey: ['url', 'realm_url', 'realm_version'],
