@@ -10,6 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import config from '@cardstack/host/config/environment';
 import NetworkService from '@cardstack/host/services/network';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
@@ -47,6 +48,22 @@ export default class LoaderService extends Service {
     });
     middlewareStack.push(async (req, next) => {
       return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    });
+    middlewareStack.push(async (req, next) => {
+      let response = await next(req);
+      if (
+        !response.ok &&
+        req.url.startsWith(
+          `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/`,
+        )
+      ) {
+        req = new Request(
+          `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/error-404.js`,
+          req,
+        );
+        response = await next(req);
+      }
+      return response;
     });
 
     if (!this.fastboot.isFastBoot) {

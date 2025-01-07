@@ -8,7 +8,8 @@ import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -23,7 +24,6 @@ import type {
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
-  ReactionEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { RoomMember } from './member';
@@ -36,13 +36,10 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event:
-      | MessageEvent
-      | CommandEvent
-      | CardMessageEvent
-      | CommandResultEvent,
+    private event: MessageEvent | CommandEvent | CardMessageEvent,
     owner: Owner,
     private builderContext: {
+      roomId: string;
       effectiveEventId: string;
       author: RoomMember;
       index: number;
@@ -57,6 +54,7 @@ export default class MessageBuilder {
 
   private get coreMessageArgs() {
     return new Message({
+      roomId: this.builderContext.roomId,
       author: this.builderContext.author,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
@@ -66,7 +64,6 @@ export default class MessageBuilder {
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
       command: null,
-      commandResult: null,
       status: this.event.status,
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
@@ -119,71 +116,54 @@ export default class MessageBuilder {
 
   async buildMessage(): Promise<Message> {
     let { event } = this;
-    let messageArgs = this.coreMessageArgs;
-    messageArgs.errorMessage = this.errorMessage;
+    let message = this.coreMessageArgs;
+    message.errorMessage = this.errorMessage;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      messageArgs.clientGeneratedId = this.clientGeneratedId;
-      messageArgs.attachedCardIds = this.attachedCardIds;
+      message.clientGeneratedId = this.clientGeneratedId;
+      message.attachedCardIds = this.attachedCardIds;
     } else if (event.content.msgtype === 'm.text') {
-      messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+      message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
     } else if (
       event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
       event.content.data.toolCall
     ) {
-      messageArgs.formattedMessage = this.formattedMessageForCommand;
-      messageArgs.command = await this.buildMessageCommand();
-      messageArgs.commandResult = await this.buildCommandResultCard();
-      messageArgs.isStreamingFinished = true;
+      message.formattedMessage = this.formattedMessageForCommand;
+      message.command = await this.buildMessageCommand(message);
+      message.isStreamingFinished = true;
     }
-    return messageArgs;
+    return message;
   }
 
-  private async buildMessageCommand() {
+  private async buildMessageCommand(message: Message) {
     let event = this.event as CommandEvent;
     let command = event.content.data.toolCall;
-    let annotation = this.builderContext.events.find((e: any) => {
+    let commandResultEvent = this.builderContext.events.find((e: any) => {
       let r = e.content['m.relates_to'];
       return (
-        e.type === 'm.reaction' &&
-        r?.rel_type === 'm.annotation' &&
-        (r?.event_id === event.content.data.eventId ||
-          r?.event_id === event.event_id ||
-          r?.event_id === this.builderContext.effectiveEventId)
+        e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        r.rel_type === 'm.annotation' &&
+        (r.event_id === event.content.data.eventId ||
+          r.event_id === event.event_id ||
+          r.event_id === this.builderContext.effectiveEventId)
       );
-    }) as ReactionEvent | undefined;
-    let status: CommandStatus = 'ready';
-    if (annotation?.content['m.relates_to'].key === 'applied') {
-      status = 'applied';
-    }
+    }) as CommandResultEvent | undefined;
+    let status = (commandResultEvent?.content?.['m.relates_to']?.key ||
+      'ready') as CommandStatus;
+    let commandResultCardEventId =
+      commandResultEvent?.content?.msgtype ===
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ? commandResultEvent.content.data.cardEventId
+        : undefined;
     let messageCommand = new MessageCommand(
+      message,
       command.id,
       command.name,
       command.arguments,
       this.builderContext.effectiveEventId,
       status,
+      commandResultCardEventId,
       getOwner(this)!,
     );
     return messageCommand;
-  }
-
-  private async buildCommandResultCard() {
-    let event = this.event as CommandEvent;
-    let commandResultEvent = this.builderContext.events.find(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-        e.content['m.relates_to'].event_id === event.content.data.eventId,
-    ) as CommandResultEvent;
-    let r = commandResultEvent?.content?.result
-      ? await this.commandService.createCommandResultArgs(
-          event,
-          commandResultEvent,
-        )
-      : undefined;
-    let commandResult = r
-      ? await this.commandService.createCommandResult(r)
-      : undefined;
-    return commandResult;
   }
 }
