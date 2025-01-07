@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Proposal",
+      "color": "var(--boxel-lilac)",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tag",
+        "name": "Tag"
+      }
+    }
+  }
+}

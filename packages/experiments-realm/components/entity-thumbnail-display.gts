@@ -80,9 +80,14 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
           --entity-display-title-font-size,
           var(--boxel-font-size-sm)
         );
+        --title-font-weight: var(--entity-display-title-font-weight, 600);
         --content-font-size: var(
           --entity-display-content-font-size,
           var(--boxel-font-size-xs)
+        );
+        --content-font-weight: var(
+          --entity-display-content-font-weight,
+          var(--boxel-font-weight-normal)
         );
         --content-color: var(--entity-display-content-color, var(--boxel-400));
         --content-gap: var(--entity-display-content-gap, var(--boxel-sp-xxxs));
@@ -116,6 +121,7 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
       .entity-title {
         word-break: break-word;
         font-size: var(--title-font-size);
+        font-weight: var(--title-font-weight);
       }
       .entity-title.underline {
         text-decoration: underline;
@@ -123,6 +129,7 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
       .entity-content {
         margin: 0;
         font-size: var(--content-font-size);
+        font-weight: var(--content-font-weight);
         color: var(--content-color);
       }
     </style>
