@@ -15,7 +15,12 @@ import {
   getPromptParts,
   extractCardFragmentsFromEvents,
 } from './helpers';
-import { APP_BOXEL_AVAILABLE_LLM_MODELS, APP_BOXEL_CARDFRAGMENT_MSGTYPE, APP_BOXEL_SELECTED_LLM_MODEL, DEFAULT_LLM_MODEL } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_AVAILABLE_LLM_MODELS,
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_SELECTED_LLM_MODEL,
+  DEFAULT_LLM_MODEL,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
@@ -101,15 +106,20 @@ class Assistant {
 
   async setLLMModels(roomId: string) {
     const response = await this.openai.models.list();
-    const models = response.data.map(data => data.id);
+    const models = response.data.map((data) => data.id);
 
-    await updateStateEvent(this.client, roomId, APP_BOXEL_AVAILABLE_LLM_MODELS, {
-      models
-    });
+    await updateStateEvent(
+      this.client,
+      roomId,
+      APP_BOXEL_AVAILABLE_LLM_MODELS,
+      {
+        models,
+      },
+    );
 
     // set default selected LLM model
     await updateStateEvent(this.client, roomId, APP_BOXEL_SELECTED_LLM_MODEL, {
-      model: DEFAULT_LLM_MODEL
+      model: DEFAULT_LLM_MODEL,
     });
   }
 }
@@ -182,7 +192,7 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if(event.getType() === APP_BOXEL_SELECTED_LLM_MODEL) {
+        if (event.getType() === APP_BOXEL_SELECTED_LLM_MODEL) {
           selectedLLMModels.set(room!.roomId, event.getContent().model);
           return;
         }
@@ -214,7 +224,8 @@ Common issues are:
           []) as DiscreteMatrixEvent[];
         try {
           promptParts = getPromptParts(eventList, aiBotUserId);
-          promptParts.model = selectedLLMModels.get(room!.roomId) ?? promptParts.model;
+          promptParts.model =
+            selectedLLMModels.get(room!.roomId) ?? promptParts.model;
         } catch (e) {
           log.error(e);
           responder.finalize(

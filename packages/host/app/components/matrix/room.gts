@@ -142,17 +142,17 @@ export default class Room extends Component<Signature> {
                 @onChange={{this.selectLLMModel}}
                 @options={{this.availableLLMModels}}
                 @matchTriggerWidth={{false}}
-                @disabled={{this.selectLLMModelTask.isRunning}}
+                @disabled={{this.isLLMModelSelectionDisabled}}
                 @dropdownClass='available-llm-models__dropdown'
                 as |item|
               >
                 <div class='llm-model'>
                   <div class='check-mark'>
-                    {{#if (this.isSelectedModel item)}}
+                    {{#if (this.isSelectedLLMModel item)}}
                       <CheckMark width='12' height='12' />
                     {{/if}}
                   </div>
-                  <span class='model'>{{item}}</span>
+                  <span class='llm-model-name'>{{item}}</span>
                 </div>
               </BoxelSelect>
             </div>
@@ -224,6 +224,10 @@ export default class Room extends Component<Signature> {
       .available-llm-models :deep(.boxel-trigger-content) {
         flex: 1;
       }
+      .available-llm-models[aria-disabled='true'] {
+        background-color: var(--boxel-light);
+        cursor: auto;
+      }
       .llm-model {
         display: grid;
         grid-template-columns: 12px 1fr;
@@ -236,13 +240,17 @@ export default class Room extends Component<Signature> {
       .available-llm-models :deep(.boxel-trigger-content .check-mark) {
         display: none;
       }
-      .available-llm-models :deep(.boxel-trigger-content .model) {
+      .available-llm-models[aria-disabled='true']
+        :deep(.boxel-trigger > *:nth-child(2)) {
+        display: none;
+      }
+      .available-llm-models :deep(.boxel-trigger-content .llm-model-name) {
         text-align: right;
       }
       .check-mark {
         height: 12px;
       }
-      .model {
+      .llm-model-name {
         overflow: hidden;
         text-overflow: ellipsis;
         text-wrap: nowrap;
@@ -528,8 +536,14 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  isSelectedModel(model: string) {
+  isSelectedLLMModel(model: string) {
     return this.selectedLLMModel === model;
+  }
+
+  private get isLLMModelSelectionDisabled() {
+    return (
+      this.selectLLMModelTask.isRunning || this.availableLLMModels.length <= 0
+    );
   }
 
   private get selectedLLMModel() {
