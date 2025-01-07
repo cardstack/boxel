@@ -1,8 +1,8 @@
-import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import ColorPicker from '../color-picker/index.gts';
+import Component from '@glimmer/component';
 
 interface Signature {
   Args: {
@@ -37,12 +37,9 @@ export default class ColorPalette extends Component<Signature> {
   colors = DEFAULT_PALETTE_COLORS;
 
   private openColorPicker = (event: MouseEvent) => {
-    let container = event.currentTarget as HTMLElement;
-    let input = container.querySelector('input[type="color"]');
-    if (!input) {
-      throw new Error('Color picker input not found');
-    }
-    (input as HTMLInputElement).click();
+    const container = event.currentTarget as HTMLElement;
+    const input = container.querySelector('input[type="color"]');
+    input?.click();
   };
 
   <template>
@@ -59,14 +56,10 @@ export default class ColorPalette extends Component<Signature> {
         {{/each}}
       </div>
 
-      <button
-        type='button'
-        class='color-picker-container'
-        {{on 'click' this.openColorPicker}}
-      >
+      <div class='color-picker-container' {{on 'click' this.openColorPicker}}>
         <ColorPicker @color={{@color}} @onChange={{@onChange}} />
         <span class='custom-color-label'>Custom Color</span>
-      </button>
+      </div>
     </div>
 
     <style scoped>
@@ -81,6 +74,7 @@ export default class ColorPalette extends Component<Signature> {
         gap: var(--boxel-sp);
         color: var(--boxel-450);
         width: 18rem;
+        cursor: pointer;
       }
 
       .color-picker-container:hover {

@@ -14,16 +14,24 @@ interface Signature {
 export default class ColorPicker extends Component<Signature> {
   private handleColorChange = (event: Event) => {
     let input = event.target as HTMLInputElement;
+    event.stopPropagation();
     this.args.onChange(input.value);
   };
 
+  private handleClick = (event: MouseEvent) => {
+    const container = event.currentTarget as HTMLElement;
+    const input = container.querySelector('input[type="color"]');
+    input?.click();
+  };
+
   <template>
-    <div class='color-picker' ...attributes>
+    <div class='color-picker' {{on 'click' this.handleClick}} ...attributes>
       <input
         type='color'
         value={{@color}}
         class='input'
         disabled={{@disabled}}
+        aria-label='Choose color'
         {{on 'input' this.handleColorChange}}
       />
       {{#if @showHexString}}
