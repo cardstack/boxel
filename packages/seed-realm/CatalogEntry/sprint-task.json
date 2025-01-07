@@ -6,7 +6,7 @@
       "description": "Catalog entry for Sprint Task",
       "ref": {
         "name": "SprintTask",
-        "module": "../productivity/task"
+        "module": "../sprint-task"
       },
       "isField": false
     },

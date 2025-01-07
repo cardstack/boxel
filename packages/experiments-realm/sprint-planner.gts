@@ -24,16 +24,12 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
 import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
-import {
-  SprintTaskStatusField,
-  Project,
-  SprintTask,
-} from './productivity/task';
-import { FilterDropdown } from './productivity/filter-dropdown';
-import { StatusPill } from './productivity/filter-dropdown-item';
-import { FilterTrigger } from './productivity/filter-trigger';
+import { SprintTaskStatusField, Project, SprintTask } from './sprint-task';
+import { FilterDropdown } from './components/filter/filter-dropdown';
+import { StatusPill } from './components/filter/filter-dropdown-item';
+import { FilterTrigger } from './components/filter/filter-trigger';
 import getKanbanResource from './kanban-resource';
-import { FilterDisplay } from './productivity/filter-display';
+import { FilterDisplay } from './components/filter/filter-display';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import User from '@cardstack/boxel-icons/user';
@@ -63,7 +59,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       searchKey: 'label',
       label: 'Status',
       codeRef: {
-        module: new URL('./productivity/task', import.meta.url).href,
+        module: new URL('./sprint-task', import.meta.url).href,
         name: 'Status',
       },
       options: () => SprintTaskStatusField.values,
@@ -72,7 +68,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       searchKey: 'name',
       label: 'Assignee',
       codeRef: {
-        module: new URL('./productivity/task', import.meta.url).href,
+        module: new URL('./sprint-task', import.meta.url).href,
         name: 'TeamMember',
       },
       options: () => this.assigneeCards,
@@ -165,7 +161,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
 
   get assignedTaskCodeRef() {
     return {
-      module: new URL('./productivity/task', import.meta.url).href,
+      module: new URL('./sprint-task', import.meta.url).href,
       name: 'SprintTask',
     };
   }

@@ -6,7 +6,7 @@
       "description": "Catalog entry for Team",
       "ref": {
         "name": "Team",
-        "module": "../productivity/task"
+        "module": "../sprint-task"
       },
       "isField": false
     },

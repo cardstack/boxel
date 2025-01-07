@@ -60,7 +60,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../productivity/task",
+        "module": "../sprint-task",
         "name": "SprintTask"
       }
     }
