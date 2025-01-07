@@ -19,6 +19,7 @@ import {
   any,
   query,
   upsert,
+  dbExpression,
 } from './expression';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -472,22 +473,23 @@ export class Batch {
     do {
       // SQLite does not support cursors when used in the worker thread since
       // the API for using cursors cannot be serialized over the postMessage
-      // boundary. so we use a handcrafted paging approach that leverages
-      // realm_version to keep the result set stable across pages
+      // boundary. so we use a handcrafted paging approach
       rows = (await this.#query([
         'SELECT i.url, i.file_alias, i.type',
         'FROM boxel_index_working as i',
-        // TODO: If this query is still slow we'll need to consider dropping
-        // this join and writing a pg specific query here--as this query is
-        // currently written in a less performant manner in order to be
-        // compatible with SQLite. make sure to measure performance in hosted
-        // env first before sending for team review. Should strive to be less
-        // than 50ms (currently about 600-700ms) when this is run against a
-        // reasonably sized index.
-        'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+        dbExpression({
+          sqlite:
+            'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+        }),
         'WHERE',
         ...every([
-          [`deps_array_element =`, param(resolvedPath)],
+          [
+            dbExpression({
+              sqlite: `deps_array_element =`,
+              pg: `COALESCE(i.deps, '[]'::jsonb) @>`,
+            }),
+            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+          ],
           // css is a subset of modules, so there won't by any references that
           // are css entries that aren't already represented by a module entry
           [`i.type != 'css'`],

@@ -29,6 +29,7 @@ import {
   fieldArity,
   tableValuedFunctionsPlaceholder,
   query,
+  isDbExpression,
 } from './expression';
 import {
   type Query,
@@ -715,6 +716,7 @@ export class IndexQueryEngine {
         query.map((element) => {
           if (
             isParam(element) ||
+            isDbExpression(element) ||
             typeof element === 'string' ||
             element.kind === 'table-valued-each' ||
             element.kind === 'table-valued-tree'
