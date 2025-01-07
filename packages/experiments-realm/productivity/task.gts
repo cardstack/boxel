@@ -140,7 +140,7 @@ function shortenId(id: string): string {
   return decimal.toString(36).padStart(6, '0');
 }
 
-class TaskIsolated extends Component<typeof WorkTask> {
+class TaskIsolated extends Component<typeof SprintTask> {
   get dueDate() {
     return this.args.model.dateRange?.end;
   }
@@ -161,7 +161,7 @@ class TaskIsolated extends Component<typeof WorkTask> {
     <div class='task-container'>
       <header>
         <div class='left-column'>
-          <h2 class='task-title'>{{@model.taskName}}</h2>
+          <h2 class='task-title'>{{@model.name}}</h2>
           <div class='status-label'>
             <span class='text-gray'>in</span>
             {{@model.status.label}}
@@ -192,8 +192,8 @@ class TaskIsolated extends Component<typeof WorkTask> {
       <div class='task-info'>
         <div class='left-column'>
           <h4>Description</h4>
-          {{#if @model.taskDetail}}
-            <p>{{@model.taskDetail}}</p>
+          {{#if @model.details}}
+            <p>{{@model.details}}</p>
           {{else}}
             <span class='no-data-found-txt'>No Task Description Provided</span>
           {{/if}}
@@ -265,10 +265,10 @@ class TaskIsolated extends Component<typeof WorkTask> {
       <hr class='task-divider border-white' />
 
       <div class='task-subtasks'>
-        <h4>Subtasks ({{@model.children.length}})</h4>
+        <h4>Subtasks ({{@model.subtasks.length}})</h4>
 
-        {{#if @model.children}}
-          <@fields.children @format='fitted' />
+        {{#if @model.subtasks}}
+          <@fields.subtasks @format='fitted' />
         {{else}}
           <span class='no-data-found-txt'>No Subtasks Found</span>
         {{/if}}
@@ -425,7 +425,7 @@ class TaskIsolated extends Component<typeof WorkTask> {
 
   get progress() {
     if (!this.hasChildren) return 0;
-    const shippedCount = this.args.model.children!.filter(
+    const shippedCount = this.args.model.subtasks!.filter(
       (child) => child.status.label === 'Shipped',
     ).length;
 
@@ -441,23 +441,23 @@ class TaskIsolated extends Component<typeof WorkTask> {
   }
 
   get hasChildren() {
-    return this.args.model.children && this.args.model.children.length > 0;
+    return this.args.model.subtasks && this.args.model.subtasks.length > 0;
   }
 
   get childrenCount() {
-    return this.args.model.children ? this.args.model.children.length : 0;
+    return this.args.model.subtasks ? this.args.model.subtasks.length : 0;
   }
 
   get shippedCount() {
-    return this.args.model.children
-      ? this.args.model.children.filter(
+    return this.args.model.subtasks
+      ? this.args.model.subtasks.filter(
           (child) => child.status.label === 'Shipped',
         ).length
       : 0;
   }
 }
 
-export class WorkTaskStatusField extends TaskStatusField {
+export class SprintTaskStatusField extends TaskStatusField {
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
     {
@@ -499,17 +499,17 @@ export class WorkTaskStatusField extends TaskStatusField {
   ];
 }
 
-export class WorkTask extends Task {
-  static displayName = 'Work Task';
+export class SprintTask extends Task {
+  static displayName = 'Sprint Task';
   static icon = CheckboxIcon;
   @field project = linksTo(() => Project);
   @field team = linksTo(() => Team);
-  @field children = linksToMany(() => WorkTask);
-  @field status = contains(WorkTaskStatusField);
+  @field subtasks = linksToMany(() => SprintTask);
+  @field status = contains(SprintTaskStatusField);
 
   @field title = contains(StringField, {
-    computeVia: function (this: WorkTask) {
-      return this.taskName;
+    computeVia: function (this: SprintTask) {
+      return this.name;
     },
   });
 
@@ -517,7 +517,7 @@ export class WorkTask extends Task {
   @field assignee = linksTo(() => TeamMember);
 
   @field shortId = contains(StringField, {
-    computeVia: function (this: WorkTask) {
+    computeVia: function (this: SprintTask) {
       if (this.id) {
         let id = shortenId(extractId(this.id));
         let _shortId: string;

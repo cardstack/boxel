@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
+      "name": "",
       "status": {
         "index": 1,
         "label": "Proposal",
@@ -37,7 +37,6 @@
       "healthScore": null,
       "notes": "",
       "valueBreakdown": [],
-      "title": null,
       "description": null,
       "thumbnailURL": null
     },

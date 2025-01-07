@@ -119,6 +119,18 @@ export abstract class Command<
     mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
   ): Promise<CardSchema> {
     let InputType = await this.getInputType();
+    if (!InputType) {
+      return {
+        attributes: {
+          type: 'object',
+          properties: {},
+        },
+        relationships: {
+          type: 'object',
+          properties: {},
+        },
+      };
+    }
     return generateJsonSchemaForCardType(
       InputType as unknown as typeof CardDef, // TODO: can we do better type-wise?
       cardApi,

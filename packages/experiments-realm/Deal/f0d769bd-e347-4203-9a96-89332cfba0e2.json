@@ -2,9 +2,65 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": null,
+      "name": "",
+      "status": {
+        "index": 3,
+        "label": "Closed Won",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "#E8F5E9"
+        }
+      },
+      "priority": {
+        "index": null,
+        "label": null,
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": null,
+          "backgroundColor": null
+        }
+      },
+      "closeDate": null,
+      "currentValue": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "predictedRevenue": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "healthScore": null,
+      "notes": null,
+      "valueBreakdown": [],
       "description": null,
       "thumbnailURL": null
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": null
+        }
+      },
+      "document": {
+        "links": {
+          "self": null
+        }
+      },
+      "primaryStakeholder": {
+        "links": {
+          "self": null
+        }
+      },
+      "stakeholders": {
+        "links": {
+          "self": null
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {

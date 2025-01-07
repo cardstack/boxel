@@ -26,7 +26,11 @@ import { LooseSingleCardDocument, getCards } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error path resolution issue
 import { AppCard } from '/experiments/app-card';
-import { WorkTaskStatusField, Project, WorkTask } from './productivity/task';
+import {
+  SprintTaskStatusField,
+  Project,
+  SprintTask,
+} from './productivity/task';
 import { FilterDropdown } from './productivity/filter-dropdown';
 import { StatusPill } from './productivity/filter-dropdown-item';
 import { FilterTrigger } from './productivity/filter-trigger';
@@ -53,7 +57,7 @@ export interface SelectedItem {
   index?: number;
 }
 
-class WorkTrackerIsolated extends Component<typeof AppCard> {
+class SprintPlannerIsolated extends Component<typeof AppCard> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
   filters = {
@@ -64,7 +68,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         module: new URL('./productivity/task', import.meta.url).href,
         name: 'Status',
       },
-      options: () => WorkTaskStatusField.values,
+      options: () => SprintTaskStatusField.values,
     },
     assignee: {
       searchKey: 'name',
@@ -101,14 +105,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     if (!this.cards || !this.cards.instances) {
       return [];
     }
-    return this.cards.instances as WorkTask[];
+    return this.cards.instances as SprintTask[];
   }
 
   get assigneeCards() {
     return this.assigneeQuery.instances;
   }
 
-  @action showTaskCard(card: WorkTask): boolean {
+  @action showTaskCard(card: SprintTask): boolean {
     return this.filterTypes.every((filterType: FilterType) => {
       let selectedItems = this.selectedItems.get(filterType) ?? [];
       if (selectedItems.length === 0) return true;
@@ -124,14 +128,14 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
     });
   }
 
-  hasColumnKey = (card: WorkTask, key: string) => {
+  hasColumnKey = (card: SprintTask, key: string) => {
     return card.status?.label === key;
   };
 
   taskCollection = getKanbanResource(
     this,
     () => this.cardInstances,
-    () => WorkTaskStatusField.values.map((status) => status.label) ?? [],
+    () => SprintTaskStatusField.values.map((status) => status.label) ?? [],
     () => this.hasColumnKey,
   );
 
@@ -164,7 +168,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
   get assignedTaskCodeRef() {
     return {
       module: new URL('./productivity/task', import.meta.url).href,
-      name: 'WorkTask',
+      name: 'SprintTask',
     };
   }
 
@@ -224,7 +228,7 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         return;
       }
 
-      let index = WorkTaskStatusField.values.find((value) => {
+      let index = SprintTaskStatusField.values.find((value) => {
         return value.label === statusLabel;
       })?.index;
 
@@ -232,8 +236,8 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
         data: {
           type: 'card',
           attributes: {
-            taskName: null,
-            taskDetail: null,
+            name: null,
+            details: null,
             status: {
               index,
               label: statusLabel,
@@ -291,10 +295,10 @@ class WorkTrackerIsolated extends Component<typeof AppCard> {
       cardInNewCol &&
       cardInNewCol.status.label !== targetColumnAfterDrag.title //not dragging to the same column
     ) {
-      let statusValue = WorkTaskStatusField.values.find(
+      let statusValue = SprintTaskStatusField.values.find(
         (value) => value.label === targetColumnAfterDrag.title,
       );
-      cardInNewCol.status = new WorkTaskStatusField(statusValue);
+      cardInNewCol.status = new SprintTaskStatusField(statusValue);
       await this.args.context?.actions?.saveCard?.(cardInNewCol);
     }
   }
@@ -626,12 +630,12 @@ class ColumnHeader extends GlimmerComponent<ColumnHeaderSignature> {
   }
 }
 
-export class WorkTracker extends AppCard {
-  static displayName = 'Work Tracker';
+export class SprintPlanner extends AppCard {
+  static displayName = 'Sprint Planner';
   static icon = Checklist;
   static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
-  static isolated = WorkTrackerIsolated;
+  static isolated = SprintPlannerIsolated;
   @field project = linksTo(() => Project);
 }
 

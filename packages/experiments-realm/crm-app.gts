@@ -23,10 +23,20 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { AppCard, Tab } from './app-card';
-import { Query, CardError, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  Query,
+  CardError,
+  SupportedMimeType,
+  getCards,
+} from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
+import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import { urgencyTagValues } from './crm/account';
+import { dealStatusValues } from './crm/deal';
+import type { Deal } from './crm/deal';
+import DealSummary from './crm/deal-summary';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -64,14 +74,27 @@ const DEAL_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Deal',
     createNewButtonText: 'Create Deal',
   },
+  ...dealStatusValues.map((status) => ({
+    displayName: status.label,
+    icon: status.icon,
+    cardTypeName: 'CRM Deal',
+    createNewButtonText: status.buttonText,
+  })),
 ];
+// Map with urgencyTagValues array from crm/account.gts
 const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
-    icon: ContactIcon,
+    icon: CalendarExclamation,
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
+  ...urgencyTagValues.map((tag) => ({
+    displayName: tag.label,
+    icon: tag.icon,
+    cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
+    createNewButtonText: tag.buttonText,
+  })),
 ];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
@@ -85,12 +108,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
+    this.loadDealCards.perform();
   }
   //tabs
   @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
   @tracked private searchKey = '';
+  @tracked private deals: Deal[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -136,6 +161,20 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     }
   });
 
+  private loadDealCards = restartableTask(async () => {
+    if (!this.query || this.activeTabId !== 'Deal') {
+      return;
+    }
+
+    const result = getCards(this.query, this.realmHrefs, {
+      isLive: true,
+    });
+
+    await result.loaded;
+    this.deals = result.instances as Deal[];
+    return result;
+  });
+
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
   }
@@ -149,6 +188,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
+    this.loadDealCards.perform();
   }
   get headerColor() {
     return (
@@ -178,6 +218,9 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   private get realms() {
     return [this.currentRealm!];
   }
+  get realmHrefs() {
+    return [this.currentRealm!.href];
+  }
 
   //create
   @action private createNew() {
@@ -204,38 +247,65 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    if (this.loadAllFilters.isIdle && this.activeFilter?.query) {
-      return {
-        filter: {
-          on: this.activeFilter.cardRef,
-          every: [
-            { type: this.activeFilter.cardRef },
-            ...(this.searchKey !== ''
-              ? [
-                  {
-                    any: [
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          name: this.searchKey,
-                        },
-                      },
-                      {
-                        on: this.activeFilter.cardRef,
-                        contains: {
-                          'company.name': this.searchKey,
-                        },
-                      },
-                    ],
-                  },
-                ]
-              : []),
-          ],
-        },
-        sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
-      } as Query;
-    }
-    return;
+    const { loadAllFilters, activeFilter, activeTabId, searchKey } = this;
+
+    if (!loadAllFilters.isIdle || !activeFilter?.query) return;
+
+    const defaultFilter = {
+      type: activeFilter.cardRef,
+    };
+
+    // filter field value by CRM Account
+    const accountFilter =
+      activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'urgencyTag.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
+    // filter field value by CRM Deal
+    const dealFilter =
+      activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
+        ? [
+            {
+              on: activeFilter.cardRef,
+              eq: {
+                'status.label': activeFilter.displayName,
+              },
+            },
+          ]
+        : [];
+
+    const searchFilter = searchKey
+      ? [
+          {
+            any: [
+              {
+                on: activeFilter.cardRef,
+                contains: { name: searchKey },
+              },
+            ],
+          },
+        ]
+      : [];
+
+    return {
+      filter: {
+        on: activeFilter.cardRef,
+        every: [
+          defaultFilter,
+          ...accountFilter,
+          ...dealFilter,
+          ...searchFilter,
+        ],
+      },
+      sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
+    } as Query;
   }
 
   get searchPlaceholder() {
@@ -313,6 +383,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             {{this.activeFilter.createNewButtonText}}
           </BoxelButton>
         {{/if}}
+        {{#if (eq this.activeTabId 'Deal')}}
+          <div class='content-header-deal-summary'>
+            <DealSummary @deals={{this.deals}} />
+          </div>
+        {{/if}}
         <div class='search-bar content-header-row-2'>
           <SearchInput
             @placeholder={{this.searchPlaceholder}}
@@ -372,6 +447,10 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       }
       .content-header-row-1 {
         margin-top: var(--boxel-sp-xs);
+      }
+      .content-header-deal-summary {
+        width: 100%;
+        margin-top: var(--boxel-sp-lg);
       }
       .content-header-row-2 {
         margin-top: var(--boxel-sp-lg);

@@ -32,6 +32,11 @@ import { Contact } from './contact';
 import { ContactRow } from '../components/contact-row';
 import Users from '@cardstack/boxel-icons/users';
 import World from '@cardstack/boxel-icons/world';
+import FilterSearch from '@cardstack/boxel-icons/filter-search';
+import FilePen from '@cardstack/boxel-icons/file-pen';
+import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
+import Award from '@cardstack/boxel-icons/award';
+import AwardOff from '@cardstack/boxel-icons/award-off';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { Document } from './document';
@@ -589,7 +594,7 @@ class FittedTemplate extends Component<typeof Deal> {
         </AccountHeader>
 
         <div class='deal-status'>
-          {{@model.status.label}}
+          <@fields.status @format='atom' @displayContainer={{false}} />
         </div>
       </header>
 
@@ -762,50 +767,85 @@ class FittedTemplate extends Component<typeof Deal> {
   </template>
 }
 
+export const dealStatusValues = [
+  {
+    index: 0,
+    icon: FilterSearch,
+    label: 'Discovery',
+    value: 'discovery',
+    buttonText: 'Create Deal', // TODO: For the createNewButtonText usage in CRM App
+    colorScheme: {
+      foregroundColor: '#D32F2F', // Dark Red
+      backgroundColor: '#FFEBEE', // Light Red
+    },
+  },
+  {
+    index: 1,
+    icon: FilePen,
+    label: 'Proposal',
+    value: 'proposal',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: 'var(--boxel-lilac)',
+    },
+  },
+  {
+    index: 2,
+    icon: ArrowLeftRight,
+    label: 'Negotiation',
+    value: 'negotiation',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: '#FFF3E0', // light orange
+    },
+  },
+  {
+    index: 3,
+    icon: Award,
+    label: 'Closed Won',
+    value: 'closed-won',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: '#E8F5E9', // light green
+    },
+  },
+  {
+    index: 4,
+    icon: AwardOff,
+    label: 'Closed Lost',
+    value: 'closed-lost',
+    buttonText: 'Create Deal',
+    colorScheme: {
+      foregroundColor: '#000000',
+      backgroundColor: '#FFEBEE', // light red
+    },
+  },
+];
+
 class DealStatus extends LooseGooseyField {
   static displayName = 'CRM Deal Status';
-  static values = [
-    {
-      index: 0,
-      label: 'Discovery',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#E3F2FD',
-      },
-    },
-    {
-      index: 1,
-      label: 'Proposal',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: 'var(--boxel-lilac)',
-      },
-    },
-    {
-      index: 2,
-      label: 'Negotiation',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#FFF3E0', // light orange
-      },
-    },
-    {
-      index: 3,
-      label: 'Closed Won',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#E8F5E9', // light green
-      },
-    },
-    {
-      index: 4,
-      label: 'Closed Lost',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#FFEBEE', // light red
-      },
-    },
-  ];
+  static values = dealStatusValues;
+
+  static atom = class Atom extends Component<typeof this> {
+    get statusData() {
+      return dealStatusValues.find(
+        (status) => status.label === this.args.model.label,
+      );
+    }
+
+    <template>
+      {{#if @model.label}}
+        <EntityDisplayWithIcon @title={{@model.label}}>
+          <:icon>
+            {{this.statusData.icon}}
+          </:icon>
+        </EntityDisplayWithIcon>
+      {{/if}}
+    </template>
+  };
 }
 
 export class DealPriority extends LooseGooseyField {
@@ -942,6 +982,12 @@ export class Deal extends CardDef {
       return this.account?.company;
     },
   });
+  @field title = contains(StringField, {
+    computeVia: function (this: Deal) {
+      return this.name;
+    },
+  });
+
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
 }

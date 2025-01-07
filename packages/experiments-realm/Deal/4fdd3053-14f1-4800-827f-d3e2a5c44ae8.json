@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
+      "name": "Demo Deal Name",
       "status": {
         "index": 1,
         "label": "Proposal",
@@ -74,7 +74,6 @@
           }
         }
       ],
-      "title": null,
       "description": null,
       "thumbnailURL": "https://picsum.photos/id/500/200/300"
     },

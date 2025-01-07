@@ -2,32 +2,29 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Fill up task board with realistic data",
-      "taskDetail": null,
       "status": {
         "index": 3,
-        "label": "In Progress"
-      },
-      "priority": {
-        "index": null,
-        "label": null
+        "label": "In Progress",
+        "color": "#FFB74D",
+        "completed": false
       },
       "dateRange": {
         "start": null,
         "end": null
       },
+      "priority": {
+        "index": 0,
+        "label": "Low"
+      },
+      "name": "Add functionality where + opens create card modal with correct status",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "assignee": {
-        "links": {
-          "self": "../TeamMember/03e293b9-e4c1-4592-b8d1-e6f963829086"
-        }
-      },
       "project": {
         "links": {
-          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
         }
       },
       "team": {
@@ -35,9 +32,14 @@
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
         }
       },
-      "children": {
+      "subtasks": {
         "links": {
           "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/4c9614cd-ecda-42cf-bc18-37903019a7be"
         }
       },
       "tags": {
@@ -49,7 +51,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "WorkTask"
+        "name": "SprintTask"
       }
     }
   }

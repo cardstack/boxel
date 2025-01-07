@@ -184,7 +184,7 @@ export class PgQueuePublisher implements QueuePublisher {
       args,
       job_type: jobType,
       concurrency_group: concurrencyGroup,
-      timeout, // TODO: check against system max timeout
+      timeout,
     } as Pick<
       JobsTable,
       'args' | 'job_type' | 'concurrency_group' | 'timeout'
@@ -222,6 +222,7 @@ export class PgQueueRunner implements QueueRunner {
   constructor(
     private pgClient: PgAdapter,
     private workerId: string,
+    private maxTimeoutSec = 10 * 60,
   ) {}
 
   register<A, T>(jobType: string, handler: (arg: A) => Promise<T>) {
@@ -299,7 +300,7 @@ export class PgQueueRunner implements QueueRunner {
               [param(jobToRun.id)],
               [
                 '(',
-                param(jobToRun.timeout),
+                param(Math.min(jobToRun.timeout, this.maxTimeoutSec)),
                 ` || ' seconds')::interval + now()`,
               ],
               [param(this.workerId)],
@@ -319,7 +320,21 @@ export class PgQueueRunner implements QueueRunner {
           let result: PgPrimitive;
           try {
             log.debug(`%s: running %s`, this.workerId, jobToRun.id);
-            result = await this.runJob(jobToRun.job_type, jobToRun.args);
+            result = await Promise.race([
+              this.runJob(jobToRun.job_type, jobToRun.args),
+              // we race the job so that it doesn't hold this worker hostage if
+              // the job's promise never resolves
+              new Promise<'timeout'>((r) =>
+                setTimeout(() => {
+                  r('timeout');
+                }, this.maxTimeoutSec * 1000),
+              ),
+            ]);
+            if (result === 'timeout') {
+              throw new Error(
+                `Timed-out after ${this.maxTimeoutSec}s waiting for job ${jobToRun.id} to complete`,
+              );
+            }
             newStatus = 'resolved';
           } catch (err: any) {
             Sentry.captureException(err);
