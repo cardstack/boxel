@@ -480,7 +480,7 @@ export class CurrentRun {
           }),
         ),
       );
-      iconHTML = unwrap(sanitizeHTML(await this.#render(cardTypeIcon(card))));
+      iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization

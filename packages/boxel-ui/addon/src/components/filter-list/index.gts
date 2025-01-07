@@ -10,11 +10,13 @@ export interface FilterListIconSignature {
 
 export type FilterListIcon = ComponentLike<FilterListIconSignature>;
 
+import { htmlSafe } from '@ember/template';
+
 import { cn, eq } from '../../helpers.ts';
 
 export type Filter = {
   displayName: string;
-  icon: FilterListIcon;
+  icon: FilterListIcon | string;
 };
 
 interface Signature {
@@ -39,9 +41,17 @@ export default class FilterList extends Component<Signature> {
           class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
           {{on 'click' (fn this.onChanged filter)}}
           data-test-boxel-filter-list-button={{filter.displayName}}
-        ><filter.icon
-            class='filter-list__icon'
-          />{{filter.displayName}}</button>
+        >
+          {{#if (isIconString filter.icon)}}
+            {{convertSVGString
+              filter.icon
+              'filter-list__icon'
+            }}{{filter.displayName}}
+          {{else}}
+            <filter.icon
+              class='filter-list__icon'
+            />{{filter.displayName}}{{/if}}</button>
+
       {{/each}}
     </div>
     <style scoped>
@@ -71,11 +81,26 @@ export default class FilterList extends Component<Signature> {
         background: var(--boxel-300);
         border-radius: 6px;
       }
-      .filter-list__icon {
+      :global(.filter-list__icon) {
         width: var(--boxel-icon-xs);
         height: var(--boxel-icon-xs);
         vertical-align: top;
       }
     </style>
   </template>
+}
+
+function convertSVGString(svgString: string, className: string) {
+  return htmlSafe(
+    svgString
+      .replace(
+        /<svg\b([^>]*)\sclass="([^"]*)"/,
+        `<svg$1 class="$2 ${className}"`,
+      )
+      .replace(/<svg\b([^>]*)>/, `<svg$1 class="${className}">`),
+  );
+}
+
+function isIconString(icon: FilterListIcon | string): icon is string {
+  return typeof icon === 'string';
 }

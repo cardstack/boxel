@@ -59,7 +59,7 @@ interface RenderCardParams {
   componentCodeRef?: CodeRef;
 }
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
-export type Render = (component: ComponentLike) => Promise<string>;
+export type Render = (component: ComponentLike) => string;
 
 const maxRenderThreshold = 10000;
 export default class RenderService extends Service {
@@ -131,14 +131,14 @@ export default class RenderService extends Service {
     return parseCardHtml(html);
   }
 
-  async render(component: ComponentLike): Promise<string> {
+  render = (component: ComponentLike): string => {
     let element = getIsolatedRenderElement(this.document);
     render(component, element, this.owner);
 
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);
     return parseCardHtml(html);
-  }
+  };
 
   // TODO delete me
   private async resolveField(
