@@ -25,13 +25,8 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import { LooseGooseyField } from '../loosey-goosey';
 import { StatusPill } from '../components/status-pill';
-import { Avatar, Pill, BoxelButton } from '@cardstack/boxel-ui/components';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
-import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
-import ActivityCard from '../components/activity-card';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import PlusIcon from '@cardstack/boxel-icons/plus';
-import PhoneIcon from '@cardstack/boxel-icons/phone';
-import SquareUser from '@cardstack/boxel-icons/square-user';
 import CalendarTime from '@cardstack/boxel-icons/calendar-time';
 import ClockExclamation from '@cardstack/boxel-icons/clock-exclamation';
 import Clock24 from '@cardstack/boxel-icons/clock-24';
@@ -274,56 +269,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </BoxelButton>
           </:icon>
           <:content>
-            <ActivityCard>
-              <:thumbnail>
-                <PhoneIcon />
-              </:thumbnail>
-              <:title>
-                Customer Call
-              </:title>
-              <:icon>
-                <Pill class='activity-pill'>
-                  Left VoiceMail
-                </Pill>
-              </:icon>
-              <:description>
-                Discuss Q3 product roadmap
-              </:description>
-              <:content>
-                <div class='activity-card-group'>
-                  <EntityDisplayWithIcon @title='Technova'>
-                    <:icon>
-                      <SquareUser />
-                    </:icon>
-                    <:content>
-                      Technova
-                    </:content>
-                  </EntityDisplayWithIcon>
-                  <EntityDisplayWithThumbnail @title='Rep: Janus Dios'>
-                    <:thumbnail>
-                      <Avatar
-                        @thumbnailURL='https://images.pexels.com/photos/1624229/pexels-photo-1624229.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2'
-                        class='avatar'
-                      />
-                    </:thumbnail>
-                    <:content>
-                      Sales Associate
-                    </:content>
-                  </EntityDisplayWithThumbnail>
-                  <EntityDisplayWithIcon
-                    class='activity-time'
-                    @title='May 15, 2024'
-                  >
-                    <:icon>
-                      <CalendarTime />
-                    </:icon>
-                    <:content>
-                      3:15pm
-                    </:content>
-                  </EntityDisplayWithIcon>
-                </div>
-              </:content>
-            </ActivityCard>
+            {{! remove activity mock }}
           </:content>
         </SummaryCard>
       </:activities>
