@@ -19,6 +19,7 @@ import { baseRealm, Command } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
@@ -362,6 +363,20 @@ module('Acceptance | Commands tests', function (hooks) {
         'person.gts': { Person, Meeting },
         'pet.gts': { Pet },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+        'AiCommandExample/london.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              location: 'London',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/ai-command-example',
+                name: 'AiCommandExample',
+              },
+            },
+          },
+        },
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
           lastName: 'Abdel-Rahman',
@@ -866,5 +881,65 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-boxel-command-result]')
       .containsText('Submode: interact');
+  });
+
+  test('command returns serialized result in room message', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}AiCommandExample/london`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-get-weather]');
+    await waitUntil(() => getRoomIds().length > 0);
+
+    let roomId = getRoomIds().pop()!;
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+
+    let boxelMessageData = JSON.parse(message.content.data);
+    assert.strictEqual(boxelMessageData.context.tools.length, 1);
+    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
+    let toolName = boxelMessageData.context.tools[0].function.name;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Getting weather information for London',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: 'Getting weather information for London',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            attributes: {
+              location: 'London',
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    await settled();
+    let commandResultEvents = await getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      1,
+      'command result event is dispatched',
+    );
   });
 });
