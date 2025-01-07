@@ -3,6 +3,7 @@ import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import ColorPicker from '../color-picker/index.gts';
 
 interface Signature {
   Args: {
@@ -57,13 +58,7 @@ export default class ColorPalette extends Component<Signature> {
 
       <label class='color-picker-container'>
         <span class='custom-color-label'>Custom Color</span>
-        <input
-          type='color'
-          value={{@color}}
-          class='color-input'
-          {{on 'input' this.handleColorInput}}
-          aria-label='Choose custom color'
-        />
+        <ColorPicker @color={{@color}} @onChange={{@onChange}} />
       </label>
     </div>
 
