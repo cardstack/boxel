@@ -19,8 +19,10 @@ export default class ColorPicker extends Component<Signature> {
   };
 
   private handleClick = (event: MouseEvent) => {
-    const container = event.currentTarget as HTMLElement;
-    const input = container.querySelector('input[type="color"]');
+    let container = event.currentTarget as HTMLElement;
+    let input = container.querySelector(
+      'input[type="color"]',
+    ) as HTMLInputElement;
     input?.click();
   };
 
