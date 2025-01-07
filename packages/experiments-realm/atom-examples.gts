@@ -17,7 +17,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { Author } from './author';
 import { Pet } from './pet';
 import { Country } from './country';
-import { TeamMember } from './productivity/task';
+import { TeamMember } from './sprint-task';
 import { Company } from './crm/company';
 import { Contact } from './crm/contact';
 import { ContactLinkField } from './fields/contact-link';

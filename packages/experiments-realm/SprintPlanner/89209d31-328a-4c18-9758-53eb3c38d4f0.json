@@ -2,15 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "tabs": [],
-      "headerIcon": {
-        "altText": null,
-        "size": "actual",
-        "height": null,
-        "width": null,
-        "base64": null
-      },
-      "moduleId": null,
+      "title": "Engineering Team Sprint",
       "description": null,
       "thumbnailURL": null
     },

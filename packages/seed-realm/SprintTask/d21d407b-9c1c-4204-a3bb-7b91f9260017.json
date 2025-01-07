@@ -3,20 +3,20 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 3,
-        "label": "In Progress",
-        "color": "#FFB74D",
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
         "completed": false
       },
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2024-12-01",
+        "end": "2024-12-08"
       },
       "priority": {
-        "index": 0,
-        "label": "Low"
+        "index": null,
+        "label": null
       },
-      "name": "Add functionality where + opens create card modal with correct status",
+      "name": "Create RHS Sheet",
       "details": null,
       "description": null,
       "thumbnailURL": null
@@ -24,12 +24,12 @@
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/9b43240d-8c9c-42bc-a4d1-f9c626661562"
+          "self": null
         }
       },
       "team": {
         "links": {
-          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+          "self": "../Team/0a799af4-c49a-4d27-aabe-9ed54b9baf55"
         }
       },
       "subtasks": {
@@ -50,7 +50,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../productivity/task",
+        "module": "../sprint-task",
         "name": "SprintTask"
       }
     }
