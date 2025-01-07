@@ -386,7 +386,7 @@ export function expressionToSql(
       } else if (isParam(element)) {
         let value = element[dbAdapterKind] ?? element.param;
         if (value === undefined) {
-          throw new Error(`unexpected param value: ${JSON.stringify(element)}`);
+          throw new Error(`undefined param value: ${JSON.stringify(element)}`);
         }
         values.push(value);
         return `$${values.length}`;
