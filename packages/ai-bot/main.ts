@@ -120,7 +120,6 @@ class Assistant {
 }
 
 let startTime = Date.now();
-let activeLLMs: Map<string, string> = new Map();
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
@@ -187,10 +186,6 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (event.getType() === APP_BOXEL_ACTIVE_LLM) {
-          activeLLMs.set(room!.roomId, event.getContent().model);
-          return;
-        }
         if (event.getType() !== 'm.room.message') {
           return; // only print messages
         }
@@ -219,7 +214,6 @@ Common issues are:
           []) as DiscreteMatrixEvent[];
         try {
           promptParts = getPromptParts(eventList, aiBotUserId);
-          promptParts.model = activeLLMs.get(room!.roomId) ?? promptParts.model;
         } catch (e) {
           log.error(e);
           responder.finalize(

@@ -12,6 +12,7 @@ import type {
   ReactionEvent,
   Tool,
   SkillsConfigEvent,
+  ActiveLLMEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -24,6 +25,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
+  APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
@@ -85,10 +87,11 @@ export function getPromptParts(
   let tools = getTools(history, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
+  let model = getModel(eventList);
   return {
     tools,
     messages,
-    model: DEFAULT_LLM,
+    model,
     history,
     toolChoice: toolChoice,
   };
@@ -603,4 +606,16 @@ export function isCommandEvent(
     typeof event.content.data === 'object' &&
     typeof event.content.data.toolCall === 'object'
   );
+}
+
+function getModel(
+  eventlist: DiscreteMatrixEvent[]
+): string {
+  let activeLLMEvent = eventlist.findLast(
+    (event) => event.type === APP_BOXEL_ACTIVE_LLM,
+  ) as ActiveLLMEvent;
+  if (!activeLLMEvent) {
+    return DEFAULT_LLM;
+  }
+  return activeLLMEvent.content.model;
 }

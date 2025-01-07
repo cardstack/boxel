@@ -995,7 +995,7 @@ export default class MatrixService extends Service {
       .getState('f' as MatrixSDK.Direction);
   }
 
-  async selectLLM(roomId: string, model: string) {
+  async sendActiveLLMEvent(roomId: string, model: string) {
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
     });

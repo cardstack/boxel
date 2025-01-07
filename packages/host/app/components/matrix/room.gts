@@ -25,7 +25,11 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton, BoxelSelect } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  BoxelSelect,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 
@@ -152,7 +156,11 @@ export default class Room extends Component<Signature> {
                       <CheckMark width='12' height='12' />
                     {{/if}}
                   </div>
-                  <span class='llm-model-name'>{{item}}</span>
+                  {{#if this.activateLLM.isRunning}}
+                    <LoadingIndicator class='loading-indicator' />
+                  {{else}}
+                    <span class='llm-model-name'>{{item}}</span>
+                  {{/if}}
                 </div>
               </BoxelSelect>
             </div>
@@ -256,6 +264,10 @@ export default class Room extends Component<Signature> {
         text-wrap: nowrap;
         color: var(--boxel-dark);
         font: 600 var(--boxel-font-sm);
+      }
+      .loading-indicator {
+        width: 100%;
+        text-align: right;
       }
 
       :global(
@@ -541,7 +553,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get isLLMSelectionDisabled() {
-    return this.selectLLMTask.isRunning || this.supportedLLMs.length <= 0;
+    return this.activateLLM.isRunning || this.supportedLLMs.length <= 0;
   }
 
   private get activeLLM() {
@@ -550,11 +562,12 @@ export default class Room extends Component<Signature> {
 
   @action
   private selectLLM(model: string) {
-    this.selectLLMTask.perform(model);
+    this.activateLLM.perform(model);
   }
 
-  private selectLLMTask = restartableTask(async (model: string) => {
-    await this.matrixService.selectLLM(this.args.roomId, model);
+  private activateLLM = restartableTask(async (model: string) => {
+    await timeout(5000);
+    await this.matrixService.sendActiveLLMEvent(this.args.roomId, model);
   });
 
   private get supportedLLMs(): string[] {
