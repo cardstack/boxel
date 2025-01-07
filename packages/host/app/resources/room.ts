@@ -65,6 +65,8 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
+  private _isDisplayingViewCodeMap: TrackedMap<string, boolean> =
+    new TrackedMap();
   @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
@@ -92,6 +94,7 @@ export class RoomResource extends Resource<Args> {
     this._fragmentCache = new TrackedMap();
     this._nameEventsCache = new TrackedMap();
     this._skillCardsCache = new TrackedMap();
+    this._isDisplayingViewCodeMap = new TrackedMap();
     this._createEvent = undefined;
   }
 
@@ -404,6 +407,17 @@ export class RoomResource extends Resource<Args> {
     ) as LooseSingleCardDocument;
     return cardDoc;
   };
+
+  public isDisplayingCode(message: Message) {
+    return this._isDisplayingViewCodeMap.get(message.eventId) ?? false;
+  }
+
+  public toggleViewCode(message: Message) {
+    this._isDisplayingViewCodeMap.set(
+      message.eventId,
+      !this.isDisplayingCode(message),
+    );
+  }
 }
 
 export function getRoom(
