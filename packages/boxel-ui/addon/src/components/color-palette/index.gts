@@ -3,6 +3,7 @@ import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+
 import ColorPicker from '../color-picker/index.gts';
 
 interface Signature {
