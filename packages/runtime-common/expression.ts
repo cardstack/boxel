@@ -382,30 +382,14 @@ export function expressionToSql(
   let text = query
     .map((element) => {
       if (isDbExpression(element)) {
-        if (dbAdapterKind === 'pg') {
-          return element.pg ?? '';
-        } else if (dbAdapterKind === 'sqlite') {
-          return element.sqlite ?? '';
-        } else {
-          throw assertNever(dbAdapterKind);
-        }
+        return element[dbAdapterKind] ?? '';
       } else if (isParam(element)) {
-        if (dbAdapterKind === 'pg' && 'pg' in element && element.pg != null) {
-          values.push(element.pg);
-          return `$${values.length}`;
-        } else if (
-          dbAdapterKind === 'sqlite' &&
-          'sqlite' in element &&
-          element.sqlite != null
-        ) {
-          values.push(element.sqlite);
-          return `$${values.length}`;
-        } else if ('param' in element && element.param !== undefined) {
-          values.push(element.param);
-          return `$${values.length}`;
-        } else {
+        let value = element[dbAdapterKind] ?? element.param;
+        if (value === undefined) {
           throw new Error(`unexpected param value: ${JSON.stringify(element)}`);
         }
+        values.push(value);
+        return `$${values.length}`;
       } else if (typeof element === 'string') {
         return element;
       } else if (element.kind === 'table-valued-tree') {
