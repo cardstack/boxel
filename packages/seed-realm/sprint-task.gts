@@ -18,8 +18,8 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
-import { User } from '../user';
-import { Task, TaskStatusField, getDueDateStatus } from '../task';
+import { User } from './user';
+import { Task, TaskStatusField, getDueDateStatus } from './task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
