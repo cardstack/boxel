@@ -53,9 +53,9 @@ export default class DndKanbanBoard extends Component<
   DndKanbanBoardSignature<DndColumn>
 > {
   @tracked areModifiersLoaded = false;
-  @tracked DndDraggableItemModifier: DndDraggableItemModifier = null;
-  @tracked DndDropTargetModifier: DndDropTargetModifier = null;
-  @tracked DndSortableItemModifier: DndSortableItemModifier = null;
+  @tracked DndDraggableItemModifier: DndDraggableItemModifier | undefined;
+  @tracked DndDropTargetModifier: DndDropTargetModifier | undefined;
+  @tracked DndSortableItemModifier: DndSortableItemModifier | undefined;
   @tracked insertAfter: <T>(array: T[], index: number, element: T) => T[] =
     undefined as any;
   @tracked insertAt: <T>(array: T[], index: number, element: T) => T[] =
