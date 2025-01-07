@@ -1,8 +1,9 @@
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import ColorPalette from './index.gts';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { fn } from '@ember/helper';
+
+import ColorPalette from './index.gts';
 
 export default class ColorPaletteUsage extends Component {
   @tracked color = '#000000';

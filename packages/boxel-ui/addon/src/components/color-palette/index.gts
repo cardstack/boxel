@@ -1,8 +1,9 @@
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import ColorPicker from '../color-picker/index.gts';
 import Component from '@glimmer/component';
+
+import ColorPicker from '../color-picker/index.gts';
 
 interface Signature {
   Args: {
