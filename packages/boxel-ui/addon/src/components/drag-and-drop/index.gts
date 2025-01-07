@@ -6,6 +6,11 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { and, eq } from '../../helpers/truth-helpers.ts';
+import type {
+  DndDraggableItemModifier,
+  DndDropTargetModifier,
+  DndSortableItemModifier,
+} from '../../types/drag-and-drop.ts';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -48,13 +53,16 @@ export default class DndKanbanBoard extends Component<
   DndKanbanBoardSignature<DndColumn>
 > {
   @tracked areModifiersLoaded = false;
-  @tracked DndDraggableItemModifier: any = null;
-  @tracked DndDropTargetModifier: any = null;
-  @tracked DndSortableItemModifier: any = null;
-  @tracked insertAfter: any;
-  @tracked insertAt: any;
-  @tracked insertBefore: any;
-  @tracked removeItem: any;
+  @tracked DndDraggableItemModifier: DndDraggableItemModifier = null;
+  @tracked DndDropTargetModifier: DndDropTargetModifier = null;
+  @tracked DndSortableItemModifier: DndSortableItemModifier = null;
+  @tracked insertAfter: <T>(array: T[], index: number, element: T) => T[] =
+    undefined as any;
+  @tracked insertAt: <T>(array: T[], index: number, element: T) => T[] =
+    undefined as any;
+  @tracked insertBefore: <T>(array: T[], index: number, element: T) => T[] =
+    undefined as any;
+  @tracked removeItem: <T>(array: T[], item: T) => T[] = undefined as any;
   @tracked draggedCard: DndItem | null = null;
 
   constructor(owner: unknown, args: DndKanbanBoardArgs<DndColumn>) {
@@ -70,25 +78,22 @@ export default class DndKanbanBoard extends Component<
   // See: https://github.com/alvarocastro/ember-draggable-modifiers/issues/1 and https://github.com/cardstack/boxel/pull/1683#discussion_r1803979937
   async loadModifiers() {
     // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const DndDraggableItemModifier = await import(
+    const DndDraggableItemModifier: DndDraggableItemModifier = await import(
       'ember-draggable-modifiers/modifiers/draggable-item'
     );
 
     // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const DndDropTargetModifier = await import(
+    const DndDropTargetModifier: DndDropTargetModifier = await import(
       'ember-draggable-modifiers/modifiers/drop-target'
     );
 
     // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const DndSortableItemModifier = await import(
+    const DndSortableItemModifier: DndSortableItemModifier = await import(
       'ember-draggable-modifiers/modifiers/sortable-item'
     );
     // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
     const arrayUtils = await import('ember-draggable-modifiers/utils/array');
 
-    this.DndDraggableItemModifier = DndDraggableItemModifier.default;
-    this.DndDropTargetModifier = DndDropTargetModifier.default;
-    this.DndSortableItemModifier = DndSortableItemModifier.default;
     this.insertAfter = arrayUtils.insertAfter;
     this.insertAt = arrayUtils.insertAt;
     this.insertBefore = arrayUtils.insertBefore;
