@@ -9,7 +9,9 @@ import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -146,19 +148,6 @@ export interface CommandMessageContent {
   };
 }
 
-export interface ReactionEvent extends BaseMatrixEvent {
-  type: 'm.reaction';
-  content: ReactionEventContent;
-}
-
-export interface ReactionEventContent {
-  'm.relates_to': {
-    event_id: string;
-    key: string;
-    rel_type: 'm.annotation';
-  };
-}
-
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
@@ -239,8 +228,8 @@ export interface SkillsConfigEvent extends RoomStateEvent {
 }
 
 export interface CommandResultEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandResultContent;
+  type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
+  content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -249,19 +238,27 @@ export interface CommandResultEvent extends BaseMatrixEvent {
   };
 }
 
-export interface CommandResultContent {
-  'm.relates_to'?: {
+export interface CommandResultWithOutputContent {
+  'm.relates_to': {
     rel_type: 'm.annotation';
     key: string;
     event_id: string;
-    'm.in_reply_to'?: {
-      event_id: string;
-    };
   };
-  formatted_body: string;
-  body: string;
-  msgtype: typeof APP_BOXEL_COMMAND_RESULT_MSGTYPE;
-  result: any;
+  data: {
+    cardEventId: string;
+    // we materialize this field on the server
+    card?: LooseSingleCardDocument;
+  };
+  msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
+}
+
+export interface CommandResultWithNoOutputContent {
+  'm.relates_to': {
+    rel_type: 'm.annotation';
+    key: string;
+    event_id: string;
+  };
+  msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
 }
 
 export type MatrixEvent =
@@ -271,7 +268,6 @@ export type MatrixEvent =
   | MessageEvent
   | CommandEvent
   | CommandResultEvent
-  | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent
