@@ -9,7 +9,7 @@ import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -22,7 +22,6 @@ import type {
   CardMessageEvent,
   CommandEvent,
   CommandResultEvent,
-  CommandResultContent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -138,26 +137,23 @@ export default class MessageBuilder {
   private async buildMessageCommand(message: Message) {
     let event = this.event as CommandEvent;
     let command = event.content.data.toolCall;
-    let annotation = this.builderContext.events.find((e: any) => {
+    let commandResultEvent = this.builderContext.events.find((e: any) => {
       let r = e.content['m.relates_to'];
       return (
         e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
-        r?.rel_type === 'm.annotation' &&
-        (r?.event_id === event.content.data.eventId ||
-          r?.event_id === event.event_id ||
-          r?.event_id === this.builderContext.effectiveEventId)
+        r.rel_type === 'm.annotation' &&
+        (r.event_id === event.content.data.eventId ||
+          r.event_id === event.event_id ||
+          r.event_id === this.builderContext.effectiveEventId)
       );
     }) as CommandResultEvent | undefined;
-    let status: CommandStatus = 'ready';
-    let commandResultContent = annotation?.content as
-      | CommandResultContent
-      | undefined;
-    if (commandResultContent?.['m.relates_to']?.key === 'applied') {
-      status = 'applied';
-    }
-    let commandResultCardEventId: string | undefined =
-      commandResultContent?.data.cardEventId ?? undefined;
+    let status = (commandResultEvent?.content?.['m.relates_to']?.key ||
+      'ready') as CommandStatus;
+    let commandResultCardEventId =
+      commandResultEvent?.content?.msgtype ===
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ? commandResultEvent.content.data.cardEventId
+        : undefined;
     let messageCommand = new MessageCommand(
       message,
       command.id,

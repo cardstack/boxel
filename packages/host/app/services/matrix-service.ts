@@ -41,7 +41,8 @@ import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
@@ -64,8 +65,9 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   CardMessageContent,
   CardFragmentContent,
-  CommandResultContent,
   MatrixEvent as DiscreteMatrixEvent,
+  CommandResultWithNoOutputContent,
+  CommandResultWithOutputContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -501,7 +503,11 @@ export default class MatrixService extends Service {
   async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | CommandResultContent,
+    content:
+      | CardMessageContent
+      | CardFragmentContent
+      | CommandResultWithNoOutputContent
+      | CommandResultWithOutputContent,
   ) {
     let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -526,17 +532,31 @@ export default class MatrixService extends Service {
     if (resultCard) {
       [resultCardEventId] = await this.addCardsToRoom([resultCard], roomId);
     }
-    let content: CommandResultContent = {
-      msgtype: APP_BOXEL_COMMAND_RESULT_MSGTYPE,
-      'm.relates_to': {
-        event_id: invokedToolFromEventId,
-        key: 'applied',
-        rel_type: 'm.annotation',
-      },
-      data: {
-        cardEventId: resultCardEventId ?? undefined,
-      },
-    };
+    let content:
+      | CommandResultWithNoOutputContent
+      | CommandResultWithOutputContent;
+    if (resultCardEventId === undefined) {
+      content = {
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        'm.relates_to': {
+          event_id: invokedToolFromEventId,
+          key: 'applied',
+          rel_type: 'm.annotation',
+        },
+      };
+    } else {
+      content = {
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        'm.relates_to': {
+          event_id: invokedToolFromEventId,
+          key: 'applied',
+          rel_type: 'm.annotation',
+        },
+        data: {
+          cardEventId: resultCardEventId,
+        },
+      };
+    }
     try {
       return await this.sendEvent(
         roomId,
@@ -1279,16 +1299,14 @@ export default class MatrixService extends Service {
     } else if (
       roomData &&
       event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-      event.content?.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE
+      event.content?.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
     ) {
       let data = (
         typeof event.content.data === 'string'
           ? JSON.parse(event.content.data)
           : event.content.data
-      ) as CommandResultContent['data'];
-      if (data.cardEventId) {
-        this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
-      }
+      ) as CommandResultWithOutputContent['data'];
+      this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
     } else if (
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE

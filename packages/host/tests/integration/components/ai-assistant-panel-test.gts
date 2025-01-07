@@ -20,7 +20,6 @@ import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -1982,11 +1981,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    let commandResultEvents = getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === 'm.room.message' &&
-        typeof event.content === 'object' &&
-        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+    let commandResultEvents = await getRoomEvents(roomId).filter(
+      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
       commandResultEvents.length,
@@ -2005,10 +2001,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
 
     commandResultEvents = await getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        typeof event.content === 'object' &&
-        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
       commandResultEvents.length,

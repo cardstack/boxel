@@ -13,9 +13,9 @@ import {
 } from '../helpers';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -1510,7 +1510,7 @@ test('Return host result of tool call back to open ai', () => {
           rel_type: 'm.annotation',
           key: 'applied',
         },
-        msgtype: APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         data: {
           card: JSON.stringify({
             data: {

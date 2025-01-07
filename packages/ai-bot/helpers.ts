@@ -16,7 +16,10 @@ import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
-import { APP_BOXEL_COMMAND_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
+import {
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+} from '../runtime-common/matrix-constants';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -139,14 +142,15 @@ export function constructHistory(
       }
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
-    if (event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE) {
+    if (
+      event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+      event.content.msgtype == APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+    ) {
       let { cardEventId } = event.content.data;
-      if (cardEventId) {
-        event.content.data.card = serializedCardFromFragments(
-          cardEventId,
-          cardFragments,
-        );
-      }
+      event.content.data.card = serializedCardFromFragments(
+        cardEventId,
+        cardFragments,
+      );
     }
     if (event.type !== 'm.room.message') {
       continue;
@@ -401,7 +405,10 @@ function toPromptMessageWithToolResult(
   let content = 'pending';
   if (commandResult) {
     let status = commandResult.content['m.relates_to']?.key;
-    if (commandResult.content.data.card) {
+    if (
+      commandResult.content.msgtype ===
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+    ) {
       content = `Command ${status}, with result card: ${JSON.stringify(
         commandResult.content.data.card,
       )}.\n`;
