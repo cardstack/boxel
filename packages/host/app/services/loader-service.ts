@@ -48,6 +48,22 @@ export default class LoaderService extends Service {
     middlewareStack.push(async (req, next) => {
       return (await maybeHandleScopedCSSRequest(req)) || next(req);
     });
+    middlewareStack.push(async (req, next) => {
+      let response = await next(req);
+      if (
+        !response.ok &&
+        req.url.startsWith(
+          'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/',
+        )
+      ) {
+        req = new Request(
+          'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/error-404.js',
+          req,
+        );
+        response = await next(req);
+      }
+      return response;
+    });
 
     if (!this.fastboot.isFastBoot) {
       middlewareStack.push(authorizationMiddleware(this.realm));
