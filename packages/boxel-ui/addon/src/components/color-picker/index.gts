@@ -18,16 +18,8 @@ export default class ColorPicker extends Component<Signature> {
     this.args.onChange(input.value);
   };
 
-  private handleClick = (event: MouseEvent) => {
-    let container = event.currentTarget as HTMLElement;
-    let input = container.querySelector(
-      'input[type="color"]',
-    ) as HTMLInputElement;
-    input?.click();
-  };
-
   <template>
-    <div class='color-picker' {{on 'click' this.handleClick}} ...attributes>
+    <div class='color-picker' ...attributes>
       <input
         type='color'
         value={{@color}}

@@ -37,8 +37,10 @@ export default class ColorPalette extends Component<Signature> {
   colors = DEFAULT_PALETTE_COLORS;
 
   private openColorPicker = (event: MouseEvent) => {
-    const container = event.currentTarget as HTMLElement;
-    const input = container.querySelector('input[type="color"]');
+    let container = event.currentTarget as HTMLElement;
+    let input = container.querySelector(
+      'input[type="color"]',
+    ) as HTMLInputElement;
     input?.click();
   };
 
