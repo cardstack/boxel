@@ -37,11 +37,6 @@ const DEFAULT_PALETTE_COLORS = [
 export default class ColorPalette extends Component<Signature> {
   colors = DEFAULT_PALETTE_COLORS;
 
-  private handleColorInput = (event: Event) => {
-    let input = event.target as HTMLInputElement;
-    this.args.onChange(input.value);
-  };
-
   <template>
     <div class='color-palette-container' ...attributes>
       <div class='color-palette'>
