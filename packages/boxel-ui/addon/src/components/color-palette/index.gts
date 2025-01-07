@@ -1,6 +1,7 @@
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import ColorPicker from '../color-picker/index.gts';
@@ -52,17 +53,21 @@ export default class ColorPalette extends Component<Signature> {
           <button
             type='button'
             class='swatch {{if (eq color @color) "selected"}}'
-            style='--swatch-color: {{color}}'
+            style={{htmlSafe (concat '--swatch-color: ' color)}}
             {{on 'click' (fn @onChange color)}}
             title={{color}}
           />
         {{/each}}
       </div>
 
-      <div class='color-picker-container' {{on 'click' this.openColorPicker}}>
+      <button
+        type='button'
+        class='color-picker-container'
+        {{on 'click' this.openColorPicker}}
+      >
         <ColorPicker @color={{@color}} @onChange={{@onChange}} />
         <span class='custom-color-label'>Custom Color</span>
-      </div>
+      </button>
     </div>
 
     <style scoped>
