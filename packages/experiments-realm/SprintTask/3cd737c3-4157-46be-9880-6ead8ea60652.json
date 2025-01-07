@@ -2,21 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
+      "status": {
+        "completed": false,
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5"
+      },
+      "dateRange": {
+        "start": "2024-11-06",
+        "end": "2025-02-04"
+      },
       "priority": {
         "index": null,
         "label": null
       },
-      "status": {
-        "completed": false,
-        "index": 3,
-        "label": "In Progress"
-      },
-      "taskName": "Resolve bug where overlay only appears on certain cards",
-      "dateRange": {
-        "start": null,
-        "end": null
-      },
-      "taskDetail": null,
+      "name": "Create kanban board",
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
@@ -31,14 +32,14 @@
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
         }
       },
-      "children": {
+      "subtasks": {
         "links": {
           "self": null
         }
       },
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
         }
       },
       "tags": {
@@ -50,7 +51,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "WorkTask"
+        "name": "SprintTask"
       }
     }
   }

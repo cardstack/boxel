@@ -107,7 +107,5 @@ If you experience issues, you can start from scratch by running this command
 
 ```
 pnpm clear-caches
-rm -rf ./packages/matrix/synapse-data
-docker ps -a --format '{{.Names}}' | grep -E 'boxel-smtp|boxel-synapse|synapse-admin' | xargs -r docker stop
-docker ps -a --format '{{.Names}}' | grep -E 'boxel-smtp|boxel-synapse|synapse-admin' | xargs -r docker rm -v
+pnpm full-reset
 ```

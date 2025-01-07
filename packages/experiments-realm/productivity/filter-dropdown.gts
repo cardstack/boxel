@@ -21,7 +21,7 @@ interface FilterDropdownSignature {
 export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
   <template>
     <BoxelMultiSelectBasic
-      class='work-tracker-multi-select'
+      class='filter-multi-select'
       @options={{@options}}
       @selected={{@selected}}
       @onChange={{@onChange}}
@@ -39,7 +39,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
     </BoxelMultiSelectBasic>
 
     <style scoped>
-      .work-tracker-multi-select {
+      .filter-multi-select {
         border: none;
       }
       .filter-option {
