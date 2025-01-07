@@ -1,26 +1,19 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Args: {
+    color: string;
+    disabled?: boolean;
     onChange: (color: string) => void;
-    value: string;
+    showHexString?: boolean;
   };
   Element: HTMLDivElement;
 }
 
 export default class ColorPicker extends Component<Signature> {
-  @tracked private selectedColor: string;
-
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-    this.selectedColor = args.value ?? '#000000';
-  }
-
   private handleColorChange = (event: Event) => {
-    const input = event.target as HTMLInputElement;
-    this.selectedColor = input.value;
+    let input = event.target as HTMLInputElement;
     this.args.onChange(input.value);
   };
 
@@ -28,26 +21,35 @@ export default class ColorPicker extends Component<Signature> {
     <div class='color-picker' ...attributes>
       <input
         type='color'
-        value={{this.selectedColor}}
+        value={{@color}}
         class='input'
+        disabled={{@disabled}}
         {{on 'input' this.handleColorChange}}
       />
+      {{#if @showHexString}}
+        <span class='hex-value'>{{@color}}</span>
+      {{/if}}
     </div>
 
     <style scoped>
       .color-picker {
-        --size: 2.5rem;
+        --swatch-size: 1.4rem;
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: var(--boxel-sp-xs);
       }
 
       .input {
-        width: var(--size);
-        height: var(--size);
+        width: var(--swatch-size);
+        height: var(--swatch-size);
         padding: 0;
         border: none;
         cursor: pointer;
+        background: transparent;
+      }
+
+      .input:disabled {
+        pointer-events: none;
       }
 
       .input::-webkit-color-swatch-wrapper {
@@ -55,18 +57,11 @@ export default class ColorPicker extends Component<Signature> {
       }
 
       .input::-webkit-color-swatch {
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
+        border: 1px solid transparent;
+        border-radius: 50%;
       }
 
-      .preview {
-        width: var(--size);
-        height: var(--size);
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
-      }
-
-      .value {
+      .hex-value {
         font: var(--boxel-font);
         color: var(--boxel-dark);
         text-transform: uppercase;
