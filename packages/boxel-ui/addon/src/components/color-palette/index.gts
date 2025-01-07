@@ -4,8 +4,6 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import ColorPicker from '../color-picker/index.gts';
-
 interface Signature {
   Args: {
     color: string;
@@ -38,12 +36,9 @@ const DEFAULT_PALETTE_COLORS = [
 export default class ColorPalette extends Component<Signature> {
   colors = DEFAULT_PALETTE_COLORS;
 
-  private openColorPicker = (event: MouseEvent) => {
-    let container = event.currentTarget as HTMLElement;
-    let input = container.querySelector(
-      'input[type="color"]',
-    ) as HTMLInputElement;
-    input?.click();
+  private handleColorInput = (event: Event) => {
+    let input = event.target as HTMLInputElement;
+    this.args.onChange(input.value);
   };
 
   <template>
@@ -60,34 +55,48 @@ export default class ColorPalette extends Component<Signature> {
         {{/each}}
       </div>
 
-      <button
-        type='button'
-        class='color-picker-container'
-        {{on 'click' this.openColorPicker}}
-      >
-        <ColorPicker @color={{@color}} @onChange={{@onChange}} />
+      <label class='color-picker-container'>
         <span class='custom-color-label'>Custom Color</span>
-      </button>
+        <input
+          type='color'
+          value={{@color}}
+          class='color-input'
+          {{on 'input' this.handleColorInput}}
+          aria-label='Choose custom color'
+        />
+      </label>
     </div>
 
     <style scoped>
+      .custom-color-label {
+        margin-left: var(--boxel-sp-sm);
+        color: var(--boxel-450);
+      }
+
+      .color-palette-container {
+        display: flex;
+        gap: var(--boxel-sp);
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
       .color-picker-container {
+        --swatch-size: 1.8rem;
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-sm);
         background: none;
-        margin-top: var(--boxel-sp-sm);
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp);
-        color: var(--boxel-450);
-        width: 18rem;
         cursor: pointer;
+        flex-direction: row-reverse;
+        width: 18rem;
+        justify-content: flex-end;
       }
 
       .color-picker-container:hover {
         background-color: var(--boxel-light-100);
-        color: var(--boxel-500);
+        color: var(--boxel-600);
       }
 
       .color-palette {
@@ -124,6 +133,24 @@ export default class ColorPalette extends Component<Signature> {
       .swatch.selected {
         background-color: white;
         border-color: var(--boxel-800);
+      }
+
+      .color-input {
+        width: 1.35rem;
+        height: 1.35rem;
+        padding: 0;
+        border: none;
+        cursor: pointer;
+        border-radius: 50%;
+      }
+
+      .color-input::-webkit-color-swatch-wrapper {
+        padding: 0;
+      }
+
+      .color-input::-webkit-color-swatch {
+        border: 1px solid transparent;
+        border-radius: 50%;
       }
     </style>
   </template>
