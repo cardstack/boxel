@@ -1,7 +1,5 @@
 import Component from '@glimmer/component';
 
-import type Owner from '@ember/owner';
-
 import type { Deal } from './deal';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -22,10 +20,6 @@ function formatCurrencyValue(value: number, currencySymbol: string) {
 }
 
 export class DealSummary extends Component<Signature> {
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-  }
-
   get deals() {
     return this.args.deals;
   }
