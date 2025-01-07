@@ -384,10 +384,7 @@ export function expressionToSql(
       if (isDbExpression(element)) {
         return element[dbAdapterKind] ?? '';
       } else if (isParam(element)) {
-        let value = element[dbAdapterKind] ?? element.param;
-        if (value === undefined) {
-          throw new Error(`undefined param value: ${JSON.stringify(element)}`);
-        }
+        let value = element[dbAdapterKind] ?? element.param ?? null;
         values.push(value);
         return `$${values.length}`;
       } else if (typeof element === 'string') {
