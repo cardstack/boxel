@@ -121,3 +121,4 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ needs.build-realm-server.outputs.image }}
+      wait-for-service-stability: false
