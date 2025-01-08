@@ -14,7 +14,6 @@ interface Signature {
 export default class ColorPicker extends Component<Signature> {
   private handleColorChange = (event: Event) => {
     let input = event.target as HTMLInputElement;
-    event.stopPropagation();
     this.args.onChange(input.value);
   };
 
