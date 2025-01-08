@@ -10,11 +10,13 @@ export interface FilterListIconSignature {
 
 export type FilterListIcon = ComponentLike<FilterListIconSignature>;
 
+import { htmlSafe } from '@ember/template';
+
 import { cn, eq } from '../../helpers.ts';
 
 export type Filter = {
   displayName: string;
-  icon: FilterListIcon;
+  icon: FilterListIcon | string;
 };
 
 interface Signature {
@@ -39,9 +41,16 @@ export default class FilterList extends Component<Signature> {
           class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
           {{on 'click' (fn this.onChanged filter)}}
           data-test-boxel-filter-list-button={{filter.displayName}}
-        ><filter.icon
-            class='filter-list__icon'
-          />{{filter.displayName}}</button>
+        >
+          {{#if (isIconString filter.icon)}}
+            {{htmlSafe
+              (addClassToSVG filter.icon 'filter-list__icon')
+            }}{{filter.displayName}}
+          {{else}}
+            <filter.icon
+              class='filter-list__icon'
+            />{{filter.displayName}}{{/if}}</button>
+
       {{/each}}
     </div>
     <style scoped>
@@ -58,6 +67,9 @@ export default class FilterList extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
         padding: var(--boxel-sp-xxs);
         margin-bottom: var(--boxel-sp-4xs);
+
+        display: flex;
+        gap: var(--boxel-sp-4xs);
       }
       .filter-list__button.selected {
         color: var(--boxel-light);
@@ -68,11 +80,21 @@ export default class FilterList extends Component<Signature> {
         background: var(--boxel-300);
         border-radius: 6px;
       }
-      .filter-list__icon {
+      :global(.filter-list__icon) {
         width: var(--boxel-icon-xs);
         height: var(--boxel-icon-xs);
         vertical-align: top;
       }
     </style>
   </template>
+}
+
+function addClassToSVG(svgString: string, className: string) {
+  return svgString
+    .replace(/<svg\b([^>]*)\sclass="([^"]*)"/, `<svg$1 class="$2 ${className}"`)
+    .replace(/<svg\b([^>]*)>/, `<svg$1 class="${className}">`);
+}
+
+function isIconString(icon: FilterListIcon | string): icon is string {
+  return typeof icon === 'string';
 }

@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": null,
+      "name": "",
       "status": {
         "index": 3,
         "label": "Closed Won",
@@ -37,7 +37,6 @@
       "healthScore": null,
       "notes": null,
       "valueBreakdown": [],
-      "title": null,
       "description": null,
       "thumbnailURL": null
     },

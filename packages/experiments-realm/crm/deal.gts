@@ -982,6 +982,12 @@ export class Deal extends CardDef {
       return this.account?.company;
     },
   });
+  @field title = contains(StringField, {
+    computeVia: function (this: Deal) {
+      return this.name;
+    },
+  });
+
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
 }

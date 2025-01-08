@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Bug",
+      "color": "#FFCCCB",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tag",
+        "name": "Tag"
+      }
+    }
+  }
+}

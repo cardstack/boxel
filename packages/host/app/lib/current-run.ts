@@ -41,6 +41,7 @@ import {
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
+import { cardTypeIcon } from '@cardstack/runtime-common/helpers';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
@@ -50,6 +51,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   type RenderCard,
+  type Render,
   IdentityContextWithErrors,
 } from '../services/render-service';
 
@@ -82,6 +84,7 @@ export class CurrentRun {
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
   #renderCard: RenderCard;
+  #render: Render;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
   readonly stats: Stats = {
@@ -100,12 +103,14 @@ export class CurrentRun {
     indexWriter,
     ignoreData = {},
     renderCard,
+    render,
   }: {
     realmURL: URL;
     reader: Reader;
     indexWriter: IndexWriter;
     ignoreData?: Record<string, string>;
     renderCard: RenderCard;
+    render: Render;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL);
@@ -113,6 +118,7 @@ export class CurrentRun {
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#renderCard = renderCard;
+    this.#render = render;
   }
 
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
@@ -413,6 +419,7 @@ export class CurrentRun {
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
     let atomHtml: string | undefined;
+    let iconHTML: string | undefined;
     let card: CardDef | undefined;
     let embeddedHtml: Record<string, string> | undefined;
     let fittedHtml: Record<string, string> | undefined;
@@ -473,6 +480,7 @@ export class CurrentRun {
           }),
         ),
       );
+      iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
@@ -552,6 +560,7 @@ export class CurrentRun {
         atomHtml,
         embeddedHtml,
         fittedHtml,
+        iconHTML,
         lastModified,
         resourceCreatedAt,
         types: typesMaybeError.types.map(({ refURL }) => refURL),

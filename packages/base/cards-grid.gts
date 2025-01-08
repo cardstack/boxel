@@ -306,7 +306,7 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  filters: { displayName: string; icon: IconComponent; query: any }[] =
+  filters: { displayName: string; icon: IconComponent | string; query: any }[] =
     new TrackedArray([
       {
         displayName: 'All Cards',
@@ -424,7 +424,11 @@ class Isolated extends Component<typeof CardsGrid> {
     }
     let cardTypeSummaries = (await response.json()).data as {
       id: string;
-      attributes: { displayName: string; total: number };
+      attributes: {
+        displayName: string;
+        total: number;
+        iconHTML: string | null;
+      };
     }[];
     let excludedCardTypeIds = [
       `${baseRealm.url}card-api/CardDef`,
@@ -441,7 +445,7 @@ class Isolated extends Component<typeof CardsGrid> {
       const lastIndex = summary.id.lastIndexOf('/');
       this.filters.push({
         displayName: summary.attributes.displayName,
-        icon: Captions,
+        icon: summary.attributes.iconHTML ?? Captions,
         query: {
           filter: {
             type: {
