@@ -59,6 +59,7 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 
 const log = logger('current-run');
+const perfLog = logger('index-perf');
 
 interface CardType {
   refURL: string;
@@ -127,19 +128,19 @@ export class CurrentRun {
   ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from scratch indexing`);
-    console.log(
+    perfLog.debug(
       `starting from scratch indexing for realm ${current.realmURL.href}`,
     );
 
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
     let invalidations: URL[] = [];
     if (invalidateEntireRealm) {
-      console.log(
+      perfLog.debug(
         `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
       );
       let mtimesStart = Date.now();
       let filesystemMtimes = await current.#reader.mtimes();
-      console.log(
+      perfLog.debug(
         `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
       );
       invalidations = Object.keys(filesystemMtimes)
@@ -154,14 +155,14 @@ export class CurrentRun {
     } else {
       let mtimesStart = Date.now();
       let mtimes = await current.batch.getModifiedTimes();
-      console.log(
+      perfLog.debug(
         `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
       );
       let invalidateStart = Date.now();
       invalidations = (
         await current.discoverInvalidations(current.realmURL, mtimes)
       ).map((href) => new URL(href));
-      console.log(
+      perfLog.debug(
         `completed invalidations in ${Date.now() - invalidateStart} ms`,
       );
     }
@@ -171,15 +172,15 @@ export class CurrentRun {
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
-      console.log(`completed index visit in ${Date.now() - visitStart} ms`);
+      perfLog.debug(`completed index visit in ${Date.now() - visitStart} ms`);
       let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
-      console.log(
+      perfLog.debug(
         `completed index finalization in ${Date.now() - finalizeStart} ms`,
       );
       current.stats.totalIndexEntries = totalIndexEntries;
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
-      console.log(
+      perfLog.debug(
         `completed from scratch indexing for realm ${
           current.realmURL.href
         } in ${Date.now() - start} ms`,
@@ -282,12 +283,12 @@ export class CurrentRun {
     indexMtimes: LastModifiedTimes,
   ): Promise<string[]> {
     log.debug(`discovering invalidations in dir ${url.href}`);
-    console.log(`discovering invalidations in dir ${url.href}`);
+    perfLog.debug(`discovering invalidations in dir ${url.href}`);
     let ignoreStart = Date.now();
     let ignorePatterns = await this.#reader.readFile(
       new URL('.gitignore', url),
     );
-    console.log(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
+    perfLog.debug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
@@ -295,7 +296,7 @@ export class CurrentRun {
 
     let mtimesStart = Date.now();
     let filesystemMtimes = await this.#reader.mtimes();
-    console.log(
+    perfLog.debug(
       `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
     );
     let invalidationList: string[] = [];
@@ -330,7 +331,7 @@ export class CurrentRun {
     for (let invalidationURL of invalidationList) {
       await this.batch.invalidate(new URL(invalidationURL));
     }
-    console.log(
+    perfLog.debug(
       `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
     );
     return this.batch.invalidations;

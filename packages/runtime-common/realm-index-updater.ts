@@ -81,8 +81,8 @@ export class RealmIndexUpdater {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
 
-  async run() {
-    await this.fullIndex();
+  async run(invalidateEntireRealm?: boolean) {
+    await this.fullIndex(invalidateEntireRealm);
   }
 
   indexing() {

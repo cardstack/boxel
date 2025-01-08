@@ -453,7 +453,7 @@ export class Realm {
   }
 
   async fullIndex() {
-    await this.realmIndexUpdater.fullIndex(this.#invalidateEntireRealm);
+    await this.realmIndexUpdater.fullIndex();
   }
 
   async flushUpdateEvents() {
@@ -594,7 +594,7 @@ export class Realm {
     await Promise.resolve();
     let startTime = Date.now();
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    let promise = this.#realmIndexUpdater.run();
+    let promise = this.#realmIndexUpdater.run(this.#invalidateEntireRealm);
     if (isNewIndex) {
       // we only await the full indexing at boot if this is a brand new index
       await promise;

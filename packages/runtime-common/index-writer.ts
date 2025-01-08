@@ -7,6 +7,7 @@ import {
   trimExecutableExtension,
   RealmPaths,
   unixTime,
+  logger,
 } from './index';
 import { transpileJS } from './transpile';
 import {
@@ -97,6 +98,7 @@ export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
   #dbAdapter: DBAdapter;
+  #perfLog = logger('index-perf');
   private declare realmVersion: number;
 
   constructor(
@@ -508,7 +510,7 @@ export class Batch {
       results = [...results, ...rows];
       pageNumber++;
     } while (rows.length === pageSize);
-    console.log(
+    this.#perfLog.debug(
       `time to determine items that reference ${resolvedPath} ${
         Date.now() - start
       } ms`,
