@@ -100,6 +100,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-pg-migration-${{ inputs.environment }}"
       image: ${{ needs.build-pg-migration.outputs.image }}
+      wait-for-service-stability: false
 
   deploy-realm-server:
     name: Deploy realm server
