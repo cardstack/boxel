@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 4,
+        "label": "In Review",
+        "color": "#9575CD",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-10-10",
+        "end": "2025-01-09"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Pair with Lucas to complete demo",
+      "details": "By Tuesday, we should have a demo that completes everything",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "subtasks.0": {
+        "links": {
+          "self": "./20058a9d-3c2d-4b42-8430-a95b6183245c"
+        }
+      },
+      "subtasks.1": {
+        "links": {
+          "self": "./9e23b8b5-d541-48ef-a652-e7afefb29777"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

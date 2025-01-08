@@ -23,6 +23,7 @@ function config() {
 type Config = ReturnType<typeof config>;
 
 export class PgAdapter implements DBAdapter {
+  readonly kind = 'pg';
   #isClosed = false;
   private pool: Pool;
   private started: Promise<void>;
@@ -124,7 +125,7 @@ export class PgAdapter implements DBAdapter {
 
     let client = await this.pool.connect();
     let query = async (expression: Expression) => {
-      let sql = expressionToSql(expression);
+      let sql = expressionToSql(this.kind, expression);
       log.debug('search: %s trace: %j', sql.text, sql.values);
       let { rows } = await client.query(sql);
       return rows;

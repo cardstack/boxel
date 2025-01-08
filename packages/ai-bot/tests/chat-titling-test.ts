@@ -1,7 +1,12 @@
 import { module, test, assert } from 'qunit';
 import { shouldSetRoomTitle } from '../lib/set-title';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import { IEvent, IRoomEvent, MatrixEvent } from 'matrix-js-sdk';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {
@@ -10,7 +15,7 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Do not set a title when there is little content', () => {
-    const eventLog: DiscreteMatrixEvent[] = [
+    const eventLog: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -33,7 +38,7 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Do not set a title when there are more than 5 messages but they are state/invites/etc', () => {
-    const eventLog: DiscreteMatrixEvent[] = [
+    const eventLog: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -78,7 +83,7 @@ module('shouldSetRoomTitle', () => {
         },
         sender: '@user:localhost',
         room_id: 'room1',
-        state_key: 'a',
+        state_key: '',
         unsigned: {
           age: 1000,
         },
@@ -90,7 +95,7 @@ module('shouldSetRoomTitle', () => {
         content: {},
         sender: '@user:localhost',
         room_id: 'room1',
-        state_key: 'b',
+        state_key: '',
         unsigned: {
           age: 1000,
         },
@@ -105,7 +110,7 @@ module('shouldSetRoomTitle', () => {
         },
         sender: '@user:localhost',
         room_id: 'room1',
-        state_key: 'c',
+        state_key: '',
         unsigned: {
           age: 1000,
         },
@@ -120,7 +125,7 @@ module('shouldSetRoomTitle', () => {
         },
         sender: '@user:localhost',
         room_id: 'room1',
-        state_key: 'd',
+        state_key: '',
         unsigned: {
           age: 1000,
         },
@@ -130,7 +135,7 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Do not set a title when there are under 5 user messages but more than 5 total messages', () => {
-    const eventLog: DiscreteMatrixEvent[] = [
+    const eventLog: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -239,7 +244,7 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Set a title when there are 5 or more user messages', () => {
-    const eventLog: DiscreteMatrixEvent[] = [
+    const eventLog: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -348,7 +353,7 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Title is not set if the bot has sent ONLY a command', () => {
-    const eventLog: DiscreteMatrixEvent[] = [
+    const eventLog: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -403,21 +408,18 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Set a title if the user applied a command', () => {
-    let patchReactionEvent = {
-      getContent() {
-        return {
-          'm.relates_to': {
-            event_id: '1',
-            key: 'applied',
-            rel_type: 'm.annotation',
-          },
-        };
-      },
-      getType() {
-        return 'm.reaction';
+    let patchCommandResultEvent: Partial<IEvent> = {
+      type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      content: {
+        'm.relates_to': {
+          event_id: '1',
+          key: 'applied',
+          rel_type: 'm.annotation',
+        },
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
       },
     };
-    const eventLog: DiscreteMatrixEvent[] = [
+    const eventLog: IRoomEvent[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -469,7 +471,11 @@ module('shouldSetRoomTitle', () => {
       },
     ];
     assert.true(
-      shouldSetRoomTitle(eventLog, '@aibot:localhost', patchReactionEvent),
+      shouldSetRoomTitle(
+        eventLog,
+        '@aibot:localhost',
+        new MatrixEvent(patchCommandResultEvent),
+      ),
     );
   });
 });

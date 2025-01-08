@@ -4,8 +4,6 @@ import { getCard } from '@cardstack/runtime-common';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { CommandResult } from 'https://cardstack.com/base/command-result';
-
 import { RoomMember } from './member';
 import MessageCommand from './message-command';
 
@@ -22,6 +20,7 @@ type AttachedCardResource = {
 type RoomMessageInterface = RoomMessageRequired & RoomMessageOptional;
 
 interface RoomMessageRequired {
+  roomId: string;
   author: RoomMember;
   created: Date;
   updated: Date;
@@ -39,7 +38,6 @@ interface RoomMessageOptional {
   errorMessage?: string;
   clientGeneratedId?: string | null;
   command?: MessageCommand | null;
-  commandResult?: CommandResult | null;
 }
 
 export class Message implements RoomMessageInterface {
@@ -51,7 +49,6 @@ export class Message implements RoomMessageInterface {
   errorMessage?: string;
   clientGeneratedId?: string;
   command?: MessageCommand | null;
-  commandResult?: CommandResult | null;
 
   author: RoomMember;
   formattedMessage: string;
@@ -60,6 +57,7 @@ export class Message implements RoomMessageInterface {
   updated: Date;
   eventId: string;
   message: string;
+  roomId: string;
 
   constructor(init: RoomMessageInterface) {
     Object.assign(this, init);
@@ -70,6 +68,7 @@ export class Message implements RoomMessageInterface {
     this.created = init.created;
     this.updated = init.updated;
     this.status = init.status;
+    this.roomId = init.roomId;
   }
   get isRetryable() {
     return (
