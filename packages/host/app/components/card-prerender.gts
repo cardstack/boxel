@@ -105,7 +105,8 @@ export default class CardPrerender extends Component {
       realmURL,
       reader,
       indexWriter,
-      renderCard: this.renderService.renderCard.bind(this.renderService),
+      renderCard: this.renderService.renderCard,
+      render: this.renderService.render,
     });
     setOwner(currentRun, getOwner(this)!);
 
@@ -127,7 +128,8 @@ export default class CardPrerender extends Component {
         reader,
         indexWriter,
         ignoreData: { ...ignoreData },
-        renderCard: this.renderService.renderCard.bind(this.renderService),
+        renderCard: this.renderService.renderCard,
+        render: this.renderService.render,
       });
       setOwner(currentRun, getOwner(this)!);
       let current = await CurrentRun.incremental(currentRun, {
