@@ -311,7 +311,9 @@ export class CurrentRun {
       }, skipped these files ${JSON.stringify(skipList)}`,
     );
     let invalidationStart = Date.now();
-    await this.batch.invalidate(new URL(url));
+    for (let invalidationURL of invalidationList) {
+      await this.batch.invalidate(new URL(invalidationURL));
+    }
     console.log(
       `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
     );
