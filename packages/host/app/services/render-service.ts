@@ -129,7 +129,7 @@ export default class RenderService extends Service {
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);
     return parseCardHtml(html);
-  }
+  };
 
   render = (component: ComponentLike): string => {
     let element = getIsolatedRenderElement(this.document);
