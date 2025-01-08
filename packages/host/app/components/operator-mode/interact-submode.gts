@@ -32,6 +32,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
@@ -198,30 +199,28 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let newCard = await here.cardService.createFromSerialized(
-          doc.data,
-          doc,
-          relativeTo,
-        );
-
         let newItem = new StackItem({
           owner: here,
-          card: newCard,
+          newCard: { doc, relativeTo },
           format: opts?.cardModeAfterCreation ?? 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
         });
 
-        // TODO: it is important saveModel happens after newItem because it
-        // looks like perhaps there is a race condition (or something else) when a
-        // new linked card is created, and when it is added to the stack and closed
-        // - the parent card is not updated with the new linked card
-        await here.cardService.saveModel(newCard);
-
         await newItem.ready();
+        if (newItem.cardError) {
+          console.error(
+            `Encountered error creating card:\n${JSON.stringify(
+              doc,
+              null,
+              2,
+            )}\nError: ${JSON.stringify(newItem.cardError, null, 2)}`,
+          );
+          return undefined;
+        }
         here.addToStack(newItem);
-        return newCard;
+        return newItem.card;
       },
       viewCard: async (
         cardOrURL: CardDef | URL,
@@ -233,9 +232,7 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let newItem = new StackItem({
           owner: here,
-          ...(cardOrURL instanceof URL
-            ? { url: cardOrURL }
-            : { card: cardOrURL }),
+          url: cardOrURL instanceof URL ? cardOrURL : new URL(cardOrURL.id),
           format,
           stackIndex,
         });
@@ -424,28 +421,19 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private _copyCard = dropTask(
-    async (card: CardDef, stackIndex: number, done: Deferred<CardDef>) => {
+    async (
+      sourceCard: CardDef,
+      stackIndex: number,
+      done: Deferred<CardDef>,
+    ) => {
       let newCard: CardDef | undefined;
       try {
-        // use existing card in stack to determine realm url,
-        // otherwise use user's first writable realm
-        let topCard =
-          this.operatorModeStateService.topMostStackItems()[stackIndex]?.card;
-        let realmURL: URL | undefined;
-        if (topCard) {
-          let url = await this.cardService.getRealmURL(topCard);
-          // open card might be from a realm in which we don't have write permissions
-          if (url && this.realm.canWrite(url.href)) {
-            realmURL = url;
-          }
-        }
-        if (!realmURL) {
-          if (!this.realm.defaultWritableRealm) {
-            throw new Error('Could not find a writable realm');
-          }
-          realmURL = new URL(this.realm.defaultWritableRealm.path);
-        }
-        newCard = await this.cardService.copyCard(card, realmURL);
+        let { commandContext } = this.commandService;
+        const result = await new CopyCardCommand(commandContext).execute({
+          sourceCard,
+          targetStackIndex: stackIndex,
+        });
+        newCard = result.newCard;
       } catch (e) {
         done.reject(e);
       } finally {
@@ -479,7 +467,12 @@ export default class InteractSubmode extends Component<Signature> {
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCard: CardDef | undefined;
         for (let [index, card] of sources.entries()) {
-          let newCard = await this.cardService.copyCard(card, realmURL);
+          let { newCard } = await new CopyCardCommand(
+            this.commandService.commandContext,
+          ).execute({
+            sourceCard: card,
+            targetRealmUrl: realmURL.href,
+          });
           if (index === 0) {
             scrollToCard = newCard; // we scroll to the first card lexically by title
           }
@@ -561,12 +554,9 @@ export default class InteractSubmode extends Component<Signature> {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
+      let url = new URL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
-        let card = await this.cardService.getCard(cardId);
-        if (!card) {
-          return;
-        }
 
         // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
         // and the card will be added to stack with index 0. shiftStack executes this logic.
@@ -574,6 +564,15 @@ export default class InteractSubmode extends Component<Signature> {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
+          let newItem = new StackItem({
+            owner: this,
+            url,
+            format: 'isolated',
+            stackIndex: 0,
+          });
+          // it's important that we await the stack item readiness _before_
+          // we mutate the stack, otherwise there are very odd visual artifacts
+          await newItem.ready();
           for (
             let stackIndex = this.stacks.length - 1;
             stackIndex >= 0;
@@ -584,15 +583,14 @@ export default class InteractSubmode extends Component<Signature> {
               stackIndex + 1,
             );
           }
-          await this.publicAPI(this, 0).viewCard(card, 'isolated');
-
+          this.addToStack(newItem);
           // In case the right button was clicked, the card will be added to stack with index 1.
         } else if (
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
           await this.publicAPI(this, this.stacks.length).viewCard(
-            card,
+            url,
             'isolated',
           );
         } else {
@@ -606,7 +604,7 @@ export default class InteractSubmode extends Component<Signature> {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(card, 'isolated');
+            await this.publicAPI(this, 0).viewCard(url, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -614,7 +612,7 @@ export default class InteractSubmode extends Component<Signature> {
               if (bottomMostItem) {
                 let stackItem = new StackItem({
                   owner: this,
-                  card,
+                  url,
                   format: 'isolated',
                   stackIndex,
                 });

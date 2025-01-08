@@ -31,6 +31,8 @@ export default class Room {
   @tracked private _events: DiscreteMatrixEvent[] = [];
   @tracked private _roomState: MatrixSDK.RoomState | undefined;
 
+  constructor(public readonly roomId: string) {}
+
   readonly mutex = new Mutex();
 
   get events() {

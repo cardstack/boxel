@@ -11,14 +11,13 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   CardFragmentContent,
   CommandEvent,
-  CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
@@ -70,6 +69,8 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
+  private _isDisplayingViewCodeMap: TrackedMap<string, boolean> =
+    new TrackedMap();
   @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
@@ -97,6 +98,7 @@ export class RoomResource extends Resource<Args> {
     this._fragmentCache = new TrackedMap();
     this._nameEventsCache = new TrackedMap();
     this._skillCardsCache = new TrackedMap();
+    this._isDisplayingViewCodeMap = new TrackedMap();
     this._createEvent = undefined;
   }
 
@@ -256,14 +258,14 @@ export class RoomResource extends Resource<Args> {
 
   private async loadRoomMessage(
     roomId: string,
-    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
+    event: MessageEvent | CommandEvent | CardMessageEvent,
     index: number,
   ) {
     let effectiveEventId = event.event_id;
     let update = false;
     if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
-      // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
-      // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
+      // ensure that we update a message when we see a reaction event for it, since we merge data from the reaction event
+      // into the message state (i.e. apply button, command result)
       update = true;
     } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
       effectiveEventId = event.content['m.relates_to'].event_id;
@@ -302,16 +304,12 @@ export class RoomResource extends Resource<Args> {
       }
       return;
     }
-    if (event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE) {
-      //don't display command result in the room as a message
-      return;
-    }
-
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
     });
     let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+      roomId,
       effectiveEventId,
       author,
       index,
@@ -391,7 +389,7 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  private serializedCardFromFragments = (eventId: string) => {
+  public serializedCardFromFragments = (eventId: string) => {
     let fragments: CardFragmentContent[] = [];
     let currentFragment: string | undefined = eventId;
     do {
@@ -417,6 +415,17 @@ export class RoomResource extends Resource<Args> {
     ) as LooseSingleCardDocument;
     return cardDoc;
   };
+
+  public isDisplayingCode(message: Message) {
+    return this._isDisplayingViewCodeMap.get(message.eventId) ?? false;
+  }
+
+  public toggleViewCode(message: Message) {
+    this._isDisplayingViewCodeMap.set(
+      message.eventId,
+      !this.isDisplayingCode(message),
+    );
+  }
 }
 
 export function getRoom(

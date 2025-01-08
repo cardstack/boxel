@@ -11,7 +11,7 @@ import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   type PromptParts,
   constructHistory,
-  isCommandReactionStatusApplied,
+  isCommandResultStatusApplied,
   getPromptParts,
   extractCardFragmentsFromEvents,
 } from './helpers';
@@ -34,6 +34,8 @@ import * as Sentry from '@sentry/node';
 
 import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
+import { ChatCompletionMessageParam } from 'openai/resources';
+import { OpenAIError } from 'openai/error';
 
 let log = logger('ai-bot');
 
@@ -73,12 +75,12 @@ class Assistant {
     if (prompt.tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
-        messages: prompt.messages,
+        messages: prompt.messages as ChatCompletionMessageParam[],
       });
     } else {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
-        messages: prompt.messages,
+        messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
       });
@@ -261,7 +263,7 @@ Common issues are:
           finalContent = await runner.finalContent();
           await responder.finalize(finalContent);
         } catch (error) {
-          await responder.onError(error);
+          await responder.onError(error as OpenAIError);
         } finally {
           if (generationId) {
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
@@ -289,7 +291,7 @@ Common issues are:
     if (!room) {
       return;
     }
-    if (!isCommandReactionStatusApplied(event)) {
+    if (!isCommandResultStatusApplied(event)) {
       return;
     }
     log.info(

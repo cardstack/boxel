@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 5,
+        "label": "Staged",
+        "color": "#26A69A",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-11-06",
+        "end": "2024-11-15"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Medium"
+      },
+      "name": "Port the already done work for CRM into the monorepo",
+      "details": "Copy the existing work that has been carried out through spikes and git commit to our monorepo",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
+        }
+      },
+      "tags.2": {
+        "links": {
+          "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

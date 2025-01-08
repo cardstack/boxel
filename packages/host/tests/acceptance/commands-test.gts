@@ -19,9 +19,12 @@ import { baseRealm, Command } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -268,6 +271,47 @@ module('Acceptance | Commands tests', function (hooks) {
           });
           await sleepCommand.execute(new ScheduleMeetingInput());
         };
+
+        runWhatSubmodeAmIIn = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+            commandContext,
+          );
+          let { roomId } = await createAIAssistantRoomCommand.execute({
+            name: 'Submode Check',
+          });
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+            commandContext,
+          );
+          let getBoxelUIStateCommand = new GetBoxelUIStateCommand(
+            commandContext,
+          );
+          await sendAiAssistantMessageCommand.execute({
+            roomId,
+            prompt: 'What submode am I in?',
+            commands: [{ command: getBoxelUIStateCommand, autoExecute: true }],
+          });
+        };
+
+        runOpenAiAssistantRoomCommand = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+
+          let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+            commandContext,
+          );
+          await openAiAssistantRoomCommand.execute({
+            roomId: 'mock_room_1',
+          });
+        };
+
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -301,6 +345,14 @@ module('Acceptance | Commands tests', function (hooks) {
             {{on 'click' this.runDelayCommandViaAiAssistant}}
             data-test-delay-button
           >Delay with autoExecute</button>
+          <button
+            {{on 'click' this.runWhatSubmodeAmIIn}}
+            data-test-what-submode-am-i-in
+          >What submode and I in?</button>
+          <button
+            {{on 'click' this.runOpenAiAssistantRoomCommand}}
+            data-test-open-ai-assistant-room-button
+          >Open AI Assistant Room</button>
         </template>
       };
     }
@@ -311,6 +363,20 @@ module('Acceptance | Commands tests', function (hooks) {
         'person.gts': { Person, Meeting },
         'pet.gts': { Pet },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+        'AiCommandExample/london.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              location: 'London',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/ai-command-example',
+                name: 'AiCommandExample',
+              },
+            },
+          },
+        },
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
           lastName: 'Abdel-Rahman',
@@ -333,6 +399,22 @@ module('Acceptance | Commands tests', function (hooks) {
         },
       },
     });
+  });
+
+  test('OpenAiAssistantRoomCommand opens the AI assistant room', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}Person/hassan`, format: 'isolated' }]],
+    });
+
+    await click('[data-test-schedule-meeting-button]');
+    await click('[data-test-open-ai-assistant-room-button]');
+
+    await waitFor('[data-room-settled]');
+    await waitFor('[data-test-room-name="AI Assistant Room"]');
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .includesText('Change the topic of the meeting to "Meeting with Hassan"');
   });
 
   test('a command sent via SendAiAssistantMessageCommand with autoExecute flag is automatically executed by the bot, panel closed', async function (assert) {
@@ -602,9 +684,10 @@ module('Acceptance | Commands tests', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    await delay(500);
+
     assert.dom('[data-test-submode-switcher=interact]').exists();
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert
       .dom(
         '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -622,7 +705,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${testCard}.json`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-open-ai-assistant]');
+
     assert
       .dom(
         '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -709,5 +792,154 @@ module('Acceptance | Commands tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
       )
       .includesText('Meeting with Hassan');
+  });
+
+  test('a command executed via the AI Assistant shows the result as an embedded card', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+    );
+    await click('[data-test-what-submode-am-i-in]');
+    await click('[data-test-open-ai-assistant]');
+    await waitUntil(() => getRoomIds().length > 0);
+    let roomId = getRoomIds().pop()!;
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+    let boxelMessageData = JSON.parse(message.content.data);
+    assert.strictEqual(boxelMessageData.context.tools.length, 1);
+    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
+    let toolName = boxelMessageData.context.tools[0].function.name;
+    assert.ok(
+      /^GetBoxelUIState/.test(toolName),
+      'The function name starts with GetBoxelUIStateCommand_',
+    );
+    assert.strictEqual(
+      boxelMessageData.context.tools[0].function.description,
+      'Get information about the current state of the Boxel UI, including the current submode, what cards are open, and what room, if any, the AI assistant is showing.',
+    );
+    // TODO: do we need to include `required: ['attributes'],` in the parameters object? If so, how?
+    assert.deepEqual(boxelMessageData.context.tools[0].function.parameters, {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+        },
+        attributes: {
+          type: 'object',
+          properties: {},
+        },
+        relationships: {
+          properties: {},
+          type: 'object',
+        },
+      },
+      required: ['attributes', 'description'],
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Inspecting the current UI state',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: 'Inspecting the current UI state',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            attributes: {},
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+    await settled();
+    assert
+      .dom(
+        '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
+      )
+      .containsText('What submode am I in?');
+    assert
+      .dom('[data-test-message-idx="1"][data-test-boxel-message-from="aibot"]')
+      .containsText('Inspecting the current UI state');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists();
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-boxel-command-result]')
+      .containsText('Submode: interact');
+  });
+
+  test('command returns serialized result in room message', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}AiCommandExample/london`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-get-weather]');
+    await waitUntil(() => getRoomIds().length > 0);
+
+    let roomId = getRoomIds().pop()!;
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+
+    let boxelMessageData = JSON.parse(message.content.data);
+    assert.strictEqual(boxelMessageData.context.tools.length, 1);
+    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
+    let toolName = boxelMessageData.context.tools[0].function.name;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Getting weather information for London',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: 'Getting weather information for London',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: toolName,
+          arguments: {
+            attributes: {
+              location: 'London',
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    await settled();
+    let commandResultEvents = await getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      1,
+      'command result event is dispatched',
+    );
   });
 });

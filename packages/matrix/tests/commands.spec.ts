@@ -3,7 +3,7 @@ import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '../helpers/matrix-constants';
 
 import {
@@ -232,7 +232,7 @@ test.describe('Commands', () => {
     expect(boxelMessageData.context.tools).toMatchObject([]);
   }); */
 
-  test(`applying a command dispatches a reaction event if command is succesful`, async ({
+  test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
@@ -273,10 +273,10 @@ test.describe('Commands', () => {
 
     await expect(async () => {
       let events = await getRoomEvents('user1', 'pass', room1);
-      let reactionEvent = (events as any).find(
-        (e: any) => e.type === 'm.reaction',
+      let commandResultEvent = (events as any).find(
+        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      await expect(reactionEvent).toBeDefined();
+      await expect(commandResultEvent).toBeDefined();
     }).toPass();
   });
 
@@ -322,9 +322,12 @@ test.describe('Commands', () => {
     await expect(async () => {
       let events = await getRoomEvents('user1', 'pass', room1);
       let commandResultEvent = (events as any).find(
-        (e: any) => e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
       await expect(commandResultEvent).toBeDefined();
+      await expect(
+        JSON.parse(commandResultEvent.content.data).cardEventId,
+      ).toBeDefined();
     }).toPass();
   });
 

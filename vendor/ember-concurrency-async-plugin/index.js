@@ -116,7 +116,7 @@ function convertFunctionExpressionIntoGenerator(
       //
       // and we need to convert it to
       //
-      //    foo = buildTask(contextFn, options | null, taskName, bufferPolicyName?)
+      //    foo = buildTask(contextFn, options | null, name, bufferPolicyName?)
       //
       // where conextFn is
       //
@@ -161,7 +161,7 @@ function convertFunctionExpressionIntoGenerator(
         originalArgs.shift();
       }
 
-      const taskName = extractTaskNameFromClassProperty(path);
+      const name = extractTaskNameFromClassProperty(path);
       let optionsOrNull;
 
       // remaining args should either be [options, async () => {}] or [async () => {}]
@@ -174,7 +174,7 @@ function convertFunctionExpressionIntoGenerator(
           break;
         default:
           throw new Error(
-            `The task() syntax you're using for the task named ${taskName} is incorrect.`,
+            `The task() syntax you're using for the task named ${name} is incorrect.`,
           );
       }
 
@@ -182,13 +182,13 @@ function convertFunctionExpressionIntoGenerator(
       const bufferPolicyName =
         FACTORY_FUNCTION_BUFFER_POLICY_MAPPING[factoryFunctionName];
 
-      // buildTask(contextFn, options | null, taskName, bufferPolicyName?)
+      // buildTask(contextFn, options | null, name, bufferPolicyName?)
       const buildTaskCall = callExpression(
         identifier(state._buildTaskImport.name),
         [
           contextFn,
           optionsOrNull,
-          stringLiteral(taskName),
+          stringLiteral(name),
           bufferPolicyName ? stringLiteral(bufferPolicyName) : nullLiteral(),
         ],
       );

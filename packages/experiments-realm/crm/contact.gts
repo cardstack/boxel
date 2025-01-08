@@ -19,7 +19,7 @@ import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import { LooseGooseyField } from '../loosey-goosey';
-import { EntityDisplay } from '../components/entity-display';
+import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -48,9 +48,7 @@ export class SocialLinkField extends ContactLinkField {
 
 class EmbeddedTemplate extends Component<typeof Contact> {
   get hasSocialLinks() {
-    return (
-      this.args.model.socialLinks && this.args.model.socialLinks.length > 0
-    );
+    return Boolean(this.args.model?.socialLinks?.length);
   }
 
   <template>
@@ -120,9 +118,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
 
 class FittedTemplate extends Component<typeof Contact> {
   get hasSocialLinks() {
-    return (
-      this.args.model.socialLinks && this.args.model.socialLinks.length > 0
-    );
+    return Boolean(this.args.model?.socialLinks?.length);
   }
 
   <template>
@@ -186,7 +182,7 @@ class FittedTemplate extends Component<typeof Contact> {
         grid-area: avatar-group-container;
       }
       .avatar-group-container
-        :where(.avatar-info .company-group .entity-name-tag) {
+        :where(.avatar-info .company-group .entity-title-tag-container) {
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -610,10 +606,7 @@ class AtomTemplate extends Component<typeof Contact> {
   }
   <template>
     <div class='contact'>
-      <EntityDisplay @underline={{true}}>
-        <:title>
-          {{this.label}}
-        </:title>
+      <EntityDisplayWithThumbnail @title={{this.label}} @underline={{true}}>
         <:thumbnail>
           <Avatar
             @userID={{@model.id}}
@@ -623,7 +616,7 @@ class AtomTemplate extends Component<typeof Contact> {
             class='avatar'
           />
         </:thumbnail>
-      </EntityDisplay>
+      </EntityDisplayWithThumbnail>
     </div>
     <style scoped>
       .contact {

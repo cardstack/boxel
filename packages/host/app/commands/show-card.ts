@@ -32,7 +32,7 @@ export default class ShowCardCommand extends HostBaseCommand<
       1,
     );
     let newStackItem = await this.operatorModeStateService.createStackItem(
-      input.cardToShow,
+      new URL(input.cardToShow.id),
       newStackIndex,
     );
     this.operatorModeStateService.addItemToStack(newStackItem);

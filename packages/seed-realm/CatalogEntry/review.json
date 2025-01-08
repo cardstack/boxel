@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Review",
-      "description": "Catalog entry for Review",
+      "description": "Catalog entry for Review card",
       "isField": false,
       "ref": {
         "module": "../review",

@@ -14,6 +14,7 @@ import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
 import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
@@ -77,6 +78,14 @@ export default class CreateProductRequirementsInstance extends Command<
     let { roomId } = await createRoomCommand.execute({
       name: 'Product Requirements Doc Creation',
     });
+
+    let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+      this.commandContext,
+    );
+    await openAiAssistantRoomCommand.execute({
+      roomId,
+    });
+
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandContext,
     );

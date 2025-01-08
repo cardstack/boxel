@@ -253,8 +253,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private closeItem = dropTask(async () => {
-    await this.startAnimation.perform('closing');
-    this.args.close(this.args.item);
+    await this.args.dismissStackedCardsAbove(this.args.index - 1);
   });
 
   @action private toggleSelect(cardDefOrId: CardDefOrId) {
@@ -523,10 +522,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return;
     }
     const animations = this.itemEl.getAnimations() || [];
-    Promise.all(animations.map((animation) => animation.finished)).then(() => {
-      this.animationType = undefined;
-      resolve();
-    });
+    Promise.all(animations.map((animation) => animation.finished))
+      .then(() => {
+        this.animationType = undefined;
+        resolve();
+      })
+      .catch((e) => {
+        // AbortError is expected in two scenarios:
+        // 1. Multiple stack items are animating in parallel (eg. closing and moving forward)
+        //    and some elements get removed before their animations complete
+        // 2. Tests running with animation-duration: 0s can cause
+        //    animations to abort before they're properly tracked
+        if (e.name === 'AbortError') {
+          this.animationType = undefined;
+          resolve();
+        } else {
+          console.error(e);
+        }
+      });
   }
 
   private setupContentEl = (el: HTMLElement) => {

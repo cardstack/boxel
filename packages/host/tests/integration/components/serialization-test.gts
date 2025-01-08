@@ -14,6 +14,8 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import type CardService from '@cardstack/host/services/card-service';
+
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -57,6 +59,8 @@ import {
 
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { Captain } from '../../cards/captain';
 
 let loader: Loader;
 
@@ -4004,6 +4008,109 @@ module('Integration | serialization', function (hooks) {
         },
       },
     });
+  });
+
+  test('can serialize a card that is constructed by another card (test realm)', async function (assert) {
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'Captain/mango.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/captain',
+                name: 'Captain',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    let captainMango = await cardService.getCard(
+      `${testRealmURL}Captain/mango`,
+    );
+    let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
+
+    assert.deepEqual(
+      serializeCard(mangoTheBoat, { includeUnrenderedFields: true }),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            description: null,
+            name: 'Mango',
+            thumbnailURL: null,
+            title: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/captain`,
+              name: 'Boat',
+            },
+          },
+        },
+      },
+    );
+  });
+
+  test('can serialize a card that is constructed by another card (shimmed)', async function (assert) {
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+
+      createEponymousPet() {
+        return new Pet({ name: this.firstName });
+      }
+    }
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Person, Pet },
+      },
+    });
+
+    let mangoThePerson = new Person({
+      id: `${testRealmURL}Person/mango`,
+      firstName: 'Mango',
+    });
+
+    let mangoThePet = mangoThePerson.createEponymousPet();
+
+    assert.deepEqual(
+      serializeCard(mangoThePet, { includeUnrenderedFields: true }),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            description: null,
+            name: 'Mango',
+            thumbnailURL: null,
+            title: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    );
   });
 
   module('linksToMany', function () {

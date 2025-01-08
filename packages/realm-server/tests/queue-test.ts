@@ -23,7 +23,7 @@ module('queue', function (hooks) {
     prepareTestDB();
     adapter = new PgAdapter({ autoMigrate: true });
     publisher = new PgQueuePublisher(adapter);
-    runner = new PgQueueRunner(adapter, 'q1');
+    runner = new PgQueueRunner(adapter, 'q1', 2);
     await runner.start();
   });
 
@@ -42,6 +42,34 @@ module('queue', function (hooks) {
 
   test('jobs are processed serially within a particular queue', async function (assert) {
     await runSharedTest(queueTests, assert, { runner, publisher });
+  });
+
+  test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
+    let events: string[] = [];
+    let runs = 0;
+    let logJob = async () => {
+      let me = runs;
+      events.push(`job${me} start`);
+      if (runs++ === 0) {
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      events.push(`job${me} finish`);
+      return me;
+    };
+
+    runner.register('logJob', logJob);
+
+    let job = await publisher.publish('logJob', 'log-group', 1, null);
+
+    try {
+      await job.done;
+      throw new Error(`expected timeout to be thrown`);
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        'Timed-out after 2s waiting for job 1 to complete',
+      );
+    }
   });
 
   // Concurrency control using different queues is only supported in pg-queue,

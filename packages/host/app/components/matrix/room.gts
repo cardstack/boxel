@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -89,6 +90,8 @@ export default class Room extends Component<Signature> {
               @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
+              @isDisplayingCode={{this.isDisplayingCode message}}
+              @onToggleViewCode={{fn this.toggleViewCode message}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               @retryAction={{this.maybeRetryAction i message}}
@@ -513,7 +516,7 @@ export default class Room extends Component<Signature> {
     return undefined;
   };
 
-  @action private isMessageStreaming(message: Message, messageIndex: number) {
+  private isMessageStreaming = (message: Message, messageIndex: number) => {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -523,7 +526,15 @@ export default class Room extends Component<Signature> {
       // threshold)
       unixTime(new Date().getTime() - message.created.getTime()) < 60
     );
-  }
+  };
+
+  private isDisplayingCode = (message: Message) => {
+    return this.roomResource?.isDisplayingCode(message);
+  };
+
+  private toggleViewCode = (message: Message) => {
+    this.roomResource.toggleViewCode(message);
+  };
 
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
