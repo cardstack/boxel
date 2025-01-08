@@ -14,7 +14,6 @@ import { PgAdapter } from '@cardstack/postgres';
 import { shimExternals } from '../lib/externals';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import indexQueryEngineTests from '@cardstack/runtime-common/tests/index-query-engine-test';
-
 import { basename } from 'path';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -419,15 +418,6 @@ module(basename(__filename), function () {
     });
 
     test('nulls are sorted to the end of search results', async function (assert) {
-      await runSharedTest(indexQueryEngineTests, assert, {
-        indexQueryEngine,
-        dbAdapter,
-        loader,
-        testCards: await makeTestCards(loader),
-      });
-    });
-
-    test('can get paginated results that are stable during index mutations', async function (assert) {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,

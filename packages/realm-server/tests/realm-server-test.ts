@@ -4100,7 +4100,8 @@ module(basename(__filename), function () {
         let response = await request
           .get('/_types')
           .set('Accept', 'application/json');
-
+        let iconHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions" viewbox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>';
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.deepEqual(response.body, {
           data: [
@@ -4110,6 +4111,7 @@ module(basename(__filename), function () {
               attributes: {
                 displayName: 'Friend',
                 total: 2,
+                iconHTML,
               },
             },
             {
@@ -4118,6 +4120,7 @@ module(basename(__filename), function () {
               attributes: {
                 displayName: 'Home',
                 total: 1,
+                iconHTML,
               },
             },
             {
@@ -4126,6 +4129,7 @@ module(basename(__filename), function () {
               attributes: {
                 displayName: 'Person',
                 total: 3,
+                iconHTML,
               },
             },
           ],
@@ -5306,30 +5310,30 @@ module(basename(__filename), function () {
       );
     });
   });
-
-  function assertScopedCssUrlsContain(
-    assert: Assert,
-    scopedCssUrls: string[],
-    moduleUrls: string[],
-  ) {
-    moduleUrls.forEach((url) => {
-      let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
-
-      assert.true(
-        scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
-        `css url for ${url} is in the deps`,
-      );
-    });
-  }
-
-  // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
-  let cardDefModuleDependencies = [
-    'https://cardstack.com/base/default-templates/embedded.gts',
-    'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-    'https://cardstack.com/base/default-templates/field-edit.gts',
-    'https://cardstack.com/base/field-component.gts',
-    'https://cardstack.com/base/contains-many-component.gts',
-    'https://cardstack.com/base/links-to-editor.gts',
-    'https://cardstack.com/base/links-to-many-component.gts',
-  ];
 });
+
+function assertScopedCssUrlsContain(
+  assert: Assert,
+  scopedCssUrls: string[],
+  moduleUrls: string[],
+) {
+  moduleUrls.forEach((url) => {
+    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
+
+    assert.true(
+      scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
+      `css url for ${url} is in the deps`,
+    );
+  });
+}
+
+// These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
+let cardDefModuleDependencies = [
+  'https://cardstack.com/base/default-templates/embedded.gts',
+  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
+  'https://cardstack.com/base/default-templates/field-edit.gts',
+  'https://cardstack.com/base/field-component.gts',
+  'https://cardstack.com/base/contains-many-component.gts',
+  'https://cardstack.com/base/links-to-editor.gts',
+  'https://cardstack.com/base/links-to-many-component.gts',
+];
