@@ -2,6 +2,7 @@ import { getOwner } from '@ember/application';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { ComponentLike } from '@glint/template';
 import Serializer from '@simple-dom/serializer';
 
 import voidMap from '@simple-dom/void-map';
@@ -58,6 +59,7 @@ interface RenderCardParams {
   componentCodeRef?: CodeRef;
 }
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
+export type Render = (component: ComponentLike) => string;
 
 const maxRenderThreshold = 10000;
 export default class RenderService extends Service {
@@ -69,7 +71,7 @@ export default class RenderService extends Service {
   renderError: Error | undefined;
   owner: Owner = getOwner(this)!;
 
-  async renderCard(params: RenderCardParams): Promise<string> {
+  renderCard = async (params: RenderCardParams): Promise<string> => {
     let {
       card,
       visit,
@@ -127,7 +129,16 @@ export default class RenderService extends Service {
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);
     return parseCardHtml(html);
-  }
+  };
+
+  render = (component: ComponentLike): string => {
+    let element = getIsolatedRenderElement(this.document);
+    render(component, element, this.owner);
+
+    let serializer = new Serializer(voidMap);
+    let html = serializer.serialize(element);
+    return parseCardHtml(html);
+  };
 
   // TODO delete me
   private async resolveField(
