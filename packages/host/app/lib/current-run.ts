@@ -135,12 +135,11 @@ export class CurrentRun {
       `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
     );
     let invalidateStart = Date.now();
-    await current.discoverInvalidations(current.realmURL, mtimes);
+    let invalidations = (
+      await current.discoverInvalidations(current.realmURL, mtimes)
+    ).map((href) => new URL(href));
     console.log(
       `completed invalidations in ${Date.now() - invalidateStart} ms`,
-    );
-    let invalidations = current.batch.invalidations.map(
-      (href) => new URL(href),
     );
 
     await current.whileIndexing(async () => {
@@ -257,7 +256,7 @@ export class CurrentRun {
   private async discoverInvalidations(
     url: URL,
     indexMtimes: LastModifiedTimes,
-  ): Promise<void> {
+  ): Promise<string[]> {
     log.debug(`discovering invalidations in dir ${url.href}`);
     console.log(`discovering invalidations in dir ${url.href}`);
     let ignoreStart = Date.now();
@@ -275,6 +274,8 @@ export class CurrentRun {
     console.log(
       `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
     );
+    let invalidationList: string[] = [];
+    let skipList: string[] = [];
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
       if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
         // Only allow json and executable files to be invalidated so that we
@@ -290,13 +291,31 @@ export class CurrentRun {
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {
-        let invalidationStart = Date.now();
-        await this.batch.invalidate(new URL(url));
-        console.log(
-          `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
-        );
+        invalidationList.push(url);
+      } else {
+        skipList.push(url);
       }
     }
+    if (skipList.length === 0) {
+      // the whole realm needs to be visited, no need to calculate
+      // invalidations--it's everything
+      console.log(
+        `entire realm ${this.realmURL.href} is invalidated--skipping invalidation calculation`,
+      );
+      return invalidationList;
+    }
+
+    console.log(
+      `unable to use optimized invalidation for realm ${
+        this.realmURL.href
+      }, skipped these files ${JSON.stringify(skipList)}`,
+    );
+    let invalidationStart = Date.now();
+    await this.batch.invalidate(new URL(url));
+    console.log(
+      `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
+    );
+    return this.batch.invalidations;
   }
 
   private async visitFile(

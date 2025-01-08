@@ -496,6 +496,9 @@ export class Batch {
           // css is a subset of modules, so there won't by any references that
           // are css entries that aren't already represented by a module entry
           [`i.type != 'css'`],
+          // probably need to reevaluate this condition when we get to cross
+          // realm invalidation
+          [`i.realm_url =`, param(this.realmURL.href)],
         ]),
         'ORDER BY i.url COLLATE "POSIX"',
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
@@ -528,17 +531,11 @@ export class Batch {
       return [];
     }
     visited.add(resolvedPath);
-    let childInvalidations = await this.itemsThatReference(resolvedPath);
-    let realmPath = new RealmPaths(this.realmURL);
-    let invalidationsInThisRealm = childInvalidations.filter((c) =>
-      realmPath.inRealm(new URL(c.url)),
-    );
-
-    let invalidations = invalidationsInThisRealm.map(({ url }) => url);
-    let aliases = invalidationsInThisRealm.map(
-      ({ alias: moduleAlias, type, url }) =>
-        // for instances we expect that the deps for an entry always includes .json extension
-        type === 'instance' ? url : moduleAlias,
+    let items = await this.itemsThatReference(resolvedPath);
+    let invalidations = items.map(({ url }) => url);
+    let aliases = items.map(({ alias: moduleAlias, type, url }) =>
+      // for instances we expect that the deps for an entry always includes .json extension
+      type === 'instance' ? url : moduleAlias,
     );
     let results = [
       ...invalidations,
