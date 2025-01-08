@@ -130,7 +130,7 @@ export class Loader {
 
     for (let propName of Object.keys(module)) {
       // Normal modules always end up in our identity map because the only way for other code to gain access to the module's exports is by getting it through the
-      // proxy our loader has wrapped around it. But shimmed modules may be used directly by our caller before we've had a chance to put them in the dientity map.
+      // proxy our loader has wrapped around it. But shimmed modules may be used directly by our caller before we've had a chance to put them in the identity map.
       // So this eagerly puts them into the identity map.
       proxiedModule[propName]; // Makes sure the shimmed modules get into the identity map.
     }
@@ -642,6 +642,10 @@ export class Loader {
       });
 
       module.implementation(...dependencies);
+      for (let propName of Object.keys(moduleInstance)) {
+        // Experimental: eagerly consume exports from the module, so that they are all in the identity map.
+        moduleInstance[propName];
+      }
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance,

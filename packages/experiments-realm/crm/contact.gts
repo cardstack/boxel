@@ -48,9 +48,7 @@ export class SocialLinkField extends ContactLinkField {
 
 class EmbeddedTemplate extends Component<typeof Contact> {
   get hasSocialLinks() {
-    return (
-      this.args.model.socialLinks && this.args.model.socialLinks.length > 0
-    );
+    return Boolean(this.args.model?.socialLinks?.length);
   }
 
   <template>
@@ -120,9 +118,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
 
 class FittedTemplate extends Component<typeof Contact> {
   get hasSocialLinks() {
-    return (
-      this.args.model.socialLinks && this.args.model.socialLinks.length > 0
-    );
+    return Boolean(this.args.model?.socialLinks?.length);
   }
 
   <template>

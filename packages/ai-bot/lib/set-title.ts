@@ -1,18 +1,23 @@
-import { type MatrixEvent, type IEventRelation } from 'matrix-js-sdk';
+import {
+  type MatrixEvent,
+  type IEventRelation,
+  IRoomEvent,
+} from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import {
   type OpenAIPromptMessage,
-  isCommandReactionStatusApplied,
+  isCommandResultStatusApplied,
   attachedCardsToMessage,
   isCommandEvent,
   getRelevantCards,
 } from '../helpers';
 import { MatrixClient } from './matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { ChatCompletionMessageParam } from 'openai/resources';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
-Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context. 
-The user can optionally apply 'patchCard' by sending data about fields to update. 
+Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
+The user can optionally apply 'patchCard' by sending data about fields to update.
 Explain the general actions and user intent. If 'patchCard' was used, express the title in an active sentence. Do NOT use the word "patch" in the title.`;
 
 export async function setTitle(
@@ -39,7 +44,7 @@ export async function setTitle(
   let result = await openai.chat.completions.create(
     {
       model: 'gpt-4o',
-      messages: startOfConversation,
+      messages: startOfConversation as ChatCompletionMessageParam[],
       stream: false,
     },
     {
@@ -120,7 +125,7 @@ export const getLatestCommandApplyMessage = (
   return [];
 };
 
-export const roomTitleAlreadySet = (rawEventLog: DiscreteMatrixEvent[]) => {
+export const roomTitleAlreadySet = (rawEventLog: IRoomEvent[]) => {
   return (
     rawEventLog.filter((event) => event.type === 'm.room.name').length > 1 ??
     false
@@ -128,7 +133,7 @@ export const roomTitleAlreadySet = (rawEventLog: DiscreteMatrixEvent[]) => {
 };
 
 const userAlreadyHasSentNMessages = (
-  rawEventLog: DiscreteMatrixEvent[],
+  rawEventLog: IRoomEvent[],
   botUserId: string,
   n = 5,
 ) => {
@@ -140,12 +145,12 @@ const userAlreadyHasSentNMessages = (
 };
 
 export function shouldSetRoomTitle(
-  rawEventLog: DiscreteMatrixEvent[],
+  rawEventLog: IRoomEvent[],
   aiBotUserId: string,
   event?: MatrixEvent,
 ) {
   return (
-    (isCommandReactionStatusApplied(event) ||
+    (isCommandResultStatusApplied(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)
   );
