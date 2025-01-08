@@ -5,7 +5,13 @@ import flattenDeep from 'lodash/flattenDeep';
 
 import { type CodeRef, type DBAdapter, type TypeCoercion } from './index';
 
-export type Expression = (string | Param | TableValuedEach | TableValuedTree)[];
+export type Expression = (
+  | string
+  | Param
+  | TableValuedEach
+  | TableValuedTree
+  | DBSpecificExpression
+)[];
 
 export type PgPrimitive =
   | number
@@ -16,8 +22,16 @@ export type PgPrimitive =
   | null;
 
 export interface Param {
-  param: PgPrimitive;
+  param?: PgPrimitive;
+  pg?: PgPrimitive;
+  sqlite?: PgPrimitive;
   kind: 'param';
+}
+
+export interface DBSpecificExpression {
+  pg?: PgPrimitive;
+  sqlite?: PgPrimitive;
+  kind: 'db-specific-expression';
 }
 
 export interface FieldQuery {
@@ -62,6 +76,7 @@ export interface FieldArity {
 export type CardExpression = (
   | string
   | Param
+  | DBSpecificExpression
   | TableValuedEach
   | TableValuedTree
   | FieldQuery
@@ -92,12 +107,50 @@ export function separatedByCommas(expressions: unknown[][]): unknown {
   }, []);
 }
 
-export function param(value: PgPrimitive): Param {
+export function param(value: { pg?: PgPrimitive; sqlite?: PgPrimitive }): Param;
+export function param(value: PgPrimitive): Param;
+export function param(
+  value: PgPrimitive | { pg?: PgPrimitive; sqlite?: PgPrimitive },
+): Param {
+  if (
+    value &&
+    typeof value === 'object' &&
+    ('pg' in value || 'sqlite' in value)
+  ) {
+    return {
+      ...value,
+      kind: 'param',
+    };
+  }
   return { param: value, kind: 'param' };
 }
 
 export function isParam(expression: any): expression is Param {
-  return isPlainObject(expression) && 'param' in expression;
+  return (
+    isPlainObject(expression) &&
+    'kind' in expression &&
+    expression.kind === 'param'
+  );
+}
+
+export function dbExpression({
+  pg,
+  sqlite,
+}: {
+  pg?: PgPrimitive;
+  sqlite?: PgPrimitive;
+}): DBSpecificExpression {
+  return { pg, sqlite, kind: 'db-specific-expression' };
+}
+
+export function isDbExpression(
+  expression: any,
+): expression is DBSpecificExpression {
+  return (
+    isPlainObject(expression) &&
+    'kind' in expression &&
+    expression.kind === 'db-specific-expression'
+  );
 }
 
 export function tableValuedEach(column: string): TableValuedEach {
@@ -226,12 +279,9 @@ export function asExpressions(
   let paramBucket = Object.fromEntries(
     Object.entries(values).map(([col, val]) => [
       col,
-      // TODO: SQLite requires JSON be referenced in a stringified
-      // manner--need to confirm if postgres is ok with this
-
-      // TODO probably we should insert using the json() or jsonb() function in
-      // SQLite, need to check for compatibility in postgres for this function
-      param(opts?.jsonFields?.includes(col) ? stringify(val) : val),
+      param(
+        opts?.jsonFields?.includes(col) ? stringify(val ?? null) : val ?? null,
+      ),
     ]),
   );
   let nameExpressions = Object.keys(paramBucket).map((name) => [name]);
@@ -309,14 +359,17 @@ export async function query(
   query: Expression,
   coerceTypes?: TypeCoercion,
 ) {
-  let sql = await expressionToSql(query);
+  let sql = await expressionToSql(dbAdapter.kind, query);
   return await dbAdapter.execute(sql.text, {
     coerceTypes,
     bind: sql.values,
   });
 }
 
-export function expressionToSql(query: Expression) {
+export function expressionToSql(
+  dbAdapterKind: DBAdapter['kind'],
+  query: Expression,
+) {
   let values: PgPrimitive[] = [];
   let nonce = 0;
   let tableValuedFunctions = new Map<
@@ -328,8 +381,11 @@ export function expressionToSql(query: Expression) {
   >();
   let text = query
     .map((element) => {
-      if (isParam(element)) {
-        values.push(element.param);
+      if (isDbExpression(element)) {
+        return element[dbAdapterKind] ?? '';
+      } else if (isParam(element)) {
+        let value = element[dbAdapterKind] ?? element.param ?? null;
+        values.push(value);
         return `$${values.length}`;
       } else if (typeof element === 'string') {
         return element;
@@ -384,28 +440,6 @@ export function expressionToSql(query: Expression) {
     text,
     values,
   };
-}
-
-export function realmVersionExpression(opts?: {
-  useWorkInProgressIndex?: boolean;
-  withMaxVersion?: number;
-}) {
-  return [
-    'realm_version =',
-    ...addExplicitParens([
-      'SELECT MAX(i2.realm_version)',
-      'FROM boxel_index i2',
-      'WHERE i2.url = i.url',
-      ...(opts?.withMaxVersion
-        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
-        : !opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i2.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-    ]),
-  ] as Expression;
 }
 
 function trimBrackets(pathTraveled: string) {

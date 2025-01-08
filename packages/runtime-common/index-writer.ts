@@ -19,7 +19,7 @@ import {
   any,
   query,
   upsert,
-  realmVersionExpression,
+  dbExpression,
 } from './expression';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -97,7 +97,6 @@ export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
   #dbAdapter: DBAdapter;
-  private isNewGeneration = false;
   private declare realmVersion: number;
 
   constructor(
@@ -123,11 +122,8 @@ export class Batch {
     let results = (await this.#query([
       `SELECT i.url, i.type, i.last_modified
        FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
           WHERE i.realm_url =`,
       param(this.realmURL.href),
-      'AND',
-      ...realmVersionExpression({ useWorkInProgressIndex: false }),
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified'
@@ -176,6 +172,7 @@ export class Batch {
             source: entry.source,
             last_modified: entry.lastModified,
             resource_created_at: entry.resourceCreatedAt,
+            error_doc: null,
           }
         : entry.type === 'module'
         ? {
@@ -188,6 +185,7 @@ export class Batch {
               entry.source,
               new RealmPaths(this.realmURL).local(url),
             ),
+            error_doc: null,
           }
         : {
             types: entry.types,
@@ -224,8 +222,8 @@ export class Batch {
 
     await this.#query([
       ...upsert(
-        'boxel_index',
-        'boxel_index_pkey',
+        'boxel_index_working',
+        'boxel_index_working_pkey',
         nameExpressions,
         valueExpressions,
       ),
@@ -233,9 +231,11 @@ export class Batch {
   }
 
   async done(): Promise<{ totalIndexEntries: number }> {
+    await this.#query(['BEGIN']);
     await this.updateRealmMeta();
     await this.applyBatchUpdates();
     await this.pruneObsoleteEntries();
+    await this.#query(['COMMIT']);
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
@@ -249,14 +249,12 @@ export class Batch {
     let [entry] = (await this.#query([
       `SELECT i.*`,
       `FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
       ...every([
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
         ]),
-        realmVersionExpression(),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     if (!entry) {
@@ -283,13 +281,11 @@ export class Batch {
     let [{ total }] = (await this.#query([
       `SELECT count(i.url) as total
        FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type != ', param('error')],
         ['i.is_deleted != true'],
-        realmVersionExpression({ useWorkInProgressIndex: true }),
       ]),
     ] as Expression)) as { total: string }[];
     return parseInt(total);
@@ -298,17 +294,13 @@ export class Batch {
   private async updateRealmMeta() {
     let results = await this.#query([
       `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       FROM boxel_index_working as i
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type = ', param('instance')],
         ['i.types IS NOT NULL'],
-        realmVersionExpression({
-          useWorkInProgressIndex: true,
-          withMaxVersion: this.realmVersion,
-        }),
+        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,
     ] as Expression);
@@ -350,6 +342,34 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+
+    if (this.#invalidations.size > 0) {
+      let columns = (await this.#dbAdapter.getColumnNames('boxel_index')).map(
+        (c) => [c],
+      );
+      let names = flattenDeep(columns);
+      await this.#query([
+        'INSERT INTO boxel_index',
+        ...addExplicitParens(separatedByCommas(columns)),
+        'SELECT',
+        ...separatedByCommas(columns),
+        'FROM boxel_index_working',
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url in',
+            ...addExplicitParens(
+              separatedByCommas(
+                [...this.#invalidations].map((i) => [param(i)]),
+              ),
+            ),
+          ],
+        ]),
+        'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
+        ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+      ] as Expression);
+    }
   }
 
   private async pruneObsoleteEntries() {
@@ -361,17 +381,6 @@ export class Batch {
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
-
-    if (this.isNewGeneration) {
-      await this.#query([
-        `DELETE FROM boxel_index`,
-        'WHERE',
-        ...every([
-          ['realm_version <', param(this.realmVersion)],
-          ['realm_url =', param(this.realmURL.href)],
-        ]),
-      ] as Expression);
-    }
   }
 
   private async setNextRealmVersion() {
@@ -436,13 +445,13 @@ export class Batch {
 
     let names = flattenDeep(columns);
     await this.#query([
-      'INSERT INTO boxel_index',
+      'INSERT INTO boxel_index_working',
       ...addExplicitParens(separatedByCommas(columns)),
       'VALUES',
       ...separatedByCommas(
         rows.map((value) => addExplicitParens(separatedByCommas(value))),
       ),
-      'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
+      'ON CONFLICT ON CONSTRAINT boxel_index_working_pkey DO UPDATE SET',
       ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
     ] as Expression);
 
@@ -452,7 +461,6 @@ export class Batch {
 
   private async itemsThatReference(
     resolvedPath: string,
-    realmVersion: number,
   ): Promise<
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
   > {
@@ -467,17 +475,23 @@ export class Batch {
     do {
       // SQLite does not support cursors when used in the worker thread since
       // the API for using cursors cannot be serialized over the postMessage
-      // boundary. so we use a handcrafted paging approach that leverages
-      // realm_version to keep the result set stable across pages
+      // boundary. so we use a handcrafted paging approach
       rows = (await this.#query([
         'SELECT i.url, i.file_alias, i.type',
-        'FROM boxel_index as i',
-        'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
-        'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
+        'FROM boxel_index_working as i',
+        dbExpression({
+          sqlite:
+            'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+        }),
         'WHERE',
         ...every([
-          [`deps_array_element =`, param(resolvedPath)],
-          realmVersionExpression({ withMaxVersion: realmVersion }),
+          [
+            dbExpression({
+              sqlite: `deps_array_element =`,
+              pg: `COALESCE(i.deps, '[]'::jsonb) @>`,
+            }),
+            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+          ],
           // css is a subset of modules, so there won't by any references that
           // are css entries that aren't already represented by a module entry
           [`i.type != 'css'`],
@@ -508,10 +522,7 @@ export class Batch {
       return [];
     }
     visited.add(resolvedPath);
-    let childInvalidations = await this.itemsThatReference(
-      resolvedPath,
-      this.realmVersion,
-    );
+    let childInvalidations = await this.itemsThatReference(resolvedPath);
     let realmPath = new RealmPaths(this.realmURL);
     let invalidationsInThisRealm = childInvalidations.filter((c) =>
       realmPath.inRealm(new URL(c.url)),

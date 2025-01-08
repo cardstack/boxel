@@ -29,7 +29,7 @@ import {
   fieldArity,
   tableValuedFunctionsPlaceholder,
   query,
-  realmVersionExpression,
+  isDbExpression,
 } from './expression';
 import {
   type Query,
@@ -53,7 +53,6 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type CardTypeSummary,
-  type RealmVersionsTable,
 } from './index-structure';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
@@ -137,13 +136,9 @@ export interface PrerenderedCard {
 
 export interface QueryResultsMeta {
   // TODO SQLite doesn't let us use cursors in the classic sense so we need to
-  // keep track of page size and index number--note it is possible for the index
-  // to mutate between pages. Perhaps consider querying a specific realm version
-  // (and only cleanup realm versions when making generations) so we can see
-  // consistent paginated results...
+  // keep track of page size and index number
   page: {
     total: number;
-    realmVersion: number;
   };
 }
 
@@ -181,15 +176,13 @@ export class IndexQueryEngine {
   ): Promise<IndexedModuleOrError | undefined> {
     let rows = (await this.#query([
       `SELECT i.*
-       FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       FROM ${tableFromOpts(opts)} as i
        WHERE`,
       ...every([
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
         ]),
-        realmVersionExpression(opts),
         any([
           ['i.type =', param('module')],
           ['i.type =', param('error')],
@@ -239,15 +232,13 @@ export class IndexQueryEngine {
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
       `SELECT i.*, embedded_html, fitted_html`,
-      `FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+      `FROM ${tableFromOpts(opts)} as i
        WHERE`,
       ...every([
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
         ]),
-        realmVersionExpression(opts),
         any([
           ['i.type =', param('instance')],
           ['i.type =', param('error')],
@@ -334,19 +325,9 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
   }> {
-    let version: number;
-    if (page?.realmVersion) {
-      version = page.realmVersion;
-    } else {
-      let currentRealmVersion = await this.fetchCurrentRealmVersion(realmURL);
-      version = opts?.useWorkInProgressIndex
-        ? currentRealmVersion + 1
-        : currentRealmVersion;
-    }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
-      realmVersionExpression({ withMaxVersion: version }),
     ];
 
     if (opts.includeErrors) {
@@ -379,8 +360,7 @@ export class IndexQueryEngine {
     let everyCondition = every(conditions);
     let query = [
       ...selectClauseExpression,
-      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
-      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
+      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
       'WHERE',
       ...everyCondition,
       'GROUP BY url',
@@ -390,7 +370,6 @@ export class IndexQueryEngine {
     let queryCount = [
       'SELECT COUNT(DISTINCT url) AS total',
       `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
-      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
     ];
@@ -403,7 +382,7 @@ export class IndexQueryEngine {
     return {
       results,
       meta: {
-        page: { total: Number(totalResults[0].total), realmVersion: version },
+        page: { total: Number(totalResults[0].total) },
       },
     };
   }
@@ -553,24 +532,11 @@ export class IndexQueryEngine {
     let results = (await this.#query([
       `SELECT value
        FROM realm_meta rm
-       INNER JOIN realm_versions rv
-       ON rm.realm_url = rv.realm_url AND rm.realm_version = rv.current_version
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
     ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
 
     return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
-  }
-
-  private async fetchCurrentRealmVersion(realmURL: URL) {
-    let [{ current_version }] = (await this.#query([
-      'SELECT current_version FROM realm_versions WHERE realm_url =',
-      param(realmURL.href),
-    ])) as Pick<RealmVersionsTable, 'current_version'>[];
-    if (current_version == null) {
-      throw new Error(`No current version found for realm ${realmURL.href}`);
-    }
-    return current_version;
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
@@ -750,6 +716,7 @@ export class IndexQueryEngine {
         query.map((element) => {
           if (
             isParam(element) ||
+            isDbExpression(element) ||
             typeof element === 'string' ||
             element.kind === 'table-valued-each' ||
             element.kind === 'table-valued-tree'
@@ -1128,6 +1095,10 @@ function assertIndexEntrySource<T>(obj: T): Omit<
     last_modified: string;
     resource_created_at: string;
   };
+}
+
+function tableFromOpts(opts: WIPOptions | undefined) {
+  return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
 }
 
 function assertNever(value: never) {

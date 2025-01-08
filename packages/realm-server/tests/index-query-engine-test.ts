@@ -424,15 +424,6 @@ module('query', function (hooks) {
     });
   });
 
-  test('can get paginated results that are stable during index mutations', async function (assert) {
-    await runSharedTest(indexQueryEngineTests, assert, {
-      indexQueryEngine,
-      dbAdapter,
-      loader,
-      testCards: await makeTestCards(loader),
-    });
-  });
-
   test(`can filter using 'gt'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
