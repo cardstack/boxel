@@ -65,7 +65,7 @@ function validateTestFiles(yamlFilePath: string, testDir: string) {
   for (let filename of ciTestModules) {
     if (!filesystemTestModules.includes(filename)) {
       console.error(
-        `Error: Test file '${filename}' exists in the YAML file but not in the ${yamlFilePath} filesystem.`,
+        `Error: Test file '${filename}' exists in the YAML file but not in the filesystem.`,
       );
       errorFound = true;
     }
