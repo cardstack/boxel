@@ -11,7 +11,6 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 

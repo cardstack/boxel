@@ -555,10 +555,6 @@ export default class Room extends Component<Signature> {
     return this.selectedLLM === model;
   }
 
-  private get activeLLM() {
-    return this.roomResource.activeLLM;
-  }
-
   @action
   private selectLLM(model: string) {
     this.selectedLLM = model;
