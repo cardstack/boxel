@@ -2331,4 +2331,66 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${resultListItem}:nth-child(6)`).containsText('Justin');
     assert.dom(`${resultListItem}:nth-child(8)`).containsText('Mickey');
   });
+
+  test('it maintains status of View Code panel as additional events stream in', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+
+    simulateRemoteMessage(room1Id, '@aibot:localhost', {
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .doesNotExist('View Code panel should not yet be open');
+    await click('[data-test-view-code-button]');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .exists('View Code panel should be open');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'Asking a question about what I saw in the proposed code...',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // previously, a new event would cause re-rendering and the open-ness of the View Code panel to be lost
+    assert
+      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .exists('View Code panel should remain open');
+  });
 });

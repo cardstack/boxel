@@ -472,6 +472,7 @@ const tests = Object.freeze({
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
           atom_html: `<span class="atom">Atom HTML</span>`,
+          icon_html: '<svg>test icon</svg>',
         },
       ],
     );
@@ -527,6 +528,7 @@ const tests = Object.freeze({
         last_modified: String(modified),
         resource_created_at: String(modified),
         is_deleted: null,
+        icon_html: '<svg>test icon</svg>',
       },
       'the error entry includes last known good state of instance',
     );
@@ -581,6 +583,7 @@ const tests = Object.freeze({
           last_modified: null,
           resource_created_at: null,
           is_deleted: false,
+          icon_html: null,
         },
         'the error entry does not include last known good state of instance',
       );
@@ -1073,6 +1076,7 @@ const tests = Object.freeze({
     assert,
     { indexWriter, adapter },
   ) => {
+    let iconHTML = '<svg>test icon</svg>';
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -1100,6 +1104,7 @@ const tests = Object.freeze({
           types: [{ module: `./person`, name: 'Person' }, baseCardRef].map(
             (i) => internalKeyFor(i, new URL(testRealmURL)),
           ),
+          icon_html: iconHTML,
         },
       ],
     );
@@ -1133,6 +1138,7 @@ const tests = Object.freeze({
         { module: `./person`, name: 'Person' },
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      iconHTML,
     });
 
     let results = await adapter.execute(
@@ -1168,7 +1174,12 @@ const tests = Object.freeze({
       'correct length of query result after indexing is done',
     );
     let value = results[0].value as [
-      { code_ref: string; display_name: string; total: number },
+      {
+        code_ref: string;
+        display_name: string;
+        icon_html: string;
+        total: number;
+      },
     ];
     assert.strictEqual(
       value.length,
@@ -1182,11 +1193,13 @@ const tests = Object.freeze({
           total: 1,
           code_ref: `${testRealmURL}fancy-person/FancyPerson`,
           display_name: 'Fancy Person',
+          icon_html: iconHTML,
         },
         {
           total: 1,
           code_ref: `${testRealmURL}person/Person`,
           display_name: 'Person',
+          icon_html: iconHTML,
         },
       ],
       'correct card type summary after indexing is done',
@@ -1221,6 +1234,7 @@ const tests = Object.freeze({
         { module: `./person`, name: 'Person' },
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      iconHTML,
     });
     let resource4: CardResource = {
       id: `${testRealmURL}4`,
@@ -1250,6 +1264,7 @@ const tests = Object.freeze({
         { module: `./card-api`, name: 'CardDef' },
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      iconHTML,
     });
     await batch.done();
 
@@ -1268,13 +1283,19 @@ const tests = Object.freeze({
       'correct length of query result after indexing is done',
     );
     value = results[0].value as [
-      { code_ref: string; display_name: string; total: number },
+      {
+        code_ref: string;
+        display_name: string;
+        total: number;
+        icon_html: string;
+      },
     ];
     assert.strictEqual(
       value.length,
       3,
       'correct length of card type summary after indexing is done',
     );
+
     assert.deepEqual(
       value,
       [
@@ -1282,16 +1303,19 @@ const tests = Object.freeze({
           total: 2,
           code_ref: `${testRealmURL}fancy-person/FancyPerson`,
           display_name: 'Fancy Person',
+          icon_html: iconHTML,
         },
         {
           total: 1,
           code_ref: `${testRealmURL}person/Person`,
           display_name: 'Person',
+          icon_html: iconHTML,
         },
         {
           total: 1,
           code_ref: `${testRealmURL}pet/Pet`,
           display_name: 'Pet',
+          icon_html: iconHTML,
         },
       ],
       'correct card type summary after indexing is done',

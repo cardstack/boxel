@@ -72,6 +72,7 @@ export interface InstanceEntry {
   embeddedHtml?: Record<string, string>;
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
+  iconHTML?: string;
   types: string[];
   displayNames: string[];
   deps: Set<string>;
@@ -164,6 +165,7 @@ export class Batch {
             embedded_html: entry.embeddedHtml,
             fitted_html: entry.fittedHtml,
             atom_html: entry.atomHtml,
+            icon_html: entry.iconHTML,
             deps: [...entry.deps],
             types: entry.types,
             display_names: entry.displayNames,
@@ -291,7 +293,7 @@ export class Batch {
 
   private async updateRealmMeta() {
     let results = await this.#query([
-      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
+      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
        FROM boxel_index_working as i
           WHERE`,
       ...every([

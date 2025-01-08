@@ -18,8 +18,8 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
-import { User } from '../user';
-import { Task, TaskStatusField, getDueDateStatus } from '../task';
+import { User } from './user';
+import { Task, TaskStatusField, getDueDateStatus } from './task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -193,7 +193,7 @@ class TaskIsolated extends Component<typeof SprintTask> {
         <div class='left-column'>
           <h4>Description</h4>
           {{#if @model.details}}
-            <p>{{@model.details}}</p>
+            <@fields.details />
           {{else}}
             <span class='no-data-found-txt'>No Task Description Provided</span>
           {{/if}}

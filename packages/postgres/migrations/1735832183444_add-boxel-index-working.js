@@ -10,6 +10,7 @@ exports.up = (pgm) => {
     error_doc: 'jsonb',
     deps: 'jsonb',
     types: 'jsonb',
+    icon_html: 'varchar',
     isolated_html: 'varchar',
     indexed_at: 'bigint',
     is_deleted: 'boolean',

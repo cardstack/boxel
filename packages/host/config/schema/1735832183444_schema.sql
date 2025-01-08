@@ -23,6 +23,7 @@
    fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
+   icon_html TEXT,
    PRIMARY KEY ( url, realm_url ) 
 );
 
@@ -37,6 +38,7 @@
    error_doc BLOB,
    deps BLOB,
    types BLOB,
+   icon_html TEXT,
    isolated_html TEXT,
    indexed_at,
    is_deleted BOOLEAN,
