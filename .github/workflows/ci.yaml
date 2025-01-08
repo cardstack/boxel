@@ -234,7 +234,7 @@ jobs:
     name: Realm Server Tests
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ matrix.testModule || github.head_ref || github.run_id }}
+      group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
