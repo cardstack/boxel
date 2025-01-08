@@ -5,14 +5,12 @@ import { type IEvent } from 'matrix-js-sdk';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  APP_BOXEL_SUPPORTED_LLM_LIST,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
-  SupportedLLMListEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import Mutex from '../mutex';
@@ -60,13 +58,6 @@ export default class Room {
         disabledEventIds: [],
       }
     );
-  }
-
-  get supportedLLMs() {
-    let event = this._roomState?.events
-      .get(APP_BOXEL_SUPPORTED_LLM_LIST)
-      ?.get('')?.event;
-    return (event as SupportedLLMListEvent)?.content.models ?? [];
   }
 
   get activeLLM() {

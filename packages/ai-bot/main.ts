@@ -16,7 +16,6 @@ import {
   extractCardFragmentsFromEvents,
 } from './helpers';
 import {
-  APP_BOXEL_SUPPORTED_LLM_LIST,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
@@ -104,15 +103,7 @@ class Assistant {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
 
-  async setActiveAndSupportedLLM(roomId: string) {
-    const response = await this.openai.models.list();
-    const models = response.data.map((data) => data.id);
-
-    await updateStateEvent(this.client, roomId, APP_BOXEL_SUPPORTED_LLM_LIST, {
-      models,
-    });
-
-    // set default selected LLM
+  async setDefaultLLM(roomId: string) {
     await updateStateEvent(this.client, roomId, APP_BOXEL_ACTIVE_LLM, {
       model: DEFAULT_LLM,
     });
@@ -158,7 +149,7 @@ Common issues are:
         .joinRoom(member.roomId)
         .then(async function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
-          await assistant.setActiveAndSupportedLLM(member.roomId);
+          await assistant.setDefaultLLM(member.roomId);
         })
         .catch(function (err) {
           log.info(

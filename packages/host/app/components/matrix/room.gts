@@ -25,15 +25,12 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import {
-  BoxelButton,
-  BoxelSelect,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { BoxelButton, BoxelSelect } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import { unixTime } from '@cardstack/runtime-common';
+import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
@@ -141,26 +138,22 @@ export default class Room extends Component<Signature> {
               />
               <BoxelSelect
                 class='available-llm-models'
-                @selected={{this.activeLLM}}
+                @selected={{this.selectedLLM}}
                 @verticalPosition='above'
                 @onChange={{this.selectLLM}}
                 @options={{this.supportedLLMs}}
                 @matchTriggerWidth={{false}}
-                @disabled={{this.isLLMSelectionDisabled}}
+                @disabled={{this.activateLLM.isRunning}}
                 @dropdownClass='available-llm-models__dropdown'
                 as |item|
               >
                 <div class='llm-model'>
                   <div class='check-mark'>
-                    {{#if (this.isActiveLLM item)}}
+                    {{#if (this.isSelectedLLM item)}}
                       <CheckMark width='12' height='12' />
                     {{/if}}
                   </div>
-                  {{#if this.activateLLM.isRunning}}
-                    <LoadingIndicator class='loading-indicator' />
-                  {{else}}
-                    <span class='llm-model-name'>{{item}}</span>
-                  {{/if}}
+                  <span class='llm-model-name'>{{item}}</span>
                 </div>
               </BoxelSelect>
             </div>
@@ -232,9 +225,11 @@ export default class Room extends Component<Signature> {
       .available-llm-models :deep(.boxel-trigger-content) {
         flex: 1;
       }
-      .available-llm-models[aria-disabled='true'] {
+      .available-llm-models[aria-disabled='true'],
+      .available-llm-models[aria-disabled='true']
+        :deep(.boxel-trigger-content .llm-model-name) {
         background-color: var(--boxel-light);
-        cursor: auto;
+        color: var(--boxel-500);
       }
       .llm-model {
         display: grid;
@@ -246,10 +241,6 @@ export default class Room extends Component<Signature> {
         grid-template-columns: 1fr;
       }
       .available-llm-models :deep(.boxel-trigger-content .check-mark) {
-        display: none;
-      }
-      .available-llm-models[aria-disabled='true']
-        :deep(.boxel-trigger > *:nth-child(2)) {
         display: none;
       }
       .available-llm-models :deep(.boxel-trigger-content .llm-model-name) {
@@ -295,6 +286,7 @@ export default class Room extends Component<Signature> {
     () => this.cardsToAttach,
   );
 
+  @tracked private selectedLLM: string = this.roomResource.activeLLM;
   @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private roomScrollState: WeakMap<
@@ -548,12 +540,8 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  isActiveLLM(model: string) {
-    return this.activeLLM === model;
-  }
-
-  private get isLLMSelectionDisabled() {
-    return this.activateLLM.isRunning || this.supportedLLMs.length <= 0;
+  isSelectedLLM(model: string) {
+    return this.selectedLLM === model;
   }
 
   private get activeLLM() {
@@ -562,16 +550,16 @@ export default class Room extends Component<Signature> {
 
   @action
   private selectLLM(model: string) {
+    this.selectedLLM = model;
     this.activateLLM.perform(model);
   }
 
   private activateLLM = restartableTask(async (model: string) => {
-    await timeout(5000);
     await this.matrixService.sendActiveLLMEvent(this.args.roomId, model);
   });
 
   private get supportedLLMs(): string[] {
-    return this.roomResource.supportedLLMs;
+    return DEFAULT_LLM_LIST;
   }
 
   private get sortedSkills(): Skill[] {

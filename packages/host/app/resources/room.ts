@@ -212,10 +212,6 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
-  get supportedLLMs() {
-    return this.matrixRoom?.supportedLLMs ?? [];
-  }
-
   get activeLLM() {
     return this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }

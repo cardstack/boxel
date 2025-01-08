@@ -6,7 +6,6 @@ import {
   type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import {
-  APP_BOXEL_SUPPORTED_LLM_LIST,
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
@@ -240,13 +239,6 @@ export interface SkillsConfigEvent extends RoomStateEvent {
   };
 }
 
-export interface SupportedLLMListEvent extends RoomStateEvent {
-  type: typeof APP_BOXEL_SUPPORTED_LLM_LIST;
-  content: {
-    models: string[];
-  };
-}
-
 export interface ActiveLLMEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ACTIVE_LLM;
   content: {
@@ -295,5 +287,4 @@ export type MatrixEvent =
   | JoinEvent
   | LeaveEvent
   | SkillsConfigEvent
-  | SupportedLLMListEvent
   | ActiveLLMEvent;
