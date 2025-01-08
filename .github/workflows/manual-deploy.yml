@@ -24,7 +24,7 @@ jobs:
       dockerfile: "packages/ai-bot/Dockerfile"
 
   deploy-ai-bot:
-    needs: [build-ai-bot, migrate-db]
+    needs: [build-ai-bot, post-migrate-db]
     name: Deploy ai-bot to AWS ECS
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
@@ -34,6 +34,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-ai-bot-${{ inputs.environment }}"
       image: ${{ needs.build-ai-bot.outputs.image }}
+      wait-for-service-stability: false
 
   build-host:
     name: Build host
@@ -102,9 +103,16 @@ jobs:
       image: ${{ needs.build-pg-migration.outputs.image }}
       wait-for-service-stability: false
 
+  post-migrate-db:
+    name: Wait for db-migration
+    needs: [migrate-db]
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 240
+
   deploy-realm-server:
     name: Deploy realm server
-    needs: [build-realm-server, deploy-host, migrate-db]
+    needs: [build-realm-server, deploy-host, post-migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
