@@ -47,6 +47,8 @@ export default class ColorPicker extends Component<Signature> {
         border: none;
         cursor: pointer;
         background: transparent;
+        border: 1px solid var(--boxel-200);
+        border-radius: 50%;
       }
 
       .input:disabled {
