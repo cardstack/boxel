@@ -140,23 +140,26 @@ export default class Room extends Component<Signature> {
                 @removeCard={{this.removeCard}}
               />
               <BoxelSelect
-                class='available-llm-models'
+                class='supported-llms'
                 @selected={{this.selectedLLM}}
                 @verticalPosition='above'
                 @onChange={{this.selectLLM}}
                 @options={{this.supportedLLMs}}
                 @matchTriggerWidth={{false}}
                 @disabled={{this.activateLLM.isRunning}}
-                @dropdownClass='available-llm-models__dropdown'
+                @dropdownClass='supported-llms__dropdown'
                 as |item|
               >
-                <div class='llm-model'>
+                <div class='llm'>
                   <div class='check-mark'>
                     {{#if (this.isSelectedLLM item)}}
                       <CheckMark width='12' height='12' />
                     {{/if}}
                   </div>
-                  <span class='llm-model-name'>{{item}}</span>
+                  <span
+                    class='llm-name'
+                    data-test-llm-name={{item}}
+                  >{{item}}</span>
                 </div>
               </BoxelSelect>
             </div>
@@ -213,7 +216,7 @@ export default class Room extends Component<Signature> {
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
       }
-      .available-llm-models {
+      .supported-llms {
         border: none;
         padding: 0;
         width: auto;
@@ -222,37 +225,37 @@ export default class Room extends Component<Signature> {
         cursor: pointer;
         font:;
       }
-      .available-llm-models :deep(.boxel-trigger) {
+      .supported-llms :deep(.boxel-trigger) {
         padding: 0;
       }
-      .available-llm-models :deep(.boxel-trigger-content) {
+      .supported-llms :deep(.boxel-trigger-content) {
         flex: 1;
       }
-      .available-llm-models[aria-disabled='true'],
-      .available-llm-models[aria-disabled='true']
-        :deep(.boxel-trigger-content .llm-model-name) {
+      .supported-llms[aria-disabled='true'],
+      .supported-llms[aria-disabled='true']
+        :deep(.boxel-trigger-content .llm-name) {
         background-color: var(--boxel-light);
         color: var(--boxel-500);
       }
-      .llm-model {
+      .llm {
         display: grid;
         grid-template-columns: 12px 1fr;
         gap: var(--boxel-sp-xs);
         width: 100%;
       }
-      .available-llm-models :deep(.boxel-trigger-content .llm-model) {
+      .supported-llms :deep(.boxel-trigger-content .llm) {
         grid-template-columns: 1fr;
       }
-      .available-llm-models :deep(.boxel-trigger-content .check-mark) {
+      .supported-llms :deep(.boxel-trigger-content .check-mark) {
         display: none;
       }
-      .available-llm-models :deep(.boxel-trigger-content .llm-model-name) {
+      .supported-llms :deep(.boxel-trigger-content .llm-name) {
         text-align: right;
       }
       .check-mark {
         height: 12px;
       }
-      .llm-model-name {
+      .llm-name {
         overflow: hidden;
         text-overflow: ellipsis;
         text-wrap: nowrap;
@@ -265,7 +268,7 @@ export default class Room extends Component<Signature> {
       }
 
       :global(
-          .available-llm-models__dropdown
+          .supported-llms__dropdown
             .ember-power-select-option[aria-current='true']
         ) {
         background-color: var(--boxel-teal) !important;
@@ -289,6 +292,8 @@ export default class Room extends Component<Signature> {
     () => this.cardsToAttach,
   );
 
+  // To avoid delay, instead of using `roomResource.activeLLM`, we use a local tracked property
+  // that updates immediately after the user selects the LLM.
   @tracked private selectedLLM: string = this.roomResource.activeLLM;
   @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
@@ -566,7 +571,7 @@ export default class Room extends Component<Signature> {
   });
 
   private get supportedLLMs(): string[] {
-    return DEFAULT_LLM_LIST;
+    return DEFAULT_LLM_LIST.sort();
   }
 
   private get sortedSkills(): Skill[] {
