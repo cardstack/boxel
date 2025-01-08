@@ -163,6 +163,7 @@ export interface RealmAdapter {
 
 interface Options {
   disableModuleCaching?: true;
+  invalidateEntireRealm?: true;
 }
 
 interface UpdateItem {
@@ -252,6 +253,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #invalidateEntireRealm = false;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -305,6 +307,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#invalidateEntireRealm = Boolean(opts?.invalidateEntireRealm);
 
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -450,7 +453,7 @@ export class Realm {
   }
 
   async fullIndex() {
-    await this.realmIndexUpdater.fullIndex();
+    await this.realmIndexUpdater.fullIndex(this.#invalidateEntireRealm);
   }
 
   async flushUpdateEvents() {

@@ -8,7 +8,10 @@ import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 // for the test-realm-adapter
 export default class LocalIndexer extends Service {
   setup(
-    _fromScratch: (realmURL: URL) => Promise<IndexResults>,
+    _fromScratch: (
+      realmURL: URL,
+      invalidateEntireRealm: boolean,
+    ) => Promise<IndexResults>,
     _incremental: (
       url: URL,
       realmURL: URL,

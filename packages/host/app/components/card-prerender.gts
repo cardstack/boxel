@@ -52,9 +52,15 @@ export default class CardPrerender extends Component {
     }
   }
 
-  private async fromScratch(realmURL: URL): Promise<IndexResults> {
+  private async fromScratch(
+    realmURL: URL,
+    invalidateEntireRealm: boolean,
+  ): Promise<IndexResults> {
     try {
-      let results = await this.doFromScratch.perform(realmURL);
+      let results = await this.doFromScratch.perform(
+        realmURL,
+        invalidateEntireRealm,
+      );
       return results;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -99,21 +105,26 @@ export default class CardPrerender extends Component {
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
   });
 
-  private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter } = this.getRunnerParams(realmURL);
-    let currentRun = new CurrentRun({
-      realmURL,
-      reader,
-      indexWriter,
-      renderCard: this.renderService.renderCard,
-      render: this.renderService.render,
-    });
-    setOwner(currentRun, getOwner(this)!);
+  private doFromScratch = enqueueTask(
+    async (realmURL: URL, invalidateEntireRealm: boolean) => {
+      let { reader, indexWriter } = this.getRunnerParams(realmURL);
+      let currentRun = new CurrentRun({
+        realmURL,
+        reader,
+        indexWriter,
+        renderCard: this.renderService.renderCard,
+        render: this.renderService.render,
+      });
+      setOwner(currentRun, getOwner(this)!);
 
-    let current = await CurrentRun.fromScratch(currentRun);
-    this.renderService.indexRunDeferred?.fulfill();
-    return current;
-  });
+      let current = await CurrentRun.fromScratch(
+        currentRun,
+        invalidateEntireRealm,
+      );
+      this.renderService.indexRunDeferred?.fulfill();
+      return current;
+    },
+  );
 
   private doIncremental = enqueueTask(
     async (

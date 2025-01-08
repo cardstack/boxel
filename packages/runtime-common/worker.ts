@@ -39,7 +39,10 @@ export interface Reader {
 }
 
 export type RunnerRegistration = (
-  fromScratch: (realmURL: URL) => Promise<IndexResults>,
+  fromScratch: (
+    realmURL: URL,
+    invalidateEntireRealm: boolean,
+  ) => Promise<IndexResults>,
   incremental: (
     url: URL,
     realmURL: URL,
@@ -70,6 +73,10 @@ export interface IncrementalResult {
   invalidations: string[];
   ignoreData: Record<string, string>;
   stats: Stats;
+}
+
+export interface FromScratchArgs extends WorkerArgs {
+  invalidateEntireRealm: boolean;
 }
 
 export interface FromScratchResult extends JSONTypes.Object {
@@ -119,7 +126,11 @@ export class Worker {
   #matrixClientCache: Map<string, MatrixClient> = new Map();
   #secretSeed: string;
   #fromScratch:
-    | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
+    | ((
+        realmURL: URL,
+        invalidateEntireRealm: boolean,
+        boom?: true,
+      ) => Promise<IndexResults>)
     | undefined;
   #incremental:
     | ((
@@ -239,13 +250,14 @@ export class Worker {
     return result;
   }
 
-  private fromScratch = async (args: WorkerArgs) => {
+  private fromScratch = async (args: FromScratchArgs) => {
     return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
       let { ignoreData, stats } = await this.#fromScratch(
         new URL(args.realmURL),
+        args.invalidateEntireRealm,
       );
       return {
         ignoreData: { ...ignoreData },

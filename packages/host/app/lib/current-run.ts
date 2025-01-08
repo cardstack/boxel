@@ -121,7 +121,10 @@ export class CurrentRun {
     this.#render = render;
   }
 
-  static async fromScratch(current: CurrentRun): Promise<IndexResults> {
+  static async fromScratch(
+    current: CurrentRun,
+    invalidateEntireRealm?: boolean,
+  ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from scratch indexing`);
     console.log(
@@ -129,18 +132,39 @@ export class CurrentRun {
     );
 
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
-    let mtimesStart = Date.now();
-    let mtimes = await current.batch.getModifiedTimes();
-    console.log(
-      `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
-    );
-    let invalidateStart = Date.now();
-    let invalidations = (
-      await current.discoverInvalidations(current.realmURL, mtimes)
-    ).map((href) => new URL(href));
-    console.log(
-      `completed invalidations in ${Date.now() - invalidateStart} ms`,
-    );
+    let invalidations: URL[] = [];
+    if (invalidateEntireRealm) {
+      console.log(
+        `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
+      );
+      let mtimesStart = Date.now();
+      let filesystemMtimes = await current.#reader.mtimes();
+      console.log(
+        `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
+      );
+      invalidations = Object.keys(filesystemMtimes)
+        .filter(
+          (url) =>
+            // Only allow json and executable files to be invalidated so that we
+            // don't end up with invalidated files that weren't meant to be indexed
+            // (images, etc)
+            url.endsWith('.json') || hasExecutableExtension(url),
+        )
+        .map((url) => new URL(url));
+    } else {
+      let mtimesStart = Date.now();
+      let mtimes = await current.batch.getModifiedTimes();
+      console.log(
+        `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+      );
+      let invalidateStart = Date.now();
+      invalidations = (
+        await current.discoverInvalidations(current.realmURL, mtimes)
+      ).map((href) => new URL(href));
+      console.log(
+        `completed invalidations in ${Date.now() - invalidateStart} ms`,
+      );
+    }
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
@@ -299,17 +323,9 @@ export class CurrentRun {
     if (skipList.length === 0) {
       // the whole realm needs to be visited, no need to calculate
       // invalidations--it's everything
-      console.log(
-        `entire realm ${this.realmURL.href} is invalidated--skipping invalidation calculation`,
-      );
       return invalidationList;
     }
 
-    console.log(
-      `unable to use optimized invalidation for realm ${
-        this.realmURL.href
-      }, skipped these files ${JSON.stringify(skipList)}`,
-    );
     let invalidationStart = Date.now();
     for (let invalidationURL of invalidationList) {
       await this.batch.invalidate(new URL(invalidationURL));
