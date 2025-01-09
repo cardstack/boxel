@@ -14,8 +14,8 @@ import {
   isCommandResultStatusApplied,
   getPromptParts,
   extractCardFragmentsFromEvents,
+  eventRequiresResponse,
 } from './helpers';
-import { APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
@@ -168,11 +168,8 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (event.getType() !== 'm.room.message') {
+        if (!eventRequiresResponse(event)) {
           return; // only print messages
-        }
-        if (event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-          return; // don't respond to card fragments, we just gather these in our history
         }
 
         if (senderMatrixUserId === aiBotUserId) {
