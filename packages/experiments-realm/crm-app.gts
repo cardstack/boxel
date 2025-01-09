@@ -33,6 +33,7 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
+import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
 import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
 import type { Deal } from './crm/deal';
@@ -65,6 +66,12 @@ const CONTACT_FILTERS: LayoutFilter[] = [
     icon: HeartHandshakeIcon,
     cardTypeName: 'CRM Customer',
     createNewButtonText: 'Create Customer',
+  },
+  {
+    displayName: 'Representatives',
+    icon: PresentationAnalytics,
+    cardTypeName: 'CRM Representative',
+    createNewButtonText: 'Create Representative',
   },
 ];
 const DEAL_FILTERS: LayoutFilter[] = [
