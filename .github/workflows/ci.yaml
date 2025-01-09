@@ -234,8 +234,24 @@ jobs:
     name: Realm Server Tests
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ github.head_ref || github.run_id }}
+      group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        testModule:
+          [
+            "auth-client-test.ts",
+            "billing-test.ts",
+            "index-query-engine-test.ts",
+            "index-writer-test.ts",
+            "indexing-test.ts",
+            "loader-test.ts",
+            "module-syntax-test.ts",
+            "queue-test.ts",
+            "realm-server-test.ts",
+            "virtual-network-test.ts",
+          ]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
@@ -265,11 +281,13 @@ jobs:
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
+        env:
+          TEST_MODULE: ${{matrix.testModule}}
       - name: Upload realm server log
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: realm-server-log
+          name: realm-server-log-${{matrix.testModule}}
           path: /tmp/server.log
           retention-days: 30
 

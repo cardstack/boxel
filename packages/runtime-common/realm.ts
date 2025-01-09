@@ -247,7 +247,6 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
-  #startTime = Date.now();
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -590,6 +589,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
+    let startTime = Date.now();
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
     let promise = this.#realmIndexUpdater.run();
     if (isNewIndex) {
@@ -601,7 +601,7 @@ export class Realm {
       data: { type: 'full', realmURL: this.url },
     });
     this.#perfLog.debug(
-      `realm server startup in ${Date.now() - this.#startTime}ms`,
+      `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
   }
 

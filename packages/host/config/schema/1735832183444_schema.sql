@@ -24,7 +24,33 @@
    display_names BLOB,
    resource_created_at,
    icon_html TEXT,
-   PRIMARY KEY ( url, realm_version, realm_url ) 
+   PRIMARY KEY ( url, realm_url ) 
+);
+
+ CREATE TABLE IF NOT EXISTS boxel_index_working (
+   url TEXT NOT NULL,
+   file_alias TEXT NOT NULL,
+   type TEXT NOT NULL,
+   realm_version INTEGER NOT NULL,
+   realm_url TEXT NOT NULL,
+   pristine_doc BLOB,
+   search_doc BLOB,
+   error_doc BLOB,
+   deps BLOB,
+   types BLOB,
+   icon_html TEXT,
+   isolated_html TEXT,
+   indexed_at,
+   is_deleted BOOLEAN,
+   source TEXT,
+   transpiled_code TEXT,
+   last_modified,
+   embedded_html BLOB,
+   atom_html TEXT,
+   fitted_html BLOB,
+   display_names BLOB,
+   resource_created_at,
+   PRIMARY KEY ( url, realm_url ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_meta (
