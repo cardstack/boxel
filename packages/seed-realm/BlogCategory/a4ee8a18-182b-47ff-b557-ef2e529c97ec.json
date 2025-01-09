@@ -5,8 +5,12 @@
       "longName": "TV Series",
       "shortName": "TV",
       "slug": "tv-series",
-      "backgroundColor": "#fff500",
-      "textColor": null,
+      "backgroundColor": {
+        "hexValue": "#9D00FF"
+      },
+      "textColor": {
+        "hexValue": "#ffffff"
+      },
       "description": null,
       "title": "TV Series",
       "thumbnailURL": null

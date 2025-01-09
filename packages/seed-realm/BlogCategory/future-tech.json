@@ -5,8 +5,12 @@
       "longName": "Future Tech",
       "shortName": "Tech",
       "slug": "future-tech",
-      "backgroundColor": "#00ac3d",
-      "textColor": "#fff",
+      "backgroundColor": {
+        "hexValue": "#000000"
+      },
+      "textColor": {
+        "hexValue": "#ffffff"
+      },
       "description": "Highlighting technology shaping tomorrow’s cities.",
       "title": "Future Tech",
       "thumbnailURL": null
