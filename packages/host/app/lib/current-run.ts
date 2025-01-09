@@ -321,11 +321,14 @@ export class CurrentRun {
         skipList.push(url);
       }
     }
-    if (skipList.length === 0) {
-      // the whole realm needs to be visited, no need to calculate
-      // invalidations--it's everything
-      return invalidationList;
-    }
+    // back this out until we can figure out why it gets trapped in a loop in
+    // experiments realm indexing
+
+    // if (skipList.length === 0) {
+    //   // the whole realm needs to be visited, no need to calculate
+    //   // invalidations--it's everything
+    //   return invalidationList;
+    // }
 
     let invalidationStart = Date.now();
     for (let invalidationURL of invalidationList) {
