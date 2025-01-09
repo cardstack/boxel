@@ -188,11 +188,8 @@ export class CurrentRun {
         );
       });
     } catch (e: any) {
-      log.error(
-        `Encountered error during full scratch indexing of realm ${current.realmURL.href}: ${e.message} - ${e.stack}`,
-      );
       console.error(
-        `Encountered error during full scratch indexing of ${current.realmURL.href}`,
+        `Encountered error during from-scratch indexing of ${current.realmURL.href}`,
         e,
       );
     }
@@ -241,9 +238,6 @@ export class CurrentRun {
         );
       });
     } catch (e: any) {
-      log.error(
-        `Encountered error during incremental indexing of realm ${url.href}: ${e.message} - ${e.stack}`,
-      );
       console.error(
         `Encountered error during incremental indexing of ${url.href}`,
         e,
