@@ -134,58 +134,68 @@ export class CurrentRun {
 
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
     let invalidations: URL[] = [];
-    if (invalidateEntireRealm) {
-      perfLog.debug(
-        `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
+    try {
+      if (invalidateEntireRealm) {
+        perfLog.debug(
+          `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
+        );
+        let mtimesStart = Date.now();
+        let filesystemMtimes = await current.#reader.mtimes();
+        perfLog.debug(
+          `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
+        );
+        invalidations = Object.keys(filesystemMtimes)
+          .filter(
+            (url) =>
+              // Only allow json and executable files to be invalidated so that we
+              // don't end up with invalidated files that weren't meant to be indexed
+              // (images, etc)
+              url.endsWith('.json') || hasExecutableExtension(url),
+          )
+          .map((url) => new URL(url));
+      } else {
+        let mtimesStart = Date.now();
+        let mtimes = await current.batch.getModifiedTimes();
+        perfLog.debug(
+          `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+        );
+        let invalidateStart = Date.now();
+        invalidations = (
+          await current.discoverInvalidations(current.realmURL, mtimes)
+        ).map((href) => new URL(href));
+        perfLog.debug(
+          `completed invalidations in ${Date.now() - invalidateStart} ms`,
+        );
+      }
+
+      await current.whileIndexing(async () => {
+        let visitStart = Date.now();
+        for (let invalidation of invalidations) {
+          await current.tryToVisit(invalidation);
+        }
+        perfLog.debug(`completed index visit in ${Date.now() - visitStart} ms`);
+        let finalizeStart = Date.now();
+        let { totalIndexEntries } = await current.batch.done();
+        perfLog.debug(
+          `completed index finalization in ${Date.now() - finalizeStart} ms`,
+        );
+        current.stats.totalIndexEntries = totalIndexEntries;
+        log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
+        perfLog.debug(
+          `completed from scratch indexing for realm ${
+            current.realmURL.href
+          } in ${Date.now() - start} ms`,
+        );
+      });
+    } catch (e: any) {
+      log.error(
+        `Encountered error during full scratch indexing of realm ${current.realmURL.href}: ${e.message} - ${e.stack}`,
       );
-      let mtimesStart = Date.now();
-      let filesystemMtimes = await current.#reader.mtimes();
-      perfLog.debug(
-        `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
-      );
-      invalidations = Object.keys(filesystemMtimes)
-        .filter(
-          (url) =>
-            // Only allow json and executable files to be invalidated so that we
-            // don't end up with invalidated files that weren't meant to be indexed
-            // (images, etc)
-            url.endsWith('.json') || hasExecutableExtension(url),
-        )
-        .map((url) => new URL(url));
-    } else {
-      let mtimesStart = Date.now();
-      let mtimes = await current.batch.getModifiedTimes();
-      perfLog.debug(
-        `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
-      );
-      let invalidateStart = Date.now();
-      invalidations = (
-        await current.discoverInvalidations(current.realmURL, mtimes)
-      ).map((href) => new URL(href));
-      perfLog.debug(
-        `completed invalidations in ${Date.now() - invalidateStart} ms`,
+      console.error(
+        `Encountered error during full scratch indexing of ${current.realmURL.href}`,
+        e,
       );
     }
-
-    await current.whileIndexing(async () => {
-      let visitStart = Date.now();
-      for (let invalidation of invalidations) {
-        await current.tryToVisit(invalidation);
-      }
-      perfLog.debug(`completed index visit in ${Date.now() - visitStart} ms`);
-      let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
-      perfLog.debug(
-        `completed index finalization in ${Date.now() - finalizeStart} ms`,
-      );
-      current.stats.totalIndexEntries = totalIndexEntries;
-      log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
-      perfLog.debug(
-        `completed from scratch indexing for realm ${
-          current.realmURL.href
-        } in ${Date.now() - start} ms`,
-      );
-    });
     return {
       invalidations: [...(invalidations ?? [])].map((url) => url.href),
       ignoreData: current.#ignoreData,
@@ -205,30 +215,40 @@ export class CurrentRun {
   ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
-
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
-    let invalidations = (await current.batch.invalidate(url)).map(
-      (href) => new URL(href),
-    );
-
-    await current.whileIndexing(async () => {
-      for (let invalidation of invalidations) {
-        if (operation === 'delete' && invalidation.href === url.href) {
-          // file is deleted, there is nothing to visit
-        } else {
-          await current.tryToVisit(invalidation);
-        }
-      }
-
-      let { totalIndexEntries } = await current.batch.done();
-      current.stats.totalIndexEntries = totalIndexEntries;
-
-      log.debug(
-        `completed incremental indexing for ${url.href} in ${
-          Date.now() - start
-        }ms`,
+    let invalidations: URL[] = [];
+    try {
+      current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+      invalidations = (await current.batch.invalidate(url)).map(
+        (href) => new URL(href),
       );
-    });
+
+      await current.whileIndexing(async () => {
+        for (let invalidation of invalidations) {
+          if (operation === 'delete' && invalidation.href === url.href) {
+            // file is deleted, there is nothing to visit
+          } else {
+            await current.tryToVisit(invalidation);
+          }
+        }
+
+        let { totalIndexEntries } = await current.batch.done();
+        current.stats.totalIndexEntries = totalIndexEntries;
+
+        log.debug(
+          `completed incremental indexing for ${url.href} in ${
+            Date.now() - start
+          }ms`,
+        );
+      });
+    } catch (e: any) {
+      log.error(
+        `Encountered error during incremental indexing of realm ${url.href}: ${e.message} - ${e.stack}`,
+      );
+      console.error(
+        `Encountered error during incremental indexing of ${url.href}`,
+        e,
+      );
+    }
     return {
       invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
@@ -321,14 +341,11 @@ export class CurrentRun {
         skipList.push(url);
       }
     }
-    // back this out until we can figure out why it gets trapped in a loop in
-    // experiments realm indexing
-
-    // if (skipList.length === 0) {
-    //   // the whole realm needs to be visited, no need to calculate
-    //   // invalidations--it's everything
-    //   return invalidationList;
-    // }
+    if (skipList.length === 0) {
+      // the whole realm needs to be visited, no need to calculate
+      // invalidations--it's everything
+      return invalidationList;
+    }
 
     let invalidationStart = Date.now();
     for (let invalidationURL of invalidationList) {
