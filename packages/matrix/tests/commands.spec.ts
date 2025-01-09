@@ -120,14 +120,14 @@ test.describe('Commands', () => {
       },
     });
     let searchCardTool = boxelMessageData.context.tools.find(
-      (t: any) => t.function.name === 'searchCard',
+      (t: any) => t.function.name === 'searchCardsByTypeAndTitle',
     );
     expect(searchCardTool).toMatchObject({
       type: 'function',
       function: {
-        name: 'searchCard',
+        name: 'searchCardsByTypeAndTitle',
         description:
-          'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
+          'Propose a query to search for card instances filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `cardType` attribute.',
         parameters: {
           type: 'object',
           properties: {
@@ -137,29 +137,20 @@ test.describe('Commands', () => {
             attributes: {
               type: 'object',
               properties: {
-                filter: {
+                title: {
+                  type: 'string',
+                  description: 'title of the card',
+                },
+                cardType: {
+                  type: 'string',
+                  description: 'name of the card type',
+                },
+                type: {
                   type: 'object',
+                  description: 'CodeRef of the card type',
                   properties: {
-                    contains: {
-                      type: 'object',
-                      properties: {
-                        title: {
-                          type: 'string',
-                          description: 'title of the card',
-                        },
-                      },
-                      required: ['title'],
-                    },
-                    eq: {
-                      type: 'object',
-                      properties: {
-                        _cardType: {
-                          type: 'string',
-                          description: 'name of the card type',
-                        },
-                      },
-                      required: ['_cardType'],
-                    },
+                    module: { type: 'string' },
+                    name: { type: 'string' },
                   },
                 },
               },
@@ -293,15 +284,13 @@ test.describe('Commands', () => {
       formatted_body: 'some command',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${appURL}person`,
-                  name: 'Person',
-                },
+              type: {
+                module: `${appURL}person`,
+                name: 'Person',
               },
             },
           },

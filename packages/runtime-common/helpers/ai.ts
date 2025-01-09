@@ -416,34 +416,15 @@ export function getPatchTool(
   };
 }
 
-const containsFilterProperty = {
-  type: 'object',
-  properties: {
-    title: { type: 'string', description: 'title of the card' },
-  },
-  required: ['title'],
-};
-
-const eqCardTypeFilterProperty = {
-  type: 'object',
-  properties: {
-    _cardType: {
-      type: 'string',
-      description: 'name of the card type',
-    },
-  },
-  required: ['_cardType'],
-};
-
 export function getSearchTool() {
   return {
     type: 'function',
     function: {
-      name: 'searchCard',
+      name: 'searchCardsByTypeAndTitle',
       description:
-        'Propose a query to search for a card instance filtered by type. \
+        'Propose a query to search for card instances filtered by type. \
   If a card was shared with you, always prioritise search based upon the card that was last shared. \
-  If you do not have information on card module and name, do the search using the `_cardType` attribute.',
+  If you do not have information on card module and name, do the search using the `cardType` attribute.',
       parameters: {
         type: 'object',
         properties: {
@@ -453,11 +434,17 @@ export function getSearchTool() {
           attributes: {
             type: 'object',
             properties: {
-              filter: {
+              cardType: {
+                type: 'string',
+                description: 'name of the card type',
+              },
+              title: { type: 'string', description: 'title of the card' },
+              type: {
                 type: 'object',
+                description: 'CodeRef of the card type',
                 properties: {
-                  contains: containsFilterProperty,
-                  eq: eqCardTypeFilterProperty,
+                  module: { type: 'string' },
+                  name: { type: 'string' },
                 },
               },
             },

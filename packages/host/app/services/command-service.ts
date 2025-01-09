@@ -4,8 +4,6 @@ import { isTesting } from '@embroider/macros';
 
 import { task, timeout, all } from 'ember-concurrency';
 
-import flatMap from 'lodash/flatMap';
-
 import { IEvent } from 'matrix-js-sdk';
 
 import { TrackedSet } from 'tracked-built-ins';
@@ -17,12 +15,9 @@ import {
   CommandContext,
   CommandContextStamp,
   baseRealm,
+  ResolvedCodeRef,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import {
-  type CardTypeFilter,
-  type EqFilter,
-  assertQuery,
-} from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -32,6 +27,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
+import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
@@ -155,29 +151,17 @@ export default class CommandService extends Service {
             relationships: payload?.attributes?.patch?.relationships,
           },
         );
-      } else if (command.name === 'searchCard') {
+      } else if (command.name === 'searchCardsByTypeAndTitle') {
         if (!hasSearchData(payload)) {
           throw new Error(
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        let query = { filter: payload.attributes.filter };
-        let realmUrls = this.realmServer.availableRealmURLs;
-        let instances: CardDef[] = flatMap(
-          await Promise.all(
-            realmUrls.map(
-              async (realm) =>
-                await this.cardService.search(query, new URL(realm)),
-            ),
-          ),
-        );
-        let commandModule = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
-        let { SearchCardsResult } = commandModule;
-        resultCard = new SearchCardsResult({
-          cardIds: instances.map((c) => c.id),
-          description: `Query: ${JSON.stringify(query.filter, null, 2)}`,
+        let command = new SearchCardsByTypeAndTitleCommand(this.commandContext);
+        resultCard = await command.execute({
+          title: payload.attributes.title,
+          cardType: payload.attributes.cardType,
+          type: payload.attributes.type,
         });
       } else if (command.name === 'generateAppModule') {
         let realmURL = this.operatorModeStateService.realmURL;
@@ -230,6 +214,7 @@ export default class CommandService extends Service {
           : e instanceof Error
           ? e
           : new Error('Command failed.');
+      console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(eventId, error);
     } finally {
@@ -240,7 +225,7 @@ export default class CommandService extends Service {
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
 type SearchPayload = {
-  attributes: { cardId: string; filter: CardTypeFilter | EqFilter };
+  attributes: { cardType?: string; title?: string; type?: ResolvedCodeRef };
 };
 
 function hasPatchData(payload: any): payload is PatchPayload {
@@ -252,6 +237,9 @@ function hasPatchData(payload: any): payload is PatchPayload {
 }
 
 function hasSearchData(payload: any): payload is SearchPayload {
-  assertQuery({ filter: payload.attributes.filter });
-  return payload;
+  return (
+    isResolvedCodeRef(payload.attributes?.cardType) ||
+    payload.attributes?.title ||
+    payload.attributes?.type
+  );
 }
