@@ -8,6 +8,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import { BlogApp as BlogAppCard } from './blog-app';
 import { htmlSafe } from '@ember/template';
+import { ColorField } from './color';
 
 function htmlSafeColor(color?: string) {
   return htmlSafe(`background-color: ${color || ''}`);
@@ -18,8 +19,8 @@ export const categoryStyle = (category: Partial<BlogCategory>) => {
     return;
   }
   return htmlSafe(`
-    background-color: ${category.backgroundColor || '#FFFFFF'};
-    color: ${category.textColor || '#000000'};
+    background-color: ${category.backgroundColor?.hexValue || '#000000'};
+    color: ${category.textColor?.hexValue || '#ffffff'};
   `);
 };
 
@@ -74,8 +75,8 @@ export class BlogCategory extends CardDef {
   @field longName = contains(StringField);
   @field shortName = contains(StringField);
   @field slug = contains(StringField);
-  @field backgroundColor = contains(StringField);
-  @field textColor = contains(StringField);
+  @field backgroundColor = contains(ColorField);
+  @field textColor = contains(ColorField);
   @field description = contains(StringField);
   @field blog = linksTo(BlogAppCard, { isUsed: true });
 
@@ -98,7 +99,10 @@ export class BlogCategory extends CardDef {
       </style>
       <div class='category-atom'>
         {{! template-lint-disable no-inline-styles }}
-        <div class='circle' style={{htmlSafeColor @model.backgroundColor}} />
+        <div
+          class='circle'
+          style={{htmlSafeColor @model.backgroundColor.hexValue}}
+        />
         <@fields.longName />
       </div>
     </template>
