@@ -19,7 +19,6 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
-import { ContactRow } from '../components/contact-row';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
@@ -189,24 +188,15 @@ class IsolatedTemplate extends Component<typeof Account> {
             <:content>
               <div class='description content-container'>
                 {{#if this.hasContacts}}
-                  {{#if @model.primaryContact}}
-                    <ContactRow
-                      @userID={{@model.primaryContact.id}}
-                      @name={{@model.primaryContact.name}}
-                      @thumbnailURL={{@model.primaryContact.thumbnailURL}}
-                      @tagLabel='primary'
-                    />
-                  {{/if}}
-                  {{#each @model.contacts as |contact|}}
-                    {{#if contact}}
-                      <ContactRow
-                        @userID={{contact.id}}
-                        @name={{contact.name}}
-                        @thumbnailURL={{contact.thumbnailURL}}
-                        @tagLabel={{contact.position}}
-                      />
-                    {{/if}}
-                  {{/each}}
+                  <@fields.primaryContact
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
+
+                  <@fields.contacts
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
                 {{else}}
                   <div class='default-value'>
                     Missing Contacts
@@ -517,6 +507,80 @@ class FittedTemplate extends Component<typeof Account> {
         .account-header-fitted {
           --account-header-logo-display: none;
         }
+      }
+    </style>
+  </template>
+}
+
+class AtomTemplate extends Component<typeof Account> {
+  get hasContacts() {
+    return (
+      this.args.model.primaryContact?.name ||
+      (this.args.model.contacts?.length ?? 0) > 0 //contacts is a proxy array
+    );
+  }
+
+  get contact() {
+    return this.args.model.primaryContact || this.args.model.contacts[0];
+  }
+
+  get isContactPrimary() {
+    return Boolean(this.args.model?.primaryContact);
+  }
+
+  get contactID() {
+    return this.contact?.id;
+  }
+
+  get contactName() {
+    return this.contact?.name;
+  }
+
+  get contactThumbnailURL() {
+    return this.contact?.thumbnailURL;
+  }
+
+  get contactCompanyName() {
+    return this.contact?.company?.name;
+  }
+
+  <template>
+    {{#if this.hasContacts}}
+      <EntityDisplayWithThumbnail @title={{this.contactName}}>
+        <:tag>
+          {{#if this.isContactPrimary}}
+            <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+              Primary
+            </Pill>
+          {{/if}}
+        </:tag>
+        <:thumbnail>
+          <Avatar
+            @userID={{this.contactID}}
+            @displayName={{this.contactName}}
+            @thumbnailURL={{this.contactThumbnailURL}}
+            @isReady={{true}}
+            class='avatar'
+          />
+        </:thumbnail>
+        <:content>
+          <span>
+            {{this.contactCompanyName}}
+          </span>
+        </:content>
+      </EntityDisplayWithThumbnail>
+    {{/if}}
+    <style scoped>
+      .avatar {
+        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-border: 0px;
+        flex-shrink: 0;
+      }
+      .primary-tag {
+        --pill-font-weight: 400;
+        --pill-padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
+        --pill-font: 400 var(--boxel-font-xs);
+        --pill-border: none;
       }
     </style>
   </template>
