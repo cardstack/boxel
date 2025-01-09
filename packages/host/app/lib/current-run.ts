@@ -360,6 +360,7 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
+    console.log(`begin visiting file ${url.href}`);
     let localPath: string;
     try {
       localPath = this.#realmPaths.local(url);
@@ -398,6 +399,7 @@ export class CurrentRun {
           resource = data;
         } catch (e) {
           log.warn(`unable to parse ${url.href} as card JSON`);
+          console.log(`unable to parse ${url.href} as card JSON`);
         }
 
         if (resource && isCardResource(resource)) {
@@ -418,6 +420,9 @@ export class CurrentRun {
         }
       }
     }
+    console.log(
+      `completed visiting file ${url.href} in ${Date.now() - start}ms`,
+    );
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
@@ -686,6 +691,9 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
+      console.log(
+        `encountered error indexing card instance ${path}: ${error.error.message}`,
+      );
       log.warn(
         `encountered error indexing card instance ${path}: ${error.error.message}`,
       );
