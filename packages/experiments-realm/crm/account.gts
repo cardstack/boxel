@@ -33,6 +33,8 @@ import Handshake from '@cardstack/boxel-icons/handshake';
 import ClockX from '@cardstack/boxel-icons/clock-x';
 import ClockUp from '@cardstack/boxel-icons/clock-up';
 import Contract from '@cardstack/boxel-icons/contract';
+import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
+import { Pill, Avatar } from '@cardstack/boxel-ui/components';
 
 export const urgencyTagValues = [
   {
@@ -521,7 +523,7 @@ class AtomTemplate extends Component<typeof Account> {
   }
 
   get contact() {
-    return this.args.model.primaryContact || this.args.model.contacts[0];
+    return this.args.model?.primaryContact || this.args.model?.contacts?.[0];
   }
 
   get isContactPrimary() {
@@ -645,6 +647,7 @@ export class Account extends CardDef {
 
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
+  static atom = AtomTemplate;
 }
 
 interface AccountPageLayoutArgs {
