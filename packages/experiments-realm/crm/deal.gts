@@ -577,61 +577,55 @@ class FittedTemplate extends Component<typeof Deal> {
               <h1 class='account-name default-value'>Missing Deal Name</h1>
             {{/if}}
           </:name>
-          <:content>
-            <div class='account-info'>
-              <@fields.company
-                @format='atom'
-                @displayContainer={{false}}
-                class='info-atom'
-              />
-              <@fields.primaryContact
-                @format='atom'
-                @displayContainer={{false}}
-                class='info-atom'
-              />
-            </div>
-          </:content>
         </AccountHeader>
-
-        <div class='deal-status'>
-          <@fields.status @format='atom' @displayContainer={{false}} />
-        </div>
       </header>
+
+      <div class='account-info'>
+        <@fields.company
+          @format='atom'
+          @displayContainer={{false}}
+          class='info-atom'
+        />
+        <@fields.primaryContact
+          @format='atom'
+          @displayContainer={{false}}
+          class='info-atom'
+        />
+      </div>
 
       <div class='deal-content'>
         <div class='deal-details'>
           <div class='deal-field'>
-            <label>Current Value:</label>
+            <label>Current Value</label>
             <@fields.computedValue class='highlight-value' @format='atom' />
           </div>
-
           <div class='deal-field'>
             <label>Close Date</label>
             <div class='highlight-value'>
               <@fields.closeDate @format='atom' />
             </div>
           </div>
-
-          {{#if @model.healthScore}}
-            <div class='deal-field'>
-              <label>Health Score</label>
-              <div class='progress-container'>
-                <CrmProgressBar
-                  @value={{@model.healthScore}}
-                  @max={{100}}
-                  @color='var(--boxel-green)'
-                />
-                <div class='highlight-value'>
-                  {{@model.healthScore}}
-                </div>
+        </div>
+        {{#if @model.healthScore}}
+          <div class='health-score'>
+            <label>Health Score</label>
+            <div class='progress-container'>
+              <CrmProgressBar
+                class='progress-bar'
+                @value={{@model.healthScore}}
+                @max={{100}}
+                @color='var(--boxel-green)'
+              />
+              <div class='highlight-value'>
+                {{@model.healthScore}}
               </div>
             </div>
-          {{/if}}
-        </div>
+          </div>
+        {{/if}}
+      </div>
 
-        <div class='event-details'>
-          {{! just serve the placeholder for grid system ,pending event card - https://linear.app/cardstack/issue/CS-7691/add-event-card }}
-        </div>
+      <div class='event-details'>
+        {{! just serve the placeholder for grid system ,pending event card - https://linear.app/cardstack/issue/CS-7691/add-event-card }}
       </div>
 
     </article>
@@ -655,30 +649,23 @@ class FittedTemplate extends Component<typeof Deal> {
         height: 100%;
         grid-template-areas:
           'deal-header'
+          'account-info'
           'deal-content';
-        grid-template-rows: max-content auto;
-        gap: var(--boxel-sp);
+        grid-template-rows: max-content auto auto;
+        row-gap: var(--boxel-sp);
         padding: var(--boxel-sp);
       }
       .deal-header {
         grid-area: deal-header;
-        display: grid;
-        grid-template-areas: 'crm-account-header deal-status';
-        grid-template-columns: 75% auto;
-        align-items: start;
-        gap: var(--boxel-sp-lg);
       }
       .deal-content {
         grid-area: deal-content;
-        display: grid;
-        grid-template-areas: 'deal-details event-details';
-        grid-template-columns: 1fr 1fr;
-        align-items: center;
         gap: var(--boxel-sp-lg);
         margin-top: auto;
       }
       .crm-account-header {
         grid-area: crm-account-header;
+        --account-header-logo-size: 40px;
         overflow: hidden;
       }
       .deal-status {
@@ -686,14 +673,18 @@ class FittedTemplate extends Component<typeof Deal> {
         margin-left: auto;
       }
       .account-name {
-        font-size: var(--boxel-font-size-med);
-        font-weight: 600;
+        font: 600 var(--boxel-font-sm);
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .account-info {
+        grid-area: account-info;
         display: flex;
-        align-items: start;
+        flex-direction: column;
         gap: var(--boxel-sp-xs);
-        overflow: hidden;
       }
       .account-name,
       .account-info:deep(.entity-name) {
@@ -712,21 +703,28 @@ class FittedTemplate extends Component<typeof Deal> {
       .deal-details {
         grid-area: deal-details;
         display: flex;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
       }
       .deal-field {
         display: flex;
         flex-direction: column;
+      }
+      .health-score {
+        display: flex;
+        flex-direction: column;
         gap: var(--boxel-sp-xxs);
+        margin-top: var(--boxel-sp);
       }
       .highlight-value {
-        font-weight: 600;
-        font-size: calc(var(--boxel-font-size) - 1px);
+        font: 600 var(--boxel-font-xs);
       }
       .progress-container {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
+      }
+      .progress-bar {
+        width: 100%;
       }
       .event-details {
         grid-area: event-details;
@@ -742,7 +740,9 @@ class FittedTemplate extends Component<typeof Deal> {
         .deal-content {
           display: none;
         }
-
+        .event-details {
+          display: none;
+        }
         .deal-header {
           grid-area: deal-header;
           display: grid;
@@ -750,17 +750,6 @@ class FittedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr;
           align-items: start;
           gap: var(--boxel-sp-lg);
-        }
-        .deal-status {
-          display: none;
-        }
-
-        .deal-header:deep(.account-header-logo) {
-          width: 40px;
-          height: 40px;
-        }
-        .account-name {
-          font-size: var(--boxel-font-size-sm);
         }
       }
     </style>
