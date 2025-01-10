@@ -7,6 +7,7 @@ import {
   trimExecutableExtension,
   RealmPaths,
   unixTime,
+  logger,
 } from './index';
 import { transpileJS } from './transpile';
 import {
@@ -97,6 +98,7 @@ export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
   #dbAdapter: DBAdapter;
+  #perfLog = logger('index-perf');
   private declare realmVersion: number;
 
   constructor(
@@ -464,6 +466,7 @@ export class Batch {
   ): Promise<
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
   > {
+    let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
       type: 'instance' | 'module' | 'error';
@@ -495,6 +498,9 @@ export class Batch {
           // css is a subset of modules, so there won't by any references that
           // are css entries that aren't already represented by a module entry
           [`i.type != 'css'`],
+          // probably need to reevaluate this condition when we get to cross
+          // realm invalidation
+          [`i.realm_url =`, param(this.realmURL.href)],
         ]),
         'ORDER BY i.url COLLATE "POSIX"',
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
@@ -504,6 +510,11 @@ export class Batch {
       results = [...results, ...rows];
       pageNumber++;
     } while (rows.length === pageSize);
+    this.#perfLog.debug(
+      `time to determine items that reference ${resolvedPath} ${
+        Date.now() - start
+      } ms`,
+    );
     return results.map(({ url, file_alias, type }) => ({
       url,
       alias: file_alias,
@@ -522,17 +533,11 @@ export class Batch {
       return [];
     }
     visited.add(resolvedPath);
-    let childInvalidations = await this.itemsThatReference(resolvedPath);
-    let realmPath = new RealmPaths(this.realmURL);
-    let invalidationsInThisRealm = childInvalidations.filter((c) =>
-      realmPath.inRealm(new URL(c.url)),
-    );
-
-    let invalidations = invalidationsInThisRealm.map(({ url }) => url);
-    let aliases = invalidationsInThisRealm.map(
-      ({ alias: moduleAlias, type, url }) =>
-        // for instances we expect that the deps for an entry always includes .json extension
-        type === 'instance' ? url : moduleAlias,
+    let items = await this.itemsThatReference(resolvedPath);
+    let invalidations = items.map(({ url }) => url);
+    let aliases = items.map(({ alias: moduleAlias, type, url }) =>
+      // for instances we expect that the deps for an entry always includes .json extension
+      type === 'instance' ? url : moduleAlias,
     );
     let results = [
       ...invalidations,

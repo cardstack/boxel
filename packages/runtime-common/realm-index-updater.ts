@@ -7,7 +7,7 @@ import {
   type Stats,
   type DBAdapter,
   type QueuePublisher,
-  type WorkerArgs,
+  type FromScratchArgs,
   type FromScratchResult,
   type IncrementalArgs,
   type IncrementalResult,
@@ -81,8 +81,8 @@ export class RealmIndexUpdater {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
 
-  async run() {
-    await this.fullIndex();
+  async run(invalidateEntireRealm?: boolean) {
+    await this.fullIndex(invalidateEntireRealm);
   }
 
   indexing() {
@@ -92,12 +92,13 @@ export class RealmIndexUpdater {
   // TODO consider triggering SSE events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
-  async fullIndex() {
+  async fullIndex(invalidateEntireRealm?: boolean) {
     this.#indexingDeferred = new Deferred<void>();
     try {
-      let args: WorkerArgs = {
+      let args: FromScratchArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.getRealmUsername(),
+        invalidateEntireRealm: Boolean(invalidateEntireRealm),
       };
       let job = await this.#queue.publish<FromScratchResult>(
         `from-scratch-index`,
