@@ -584,12 +584,12 @@ class FittedTemplate extends Component<typeof Deal> {
         <@fields.company
           @format='atom'
           @displayContainer={{false}}
-          class='info-atom'
+          class='fitted-account-info-atom'
         />
         <@fields.primaryContact
           @format='atom'
           @displayContainer={{false}}
-          class='info-atom'
+          class='fitted-account-info-atom'
         />
       </div>
 
@@ -650,8 +650,9 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-template-areas:
           'deal-header'
           'account-info'
-          'deal-content';
-        grid-template-rows: max-content auto auto;
+          'deal-content'
+          'event-details';
+        grid-template-rows: max-content auto auto auto;
         row-gap: var(--boxel-sp);
         padding: var(--boxel-sp);
       }
@@ -661,7 +662,6 @@ class FittedTemplate extends Component<typeof Deal> {
       .deal-content {
         grid-area: deal-content;
         gap: var(--boxel-sp-lg);
-        margin-top: auto;
       }
       .crm-account-header {
         grid-area: crm-account-header;
@@ -684,9 +684,8 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: account-info;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xs);
+        row-gap: var(--boxel-sp-xs);
       }
-      .account-name,
       .account-info:deep(.entity-name) {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -695,14 +694,17 @@ class FittedTemplate extends Component<typeof Deal> {
         -webkit-line-clamp: 1;
         width: 100%;
       }
-      .info-atom {
+      .fitted-account-info-atom {
         width: fit-content;
         display: inline-flex;
+        --entity-display-icon-size: var(--boxel-icon-sm);
+        --entity-display-title-font-size: var(--boxel-font-size-xs);
       }
       /* deal details */
       .deal-details {
         grid-area: deal-details;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: var(--boxel-sp);
       }
       .deal-field {
