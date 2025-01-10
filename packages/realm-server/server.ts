@@ -347,18 +347,21 @@ export class RealmServer {
       this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
     }
 
-    let realm = new Realm({
-      url,
-      adapter,
-      secretSeed: this.secretSeed,
-      virtualNetwork: this.virtualNetwork,
-      dbAdapter: this.dbAdapter,
-      queue: this.queue,
-      matrix: {
-        url: this.matrixClient.matrixURL,
-        username,
+    let realm = new Realm(
+      {
+        url,
+        adapter,
+        secretSeed: this.secretSeed,
+        virtualNetwork: this.virtualNetwork,
+        dbAdapter: this.dbAdapter,
+        queue: this.queue,
+        matrix: {
+          url: this.matrixClient.matrixURL,
+          username,
+        },
       },
-    });
+      { invalidateEntireRealm: true },
+    );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
