@@ -72,6 +72,10 @@ export class RoomResource extends Resource<Args> {
     new TrackedMap();
   @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
+
+  // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
+  // that updates immediately after the user selects the LLM.
+  @tracked _activeLLM: string | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
   @service private declare cardService: CardService;
@@ -83,6 +87,7 @@ export class RoomResource extends Resource<Args> {
       }
       this._previousRoomId = named.roomId;
       this.loading = this.load.perform(named.roomId);
+      this._activeLLM = undefined;
     }
   }
 
@@ -214,8 +219,24 @@ export class RoomResource extends Resource<Args> {
   }
 
   get activeLLM() {
-    return this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+    return this._activeLLM ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
+
+  activateLLM(model: string) {
+    this._activeLLM = model;
+    this.activateLLMTask.perform(model);
+  }
+
+  get isActivatingLLM() {
+    return this.activateLLMTask.isRunning;
+  }
+
+  private activateLLMTask = restartableTask(async (model: string) => {
+    if (!this.matrixRoom) {
+      throw new Error('matrixRoom is required to activate LLM');
+    }
+    await this.matrixService.sendActiveLLMEvent(this.matrixRoom.roomId, model);
+  });
 
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
