@@ -5,6 +5,7 @@ import * as MatrixSDK from 'matrix-js-sdk';
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -425,6 +426,7 @@ export class MockClient implements ExtendedClient {
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+      case APP_BOXEL_ACTIVE_LLM:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':
