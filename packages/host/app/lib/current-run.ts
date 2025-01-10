@@ -730,44 +730,75 @@ export class CurrentRun {
     this.#typesCache.set(card, deferred.promise);
     let types: CardType[] = [];
     let fullRef: CodeRef = ref;
-    while (fullRef) {
-      let loadedCard: typeof CardAPI.CardDef,
-        loadedCardRef: CodeRef | undefined;
-      try {
-        let maybeCard = await loadCard(fullRef, {
-          loader: this.loaderService.loader,
-        });
-        if (!isCardDef(maybeCard)) {
-          throw new Error(
-            `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
-          );
+    let result: TypesWithErrors | undefined;
+    try {
+      while (fullRef) {
+        let loadedCard: typeof CardAPI.CardDef,
+          loadedCardRef: CodeRef | undefined;
+        try {
+          let maybeCard = await loadCard(fullRef, {
+            loader: this.loaderService.loader,
+          });
+          if (!isCardDef(maybeCard)) {
+            result = {
+              type: 'error' as const,
+              error: serializableError(
+                new Error(
+                  `The definition at ${JSON.stringify(
+                    fullRef,
+                  )} is not a CardDef`,
+                ),
+              ),
+            };
+            return result;
+          }
+          loadedCard = maybeCard;
+          loadedCardRef = identifyCard(loadedCard);
+          if (!loadedCardRef) {
+            result = {
+              type: 'error' as const,
+              error: serializableError(
+                new Error(`could not identify card ${loadedCard.name}`),
+              ),
+            };
+            return result;
+          }
+        } catch (error) {
+          result = {
+            type: 'error' as const,
+            error: serializableError(error),
+          };
+          return result;
         }
-        loadedCard = maybeCard;
-        loadedCardRef = identifyCard(loadedCard);
-        if (!loadedCardRef) {
-          throw new Error(`could not identify card ${loadedCard.name}`);
-        }
-      } catch (error) {
-        return { type: 'error', error: serializableError(error) };
-      }
 
-      types.push({
-        refURL: internalKeyFor(loadedCardRef, undefined),
-        codeRef: loadedCardRef,
-        displayName: getDisplayName(loadedCard),
-      });
-      if (!isEqual(loadedCardRef, baseCardRef)) {
-        fullRef = {
-          type: 'ancestorOf',
-          card: loadedCardRef,
-        };
+        types.push({
+          refURL: internalKeyFor(loadedCardRef, undefined),
+          codeRef: loadedCardRef,
+          displayName: getDisplayName(loadedCard),
+        });
+        if (!isEqual(loadedCardRef, baseCardRef)) {
+          fullRef = {
+            type: 'ancestorOf',
+            card: loadedCardRef,
+          };
+        } else {
+          break;
+        }
+      }
+      result = { type: 'types', types };
+      return result;
+    } finally {
+      if (result) {
+        deferred.fulfill(result);
       } else {
-        break;
+        deferred.fulfill({
+          type: 'error',
+          error: serializableError(
+            new Error(`unable to determine result for card type ${card.name}`),
+          ),
+        });
       }
     }
-    let result: TypesWithErrors = { type: 'types', types };
-    deferred.fulfill(result);
-    return result;
   }
 }
 

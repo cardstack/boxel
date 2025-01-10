@@ -4849,6 +4849,22 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'chess-gallery.gts': {
+                links: {
+                  related: `${testRealmHref}chess-gallery.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'ChessGallery/': {
+                links: {
+                  related: `${testRealmHref}ChessGallery/`,
+                },
+                meta: {
+                  kind: 'directory',
+                },
+              },
               'code-ref-test.gts': {
                 links: {
                   related: `${testRealmHref}code-ref-test.gts`,

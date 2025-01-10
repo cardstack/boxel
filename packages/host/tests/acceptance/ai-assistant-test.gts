@@ -7,6 +7,11 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 import { baseRealm } from '@cardstack/runtime-common';
 
 import {
+  APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_LLM,
+} from '@cardstack/runtime-common/matrix-constants';
+
+import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -101,7 +106,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+  let { createAndJoinRoom, getRoomState } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
@@ -291,5 +296,27 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
       },
     ]);
+  });
+
+  test('displays active LLM in chat input', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+
+    assert.dom('[data-test-llm-name]').hasText(DEFAULT_LLM);
+    await click('[data-test-llm-name]');
+    await click('[data-test-llm-name="google/gemini-pro-1.5"]');
+    assert.dom('[data-test-llm-name]').hasText('google/gemini-pro-1.5');
+
+    let roomState = getRoomState('mock_room_1', APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');
   });
 });
