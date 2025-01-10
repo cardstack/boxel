@@ -266,7 +266,7 @@ export class RoomResource extends Resource<Args> {
         !event.content.isStreamingFinished
       ) {
         // we don't need to process this event if it's not finished streaming,
-        // but we do need to note it's creation time so that we can capture the earliest one
+        // but we do need to capture the earliest create time and update the message
         let earliestKnownCreateTime =
           this._messageCreateTimesCache.get(effectiveEventId);
         if (
@@ -281,6 +281,9 @@ export class RoomResource extends Resource<Args> {
             this._messageCache.get(effectiveEventId);
           if (alreadyProcessedMessage) {
             alreadyProcessedMessage.created = new Date(event.origin_server_ts);
+            alreadyProcessedMessage.message = event.content.body;
+            alreadyProcessedMessage.formattedMessage =
+              event.content.formatted_body;
           }
         }
         return;
