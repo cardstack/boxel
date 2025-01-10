@@ -31,6 +31,7 @@ export class RealmAuthClient {
     options?: Options,
   ) {
     this.isRealmServerAuth = Boolean(options?.authWithRealmServer);
+    console.log('i exist', realmURL, options);
   }
 
   get jwt(): string | undefined {

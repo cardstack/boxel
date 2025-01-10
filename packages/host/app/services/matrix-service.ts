@@ -86,6 +86,7 @@ import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type MessageService from './message-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
@@ -108,6 +109,7 @@ export default class MatrixService extends Service {
   @service private declare commandService: CommandService;
   @service private declare realm: RealmService;
   @service private declare matrixSdkLoader: MatrixSDKLoader;
+  @service private declare messageService: MessageService;
   @service private declare realmServer: RealmServerService;
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
@@ -1312,6 +1314,15 @@ export default class MatrixService extends Service {
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
       await this.realmServer.handleEvent(event);
+    } else if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'app.boxel.sse'
+    ) {
+      // FIXME provenance should be checked
+      console.log('received sse event', event);
+      let parsedEventContent = JSON.parse(event.content.body);
+      console.log('relayMatrixSSE', parsedEventContent);
+      this.messageService.relayMatrixSSE(parsedEventContent);
     }
     await this.addRoomEvent(event, oldEventId);
 

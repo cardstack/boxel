@@ -8,12 +8,16 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
+import type { RealmURLWrappedServerEvent } from '@cardstack/runtime-common/realm';
+
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
+  @tracked listenerCallbacks: Map<string, ((ev: ServerEvents) => void)[]> =
+    new Map();
   @service private declare network: NetworkService;
 
   register() {
@@ -48,12 +52,30 @@ export default class MessageService extends Service {
     // TODO might want to consider making separate subscription methods so that
     // you can subscribe to a specific type of events instead of all of the
     // events...
+
+    if (!this.listenerCallbacks.has(realmURL)) {
+      this.listenerCallbacks.set(realmURL, []);
+    }
+    this.listenerCallbacks.get(realmURL)?.push(cb);
+
     eventSource.addEventListener('update', cb);
     eventSource.addEventListener('index', cb);
     return () => {
       eventSource.removeEventListener('update', cb);
       eventSource.removeEventListener('index', cb);
     };
+  }
+
+  relayMatrixSSE(realmWrappedEvent: RealmURLWrappedServerEvent) {
+    console.log('relaying matrix sse event', realmWrappedEvent);
+    this.listenerCallbacks.get(realmWrappedEvent.realmURL)?.forEach((cb) => {
+      console.log('callback', cb);
+      let eventWithStringData = {
+        type: realmWrappedEvent.event.type,
+        data: JSON.stringify(realmWrappedEvent.event.data),
+      };
+      cb(eventWithStringData);
+    });
   }
 }
 

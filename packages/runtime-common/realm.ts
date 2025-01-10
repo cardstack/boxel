@@ -173,6 +173,11 @@ interface UpdateItem {
 
 type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
 
+type RealmURLWrappedServerEvent = {
+  realmURL: string;
+  event: ServerEvents;
+};
+
 interface UpdateEvent {
   type: 'update';
   data: UpdateEventData;
@@ -1863,6 +1868,7 @@ export class Realm {
   }
 
   private listeningClients: WritableStream[] = [];
+  private listeningUsers: string[] = [];
 
   private async subscribe(
     request: Request,
@@ -1913,6 +1919,26 @@ export class Realm {
         this.drainUpdates();
       });
     }
+
+    let authorizationString = request.headers.get('Authorization');
+
+    if (!authorizationString) {
+      throw new AuthenticationError(
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
+    }
+    let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
+
+    let token: TokenClaims;
+
+    try {
+      token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+      this.listeningUsers.push(token.user);
+    } catch (e) {
+      console.log('error storing listening user', e);
+    }
+
+    console.log('listeningUsers now', this.listeningUsers);
 
     this.listeningClients.push(writable);
     this.sendServerEvent({
@@ -1968,6 +1994,32 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
+    if (['update', 'index'].includes(event.type)) {
+      console.log(
+        `skipping sending ${event.type} event, sending via Matrix instead`,
+        event,
+      );
+
+      // FIXME duplicated in multiple places
+      let dmRooms =
+        (await this.#matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+
+      for (let user of this.listeningUsers) {
+        let roomId = dmRooms[user];
+        await this.#matrixClient.sendEvent(roomId, 'm.room.message', {
+          body: JSON.stringify({
+            realmURL: this.url,
+            event,
+          }),
+          msgtype: 'app.boxel.sse',
+          format: 'app.boxel.sse-format',
+        });
+      }
+
+      return;
+    }
     this.#log.debug(
       `sending updates to ${this.listeningClients.length} clients`,
     );
