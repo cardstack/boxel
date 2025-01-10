@@ -46,6 +46,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_ACTIVE_LLM,
   LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -1007,6 +1008,12 @@ export default class MatrixService extends Service {
       .getRoom(roomId)
       ?.getLiveTimeline()
       .getState('f' as MatrixSDK.Direction);
+  }
+
+  async sendActiveLLMEvent(roomId: string, model: string) {
+    await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
+      model,
+    });
   }
 
   private async addRoomEvent(event: TempEvent, oldEventId?: string) {
