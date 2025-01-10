@@ -5,8 +5,7 @@ import {
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
-import { ColorPalette } from '@cardstack/boxel-ui/components';
-import { ColorPicker } from '@cardstack/boxel-ui/components';
+import { ColorPalette, ColorPicker } from '@cardstack/boxel-ui/components';
 
 class View extends Component<typeof ColorPalette> {
   <template>
