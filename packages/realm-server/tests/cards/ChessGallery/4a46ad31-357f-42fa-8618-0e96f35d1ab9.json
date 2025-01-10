@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "pgn": "1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. f4 Bg7 5. Nf3 O-O 6. Bd3 c5 7. dxc5 Qa5 8. O-O Qxc5+ 9. Kh1 Nc6 10. Qe1 Bg4 11. Be3 Qa5 12. Nd2 Be6 13. f5 Bd7 14. Qh4 Ne5 15. Bh6 Bxh6 16. Qxh6 Neg4 17. Qh4 Kg7 18. Nc4 Qc5 19. Rae1 Bc6 20. h3 Ne5 21. Nxe5 Qxe5 22. Nd5 Bxd5 23. exd5 Qxb2 24. Rxe7 b5 25. a4 a6 26. Qg5 Rae8 27. Re6 bxa4 28. Rxd6 Qe5 29. Rxa6 Nxd5 30. f6+ Kh8 31. Qh6 Rg8 32. Rxa4 Nxf6 33. Rh4 Rg7 34. c4 Nh5 35. c5 Ng3+ 36. Kg1 Nxf1 37. Bxf1 Qxc5+ 38. Kh2 Qd6+ 39. Kg1 Qc5+ 40. Kh2 Re1 41. Qf4 Qe5 42. Rg4 Qxf4+ 43. Rxf4 f5 44. h4 Ra7 45. Kg3 Ra3+ 46. Kh2 Raa1 47. Bc4 Re4 48. Rxe4 fxe4 49. Kg3 Kg7 50. Kf4 Ra3 51. Be2 e3 52. Kf3 Kf6 53. g4 Ke5 54. h5 g5 55. Bc4 Rc3 56. Bg8 h6 57. Bf7 Kd4 58. Bg6 Rc6 59. Be4 Rf6+ 60. Bf5 Ke5 61. Kxe3 Rxf5 62. gxf5 Kxf5 63. Kf3 g4+ 64. Kg3 Kg5 65. Kg2 Kxh5 66. Kg3 Kg5 67. Kg2 h5 68. Kg3 h4+ 69. Kg2 h3+ 70. Kg3 Kh5 71. f3 gxf3 72. Kxh3 Kg5 73. Kg3 Kf5 74. Kf2 Ke4 75. Ke1 Kd3 76. Kf2 Ke4 77. Ke1 Kf4 78. Kf2",
+      "dateOfGame": "1999-10-23",
+      "whitePlayer": "Garry Kasparov",
+      "blackPlayer": "Veselin Topalov",
+      "title": "Kasparov's Immortal Game - 1999",
+      "description": "Garry Kasparov's stunning victory against Veselin Topalov at the 1999 Wijk aan Zee tournament, often referred to as Kasparov's Immortal.",
+      "thumbnailURL": "https://i.ytimg.com/vi/9PwSa7hkiKc/maxresdefault.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chess-gallery",
+        "name": "ChessGallery"
+      }
+    }
+  }
+}
