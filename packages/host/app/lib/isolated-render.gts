@@ -16,7 +16,7 @@ import type { SimpleElement } from '@simple-dom/interface';
 
 interface Signature {
   Args: {
-    format: Format;
+    format?: Format;
   };
 }
 
@@ -24,7 +24,7 @@ export function render(
   C: ComponentLike<Signature>,
   element: SimpleElement,
   owner: Owner,
-  format: Format,
+  format?: Format,
 ): void {
   // this needs to be a template-only component because the way we're invoking it
   // just grabs the template and would drop any associated class.

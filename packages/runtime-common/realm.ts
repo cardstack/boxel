@@ -163,6 +163,7 @@ export interface RealmAdapter {
 
 interface Options {
   disableModuleCaching?: true;
+  invalidateEntireRealm?: true;
 }
 
 interface UpdateItem {
@@ -247,12 +248,12 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
-  #startTime = Date.now();
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #invalidateEntireRealm = false;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -306,6 +307,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#invalidateEntireRealm = Boolean(opts?.invalidateEntireRealm);
 
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -590,8 +592,9 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
+    let startTime = Date.now();
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    let promise = this.#realmIndexUpdater.run();
+    let promise = this.#realmIndexUpdater.run(this.#invalidateEntireRealm);
     if (isNewIndex) {
       // we only await the full indexing at boot if this is a brand new index
       await promise;
@@ -601,7 +604,7 @@ export class Realm {
       data: { type: 'full', realmURL: this.url },
     });
     this.#perfLog.debug(
-      `realm server startup in ${Date.now() - this.#startTime}ms`,
+      `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
   }
 

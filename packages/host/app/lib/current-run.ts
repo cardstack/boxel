@@ -41,6 +41,7 @@ import {
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
+import { cardTypeIcon } from '@cardstack/runtime-common/helpers';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
@@ -50,6 +51,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   type RenderCard,
+  type Render,
   IdentityContextWithErrors,
 } from '../services/render-service';
 
@@ -57,6 +59,7 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 
 const log = logger('current-run');
+const perfLog = logger('index-perf');
 
 interface CardType {
   refURL: string;
@@ -82,6 +85,7 @@ export class CurrentRun {
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
   #renderCard: RenderCard;
+  #render: Render;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
   readonly stats: Stats = {
@@ -100,12 +104,14 @@ export class CurrentRun {
     indexWriter,
     ignoreData = {},
     renderCard,
+    render,
   }: {
     realmURL: URL;
     reader: Reader;
     indexWriter: IndexWriter;
     ignoreData?: Record<string, string>;
     renderCard: RenderCard;
+    render: Render;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL);
@@ -113,26 +119,72 @@ export class CurrentRun {
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#renderCard = renderCard;
+    this.#render = render;
   }
 
-  static async fromScratch(current: CurrentRun): Promise<IndexResults> {
+  static async fromScratch(
+    current: CurrentRun,
+    invalidateEntireRealm?: boolean,
+  ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from scratch indexing`);
-
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
-    let mtimes = await current.batch.getModifiedTimes();
-    await current.discoverInvalidations(current.realmURL, mtimes);
-    let invalidations = current.batch.invalidations.map(
-      (href) => new URL(href),
+    perfLog.debug(
+      `starting from scratch indexing for realm ${current.realmURL.href}`,
     );
 
+    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    let invalidations: URL[] = [];
+    if (invalidateEntireRealm) {
+      perfLog.debug(
+        `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
+      );
+      let mtimesStart = Date.now();
+      let filesystemMtimes = await current.#reader.mtimes();
+      perfLog.debug(
+        `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
+      );
+      invalidations = Object.keys(filesystemMtimes)
+        .filter(
+          (url) =>
+            // Only allow json and executable files to be invalidated so that we
+            // don't end up with invalidated files that weren't meant to be indexed
+            // (images, etc)
+            url.endsWith('.json') || hasExecutableExtension(url),
+        )
+        .map((url) => new URL(url));
+    } else {
+      let mtimesStart = Date.now();
+      let mtimes = await current.batch.getModifiedTimes();
+      perfLog.debug(
+        `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+      );
+      let invalidateStart = Date.now();
+      invalidations = (
+        await current.discoverInvalidations(current.realmURL, mtimes)
+      ).map((href) => new URL(href));
+      perfLog.debug(
+        `completed invalidations in ${Date.now() - invalidateStart} ms`,
+      );
+    }
+
     await current.whileIndexing(async () => {
+      let visitStart = Date.now();
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
+      perfLog.debug(`completed index visit in ${Date.now() - visitStart} ms`);
+      let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
+      perfLog.debug(
+        `completed index finalization in ${Date.now() - finalizeStart} ms`,
+      );
       current.stats.totalIndexEntries = totalIndexEntries;
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
+      perfLog.debug(
+        `completed from scratch indexing for realm ${
+          current.realmURL.href
+        } in ${Date.now() - start} ms`,
+      );
     });
     return {
       invalidations: [...(invalidations ?? [])].map((url) => url.href),
@@ -229,17 +281,26 @@ export class CurrentRun {
   private async discoverInvalidations(
     url: URL,
     indexMtimes: LastModifiedTimes,
-  ): Promise<void> {
+  ): Promise<string[]> {
     log.debug(`discovering invalidations in dir ${url.href}`);
+    perfLog.debug(`discovering invalidations in dir ${url.href}`);
+    let ignoreStart = Date.now();
     let ignorePatterns = await this.#reader.readFile(
       new URL('.gitignore', url),
     );
+    perfLog.debug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
+    let mtimesStart = Date.now();
     let filesystemMtimes = await this.#reader.mtimes();
+    perfLog.debug(
+      `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
+    );
+    let invalidationList: string[] = [];
+    let skipList: string[] = [];
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
       if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
         // Only allow json and executable files to be invalidated so that we
@@ -255,9 +316,25 @@ export class CurrentRun {
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {
-        await this.batch.invalidate(new URL(url));
+        invalidationList.push(url);
+      } else {
+        skipList.push(url);
       }
     }
+    if (skipList.length === 0) {
+      // the whole realm needs to be visited, no need to calculate
+      // invalidations--it's everything
+      return invalidationList;
+    }
+
+    let invalidationStart = Date.now();
+    for (let invalidationURL of invalidationList) {
+      await this.batch.invalidate(new URL(invalidationURL));
+    }
+    perfLog.debug(
+      `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
+    );
+    return this.batch.invalidations;
   }
 
   private async visitFile(
@@ -413,6 +490,7 @@ export class CurrentRun {
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
     let atomHtml: string | undefined;
+    let iconHTML: string | undefined;
     let card: CardDef | undefined;
     let embeddedHtml: Record<string, string> | undefined;
     let fittedHtml: Record<string, string> | undefined;
@@ -473,6 +551,7 @@ export class CurrentRun {
           }),
         ),
       );
+      iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
@@ -552,6 +631,7 @@ export class CurrentRun {
         atomHtml,
         embeddedHtml,
         fittedHtml,
+        iconHTML,
         lastModified,
         resourceCreatedAt,
         types: typesMaybeError.types.map(({ refURL }) => refURL),

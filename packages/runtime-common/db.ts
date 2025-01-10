@@ -12,6 +12,7 @@ export interface ExecuteOptions {
 }
 
 export interface DBAdapter {
+  kind: 'pg' | 'sqlite';
   isClosed: boolean;
   execute: (
     sql: string,
