@@ -190,10 +190,15 @@ class IsolatedTemplate extends Component<typeof Account> {
             <:content>
               <div class='description content-container'>
                 {{#if this.hasContacts}}
-                  <@fields.primaryContact
-                    @format='atom'
-                    @displayContainer={{false}}
-                  />
+                  <div class='primary-contact-group'>
+                    <@fields.primaryContact
+                      @format='atom'
+                      @displayContainer={{false}}
+                    />
+                    <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+                      Primary
+                    </Pill>
+                  </div>
 
                   <@fields.contacts
                     @format='atom'
@@ -297,6 +302,18 @@ class IsolatedTemplate extends Component<typeof Account> {
       .primary-contact {
         width: fit-content;
         display: inline-block;
+      }
+      .primary-contact-group {
+        display: inline-flex;
+        align-items: start;
+        gap: var(--boxel-sp-xs);
+      }
+      .primary-tag {
+        --pill-font-weight: 400;
+        --pill-padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
+        --pill-font: 400 var(--boxel-font-xs);
+        --pill-border: none;
+        flex-shrink: 0;
       }
       .description {
         font: 500 var(--boxel-font-sm);
@@ -514,80 +531,6 @@ class FittedTemplate extends Component<typeof Account> {
   </template>
 }
 
-class AtomTemplate extends Component<typeof Account> {
-  get hasContacts() {
-    return (
-      this.args.model.primaryContact?.name ||
-      (this.args.model.contacts?.length ?? 0) > 0 //contacts is a proxy array
-    );
-  }
-
-  get contact() {
-    return this.args.model?.primaryContact || this.args.model?.contacts?.[0];
-  }
-
-  get isContactPrimary() {
-    return Boolean(this.args.model?.primaryContact);
-  }
-
-  get contactID() {
-    return this.contact?.id;
-  }
-
-  get contactName() {
-    return this.contact?.name;
-  }
-
-  get contactThumbnailURL() {
-    return this.contact?.thumbnailURL;
-  }
-
-  get contactCompanyName() {
-    return this.contact?.company?.name;
-  }
-
-  <template>
-    {{#if this.hasContacts}}
-      <EntityDisplayWithThumbnail @title={{this.contactName}}>
-        <:tag>
-          {{#if this.isContactPrimary}}
-            <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-              Primary
-            </Pill>
-          {{/if}}
-        </:tag>
-        <:thumbnail>
-          <Avatar
-            @userID={{this.contactID}}
-            @displayName={{this.contactName}}
-            @thumbnailURL={{this.contactThumbnailURL}}
-            @isReady={{true}}
-            class='avatar'
-          />
-        </:thumbnail>
-        <:content>
-          <span>
-            {{this.contactCompanyName}}
-          </span>
-        </:content>
-      </EntityDisplayWithThumbnail>
-    {{/if}}
-    <style scoped>
-      .avatar {
-        --profile-avatar-icon-size: 20px;
-        --profile-avatar-icon-border: 0px;
-        flex-shrink: 0;
-      }
-      .primary-tag {
-        --pill-font-weight: 400;
-        --pill-padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
-        --pill-font: 400 var(--boxel-font-xs);
-        --pill-border: none;
-      }
-    </style>
-  </template>
-}
-
 class UrgencyTag extends LooseGooseyField {
   static icon = CalendarExclamation;
   static displayName = 'CRM Urgency Tag';
@@ -647,7 +590,6 @@ export class Account extends CardDef {
 
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
-  static atom = AtomTemplate;
 }
 
 interface AccountPageLayoutArgs {
