@@ -691,10 +691,7 @@ class FittedTemplate extends Component<typeof Deal> {
         margin-top: auto;
       }
       .crm-account-header {
-        display: grid;
         grid-area: crm-account-header;
-        grid-template-areas: 'account-header-logo account-header-info';
-        grid-template-columns: 60px 1fr;
         overflow: hidden;
       }
       .deal-status {
@@ -703,8 +700,7 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .account-name {
         grid-area: account-name;
-        font-size: var(--boxel-font-size-med);
-        font-weight: 600;
+        font: 600 var(--boxel-font-sm);
       }
       .account-info {
         display: flex;
@@ -762,11 +758,11 @@ class FittedTemplate extends Component<typeof Deal> {
           grid-template-rows: auto;
           padding: var(--boxel-sp-sm);
         }
+        .crm-account-header {
+          --account-header-logo-size: 40px;
+        }
         .deal-content {
           display: none;
-        }
-        .crm-account-header {
-          grid-template-columns: 40px 1fr;
         }
         .deal-header {
           grid-area: deal-header;
@@ -778,10 +774,6 @@ class FittedTemplate extends Component<typeof Deal> {
         }
         .deal-status {
           display: none;
-        }
-        .deal-header:deep(.account-header-logo) {
-          grid-area: account-header-logo;
-          --account-header-logo-size: 40px;
         }
         .account-name {
           font-size: var(--boxel-font-size-sm);
@@ -801,8 +793,22 @@ class FittedTemplate extends Component<typeof Deal> {
           gap: var(--boxel-sp);
           padding: var(--boxel-sp);
         }
+        .crm-account-header {
+          --account-header-logo-size: 40px;
+        }
+        .account-name {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .account-info {
           display: none;
+        }
+        .info-atom {
+          --entity-display-icon-size: var(--boxel-icon-sm);
+          --entity-display-title-font-size: var(--boxel-font-size-xs);
         }
         .account-info-grid-view {
           display: flex;
@@ -810,14 +816,20 @@ class FittedTemplate extends Component<typeof Deal> {
         }
         .deal-header {
           grid-template-columns: auto;
+          gap: 0;
         }
         .deal-status {
           display: none;
         }
+        .deal-content {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
         .deal-details {
           display: grid;
           grid-template-rows: auto auto;
-          grid-template-columns: 1fr;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp-xs);
         }
         .deal-field {
           width: 100%;
@@ -830,11 +842,16 @@ class FittedTemplate extends Component<typeof Deal> {
         .deal-field:nth-child(2) {
           grid-row: 1;
         }
-
         /* Make the health score field take full width in row 2 */
         .deal-field:nth-child(3) {
           grid-row: 2;
           grid-column: 1 / -1;
+        }
+        .highlight-value {
+          font: 600 var(--boxel-font-xs);
+        }
+        .progress-bar {
+          width: 100%;
         }
       }
     </style>
