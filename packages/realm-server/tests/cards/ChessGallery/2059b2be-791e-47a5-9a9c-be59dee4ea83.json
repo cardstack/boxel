@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7 11. c4 c6 12. Nc3 Bb7 13. Bg5 h6 14. Bh4 Re8 15. cxb5 axb5 16. a3 Bf8 17. Rc1 Qb6 18. Bg3 Rad8 19. d5 c5 20. Nd2 g6 21. Bc2 Bg7 22. Bd3 c4 23. Bc2 Nc5 24. b4 cxb3 25. Nxb3 Nxb3 26. Bxb3 Rc8 27. Qd3 Ba6 28. Na2 Nd7 29. Nb4 Nc5 30. Qb1 Bb7 31. Kh1 Re7 32. f3 Rec7 33. Bf2 Bf8 34. Rc3 Qa7 35. Rec1 Qa8 36. Qa2 Be7 37. Be3 Bf8 38. Kh2 Be7 39. R1c2 Qa7 40. Qb1 Bg5 41. Bxg5 hxg5 42. Nd3 Kg7 43. Ba2 f5 44. Qc1 fxe4 45. Qxg5 Ba6 46. Nb4 Bb7 47. fxe4 Qa8 48. Rg3 Kh7 49. Qxg6+ Kh8 50. Qh6+ Rh7 51. Qf6+ Rg7 52. Rg4 Ba6 53. Nc6 Re8 54. Bb3 Bc8 55. Rg5 Rf8 56. Qxd6 Nxe4 57. Qxe5 Nxg5 58. Qxg5 Rxg5 59. d6 Bd7 60. Ne5 Be8 61. d7 Bxd7 62. Nxd7 Rff2 63. Rc8+ Kh7 64. Nf6+ Kg6 65. Bd5 Rxf6 66. Be4+ Kh5 67. Rc3 Rf2 68. Re3 Ra2 69. Bf3+ Kg6 70. Bg4 Qxg2#",
+      "dateOfGame": "2022-12-12",
+      "whitePlayer": "Magnus Carlsen",
+      "blackPlayer": "Ian Nepomniachtchi",
+      "title": "Magnus Carlsen vs Ian Nepomniachtchi - 2022 World Championship",
+      "description": "A thrilling game in the 2022 World Championship where Magnus Carlsen faced Ian Nepomniachtchi. An intense battle showcasing advanced strategies.",
+      "thumbnailURL": "https://www.chessdom.com/wp-content/uploads/2022/09/nepo-magnus-end-nr.jpeg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chess-gallery",
+        "name": "ChessGallery"
+      }
+    }
+  }
+}

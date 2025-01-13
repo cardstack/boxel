@@ -5,8 +5,12 @@
       "longName": "Urban Work",
       "shortName": "Work",
       "slug": "urban-work",
-      "backgroundColor": "#ff7f00",
-      "textColor": "#fff",
+      "backgroundColor": {
+        "hexValue": "#A6F4CA"
+      },
+      "textColor": {
+        "hexValue": "#000000"
+      },
       "description": "Exploring work trends in the evolving city landscape.",
       "title": "Work",
       "thumbnailURL": null
