@@ -1,0 +1,80 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": "Discuss Q3 Product RoadMap",
+      "activity": {
+        "type": "Customer Call",
+        "call": {
+          "phoneNumber": {
+            "number": "108920123",
+            "countryCode": "60"
+          },
+          "callTime": "2025-01-13T04:30:00.000Z",
+          "callDuration": "1 hour"
+        },
+        "email": {
+          "emailAddress": null,
+          "emailContent": null,
+          "sentTime": null
+        },
+        "meeting": {
+          "location": {
+            "addressLine1": null,
+            "addressLine2": null,
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": {
+              "name": null,
+              "code": null
+            },
+            "poBoxNumber": null
+          },
+          "startTime": null,
+          "endTime": null
+        }
+      },
+      "status": {
+        "index": 0,
+        "label": "Pending",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "#FFF3E0"
+        }
+      },
+      "dueDate": "2025-01-31T04:11:00.000Z",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "contact.0": {
+        "links": {
+          "self": "../Contact/a01fc5c9-d70d-4b9c-aae4-384cf2b79b25"
+        }
+      },
+      "deal": {
+        "links": {
+          "self": "../Deal/4fdd3053-14f1-4800-827f-d3e2a5c44ae8"
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
+        }
+      },
+      "rep": {
+        "links": {
+          "self": "../Representative/e0b16307-04bd-4e48-bdf8-517bb35b8119"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/activity",
+        "name": "Activity"
+      }
+    }
+  }
+}

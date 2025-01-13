@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": "Potential Collaboration 2025",
+      "activity": {
+        "type": "Meeting",
+        "call": {
+          "phoneNumber": {
+            "number": null,
+            "countryCode": null
+          },
+          "callTime": null,
+          "callDuration": null
+        },
+        "email": {
+          "emailAddress": null,
+          "emailContent": null,
+          "sentTime": null
+        },
+        "meeting": {
+          "location": {
+            "addressLine1": "123 Main Street",
+            "addressLine2": "Suite 400",
+            "city": "New York",
+            "state": "NY",
+            "postalCode": "10001",
+            "country": {
+              "name": "Albania",
+              "code": "AL"
+            },
+            "poBoxNumber": ""
+          },
+          "startTime": "2025-01-15T04:30:00.000Z",
+          "endTime": "2025-01-15T05:30:00.000Z"
+        }
+      },
+      "status": {
+        "index": 0,
+        "label": "Pending",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": "#000000",
+          "backgroundColor": "#FFF3E0"
+        }
+      },
+      "dueDate": "2025-01-30T08:40:00.000Z",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "contact.0": {
+        "links": {
+          "self": "../Customer/0e5aec99-798b-4417-9426-a338432e0ee5"
+        }
+      },
+      "contact.1": {
+        "links": {
+          "self": "../Lead/9d7b2f20-c7da-4ddc-8e77-b75d88c97b48"
+        }
+      },
+      "contact.2": {
+        "links": {
+          "self": "../Contact/a01fc5c9-d70d-4b9c-aae4-384cf2b79b25"
+        }
+      },
+      "deal": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
+        }
+      },
+      "rep": {
+        "links": {
+          "self": "../Representative/e0b16307-04bd-4e48-bdf8-517bb35b8119"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/activity",
+        "name": "Activity"
+      }
+    }
+  }
+}
