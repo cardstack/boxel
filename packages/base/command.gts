@@ -114,11 +114,6 @@ export class GetBoxelUIStateResult extends CardDef {
   };
 }
 
-export class LegacyGenerateAppModuleResult extends CardDef {
-  @field moduleId = contains(StringField);
-  @field source = contains(StringField);
-}
-
 export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
 }

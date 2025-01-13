@@ -14,7 +14,6 @@ import {
   type PatchData,
   CommandContext,
   CommandContextStamp,
-  baseRealm,
   ResolvedCodeRef,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -24,8 +23,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
@@ -163,39 +160,6 @@ export default class CommandService extends Service {
           cardType: payload.attributes.cardType,
           type: payload.attributes.type,
         });
-      } else if (command.name === 'generateAppModule') {
-        let realmURL = this.operatorModeStateService.realmURL;
-
-        if (!realmURL) {
-          throw new Error(
-            `Cannot generate app module without a writable realm`,
-          );
-        }
-
-        let timestamp = Date.now();
-        let fileName =
-          (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
-          `untitled-app-${timestamp}`;
-        let moduleId = `${realmURL}AppModules/${fileName}-${timestamp}`;
-        let content = (payload.moduleCode as string) ?? '';
-        let commandModule = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
-        let { LegacyGenerateAppModuleResult } = commandModule;
-        await this.cardService.saveSource(new URL(`${moduleId}.gts`), content);
-        resultCard = new LegacyGenerateAppModuleResult({
-          moduleId: `${moduleId}.gts`,
-          source: content,
-        });
-        if (!payload.attached_card_id) {
-          throw new Error(
-            `Could not update 'moduleURL' with a link to the generated module.`,
-          );
-        }
-        await this.operatorModeStateService.patchCard.perform(
-          String(payload.attached_card_id),
-          { attributes: { moduleURL: moduleId } },
-        );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
