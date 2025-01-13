@@ -86,6 +86,7 @@ export async function startServer() {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     },
   );
+  realmServer.unref();
   if (realmServer.stdout) {
     realmServer.stdout.on('data', (data: Buffer) =>
       console.log(`realm server: ${data.toString()}`),
@@ -122,25 +123,36 @@ export async function startServer() {
     );
   }
 
-  return new IsolatedRealmServer(realmServer, testRealmDir);
+  return new IsolatedRealmServer(realmServer, workerManager, testRealmDir);
 }
 
 export class IsolatedRealmServer {
-  private stopped: (() => void) | undefined;
+  private realmServerStopped: (() => void) | undefined;
+  private workerManagerStopped: (() => void) | undefined;
   private sqlResults: ((results: string) => void) | undefined;
   private sqlError: ((error: string) => void) | undefined;
 
   constructor(
     private realmServerProcess: ReturnType<typeof spawn>,
+    private workerManagerProcess: ReturnType<typeof spawn>,
     readonly realmPath: string, // useful for debugging
   ) {
+    workerManagerProcess.on('message', (message) => {
+      if (message === 'stopped') {
+        if (!this.workerManagerStopped) {
+          console.error(`received unprompted worker manager stop`);
+          return;
+        }
+        this.workerManagerStopped();
+      }
+    });
     realmServerProcess.on('message', (message) => {
       if (message === 'stopped') {
-        if (!this.stopped) {
+        if (!this.realmServerStopped) {
           console.error(`received unprompted server stop`);
           return;
         }
-        this.stopped();
+        this.realmServerStopped();
       } else if (
         typeof message === 'string' &&
         message.startsWith('sql-results:')
@@ -180,10 +192,20 @@ export class IsolatedRealmServer {
   }
 
   async stop() {
-    let stop = new Promise<void>((r) => (this.stopped = r));
+    let realmServerStop = new Promise<void>(
+      (r) => (this.realmServerStopped = r),
+    );
     this.realmServerProcess.send('stop');
-    await stop;
-    this.stopped = undefined;
+    await realmServerStop;
+    this.realmServerStopped = undefined;
     this.realmServerProcess.send('kill');
+
+    let workerManagerStop = new Promise<void>(
+      (r) => (this.workerManagerStopped = r),
+    );
+    this.workerManagerProcess.send('stop');
+    await workerManagerStop;
+    this.workerManagerStopped = undefined;
+    this.workerManagerProcess.send('kill');
   }
 }

@@ -77,6 +77,7 @@ if (port != null) {
       console.error(`realm disconnected from worker manager: ${err.message}`);
     });
   });
+  server.unref();
 
   server.listen(port, () => {
     log.info(`worker manager listening for realm on port ${port}`);
@@ -99,6 +100,21 @@ if (port != null) {
   process.on('uncaughtException', (err) => {
     log.error(`Uncaught exception in worker manager:`, err);
     shutdown();
+  });
+
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      console.log(`stopping realm server on port ${port}...`);
+      server.close(() => {
+        console.log(`worker manager on port ${port} has stopped`);
+        if (process.send) {
+          process.send('stopped');
+        }
+      });
+    } else if (message === 'kill') {
+      console.log(`Ending worker manager process for ${port}...`);
+      process.exit(0);
+    }
   });
 }
 
