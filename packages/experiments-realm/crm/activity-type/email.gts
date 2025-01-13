@@ -3,7 +3,6 @@ import { contains, field } from 'https://cardstack.com/base/card-api';
 import { StringField } from 'https://cardstack.com/base/card-api';
 import { EmailField } from '../../email';
 import DatetimeField from 'https://cardstack.com/base/datetime';
-import { ActivityType } from '../activity';
 
 export class Email extends FieldDef {
   static displayName = 'Email Activity';
