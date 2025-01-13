@@ -624,8 +624,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
               boxel-card-header-actions-min-width=(if
                 this.isBuried '50px' '95px'
               )
-              realm-icon-background=(getContrastColor
+              boxel-card-header-background-color=@item.headerColor
+              boxel-card-header-text-color=(getContrastColor @item.headerColor)
+              realm-icon-background-color=(getContrastColor
                 @item.headerColor 'transparent'
+              )
+              realm-icon-border-color=(getContrastColor
+                @item.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
               )
             }}
             role={{if this.isBuried 'button' 'banner'}}
@@ -654,7 +659,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon @item.card}}
-              @headerColor={{@item.headerColor}}
               @isSaving={{this.isSaving}}
               @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.lastSavedMsg}}
@@ -671,8 +675,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 boxel-card-header-actions-min-width=(if
                   this.isBuried '50px' '95px'
                 )
-                realm-icon-background=(getContrastColor
+                boxel-card-header-background-color=@item.headerColor
+                boxel-card-header-text-color=(getContrastColor
+                  @item.headerColor
+                )
+                realm-icon-background-color=(getContrastColor
                   @item.headerColor 'transparent'
+                )
+                realm-icon-border-color=(getContrastColor
+                  @item.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
                 )
               }}
               role={{if this.isBuried 'button' 'banner'}}
@@ -774,6 +785,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .item.buried {
         --stack-item-header-height: 2.5rem;
+        --realm-icon-border-radius: 4px;
       }
 
       .stack-item-card {
