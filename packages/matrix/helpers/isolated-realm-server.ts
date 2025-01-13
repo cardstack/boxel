@@ -31,7 +31,7 @@ export async function startServer() {
   process.env.MATRIX_URL = 'http://localhost:8008';
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
 
-  let worker = spawn(
+  let workerManager = spawn(
     'ts-node',
     [
       `--transpileOnly`,
@@ -50,13 +50,13 @@ export async function startServer() {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     },
   );
-  if (worker.stdout) {
-    worker.stdout.on('data', (data: Buffer) =>
+  if (workerManager.stdout) {
+    workerManager.stdout.on('data', (data: Buffer) =>
       console.log(`worker: ${data.toString()}`),
     );
   }
-  if (worker.stderr) {
-    worker.stderr.on('data', (data: Buffer) =>
+  if (workerManager.stderr) {
+    workerManager.stderr.on('data', (data: Buffer) =>
       console.error(`worker: ${data.toString()}`),
     );
   }

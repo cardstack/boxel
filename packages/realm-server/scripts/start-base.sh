@@ -26,4 +26,4 @@ NODE_ENV=development \
   --path='../base' \
   --username='base_realm' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='/base/'
+  --toUrl='http://localhost:4201/base/'

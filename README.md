@@ -84,7 +84,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
 | :4210 | Development Worker Manager (spins up 1 worker by default)     | ✅                  | 🚫                   |
 | :4211 | Test Worker Manager (spins up 1 worker by default)            | ✅                  | 🚫                   |
-| :4212 | Test Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅                  | 🚫                   |
+| :4212 | Test Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅ | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
