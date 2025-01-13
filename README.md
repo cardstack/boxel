@@ -73,7 +73,7 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `start:all`
 
-Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
+Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Use the environment variable `WORKER_COUNT` to add additional workers. By default there is 1 worker for each realm server. Here's what is spun up with `start:all`:
 
 | Port  | Description                                                   | Running `start:all` | Running `start:base` |
 | ----- | ------------------------------------------------------------- | ------------------- | -------------------- |
@@ -82,13 +82,16 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4201 | `/seed` seed realm                                            | ✅                  | 🚫                   |
 | :4202 | `/test` host test realm, `/node-test` node test realm         | ✅                  | 🚫                   |
 | :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
+| :4210 | Development Worker Manager (spins up 1 worker by default)     | ✅                  | 🚫                   |
+| :4211 | Test Worker Manager (spins up 1 worker by default)            | ✅                  | 🚫                   |
+| :4212 | Test Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
 
 #### Using `start:development`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm.
+You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers (which are normally started in `start:all`.
 
 ### Card Pre-rendering
 

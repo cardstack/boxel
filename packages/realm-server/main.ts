@@ -11,13 +11,12 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
-import { spawn } from 'child_process';
+import { createConnection, type Socket } from 'net';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import flattenDeep from 'lodash/flattenDeep';
 import 'decorator-transforms/globals';
 
 let log = logger('main');
@@ -68,6 +67,7 @@ let {
   useRegistrationSecretFunction,
   seedPath,
   migrateDB,
+  workerManagerPort,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -130,6 +130,11 @@ let {
         'The flag should be set when running matrix tests where the synapse instance is torn down and restarted multiple times during the life of the realm server.',
       type: 'boolean',
     },
+    workerManagerPort: {
+      description:
+        'The port the worker manager is running on. used to wait for the workers to be ready',
+      type: 'number',
+    },
   })
   .parseSync();
 
@@ -165,8 +170,8 @@ let virtualNetwork = new VirtualNetwork();
 shimExternals(virtualNetwork);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
-  new URL(String(fromUrl), `http://localhost:${port}`),
-  new URL(String(toUrls[i]), `http://localhost:${port}`),
+  new URL(String(fromUrl)),
+  new URL(String(toUrls[i])),
 ]);
 for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
@@ -185,7 +190,9 @@ let autoMigrate = migrateDB || undefined;
     manager.getOptions.bind(manager),
   );
 
-  await startWorker({ autoMigrate });
+  if (workerManagerPort != null) {
+    await waitForWorkerManager(workerManagerPort);
+  }
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -324,51 +331,49 @@ let autoMigrate = migrateDB || undefined;
   process.exit(-3);
 });
 
-async function startWorker(opts?: { autoMigrate?: true }) {
-  let worker = spawn(
-    'ts-node',
-    [
-      '--transpileOnly',
-      'worker',
-      `--port=${port}`,
-      `--matrixURL='${matrixURL}'`,
-      `--distURL='${distURL}'`,
-      ...(opts?.autoMigrate ? [`--migrateDB`] : []),
-      ...flattenDeep(
-        urlMappings.map(([from, to]) => [
-          `--fromUrl='${from}'`,
-          `--toUrl='${to}'`,
-        ]),
-      ),
-    ],
-    {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    },
-  );
+let workerReadyDeferred: Deferred<boolean> | undefined;
+async function waitForWorkerManager(port: number) {
+  const workerManager = await new Promise<Socket>((r) => {
+    let socket = createConnection({ port }, () => {
+      log.info(`Connected to worker manager on port ${port}`);
+      r(socket);
+    });
+  });
 
-  if (worker.stdout) {
-    worker.stdout.on('data', (data: Buffer) =>
-      log.info(`worker: ${data.toString()}`),
-    );
-  }
-  if (worker.stderr) {
-    worker.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
-    );
-  }
+  workerManager.on('data', (data) => {
+    let res = data.toString();
+    if (!workerReadyDeferred) {
+      throw new Error(
+        `received unsolicited message from worker manager on port ${port}`,
+      );
+    }
+    switch (res) {
+      case 'ready':
+      case 'not-ready':
+        workerReadyDeferred.fulfill(res === 'ready' ? true : false);
+        break;
+      default:
+        workerReadyDeferred.reject(
+          `unexpected response from worker manager: ${res}`,
+        );
+    }
+  });
 
-  let timeout = await Promise.race([
-    new Promise<void>((r) => {
-      worker.on('message', (message) => {
-        if (message === 'ready') {
-          r();
-        }
-      });
-    }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
-  ]);
-  if (timeout) {
-    console.error(`timed-out waiting for worker to start. Stopping server`);
-    process.exit(-2);
+  try {
+    let isReady = false;
+    let timeout = Date.now() + 30_000;
+    do {
+      workerReadyDeferred = new Deferred();
+      workerManager.write('ready?');
+      isReady = await workerReadyDeferred.promise;
+    } while (!isReady && Date.now() < timeout);
+    if (!isReady) {
+      throw new Error(
+        `timed out trying to connect to worker manager on port ${port}`,
+      );
+    }
+  } finally {
+    workerManager.end();
   }
+  log.info('workers are ready');
 }

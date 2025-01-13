@@ -74,9 +74,20 @@ jobs:
     with:
       repository: "boxel-realm-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
-      dockerfile: "packages/realm-server/Dockerfile"
+      dockerfile: "packages/realm-server/realm-server.Dockerfile"
       build-args: |
         "realm_server_script=start:${{ inputs.environment }}"
+
+  build-worker:
+    name: Build worker Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-realm-server-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/worker.Dockerfile"
+      build-args: |
+        "worker_script=start:worker-${{ inputs.environment }}"
 
   build-pg-migration:
     name: Build pg-migration Docker image
@@ -110,9 +121,22 @@ jobs:
     steps:
       - run: sleep 240
 
+  deploy-worker:
+    name: Deploy worker
+    needs: [build-realm-server, deploy-host, post-migrate-db]
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-worker"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-worker-${{ inputs.environment }}"
+      image: ${{ needs.build-worker.outputs.image }}
+      wait-for-service-stability: false
+
   deploy-realm-server:
     name: Deploy realm server
-    needs: [build-realm-server, deploy-host, post-migrate-db]
+    needs: [deploy-worker]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
