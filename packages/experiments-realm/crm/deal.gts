@@ -134,15 +134,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return null;
   }
 
-  @action
-  viewDocument(id: string | undefined) {
-    if (id && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(new URL(id));
-    } else {
-      console.warn('Card opening functionality is not available here.');
-    }
-  }
-
   <template>
     <DealPageLayout>
       <:header>
@@ -296,18 +287,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     <Info class='info-icon' />
                   </:icon>
                 </EntityDisplayWithIcon>
-
-                {{#if @model.document}}
-                  <BoxelButton
-                    @as='button'
-                    @size='extra-small'
-                    @kind='secondary-light'
-                    class='view-document-btn'
-                    {{on 'click' (fn this.viewDocument @model.document.id)}}
-                  >
-                    View Attachment
-                  </BoxelButton>
-                {{/if}}
               </div>
               <div class='description content-container'>
                 {{#if @model.notes}}
