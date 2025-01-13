@@ -303,7 +303,7 @@ class EmbeddedTemplate extends Component<typeof Activity> {
   <template>
     <ActivityCard>
       <:header>
-        <header>
+        <header aria-label='Activity details'>
           <div class='activity-card-subject-group'>
             <EntityDisplayWithIcon @title={{this.activityType}}>
               <:icon>
@@ -313,7 +313,7 @@ class EmbeddedTemplate extends Component<typeof Activity> {
             <p class='activity-card-subject'>{{this.activitySubject}}</p>
           </div>
 
-          <aside class='activity-card-status'>
+          <aside class='activity-card-status' aria-label='Activity status'>
             {{#if this.activityStatus}}
               <Pill
                 style={{htmlSafe
