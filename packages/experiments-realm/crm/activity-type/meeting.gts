@@ -12,10 +12,9 @@ export class Meeting extends FieldDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Meeting) {
-      const locationStr = this.location?.toString() ?? '';
       const startTimeStr = this.startTime?.toLocaleString() ?? '';
       const endTimeStr = this.endTime?.toLocaleString() ?? '';
-      return `${locationStr} - ${startTimeStr} to ${endTimeStr}`;
+      return `${startTimeStr} to ${endTimeStr}`;
     },
   });
 }
