@@ -49,6 +49,11 @@ export default class Panel extends Component<Signature> {
     >
       {{yield}}
     </div>
+    <style scoped>
+      .boxel-panel {
+        overflow: hidden;
+      }
+    </style>
   </template>
 
   element!: HTMLDivElement;

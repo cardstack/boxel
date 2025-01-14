@@ -161,7 +161,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       }
 
       return htmlSafe(
-        `flex: 0; flex-grow: ${flexGrow}; flex-shrink: 1; overflow: hidden; pointer-events: ${
+        `flex: 0; flex-grow: ${flexGrow}; flex-shrink: 1; pointer-events: ${
           this.dragState !== null ? 'none' : undefined
         };`,
       );
