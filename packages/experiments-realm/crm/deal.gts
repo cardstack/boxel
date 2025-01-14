@@ -42,6 +42,7 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
 import { Query } from '@cardstack/runtime-common/query';
 import { Company } from './company';
+import { DealEvent } from './deal-event';
 
 interface DealSizeSummary {
   summary: string;
@@ -1006,6 +1007,7 @@ export class Deal extends CardDef {
     },
   });
   @field healthScore = contains(PercentageField);
+  @field event = linksTo(() => DealEvent);
   @field notes = contains(MarkdownField);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
