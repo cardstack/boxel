@@ -42,6 +42,7 @@ import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
   isCardOrFieldDeclaration,
+  isReexportCardOrField,
   type ModuleDeclaration,
   type State as ModuleState,
   findDeclarationByName,
@@ -266,14 +267,19 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get hasCardDefOrFieldDef() {
-    return this.declarations.some(isCardOrFieldDeclaration);
+    return this.declarations.some(
+      (d) => isCardOrFieldDeclaration(d) || isReexportCardOrField(d),
+    );
   }
 
   private get isSelectedItemIncompatibleWithSchemaEditor() {
     if (!this.selectedDeclaration) {
       return undefined;
     }
-    return !isCardOrFieldDeclaration(this.selectedDeclaration);
+    return (
+      !isCardOrFieldDeclaration(this.selectedDeclaration) &&
+      !isReexportCardOrField(this.selectedDeclaration)
+    );
   }
 
   private get isNonCardJson() {
@@ -468,10 +474,18 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
+  get showBoxelSpecPreview() {
+    return (
+      !this.moduleContentsResource.isLoading &&
+      this.selectedDeclaration?.exportName
+    );
+  }
+
   private get selectedCardOrField() {
     if (
       this.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.selectedDeclaration)
+      (isCardOrFieldDeclaration(this.selectedDeclaration) ||
+        isReexportCardOrField(this.selectedDeclaration))
     ) {
       return this.selectedDeclaration;
     }
