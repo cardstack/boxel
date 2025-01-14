@@ -37,7 +37,6 @@ import FilePen from '@cardstack/boxel-icons/file-pen';
 import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Award from '@cardstack/boxel-icons/award';
 import AwardOff from '@cardstack/boxel-icons/award-off';
-import { Document } from './document';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
@@ -477,12 +476,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         align-items: center;
         gap: var(--boxel-sp-sm);
         font-weight: 600;
-      }
-      .view-document-btn {
-        font-weight: 600;
-        padding: 2px 5px;
-        min-width: 0px;
-        min-height: 0px;
       }
       @container (max-width: 447px) {
         .progress-container {
@@ -1014,7 +1007,6 @@ export class Deal extends CardDef {
   });
   @field healthScore = contains(PercentageField);
   @field notes = contains(MarkdownField);
-  @field document = linksTo(() => Document);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
   @field valueBreakdown = containsMany(ValueLineItem);
