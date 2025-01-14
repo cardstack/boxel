@@ -649,12 +649,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           description: 'Catalog entry for Person card',
           moduleHref: `${testRealmURL}person`,
           realmName: 'Unnamed Workspace',
+          thumbnailURL: null,
+          readMe: null,
+
           isField: false,
           ref: {
             module: `./person`,
             name: 'Person',
           },
-          demo: {},
         },
         meta: {
           adoptsFrom: {
@@ -676,7 +678,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       );
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Catalog Entry',
-        demo: {},
         description: 'Catalog entry for Person card',
         id: `${testRealmURL}person-catalog-entry`,
         isField: false,
@@ -1589,7 +1590,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     );
     if (vendor?.type === 'doc') {
-      console.log(vendor.doc);
       assert.deepEqual(vendor.doc, {
         data: {
           id: `${testRealmURL}Vendor/vendor1`,
@@ -1996,24 +1996,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
               },
-              demo: {
-                title: null,
-                venue: null,
-                startTime: null,
-                endTime: null,
-                hosts: [],
-                sponsors: [],
-              },
             },
             meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: '../booking',
-                    name: 'Booking',
-                  },
-                },
-              },
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
                 name: 'CatalogEntry',
@@ -2030,12 +2014,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     assert.deepEqual(entry?.searchDoc, {
       _cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
-      demo: {
-        hosts: null,
-        sponsors: null,
-        title: null,
-        venue: null,
-      },
       description: 'Catalog entry for Booking',
       isField: false,
       moduleHref: 'http://localhost:4202/test/booking',
@@ -2352,25 +2330,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
-              demo: { firstName: 'Hassan' },
             },
-            relationships: {
-              'demo.pets.0': {
-                links: { self: `${testRealmURL}Pet/mango` },
-              },
-              'demo.pets.1': {
-                links: { self: `${testRealmURL}Pet/vanGogh` },
-              },
-            },
+            relationships: {},
             meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: `${testModuleRealm}pet-person`,
-                    name: 'PetPersonField',
-                  },
-                },
-              },
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
                 name: 'CatalogEntry',
@@ -2406,38 +2368,20 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         attributes: {
           title: 'PetPerson',
           description: 'Catalog entry for PetPerson',
+          readMe: null,
+          thumbnailURL: null,
           ref: {
             module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
           },
-          demo: { firstName: 'Hassan' },
           isField: false,
           moduleHref: `${testModuleRealm}pet-person`,
           realmName: 'Unnamed Workspace',
-        },
-        relationships: {
-          'demo.friend': { links: { self: null } },
-          'demo.pets.0': {
-            links: { self: `${testRealmURL}Pet/mango` },
-            data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
-          },
-          'demo.pets.1': {
-            links: { self: `${testRealmURL}Pet/vanGogh` },
-            data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
-          },
         },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/catalog-entry',
             name: 'CatalogEntry',
-          },
-          fields: {
-            demo: {
-              adoptsFrom: {
-                module: `${testModuleRealm}pet-person`,
-                name: 'PetPersonField',
-              },
-            },
           },
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}pet-person-catalog-entry.json`,
@@ -2449,55 +2393,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           ),
         },
       });
-
-      assert.deepEqual(catalogEntry.doc.included, [
-        {
-          id: `${testRealmURL}Pet/mango`,
-          type: 'card',
-          links: { self: `${testRealmURL}Pet/mango` },
-          attributes: {
-            description: null,
-            firstName: 'Mango',
-            title: 'Mango',
-            thumbnailURL: null,
-          },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}Pet/mango.json`,
-            ),
-            realmInfo: testRealmInfo,
-            realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}pet-person-catalog-entry.json`,
-            ),
-          },
-        },
-        {
-          id: `${testRealmURL}Pet/vanGogh`,
-          type: 'card',
-          links: { self: `${testRealmURL}Pet/vanGogh` },
-          attributes: {
-            description: null,
-            firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            thumbnailURL: null,
-          },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}Pet/vanGogh.json`,
-            ),
-            realmInfo: testRealmInfo,
-            realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}pet-person-catalog-entry.json`,
-            ),
-          },
-        },
-      ]);
     } else {
       assert.ok(
         false,
@@ -2516,28 +2411,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
         ref: `${testModuleRealm}pet-person/PetPerson`,
-        demo: {
-          firstName: 'Hassan',
-          pets: [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              description: null,
-              firstName: 'Mango',
-              owner: null,
-              title: 'Mango',
-              thumbnailURL: null,
-            },
-            {
-              id: `${testRealmURL}Pet/vanGogh`,
-              description: null,
-              firstName: 'Van Gogh',
-              owner: null,
-              title: 'Van Gogh',
-              thumbnailURL: null,
-            },
-          ],
-          friend: null,
-        },
         isField: false,
         moduleHref: `${testModuleRealm}pet-person`,
         realmName: 'Unnamed Workspace',

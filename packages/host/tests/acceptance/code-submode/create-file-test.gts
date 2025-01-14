@@ -94,9 +94,6 @@ const files: Record<string, any> = {
           module: '../error',
           name: 'default',
         },
-        demo: {
-          title: 'Error title',
-        },
       },
       meta: {
         adoptsFrom: {
