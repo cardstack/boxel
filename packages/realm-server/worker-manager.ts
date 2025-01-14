@@ -60,6 +60,10 @@ let {
   .parseSync();
 
 let isReady = false;
+let isExiting = false;
+process.on('SIGINT', () => (isExiting = true));
+process.on('SIGTERM', () => (isExiting = true));
+
 if (port != null) {
   // in tests we start a simple TCP server to communicate to the realm when
   // the worker is ready to start processing jobs
@@ -158,6 +162,13 @@ async function startWorker(urlMappings: URL[][]) {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     },
   );
+
+  worker.on('exit', () => {
+    if (!isExiting) {
+      log.info(`worker ${worker.pid} exited. spawning replacement worker`);
+      startWorker(urlMappings);
+    }
+  });
 
   if (worker.stdout) {
     worker.stdout.on('data', (data: Buffer) =>
