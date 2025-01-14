@@ -1,3 +1,5 @@
+import { tracked } from '@glimmer/tracking';
+
 import { EventStatus } from 'matrix-js-sdk';
 
 import { getCard } from '@cardstack/runtime-common';
@@ -41,6 +43,9 @@ interface RoomMessageOptional {
 }
 
 export class Message implements RoomMessageInterface {
+  @tracked formattedMessage: string;
+  @tracked message: string;
+
   attachedCardIds?: string[] | null;
   attachedSkillCardIds?: string[] | null;
   index?: number;
@@ -51,12 +56,10 @@ export class Message implements RoomMessageInterface {
   command?: MessageCommand | null;
 
   author: RoomMember;
-  formattedMessage: string;
   status: EventStatus | null;
   created: Date;
   updated: Date;
   eventId: string;
-  message: string;
   roomId: string;
 
   constructor(init: RoomMessageInterface) {

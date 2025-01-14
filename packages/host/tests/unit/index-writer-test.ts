@@ -48,14 +48,6 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('only invalidates latest version of content', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
   test('can update an index entry', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,

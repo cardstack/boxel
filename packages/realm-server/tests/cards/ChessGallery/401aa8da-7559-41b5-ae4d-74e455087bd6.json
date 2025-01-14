@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "pgn": "1. e4 c5 2. Nf3 Nc6 3. Bb5 g6 4. O-O Bg7 5. Re1 e5 6. c3 Nge7 7. d4 cxd4 8. cxd4 exd4 9. e5 a6 10. Bf1 O-O 11. Na3 d6 12. exd6 Qxd6 13. Nc4 Qc7 14. g3 Nd5 15. Bg2 Rd8 16. Bg5 f6 17. Bd2 b5 18. Na3 Kh8 19. Rc1 Qb6 20. Qb3 Bf8 21. Nh4 Nde7 22. Qf7 Bg7 23. Rxc6 Qxc6 24. Rxe7 Qxg2+ 25. Kxg2 Rg8 26. Bh6 Bh3+ 27. Kxh3 Ra7 28. Bxg7+ Rxg7 29. Re8+ Rg8 30. Rxg8#",
+      "dateOfGame": "2022-08-06",
+      "whitePlayer": "Gukesh D",
+      "blackPlayer": "Alexei Shirov",
+      "title": "Gukesh D vs Alexei Shirov - 2022 Chess Olympiad",
+      "description": "A remarkable victory by Gukesh over Alexei Shirov at the 2022 Chess Olympiad, showcasing his extraordinary talent and strategic prowess.",
+      "thumbnailURL": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRqPDi__ejymzQm5Ho7m6zWAOExXkYS-DcAmw&s"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chess-gallery",
+        "name": "ChessGallery"
+      }
+    }
+  }
+}

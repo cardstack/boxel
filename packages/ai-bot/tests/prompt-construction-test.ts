@@ -16,6 +16,7 @@ import {
   APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -1632,4 +1633,29 @@ test('Tools calls are connected to their results', () => {
     toolCallMessage!.content!.includes('Sunny'),
     'Tool call result should include "Sunny"',
   );
+});
+
+module('set model in prompt', () => {
+  test('default active LLM must be equal to `DEFAULT_LLM`', () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/required-tool-call-in-last-message.json',
+        ),
+      ),
+    );
+
+    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    assert.strictEqual(model, DEFAULT_LLM);
+  });
+
+  test('use latest active llm', () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(path.join(__dirname, 'resources/chats/set-active-llm.json')),
+    );
+
+    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    assert.strictEqual(model, 'google/gemini-pro-1.5');
+  });
 });

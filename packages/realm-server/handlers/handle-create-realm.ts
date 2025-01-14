@@ -104,7 +104,7 @@ export default function handleCreateRealmRequest({
       }
 
       let creationTimeMs = Date.now() - start;
-      if (creationTimeMs > 15_000) {
+      if (creationTimeMs > 30_000) {
         let msg = `it took a long time, ${creationTimeMs} ms, to create realm for ${ownerUserId}, ${JSON.stringify(
           json.data.attributes,
         )}`;

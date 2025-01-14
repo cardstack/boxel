@@ -8,12 +8,11 @@ import {
   type Loader,
   type ResolvedCodeRef,
   DBAdapter,
-  IndexWriter,
 } from '../index';
 import { serializeCard } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
 import { type SharedTests } from '../helpers';
-import { type TestIndexRow, setupIndex, getTypes } from '../helpers/indexer';
+import { setupIndex, getTypes } from '../helpers/indexer';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { cardSrc } from '../etc/test-fixtures';
@@ -1356,28 +1355,36 @@ const tests = Object.freeze({
     await setupIndex(
       dbAdapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
-      [
-        {
-          card: mango,
-          data: { realm_version: 1, search_doc: { name: 'Mango' } },
-        },
-        {
-          card: vangogh,
-          data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
-        },
-        {
-          card: vangogh,
-          data: { realm_version: 2, search_doc: { name: 'Mango' } },
-        },
-        {
-          card: ringo,
-          data: { realm_version: 1, search_doc: { name: 'Mango' } },
-        },
-        {
-          card: ringo,
-          data: { realm_version: 2, search_doc: { name: 'Ringo' } },
-        },
-      ],
+      {
+        working: [
+          {
+            card: mango,
+            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+          },
+          {
+            card: vangogh,
+            data: { realm_version: 2, search_doc: { name: 'Mango' } },
+          },
+          {
+            card: ringo,
+            data: { realm_version: 2, search_doc: { name: 'Ringo' } },
+          },
+        ],
+        production: [
+          {
+            card: mango,
+            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+          },
+          {
+            card: vangogh,
+            data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+          },
+          {
+            card: ringo,
+            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+          },
+        ],
+      },
     );
 
     let type = await personCardType(testCards);
@@ -1394,11 +1401,6 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
-    assert.strictEqual(
-      meta.page.realmVersion,
-      2,
-      'the realm version queried is correct',
-    );
     assert.deepEqual(
       getIds(results),
       [mango.id, vangogh.id],
@@ -1414,24 +1416,36 @@ const tests = Object.freeze({
     await setupIndex(
       dbAdapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
-      [
-        {
-          card: mango,
-          data: { realm_version: 1, search_doc: { name: 'Mango' } },
-        },
-        {
-          card: vangogh,
-          data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
-        },
-        {
-          card: vangogh,
-          data: { realm_version: 2, search_doc: { name: 'Mango' } },
-        },
-        {
-          card: ringo,
-          data: { realm_version: 1, search_doc: { name: 'Ringo' } },
-        },
-      ],
+      {
+        working: [
+          {
+            card: mango,
+            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+          },
+          {
+            card: vangogh,
+            data: { realm_version: 2, search_doc: { name: 'Mango' } },
+          },
+          {
+            card: ringo,
+            data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+          },
+        ],
+        production: [
+          {
+            card: mango,
+            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+          },
+          {
+            card: vangogh,
+            data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+          },
+          {
+            card: ringo,
+            data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+          },
+        ],
+      },
     );
 
     let type = await personCardType(testCards);
@@ -1447,11 +1461,6 @@ const tests = Object.freeze({
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.strictEqual(
-      meta.page.realmVersion,
-      1,
-      'the realm version queried is correct',
-    );
     assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   },
 
@@ -1647,179 +1656,6 @@ const tests = Object.freeze({
         [vangogh.id, mango.id, ringo.id],
         'results are correct',
       );
-    }
-  },
-
-  'can get paginated results that are stable during index mutations': async (
-    assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
-  ) => {
-    let { mango } = testCards;
-    let Card = mango.constructor as typeof CardDef;
-    let testData: TestIndexRow[] = [];
-    for (let i = 0; i < 10; i++) {
-      testData.push({
-        card: new Card({ id: `${testRealmURL}mango${i}` }),
-        data: { search_doc: { name: `Mango-${i}` } },
-      });
-    }
-
-    await setupIndex(dbAdapter, testData);
-
-    // page 1
-    let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        page: { number: 0, size: 3 },
-        sort: [
-          {
-            on: type,
-            by: 'name',
-            direction: 'desc',
-          },
-        ],
-        filter: {
-          on: type,
-          contains: { name: 'Mango' },
-        },
-      },
-      loader,
-    );
-
-    let {
-      page: { total, realmVersion },
-    } = meta;
-    assert.strictEqual(total, 10, 'the total results meta is correct');
-    assert.strictEqual(realmVersion, 1, 'the query realm version is correct');
-    assert.deepEqual(getIds(results), [
-      `${testRealmURL}mango9`,
-      `${testRealmURL}mango8`,
-      `${testRealmURL}mango7`,
-    ]);
-
-    {
-      // page 2
-      let { cards: results, meta } = await indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          // providing the realm version received from the 1st page's meta keeps
-          // the result set stable while we page over it
-          page: { number: 1, size: 3, realmVersion },
-          sort: [
-            {
-              on: type,
-              by: 'name',
-              direction: 'desc',
-            },
-          ],
-          filter: {
-            on: type,
-            contains: { name: 'Mango' },
-          },
-        },
-        loader,
-      );
-      assert.strictEqual(
-        meta.page.total,
-        10,
-        'the total results meta is correct',
-      );
-      assert.strictEqual(
-        meta.page.realmVersion,
-        1,
-        'the query realm version is correct',
-      );
-      assert.deepEqual(getIds(results), [
-        `${testRealmURL}mango6`,
-        `${testRealmURL}mango5`,
-        `${testRealmURL}mango4`,
-      ]);
-    }
-
-    // mutate the index
-    let batch = await new IndexWriter(dbAdapter).createBatch(
-      new URL(testRealmURL),
-    );
-    await batch.invalidate(new URL(`${testRealmURL}mango3.json`));
-    await batch.done();
-
-    {
-      // page 3
-      let { cards: results, meta } = await indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          // providing the realm version received from the 1st page's meta keeps
-          // the result set stable while we page over it
-          page: { number: 2, size: 3, realmVersion },
-          sort: [
-            {
-              on: type,
-              by: 'name',
-              direction: 'desc',
-            },
-          ],
-          filter: {
-            on: type,
-            contains: { name: 'Mango' },
-          },
-        },
-        loader,
-      );
-      assert.strictEqual(
-        meta.page.total,
-        10,
-        'the total results meta is correct',
-      );
-      assert.strictEqual(
-        meta.page.realmVersion,
-        1,
-        'the query realm version is correct',
-      );
-      assert.deepEqual(getIds(results), [
-        `${testRealmURL}mango3`, // this is actually removed in the current index
-        `${testRealmURL}mango2`,
-        `${testRealmURL}mango1`,
-      ]);
-    }
-
-    // assert that a new search against the current index no longer contains the
-    // removed card
-    {
-      let { cards: results, meta } = await indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          sort: [
-            {
-              on: type,
-              by: 'name',
-              direction: 'desc',
-            },
-          ],
-          filter: {
-            on: type,
-            contains: { name: 'Mango' },
-          },
-        },
-        loader,
-      );
-
-      let {
-        page: { total, realmVersion },
-      } = meta;
-      assert.strictEqual(total, 9, 'the total results meta is correct');
-      assert.strictEqual(realmVersion, 2, 'the query realm version is correct');
-      assert.deepEqual(getIds(results), [
-        `${testRealmURL}mango9`,
-        `${testRealmURL}mango8`,
-        `${testRealmURL}mango7`,
-        `${testRealmURL}mango6`,
-        `${testRealmURL}mango5`,
-        `${testRealmURL}mango4`,
-        `${testRealmURL}mango2`,
-        `${testRealmURL}mango1`,
-        `${testRealmURL}mango0`,
-      ]);
     }
   },
 
@@ -2723,7 +2559,6 @@ const tests = Object.freeze({
       3,
       'meta total results meta is correct',
     );
-    assert.strictEqual(meta.page.realmVersion, 1, 'realm version is correct');
     assert.strictEqual(
       prerenderedCards.length,
       3,
@@ -2816,12 +2651,6 @@ const tests = Object.freeze({
     ));
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.strictEqual(
-      meta.page.realmVersion,
-      1,
-      'the realm version is correct',
-    );
-
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
   },
