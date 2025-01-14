@@ -19,7 +19,6 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
-import { ContactRow } from '../components/contact-row';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
@@ -34,6 +33,7 @@ import Handshake from '@cardstack/boxel-icons/handshake';
 import ClockX from '@cardstack/boxel-icons/clock-x';
 import ClockUp from '@cardstack/boxel-icons/clock-up';
 import Contract from '@cardstack/boxel-icons/contract';
+import { Pill } from '@cardstack/boxel-ui/components';
 
 export const urgencyTagValues = [
   {
@@ -189,24 +189,20 @@ class IsolatedTemplate extends Component<typeof Account> {
             <:content>
               <div class='description content-container'>
                 {{#if this.hasContacts}}
-                  {{#if @model.primaryContact}}
-                    <ContactRow
-                      @userID={{@model.primaryContact.id}}
-                      @name={{@model.primaryContact.name}}
-                      @thumbnailURL={{@model.primaryContact.thumbnailURL}}
-                      @tagLabel='primary'
+                  <div class='primary-contact-group'>
+                    <@fields.primaryContact
+                      @format='atom'
+                      @displayContainer={{false}}
                     />
-                  {{/if}}
-                  {{#each @model.contacts as |contact|}}
-                    {{#if contact}}
-                      <ContactRow
-                        @userID={{contact.id}}
-                        @name={{contact.name}}
-                        @thumbnailURL={{contact.thumbnailURL}}
-                        @tagLabel={{contact.position}}
-                      />
-                    {{/if}}
-                  {{/each}}
+                    <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+                      Primary
+                    </Pill>
+                  </div>
+
+                  <@fields.contacts
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
                 {{else}}
                   <div class='default-value'>
                     Missing Contacts
@@ -305,6 +301,18 @@ class IsolatedTemplate extends Component<typeof Account> {
       .primary-contact {
         width: fit-content;
         display: inline-block;
+      }
+      .primary-contact-group {
+        display: inline-flex;
+        align-items: start;
+        gap: var(--boxel-sp-xs);
+      }
+      .primary-tag {
+        --pill-font-weight: 400;
+        --pill-padding: var(--boxel-sp-6xs) var(--boxel-sp-xxs);
+        --pill-font: 400 var(--boxel-font-xs);
+        --pill-border: none;
+        flex-shrink: 0;
       }
       .description {
         font: 500 var(--boxel-font-sm);
