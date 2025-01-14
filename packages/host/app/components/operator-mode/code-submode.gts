@@ -478,6 +478,13 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
+  get showBoxelSpecPreview() {
+    return (
+      !this.moduleContentsResource.isLoading &&
+      this.selectedDeclaration?.exportName
+    );
+  }
+
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.goToDefinition(undefined, dec.localName);
