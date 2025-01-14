@@ -83,7 +83,7 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
     secrets: inherit
     with:
-      repository: "boxel-realm-server-${{ inputs.environment }}"
+      repository: "boxel-worker-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/worker.Dockerfile"
       build-args: |
