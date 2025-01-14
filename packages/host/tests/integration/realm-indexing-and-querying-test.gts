@@ -617,7 +617,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person card',
-              isField: false,
+              type: 'card',
               ref: {
                 module: './person',
                 name: 'Person',
@@ -651,8 +651,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           realmName: 'Unnamed Workspace',
           thumbnailURL: null,
           readMe: null,
-
-          isField: false,
+          type: 'card',
           ref: {
             module: `./person`,
             name: 'Person',
@@ -680,7 +679,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         _cardType: 'Catalog Entry',
         description: 'Catalog entry for Person card',
         id: `${testRealmURL}person-catalog-entry`,
-        isField: false,
+        type: 'card',
         moduleHref: `${testRealmURL}person`,
         realmName: 'Unnamed Workspace',
         ref: `${testRealmURL}person/Person`,
@@ -1991,7 +1990,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'Booking',
               description: 'Catalog entry for Booking',
-              isField: false,
+              type: 'card',
               ref: {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
@@ -2015,7 +2014,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       _cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
       description: 'Catalog entry for Booking',
-      isField: false,
+      type: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
@@ -2325,7 +2324,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
-              isField: false,
+              type: 'card',
               ref: {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
@@ -2374,7 +2373,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
           },
-          isField: false,
+          type: 'card',
           moduleHref: `${testModuleRealm}pet-person`,
           realmName: 'Unnamed Workspace',
         },
@@ -2411,7 +2410,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
         ref: `${testModuleRealm}pet-person/PetPerson`,
-        isField: false,
+        type: 'card',
         moduleHref: `${testModuleRealm}pet-person`,
         realmName: 'Unnamed Workspace',
       });
@@ -3782,7 +3781,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
-            isField: false,
+            type: 'card',
             ref: {
               module: `${testModuleRealm}post`,
               name: 'Post',
@@ -3802,7 +3801,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
-            isField: false,
+            type: 'card',
             ref: {
               module: `${testModuleRealm}article`,
               name: 'Article',

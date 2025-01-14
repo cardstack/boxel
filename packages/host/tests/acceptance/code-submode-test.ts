@@ -562,7 +562,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               attributes: {
                 title: 'Person',
                 description: 'Catalog entry',
-                isField: false,
+                type: 'card',
                 ref: {
                   module: `./person`,
                   name: 'Person',

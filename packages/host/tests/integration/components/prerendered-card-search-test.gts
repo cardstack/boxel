@@ -259,7 +259,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
-            isField: false,
+            type: 'card',
             ref: {
               module: `${testRealmURL}post`,
               name: 'Post',
@@ -279,7 +279,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
-            isField: false,
+            type: 'card',
             ref: {
               module: `${testRealmURL}article`,
               name: 'Article',

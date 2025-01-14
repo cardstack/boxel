@@ -255,7 +255,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
+              type: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',

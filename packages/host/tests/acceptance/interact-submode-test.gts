@@ -256,7 +256,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       [`${fileName}.json`]: new CatalogEntry({
         title,
         description: `Catalog entry for ${title}`,
-        isField: false,
+        type: 'card',
         ref,
       }),
     });
@@ -282,7 +282,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'person-entry.json': new CatalogEntry({
           title: 'Person Card',
           description: 'Catalog entry for Person Card',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -291,7 +291,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'pet-entry.json': new CatalogEntry({
           title: 'Pet Card',
           description: 'Catalog entry for Pet Card',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
@@ -301,7 +301,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'puppy-entry.json': new CatalogEntry({
           title: 'Puppy Card',
           description: 'Catalog entry for Puppy Card',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Puppy',
@@ -454,7 +454,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
-        .containsText('Test Workspace B');
+        .containsText('http://test-realm/test/person');
 
       // Close the card, find it in recent cards, and reopen it
       await click(

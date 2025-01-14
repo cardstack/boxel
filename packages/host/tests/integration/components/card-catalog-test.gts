@@ -118,7 +118,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/publishing-packet.json': new CatalogEntry({
           title: 'Publishing Packet',
           description: 'Catalog entry for PublishingPacket',
-          isField: false,
+          type: 'card',
           ref: {
             module: `../publishing-packet`,
             name: 'PublishingPacket',
@@ -127,7 +127,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/author.json': new CatalogEntry({
           title: 'Author',
           description: 'Catalog entry for Author',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
@@ -136,7 +136,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/person.json': new CatalogEntry({
           title: 'Person',
           description: 'Catalog entry for Person',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -145,7 +145,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/pet.json': new CatalogEntry({
           title: 'Pet',
           description: 'Catalog entry for Pet',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
@@ -154,7 +154,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/tree.json': new CatalogEntry({
           title: 'Tree',
           description: 'Catalog entry for Tree',
-          isField: false,
+          type: 'card',
           ref: {
             module: `${testRealmURL}tree`,
             name: 'Tree',
@@ -163,7 +163,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/blog-post.json': new CatalogEntry({
           title: 'BlogPost',
           description: 'Catalog entry for BlogPost',
-          isField: false,
+          type: 'field',
           ref: {
             module: `${testRealmURL}blog-post`,
             name: 'BlogPost',
@@ -172,7 +172,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/address.json': new CatalogEntry({
           title: 'Address',
           description: 'Catalog entry for Address field',
-          isField: true,
+          type: 'field',
           ref: {
             module: `${testRealmURL}address`,
             name: 'Address',
