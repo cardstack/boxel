@@ -244,8 +244,8 @@ export class CatalogEntry extends CardDef {
           <p class='description'><@fields.description /></p>
         </div>
         <div class='pill-container'>
-          {{#if this.args.model.type}}
-            <SpecTag @type={{this.args.model.type}} />
+          {{#if @model.type}}
+            <SpecTag @type={{@model.type}} />
           {{/if}}
         </div>
       </div>
