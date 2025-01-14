@@ -14,7 +14,7 @@ import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
+import { Pill } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
@@ -37,8 +37,6 @@ import FilePen from '@cardstack/boxel-icons/file-pen';
 import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Award from '@cardstack/boxel-icons/award';
 import AwardOff from '@cardstack/boxel-icons/award-off';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 import { Document } from './document';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
@@ -132,15 +130,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
       };
     }
     return null;
-  }
-
-  @action
-  viewDocument(id: string | undefined) {
-    if (id && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(new URL(id));
-    } else {
-      console.warn('Card opening functionality is not available here.');
-    }
   }
 
   <template>
@@ -296,18 +285,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     <Info class='info-icon' />
                   </:icon>
                 </EntityDisplayWithIcon>
-
-                {{#if @model.document}}
-                  <BoxelButton
-                    @as='button'
-                    @size='extra-small'
-                    @kind='secondary-light'
-                    class='view-document-btn'
-                    {{on 'click' (fn this.viewDocument @model.document.id)}}
-                  >
-                    View Attachment
-                  </BoxelButton>
-                {{/if}}
               </div>
               <div class='description content-container'>
                 {{#if @model.notes}}

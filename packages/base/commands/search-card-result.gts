@@ -9,7 +9,7 @@ import {
   IconPlus,
   IconSearchThick,
 } from '@cardstack/boxel-ui/icons';
-import { getCard, primitive } from '@cardstack/runtime-common';
+import { Query, getCard, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
@@ -22,12 +22,14 @@ import {
   type Format,
   FieldDef,
 } from '../card-api';
+import CodeRefField from '../code-ref';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
   loaded?: Promise<void>;
   cardError?: { id: string; error: Error };
 };
+
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
@@ -40,6 +42,24 @@ interface ResourceListSignature {
 
 export class JsonField extends FieldDef {
   static [primitive]: Record<string, any>;
+}
+
+export class QueryField extends FieldDef {
+  static [primitive]: Query;
+}
+
+export class SearchCardsByQueryInput extends CardDef {
+  static displayName = 'Search Cards';
+  static icon = IconSearchThick;
+  @field query = contains(QueryField);
+}
+
+export class SearchCardsByTypeAndTitleInput extends CardDef {
+  static displayName = 'Search Cards';
+  static icon = IconSearchThick;
+  @field title = contains(StringField);
+  @field type = contains(CodeRefField);
+  @field cardType = contains(StringField);
 }
 
 class ResourceList extends GlimmerComponent<ResourceListSignature> {
