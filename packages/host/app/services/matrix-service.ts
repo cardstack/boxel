@@ -624,7 +624,7 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
-    let tools = [];
+    let tools = [getSearchTool()];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
@@ -644,7 +644,6 @@ export default class MatrixService extends Service {
         );
         if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-          tools.push(getSearchTool());
         }
       }
     }
