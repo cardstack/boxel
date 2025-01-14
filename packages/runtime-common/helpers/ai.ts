@@ -416,7 +416,7 @@ export function getPatchTool(
   };
 }
 
-export function getSearchTool() {
+export function getSearchTool(): Tool {
   return {
     type: 'function',
     function: {

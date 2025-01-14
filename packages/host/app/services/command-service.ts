@@ -238,8 +238,8 @@ function hasPatchData(payload: any): payload is PatchPayload {
 
 function hasSearchData(payload: any): payload is SearchPayload {
   return (
-    isResolvedCodeRef(payload.attributes?.cardType) ||
+    isResolvedCodeRef(payload.attributes?.type) ||
     payload.attributes?.title ||
-    payload.attributes?.type
+    payload.attributes?.cardType
   );
 }

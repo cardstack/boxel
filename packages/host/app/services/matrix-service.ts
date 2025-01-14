@@ -31,9 +31,9 @@ import {
   basicMappings,
   generateJsonSchemaForCardType,
   getSearchTool,
+  getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -70,6 +70,7 @@ import type {
   CommandResultWithOutputContent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { getCard } from '../resources/card-resource';
@@ -624,7 +625,7 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
-    let tools = [getSearchTool()];
+    let tools: Tool[] = [getSearchTool()];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
