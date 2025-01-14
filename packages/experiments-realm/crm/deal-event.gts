@@ -197,7 +197,7 @@ export class DealEvent extends Event {
           </EntityDisplayWithIcon>
         {{/if}}
       </div>
-      <style>
+      <style scoped>
         .event-summary {
           display: inline-flex;
           flex-wrap: wrap;
