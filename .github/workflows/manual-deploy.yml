@@ -123,7 +123,7 @@ jobs:
 
   deploy-worker:
     name: Deploy worker
-    needs: [build-realm-server, deploy-host, post-migrate-db]
+    needs: [build-worker, deploy-host, post-migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
