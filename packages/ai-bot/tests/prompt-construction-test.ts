@@ -1611,6 +1611,27 @@ test('Tools can be required to be called if done so in the last message', () => 
   });
 });
 
+test('Tools calls are connected to their results', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(
+        __dirname,
+        'resources/chats/connect-tool-calls-to-results.json',
+      ),
+    ),
+  );
+
+  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  // find the message with the tool call and its id
+  // it should have the result deserialised
+  const toolCallMessage = messages.find((message) => message.role === 'tool');
+  assert.ok(toolCallMessage, 'Should have a tool call message');
+  assert.ok(
+    toolCallMessage!.content!.includes('Cloudy'),
+    'Tool call result should include "Cloudy"',
+  );
+});
+
 module('set model in prompt', () => {
   test('default active LLM must be equal to `DEFAULT_LLM`', () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(

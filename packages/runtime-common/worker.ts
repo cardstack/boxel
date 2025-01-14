@@ -12,6 +12,7 @@ import {
   SupportedMimeType,
   fileContentToText,
   unixTime,
+  logger,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
@@ -117,6 +118,7 @@ export class RunnerOptionsManager {
 }
 
 export class Worker {
+  #log = logger('worker');
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #indexWriter: IndexWriter;
@@ -232,7 +234,7 @@ export class Worker {
           // was raised to this level the fastboot instance is probably no
           // longer usable.
           reportError(e);
-          console.error(
+          this.#log.error(
             `Error raised during indexing has likely stopped the indexer`,
             e,
           );
@@ -251,6 +253,9 @@ export class Worker {
   }
 
   private fromScratch = async (args: FromScratchArgs) => {
+    this.#log.debug(
+      `starting from-scratch indexing for job: ${JSON.stringify(args)}`,
+    );
     return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
@@ -258,6 +263,11 @@ export class Worker {
       let { ignoreData, stats } = await this.#fromScratch(
         new URL(args.realmURL),
         args.invalidateEntireRealm,
+      );
+      this.#log.debug(
+        `completed from-scratch indexing for realm ${
+          args.realmURL
+        }:\n${JSON.stringify(stats, null, 2)}`,
       );
       return {
         ignoreData: { ...ignoreData },
@@ -267,6 +277,9 @@ export class Worker {
   };
 
   private incremental = async (args: IncrementalArgs) => {
+    this.#log.debug(
+      `starting incremental indexing for job: ${JSON.stringify(args)}`,
+    );
     return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
@@ -276,6 +289,13 @@ export class Worker {
         new URL(args.realmURL),
         args.operation,
         { ...args.ignoreData },
+      );
+      this.#log.debug(
+        `completed incremental indexing for  ${args.url}:\n${JSON.stringify(
+          { ...stats, invalidations },
+          null,
+          2,
+        )}`,
       );
       return {
         ignoreData: { ...ignoreData },

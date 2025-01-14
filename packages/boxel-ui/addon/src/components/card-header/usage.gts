@@ -134,7 +134,7 @@ export default class CardHeaderUsage extends Component {
           />
           <Args.String
             @name='headerColor'
-            @description='background color of the header, defaults to boxel-light'
+            @description='background color of the header'
             @value={{this.headerColor}}
             @onInput={{fn (mut this.headerColor)}}
           />
@@ -195,7 +195,7 @@ export default class CardHeaderUsage extends Component {
           <Css.Basic
             @name='boxel-card-header-icon-container-min-width'
             @type='length'
-            @description='minimum width of the icon container; useful to set matching boxel-card-header-actions-min-width to keep the title centered opverall'
+            @description='minimum width of the icon container; useful to set matching boxel-card-header-actions-min-width to keep the title centered overall'
             @defaultValue={{this.cardHeaderIconContainerMinWidth.defaults}}
             @value={{this.cardHeaderIconContainerMinWidth.value}}
             @onInput={{this.cardHeaderIconContainerMinWidth.update}}
@@ -203,7 +203,7 @@ export default class CardHeaderUsage extends Component {
           <Css.Basic
             @name='boxel-card-header-actions-min-width'
             @type='length'
-            @description='minimum width of the actions container; useful to set matching boxel-card-header-icon-container-min-width to keep the title centered opverall'
+            @description='minimum width of the actions container; useful to set matching boxel-card-header-icon-container-min-width to keep the title centered overall'
             @defaultValue={{this.cardHeaderActionsMinWidth.defaults}}
             @value={{this.cardHeaderActionsMinWidth.value}}
             @onInput={{this.cardHeaderActionsMinWidth.update}}
