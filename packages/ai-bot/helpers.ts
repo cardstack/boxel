@@ -156,7 +156,10 @@ export function constructHistory(
         cardFragments,
       );
     }
-    if (event.type !== 'm.room.message') {
+    if (
+      event.type !== 'm.room.message' &&
+      event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+    ) {
       continue;
     }
     let eventId = event.event_id!;
@@ -594,4 +597,25 @@ export function isCommandResultEvent(
     event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
     event.content['m.relates_to']?.rel_type === 'm.annotation'
   );
+}
+
+export function eventRequiresResponse(event: MatrixEvent) {
+  // If it's a message, we should respond unless it's a card fragment
+  if (event.getType() === 'm.room.message') {
+    if (event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
+      return false;
+    }
+    return true;
+  }
+
+  // If it's a command result with output, we should respond
+  if (
+    event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+    event.getContent().msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+  ) {
+    return true;
+  }
+
+  // If it's a different type, or a command result without output, we should not respond
+  return false;
 }
