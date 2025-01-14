@@ -68,7 +68,7 @@ export default class CommandService extends Service {
   public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
-      eventId = event.content?.['m.relates_to']!.event_id!;
+      eventId = event.content?.['m.relates_to']!.event_id;
     }
     if (!eventId) {
       throw new Error(
