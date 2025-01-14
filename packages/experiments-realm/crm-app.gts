@@ -15,7 +15,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { not, eq } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   TabbedHeader,
@@ -412,11 +412,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @setSearchKey={{this.setSearchKey}}
           />
         </div>
-        <ViewSelector
-          class='view-menu content-header-row-2'
-          @selectedId={{this.selectedView}}
-          @onChange={{this.onChangeView}}
-        />
+        {{#if (not (eq this.activeTabId 'Task'))}}
+          <ViewSelector
+            class='view-menu content-header-row-2'
+            @selectedId={{this.selectedView}}
+            @onChange={{this.onChangeView}}
+          />
+        {{/if}}
         {{#if this.activeFilter.sortOptions.length}}
           {{#if this.selectedSort}}
             <SortMenu
@@ -440,10 +442,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           />
         {{/if}}
         {{#if (eq this.activeTabId 'Task')}}
-          <CRMTaskPlannerIsolated
-            @model={{this.args.model}}
-            @context={{@context}}
-          />
+          <CRMTaskPlannerIsolated @model={{@model}} @context={{@context}} />
         {{/if}}
       </:grid>
     </Layout>

@@ -363,7 +363,7 @@ export class CRMTaskPlannerIsolated extends Component<typeof CRMTaskPlanner> {
 
   <template>
     <div class='task-app'>
-      {{#if (not this.args.model.id)}}
+      {{#if (not @model.id)}}
         <div class='disabled'>
           {{#if @context.actions.viewCard}}
             <BoxelButton @kind='primary' {{on 'click' this.viewCard}}>

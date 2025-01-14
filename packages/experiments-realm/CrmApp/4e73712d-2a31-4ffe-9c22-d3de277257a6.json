@@ -35,7 +35,7 @@
           "tabId": "Task",
           "ref": {
             "name": "Task",
-            "module": "crm/task"
+            "module": "crm/crm-task"
           },
           "isTable": false
         }
