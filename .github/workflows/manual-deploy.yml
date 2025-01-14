@@ -136,7 +136,7 @@ jobs:
 
   deploy-realm-server:
     name: Deploy realm server
-    needs: [deploy-worker]
+    needs: [deploy-worker, build-realm-server, deploy-host, post-migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
