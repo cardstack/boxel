@@ -465,7 +465,7 @@ module('Integration | operator-mode', function (hooks) {
           } as LooseSingleCardDocument,
           'grid.json': new CardsGrid(),
           'CatalogEntry/publishing-packet.json': new CatalogEntry({
-            title: 'Publishing Packet',
+            name: 'Publishing Packet',
             description: 'Catalog entry for PublishingPacket',
             type: 'card',
             ref: {
@@ -474,7 +474,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
           'CatalogEntry/pet-room.json': new CatalogEntry({
-            title: 'General Pet Room',
+            name: 'General Pet Room',
             description: 'Catalog entry for Pet Room Card',
             type: 'card',
             ref: {
@@ -483,7 +483,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
           'CatalogEntry/pet-card.json': new CatalogEntry({
-            title: 'Pet',
+            name: 'Pet',
             description: 'Catalog entry for Pet',
             type: 'card',
             ref: {

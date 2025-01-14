@@ -280,7 +280,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
         'person-entry.json': new CatalogEntry({
-          title: 'Person Card',
+          name: 'Person Card',
           description: 'Catalog entry for Person Card',
           type: 'card',
           ref: {
@@ -289,7 +289,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         }),
         'pet-entry.json': new CatalogEntry({
-          title: 'Pet Card',
+          name: 'Pet Card',
           description: 'Catalog entry for Pet Card',
           type: 'card',
           ref: {
@@ -299,7 +299,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }),
         ...catalogEntries,
         'puppy-entry.json': new CatalogEntry({
-          title: 'Puppy Card',
+          name: 'Puppy Card',
           description: 'Catalog entry for Puppy Card',
           type: 'card',
           ref: {
