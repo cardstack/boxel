@@ -41,8 +41,8 @@ export default class CardHeader extends Component<Signature> {
       data-test-card-header
       class={{cn is-editing=(bool @onFinishEditing)}}
       {{setCssVar
-        --boxel-card-header-background-color=@headerColor
-        --boxel-card-header-text-color=(getContrastColor @headerColor)
+        boxel-card-header-background-color=@headerColor
+        boxel-card-header-text-color=(getContrastColor @headerColor)
       }}
       ...attributes
     >
