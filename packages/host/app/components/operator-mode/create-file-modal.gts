@@ -568,7 +568,7 @@ export default class CreateFileModal extends Component<Signature> {
       filter: {
         on: catalogEntryRef,
         // REMEMBER ME
-        every: [{ eq: { type: 'card' } }],
+        every: [{ eq: { type: isField ? 'field' : 'card' } }],
       },
     });
   });
