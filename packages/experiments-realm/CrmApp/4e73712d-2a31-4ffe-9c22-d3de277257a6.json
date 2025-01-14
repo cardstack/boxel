@@ -29,6 +29,15 @@
             "module": "crm/deal"
           },
           "isTable": false
+        },
+        {
+          "displayName": "Tasks",
+          "tabId": "Task",
+          "ref": {
+            "name": "Task",
+            "module": "crm/task"
+          },
+          "isTable": false
         }
       ],
       "headerIcon": {

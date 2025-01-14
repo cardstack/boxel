@@ -38,6 +38,7 @@ import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
+import { CRMTaskPlannerIsolated } from './crm/task-planner';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -103,6 +104,14 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     createNewButtonText: tag.buttonText,
   })),
 ];
+const TASK_FILTERS: LayoutFilter[] = [
+  {
+    displayName: 'All Tasks',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Task',
+    createNewButtonText: 'Create Task',
+  },
+];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
@@ -111,6 +120,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     ['Contact', CONTACT_FILTERS],
     ['Deal', DEAL_FILTERS],
     ['Account', ACCOUNT_FILTERS],
+    ['Task', TASK_FILTERS],
   ]);
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
@@ -427,6 +437,12 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @context={{@context}}
             @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
             class='crm-app-grid'
+          />
+        {{/if}}
+        {{#if (eq this.activeTabId 'Task')}}
+          <CRMTaskPlannerIsolated
+            @model={{this.args.model}}
+            @context={{@context}}
           />
         {{/if}}
       </:grid>
