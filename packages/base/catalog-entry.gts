@@ -109,7 +109,7 @@ export class CatalogEntry extends CardDef {
         <div class='readme section'>
           <div class='row-header'>
             <BookOpenText />
-            Read Me
+            README
           </div>
           {{#if @model.readMe}}
             <div class='box'>
