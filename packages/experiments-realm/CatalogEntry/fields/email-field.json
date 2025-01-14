@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Email Field",
       "description": "Email string field",
-      "isField": true,
+      "type": "field",
       "ref": {
         "module": "../../email",
         "name": "EmailField"
