@@ -1806,6 +1806,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-accordion-item="boxel-spec-preview"] button');
       await waitFor('[data-test-boxel-spec-selector]');
       assert.dom('[data-test-boxel-spec-selector]').exists();
+      await percySnapshot(assert);
       assert.dom('[data-test-title]').containsText('Person');
       assert.dom('[data-test-description]').containsText('Catalog entry');
       assert
