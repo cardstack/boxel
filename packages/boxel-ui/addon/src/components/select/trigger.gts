@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import { cn } from '../../helpers.ts';
+import { not } from '../../helpers/truth-helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
 
 export interface TriggerSignature {
@@ -40,9 +41,11 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
           {{yield @select.selected @select}}
         {{/if}}
       </div>
+      {{#if (not @select.disabled)}}
 
-      {{#if (has-block 'icon')}}
-        {{yield to='icon'}}
+        {{#if (has-block 'icon')}}
+          {{yield to='icon'}}
+        {{/if}}
       {{/if}}
     </div>
     <style scoped>
