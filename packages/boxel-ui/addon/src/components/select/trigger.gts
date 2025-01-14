@@ -89,7 +89,10 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
         {{/if}}
       </:default>
       <:icon>
-        <CaretDown class={{cn 'icon' (if @select.isOpen 'is-open')}} />
+        <CaretDown
+          class={{cn 'icon' (if @select.isOpen 'is-open')}}
+          data-test-caret-down
+        />
       </:icon>
     </BoxelTriggerWrapper>
     <style scoped>

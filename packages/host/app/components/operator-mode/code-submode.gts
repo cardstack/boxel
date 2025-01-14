@@ -937,6 +937,7 @@ export default class CodeSubmode extends Component<Signature> {
                             this.selectedAccordionItem
                             'schema-editor'
                           }}
+                          data-test-accordion-item='schema-editor'
                         >
                           <:title>
                             <SchemaEditorTitle />
@@ -964,6 +965,7 @@ export default class CodeSubmode extends Component<Signature> {
                               this.selectedAccordionItem
                               'boxel-spec-preview'
                             }}
+                            data-test-accordion-item='boxel-spec-preview'
                           >
                             <:title>
                               <BoxelSpecPreviewTitle />

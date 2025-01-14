@@ -187,7 +187,7 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
       </div>
     {{else}}
       <div class='boxel-spec-preview'>
-        <div class='boxel-spec-selector'>
+        <div class='boxel-spec-selector' data-test-boxel-spec-selector>
           <BoxelSelect
             @options={{@boxelSpecInstances}}
             @selected={{@selectedInstance}}

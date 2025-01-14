@@ -131,7 +131,7 @@ export class CatalogEntry extends CardDef {
           <div class='container-code-ref'>
             <div class='row-code-ref'>
               <div class='row-code-ref-label'>URL</div>
-              <div class='row-code-ref-value box'>
+              <div class='row-code-ref-value box' data-test-module-href>
                 {{@model.moduleHref}}
               </div>
             </div>
@@ -139,11 +139,11 @@ export class CatalogEntry extends CardDef {
               <div class='row-code-ref-label'>Exported Name</div>
               <div class='row-code-ref-value box'>
                 <div class='exported-row'>
-                  <div class='exported-name'>
+                  <div class='exported-name' data-test-exported-name>
                     <DiagonalArrowLeftUp class='exported-arrow' />
                     {{@model.ref.name}}
                   </div>
-                  <div class='exported-type'>
+                  <div class='exported-type' data-test-exported-type>
                     {{@model.type}}
                   </div>
                 </div>
