@@ -102,7 +102,7 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<FromScratchResult>(
         `from-scratch-index`,
-        'indexing',
+        `indexing:${this.#realm.url}`,
         4 * 60,
         args,
       );
@@ -140,7 +140,7 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<IncrementalResult>(
         `incremental-index`,
-        'indexing',
+        `indexing:${this.#realm.url}`,
         4 * 60,
         args,
       );

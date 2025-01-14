@@ -17,7 +17,7 @@ let log = logger('worker');
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
-  console.error(
+  log.error(
     `The REALM_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
@@ -29,11 +29,10 @@ if (!REALM_SECRET_SEED) {
 // the '-' is the task ID.
 const ECS_CONTAINER_METADATA_URI = process.env.ECS_CONTAINER_METADATA_URI;
 let workerId = ECS_CONTAINER_METADATA_URI
-  ? ECS_CONTAINER_METADATA_URI.split('/').pop()!
-  : 'realm_worker';
+  ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${process.pid}`
+  : `worker-pid-${process.pid}`;
 
 let {
-  port,
   matrixURL,
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
@@ -42,11 +41,6 @@ let {
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
-    port: {
-      description: 'port number',
-      demandOption: true,
-      type: 'number',
-    },
     fromUrl: {
       description: 'the source of the realm URL proxy',
       demandOption: true,
@@ -68,17 +62,17 @@ let {
       type: 'boolean',
     },
     matrixURL: {
-      description: 'The matrix homeserver for the realm',
+      description: 'The matrix homeserver for the realm server',
       demandOption: true,
       type: 'string',
     },
   })
   .parseSync();
 
-log.info(`starting worker for port ${port}`);
+log.info(`starting worker with pid ${process.pid}`);
 
 if (fromUrls.length !== toUrls.length) {
-  console.error(
+  log.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
   );
   process.exit(-1);
@@ -89,8 +83,8 @@ let virtualNetwork = new VirtualNetwork();
 shimExternals(virtualNetwork);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
-  new URL(String(fromUrl), `http://localhost:${port}`),
-  new URL(String(toUrls[i]), `http://localhost:${port}`),
+  new URL(String(fromUrl)),
+  new URL(String(toUrls[i])),
 ]);
 for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
@@ -117,14 +111,14 @@ let autoMigrate = migrateDB || undefined;
   });
 
   await worker.run();
+  log.info(`worker started`);
   if (process.send) {
-    log.info(`worker on port ${port} is ready`);
     process.send('ready');
   }
 })().catch((e: any) => {
   Sentry.captureException(e);
-  console.error(
-    `worker on port ${port}: Unexpected error encountered starting realm, stopping server`,
+  log.error(
+    `worker: Unexpected error encountered starting worker, stopping worker`,
     e,
   );
   process.exit(1);
