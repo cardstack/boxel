@@ -1,7 +1,6 @@
 #! /bin/sh
 
 NODE_NO_WARNINGS=1 \
-  LOG_LEVELS='*=info' \
   ts-node \
   --transpileOnly worker-manager \
   --count="${WORKER_COUNT:-1}" \

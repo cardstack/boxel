@@ -3,7 +3,6 @@
 FROM node:18.6.0-slim
 ARG worker_script
 ENV worker_script=$worker_script
-ENV LOG_LEVELS='worker=debug'
 
 WORKDIR /realm-server
 
