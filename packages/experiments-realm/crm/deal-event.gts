@@ -59,7 +59,7 @@ class IsolatedTemplate extends Component<typeof DealEvent> {
   </template>
 }
 
-class Atom extends Component<typeof DealEvent> {
+class AtomTemplate extends Component<typeof DealEvent> {
   <template>
     <div class='event-summary'>
       {{#if @model.eventDate}}
@@ -197,6 +197,7 @@ class EditTemplate extends Component<typeof DealEvent> {
   </template>
 }
 
+// @ts-ignore
 export class DealEvent extends Event {
   static displayName = 'Deal Event';
   static icon = CalendarPlus;
@@ -205,12 +206,18 @@ export class DealEvent extends Event {
 
   @field title = contains(StringField, {
     computeVia(this: DealEvent) {
+      if (!this.eventType || !this.location || !this.startDateTime) {
+        return '';
+      }
       return `${this.eventType} at ${this.location} (${this.startDateTime})`;
     },
   });
 
   @field eventDate = contains(StringField, {
     computeVia(this: DealEvent) {
+      if (!this.startDateTime) {
+        return '';
+      }
       const date = new Date(this.startDateTime);
       return date.toLocaleDateString('en-US', {
         year: 'numeric',
@@ -220,7 +227,7 @@ export class DealEvent extends Event {
     },
   });
 
-  static atom = AtomTemplate;
   static isolated = IsolatedTemplate;
+  static atom = AtomTemplate;
   static edit = EditTemplate;
 }
