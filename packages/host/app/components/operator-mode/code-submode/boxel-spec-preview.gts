@@ -5,6 +5,13 @@ import GlimmerComponent from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import AppsIcon from '@cardstack/boxel-icons/apps';
+import Brain from '@cardstack/boxel-icons/brain';
+import DotIcon from '@cardstack/boxel-icons/dot';
+
+import LayoutList from '@cardstack/boxel-icons/layout-list';
+import StackIcon from '@cardstack/boxel-icons/stack';
+
 import {
   BoxelButton,
   Pill,
@@ -26,6 +33,8 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import RealmService from '@cardstack/host/services/realm';
 
+import type RealmServerService from '@cardstack/host/services/realm-server';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
@@ -33,12 +42,6 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { type FileType } from '../create-file-modal';
 
 import type { WithBoundArgs } from '@glint/template';
-import type RealmServerService from '@cardstack/host/services/realm-server';
-import DotIcon from '@cardstack/boxel-icons/dot';
-import StackIcon from '@cardstack/boxel-icons/stack';
-import AppsIcon from '@cardstack/boxel-icons/apps';
-import LayoutList from '@cardstack/boxel-icons/layout-list';
-import Brain from '@cardstack/boxel-icons/brain';
 
 interface Signature {
   Element: HTMLElement;
