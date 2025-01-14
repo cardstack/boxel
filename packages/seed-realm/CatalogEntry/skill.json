@@ -4,7 +4,6 @@
     "attributes": {
       "title": "Skill Card",
       "description": "Catalog entry for Skill card",
-      "isField": false,
       "ref": {
         "module": "../skill-card",
         "name": "SkillCard"

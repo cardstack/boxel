@@ -4,7 +4,6 @@
     "attributes": {
       "title": "Sprint Planner",
       "description": "Catalog entry for Sprint Planner App card",
-      "isField": false,
       "ref": {
         "module": "../sprint-planner",
         "name": "SprintPlanner"
