@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Product",
       "description": "Catalog entry for Product card",
-      "isField": false,
+      "type": "card",
       "ref": {
         "module": "../product",
         "name": "Product"

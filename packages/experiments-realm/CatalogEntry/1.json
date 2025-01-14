@@ -4,17 +4,10 @@
     "attributes": {
       "title": "Person",
       "description": "Catalog entry for Person card",
-      "isField": false,
+      "type": "card",
       "ref": {
         "module": "../person",
         "name": "Person"
-      }
-    },
-    "relationships": {
-      "demo.pet": {
-        "links": {
-          "self": "../Pet/1"
-        }
       }
     },
     "meta": {

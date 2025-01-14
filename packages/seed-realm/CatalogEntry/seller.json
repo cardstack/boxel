@@ -4,11 +4,11 @@
     "attributes": {
       "title": "Seller",
       "description": "Catalog entry for Seller card",
-      "isField": false,
       "ref": {
         "module": "../seller",
         "name": "Seller"
-      }
+      },
+      "type": "card"
     },
     "meta": {
       "adoptsFrom": {

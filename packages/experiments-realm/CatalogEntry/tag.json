@@ -8,7 +8,7 @@
         "name": "Tag",
         "module": "../tag"
       },
-      "isField": false
+      "type": "card"
     },
     "meta": {
       "adoptsFrom": {

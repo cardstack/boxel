@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Hello World",
       "description": "Catalog entry for Hello World card",
-      "isField": false,
+      "type": "card",
       "ref": {
         "module": "../hello-world",
         "name": "HelloWorld"

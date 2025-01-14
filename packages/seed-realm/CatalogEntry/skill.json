@@ -8,7 +8,8 @@
       "ref": {
         "module": "../skill-card",
         "name": "SkillCard"
-      }
+      },
+      "type": "card"
     },
     "meta": {
       "adoptsFrom": {
