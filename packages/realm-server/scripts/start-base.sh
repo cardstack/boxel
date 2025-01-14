@@ -20,7 +20,7 @@ NODE_ENV=development \
   --transpileOnly main \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
-  --realmsRootPath='./realms/localhost_4201' \
+  --realmsRootPath='./realms/localhost_4201_base' \
   --migrateDB \
   $1 \
   \
