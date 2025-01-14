@@ -172,6 +172,7 @@ export function constructHistory(
     }
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content['m.relates_to']!.event_id!;
+      event.event_id = eventId;
     }
     const existingEvent = latestEventsMap.get(eventId);
     if (

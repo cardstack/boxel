@@ -66,6 +66,15 @@ export default class CommandService extends Service {
   }
 
   public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+    let eventId = event.event_id;
+    if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
+      eventId = event.content?.['m.relates_to']!.event_id!;
+    }
+    if (!eventId) {
+      throw new Error(
+        'No event id found for command event, this should not happen',
+      );
+    }
     // examine the tool_call and see if it's a command that we know how to run
     let toolCall = event?.content?.data?.toolCall;
     if (!toolCall) {
@@ -77,7 +86,7 @@ export default class CommandService extends Service {
     if (!command || !autoExecute) {
       return;
     }
-    this.currentlyExecutingCommandEventIds.add(event.event_id!);
+    this.currentlyExecutingCommandEventIds.add(eventId);
     try {
       // Get the input type and validate/construct the payload
       let InputType = await command.getInputType();
@@ -96,11 +105,11 @@ export default class CommandService extends Service {
       let resultCard = await command.execute(typedInput);
       await this.matrixService.sendCommandResultEvent(
         event.room_id!,
-        event.event_id!,
+        eventId,
         resultCard,
       );
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(event.event_id!);
+      this.currentlyExecutingCommandEventIds.delete(eventId);
     }
   }
 
