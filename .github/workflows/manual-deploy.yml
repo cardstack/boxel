@@ -114,12 +114,15 @@ jobs:
       image: ${{ needs.build-pg-migration.outputs.image }}
       wait-for-service-stability: false
 
+  # the wait-for-service-stability flag doesn't seem to work in
+  # aws-actions/amazon-ecs-deploy-task-definition@v2. we keep getting timeouts
+  # waiting for service stability. So we are manually waiting here.
   post-migrate-db:
     name: Wait for db-migration
     needs: [migrate-db]
     runs-on: ubuntu-latest
     steps:
-      - run: sleep 240
+      - run: sleep 180
 
   deploy-worker:
     name: Deploy worker
@@ -134,9 +137,20 @@ jobs:
       image: ${{ needs.build-worker.outputs.image }}
       wait-for-service-stability: false
 
+  # the wait-for-service-stability flag doesn't seem to work in
+  # aws-actions/amazon-ecs-deploy-task-definition@v2. we keep getting timeouts
+  # waiting for service stability. So we are manually waiting here.
+  post-deploy-worker:
+    name: Wait for worker
+    needs: [deploy-worker]
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 180
+
   deploy-realm-server:
     name: Deploy realm server
-    needs: [deploy-worker, build-realm-server, deploy-host, post-migrate-db]
+    needs:
+      [post-deploy-worker, build-realm-server, deploy-host, post-migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
