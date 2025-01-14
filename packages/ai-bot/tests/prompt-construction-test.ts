@@ -1624,14 +1624,13 @@ test('Tools calls are connected to their results', () => {
   );
 
   const { messages } = getPromptParts(eventList, '@aibot:localhost');
-  console.log(messages);
   // find the message with the tool call and its id
   // it should have the result deserialised
   const toolCallMessage = messages.find((message) => message.role === 'tool');
   assert.ok(toolCallMessage, 'Should have a tool call message');
   assert.ok(
-    toolCallMessage!.content!.includes('Sunny'),
-    'Tool call result should include "Sunny"',
+    toolCallMessage!.content!.includes('Cloudy'),
+    'Tool call result should include "Cloudy"',
   );
 });
 

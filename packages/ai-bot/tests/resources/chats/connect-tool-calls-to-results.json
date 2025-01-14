@@ -1,41 +1,41 @@
 [
   {
     "type": "m.room.create",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "room_version": "10",
       "creator": "@admin:localhost"
     },
     "state_key": "",
-    "origin_server_ts": 1736338247627,
+    "origin_server_ts": 1736864362728,
     "unsigned": {
-      "age": 260438
+      "age": 71431
     },
-    "event_id": "$aUpmNo4fNVnUG-AKQDDwTgbJYOWK1dPJP4t_45C4EwU",
+    "event_id": "$BbFv3bQk_6IXS845CttWkNqprc00PaW7egknDPzAb3U",
     "user_id": "@admin:localhost",
-    "age": 260438
+    "age": 71431
   },
   {
     "type": "m.room.member",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "membership": "join",
       "displayname": "admin"
     },
     "state_key": "@admin:localhost",
-    "origin_server_ts": 1736338247658,
+    "origin_server_ts": 1736864362765,
     "unsigned": {
-      "age": 260407
+      "age": 71394
     },
-    "event_id": "$rjC4QMBw5ik2MwRJ9vmRxFL2BOJoc76MvqXHzGvGUUY",
+    "event_id": "$auoMF6x0EHAGAIVbeHjsLdrepN5NWaoXVkWPa_QNZ1o",
     "user_id": "@admin:localhost",
-    "age": 260407
+    "age": 71394
   },
   {
     "type": "m.room.power_levels",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "users": {
@@ -61,114 +61,114 @@
       "historical": 100
     },
     "state_key": "",
-    "origin_server_ts": 1736338247682,
+    "origin_server_ts": 1736864362793,
     "unsigned": {
-      "age": 260383
+      "age": 71366
     },
-    "event_id": "$QhnLloGN5lNRIqKiZBotQkD6N2tDmZkx9SKiU3vzb90",
+    "event_id": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
     "user_id": "@admin:localhost",
-    "age": 260383
+    "age": 71366
   },
   {
     "type": "m.room.canonical_alias",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "alias": "#Weather%20Assistant%20-%202025-01-08T12%3A10%3A47.589%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
+      "alias": "#Weather%20Travel%20Advice%20-%202025-01-14T14%3A19%3A22.706%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
     },
     "state_key": "",
-    "origin_server_ts": 1736338247692,
+    "origin_server_ts": 1736864362807,
     "unsigned": {
-      "age": 260373
+      "age": 71352
     },
-    "event_id": "$q-oQgT29wLTGtPdxxyqV5C81RuGOYkZ-4L5hwOoOzD8",
+    "event_id": "$C7j2gqIzpWOjWp5yabZ2JLVGc5sh_KjuOdrtv7TavNE",
     "user_id": "@admin:localhost",
-    "age": 260373
+    "age": 71352
   },
   {
     "type": "m.room.join_rules",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "join_rule": "invite"
     },
     "state_key": "",
-    "origin_server_ts": 1736338247693,
+    "origin_server_ts": 1736864362808,
     "unsigned": {
-      "age": 260372
+      "age": 71351
     },
-    "event_id": "$PvXxeP3JbcL9imGfpsSlYW29WcaK4_uum62UPl0nTW8",
+    "event_id": "$8FT4iaFSox71dX5-Z0xgbiY2isoPL6ybLM37wXSKJOs",
     "user_id": "@admin:localhost",
-    "age": 260372
+    "age": 71351
   },
   {
     "type": "m.room.history_visibility",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "history_visibility": "shared"
     },
     "state_key": "",
-    "origin_server_ts": 1736338247694,
+    "origin_server_ts": 1736864362809,
     "unsigned": {
-      "age": 260371
+      "age": 71350
     },
-    "event_id": "$vnafxevLQ4Ab8Yskv7tHBVmsKmTlpyevZxXEYnyhJzM",
+    "event_id": "$cxBIW2re3D1puIfhAyg067GLdW24FXctOqQ8Juma-Hs",
     "user_id": "@admin:localhost",
-    "age": 260371
+    "age": 71350
   },
   {
     "type": "m.room.guest_access",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "guest_access": "can_join"
     },
     "state_key": "",
-    "origin_server_ts": 1736338247695,
+    "origin_server_ts": 1736864362809,
     "unsigned": {
-      "age": 260370
+      "age": 71350
     },
-    "event_id": "$owaAuqPBdZGfA9E0FvWe4-pFziqxaP2wsDKlypMGZ68",
+    "event_id": "$hSlWgIKf_y_uycz1Ae4USMOa4K17dq7f6VHSrN2nhcU",
     "user_id": "@admin:localhost",
-    "age": 260370
+    "age": 71350
   },
   {
     "type": "m.room.name",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "name": "Weather Assistant"
+      "name": "Weather Travel Advice"
     },
     "state_key": "",
-    "origin_server_ts": 1736338247695,
+    "origin_server_ts": 1736864362810,
     "unsigned": {
-      "age": 260370
+      "age": 71349
     },
-    "event_id": "$b8synaXlbI51PCsgVCHgaYh-lXkWOW1i4D627BaMkDA",
+    "event_id": "$isUAMN-pIaBk9gFFTn6UyyTk9QcG59QwOuWhXbfCEkw",
     "user_id": "@admin:localhost",
-    "age": 260370
+    "age": 71349
   },
   {
     "type": "m.room.member",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "membership": "invite",
       "displayname": "aibot"
     },
     "state_key": "@aibot:localhost",
-    "origin_server_ts": 1736338247792,
+    "origin_server_ts": 1736864362916,
     "unsigned": {
-      "age": 260273
+      "age": 71243
     },
-    "event_id": "$WrvSTUtHmvT1MS486fMJ4d_c7cO-6tXzft7Jw4Bin-A",
+    "event_id": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
     "user_id": "@admin:localhost",
-    "age": 260273
+    "age": 71243
   },
   {
     "type": "m.room.power_levels",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "users": {
@@ -195,9 +195,9 @@
       "historical": 100
     },
     "state_key": "",
-    "origin_server_ts": 1736338247885,
+    "origin_server_ts": 1736864363018,
     "unsigned": {
-      "replaces_state": "$QhnLloGN5lNRIqKiZBotQkD6N2tDmZkx9SKiU3vzb90",
+      "replaces_state": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
       "prev_content": {
         "users": {
           "@admin:localhost": 100
@@ -222,12 +222,12 @@
         "historical": 100
       },
       "prev_sender": "@admin:localhost",
-      "age": 260180
+      "age": 71141
     },
-    "event_id": "$QEmVlLfwKOyztBvgqSWg08Jc-O7WbuqA3MyvygPEpds",
+    "event_id": "$TM9oHBXj1Iaa56XU4WF-yxjREXQNQJE1cWaqOqaWqrQ",
     "user_id": "@admin:localhost",
-    "age": 260180,
-    "replaces_state": "$QhnLloGN5lNRIqKiZBotQkD6N2tDmZkx9SKiU3vzb90",
+    "age": 71141,
+    "replaces_state": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
     "prev_content": {
       "users": {
         "@admin:localhost": 100
@@ -254,142 +254,90 @@
   },
   {
     "type": "m.room.member",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
       "membership": "join",
       "displayname": "aibot"
     },
     "state_key": "@aibot:localhost",
-    "origin_server_ts": 1736338247911,
+    "origin_server_ts": 1736864363054,
     "unsigned": {
-      "replaces_state": "$WrvSTUtHmvT1MS486fMJ4d_c7cO-6tXzft7Jw4Bin-A",
+      "replaces_state": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
       "prev_content": {
         "membership": "invite",
         "displayname": "aibot"
       },
       "prev_sender": "@admin:localhost",
-      "age": 260154
+      "age": 71105
     },
-    "event_id": "$8Dr0ingwUjNiR_XfmhsvSXdC1xGziHP79T74jwuzIO4",
+    "event_id": "$Mp2uUXS9lIbgx8qKF43zBiqU-B0EXsdWv-IsAs8kz1I",
     "user_id": "@aibot:localhost",
-    "age": 260154,
-    "replaces_state": "$WrvSTUtHmvT1MS486fMJ4d_c7cO-6tXzft7Jw4Bin-A",
+    "age": 71105,
+    "replaces_state": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
     "prev_content": {
       "membership": "invite",
       "displayname": "aibot"
     }
   },
   {
-    "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.message",
-      "body": "What is the weather in London?",
-      "format": "org.matrix.custom.html",
-      "formatted_body": "<p>What is the weather in London?</p>\n",
-      "clientGeneratedId": "594ed30d-0e2e-4df9-ac0f-5bdba4fe000b",
-      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_ja9FXDbgoTGq7XUdTizHSg\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
-    },
-    "origin_server_ts": 1736338247986,
-    "unsigned": {
-      "age": 260079
-    },
-    "event_id": "$zojh2aADTJvNGf9S27kg8yzP-hq_0tQCi6yMrpGdRqw",
-    "user_id": "@admin:localhost",
-    "age": 260079
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "type": "app.boxel.active-llm",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Thinking...",
-      "msgtype": "m.text",
-      "formatted_body": "Thinking...",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "formatted_body": "Thinking...",
-        "format": "org.matrix.custom.html"
-      }
+      "model": "openai/gpt-4o"
     },
-    "origin_server_ts": 1736338249888,
+    "state_key": "",
+    "origin_server_ts": 1736864363147,
     "unsigned": {
-      "age": 258177
+      "age": 71012
     },
-    "event_id": "$-rZREQE4MAzeyq2OunNS_lJPvRKT-LaWiddzyxwuMBE",
+    "event_id": "$fsEdqZdOBurry8ujwLTo38DlybaqGuOtas59BiZedeg",
     "user_id": "@aibot:localhost",
-    "age": 258177
+    "age": 71012
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "requesting current weather information for London",
-      "msgtype": "app.boxel.command",
-      "formatted_body": "requesting current weather information for London",
-      "format": "org.matrix.custom.html",
-      "data": "{\"eventId\":\"$-rZREQE4MAzeyq2OunNS_lJPvRKT-LaWiddzyxwuMBE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_j0e5qKzUwNLCDn9VnX8CHoFx\",\"name\":\"GetWeatherCommand_ja9FXDbgoTGq7XUdTizHSg\",\"arguments\":{\"description\":\"requesting current weather information for London\",\"attributes\":{\"location\":\"London\"}}}}",
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$-rZREQE4MAzeyq2OunNS_lJPvRKT-LaWiddzyxwuMBE"
-      }
-    },
-    "origin_server_ts": 1736338254237,
-    "unsigned": {
-      "age": 253828
-    },
-    "event_id": "$QZRwIJEFwgF18wkt_GMIGrxVoiWiJ14teWv-hj1bjrU",
-    "user_id": "@aibot:localhost",
-    "age": 253828
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"25 C\\\",\\\"conditions\\\":\\\"Sunny\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/onnx/AiCommandExample/86ed3d35-c97c-4c2c-a7cb-88c3dba6e1ec\\\",\\\"attributes\\\":{\\\"locations\\\":[\\\"New York\\\"],\\\"title\\\":\\\"AI COMMAND TEST\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"AiCommandExample\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
-    "origin_server_ts": 1736338254397,
+    "origin_server_ts": 1736864363215,
     "unsigned": {
-      "age": 253668
+      "age": 70944
     },
-    "event_id": "$PuEhMhb3_4H13Wb3ngMKTZuMB9UTC-CMUy15R1QkV7M",
+    "event_id": "$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE",
     "user_id": "@admin:localhost",
-    "age": 253668
-  },
-  {
-    "type": "app.boxel.commandResult",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.commandResultWithOutput",
-      "m.relates_to": {
-        "event_id": "$QZRwIJEFwgF18wkt_GMIGrxVoiWiJ14teWv-hj1bjrU",
-        "key": "applied",
-        "rel_type": "m.annotation"
-      },
-      "data": "{\"cardEventId\":\"$PuEhMhb3_4H13Wb3ngMKTZuMB9UTC-CMUy15R1QkV7M\"}"
-    },
-    "origin_server_ts": 1736338254435,
-    "unsigned": {
-      "age": 253630
-    },
-    "event_id": "$Ht8vA_O4oQWHNMt2QDhrIAqhG2gEoWrVVysWakRhEdA",
-    "user_id": "@admin:localhost",
-    "age": 253630
+    "age": 70944
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "I'm planning to visit these locations: New York. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>I'm planning to visit these locations: New York. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions</p>\n",
+      "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
+      "data": "{\"attachedCardsEventIds\":[\"$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE\"],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
+    },
+    "origin_server_ts": 1736864363324,
+    "unsigned": {
+      "age": 70835
+    },
+    "event_id": "$FKof2RxEh_MEfR5iSCwXPOyfcC-t961Nnmvn2Hid6_I",
+    "user_id": "@admin:localhost",
+    "age": 70835
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
       "body": "Thinking...",
@@ -403,207 +351,472 @@
         "format": "org.matrix.custom.html"
       }
     },
-    "origin_server_ts": 1736338256294,
+    "origin_server_ts": 1736864365020,
     "unsigned": {
-      "age": 251771
+      "age": 69139
     },
-    "event_id": "$Z7VbrzFx5Y7kthX21N1cCZUfFYQ8Hw9s75t49M2Rvio",
+    "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
     "user_id": "@aibot:localhost",
-    "age": 251771
+    "age": 69139
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Check the current weather conditions for traveling",
+      "msgtype": "app.boxel.command",
+      "formatted_body": "Check the current weather conditions for traveling",
+      "format": "org.matrix.custom.html",
+      "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
+      }
+    },
+    "origin_server_ts": 1736864370642,
+    "unsigned": {
+      "age": 63517
+    },
+    "event_id": "$V4k751dVMZphpB6P7OJ3Q-vRbTihn5KekUpTNL1LVpE",
+    "user_id": "@aibot:localhost",
+    "age": 63517
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"22°C\\\",\\\"conditions\\\":\\\"Cloudy\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1736864370828,
+    "unsigned": {
+      "age": 63331
+    },
+    "event_id": "$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc",
+    "user_id": "@admin:localhost",
+    "age": 63331
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithOutput",
+      "m.relates_to": {
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
+        "key": "applied",
+        "rel_type": "m.annotation"
+      },
+      "data": "{\"cardEventId\":\"$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc\"}"
+    },
+    "origin_server_ts": 1736864370892,
+    "unsigned": {
+      "age": 63267
+    },
+    "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
+    "user_id": "@admin:localhost",
+    "age": 63267
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Thinking...",
+      "msgtype": "m.text",
+      "formatted_body": "Thinking...",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Thinking...",
+        "msgtype": "m.text",
+        "formatted_body": "Thinking...",
+        "format": "org.matrix.custom.html"
+      }
+    },
+    "origin_server_ts": 1736864372713,
+    "unsigned": {
+      "age": 61446
+    },
+    "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po",
+    "user_id": "@aibot:localhost",
+    "age": 61446
   },
   {
     "type": "m.room.name",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "name": "Weather Inquiry for London Conditions"
+      "name": "Checking New York Weather for Travel"
     },
     "state_key": "",
-    "origin_server_ts": 1736338257296,
+    "origin_server_ts": 1736864374712,
     "unsigned": {
-      "replaces_state": "$b8synaXlbI51PCsgVCHgaYh-lXkWOW1i4D627BaMkDA",
+      "replaces_state": "$isUAMN-pIaBk9gFFTn6UyyTk9QcG59QwOuWhXbfCEkw",
       "prev_content": {
-        "name": "Weather Assistant"
+        "name": "Weather Travel Advice"
       },
       "prev_sender": "@admin:localhost",
-      "age": 250769
+      "age": 59447
     },
-    "event_id": "$JTMbcNHCdyKKkvMO963In-uWaI16F2KkZJbuYrxITl0",
+    "event_id": "$a1FynSnKBAvpv-dTx83e2EcVjZsetE_clBhca11hl6c",
     "user_id": "@aibot:localhost",
-    "age": 250769,
-    "replaces_state": "$b8synaXlbI51PCsgVCHgaYh-lXkWOW1i4D627BaMkDA",
+    "age": 59447,
+    "replaces_state": "$isUAMN-pIaBk9gFFTn6UyyTk9QcG59QwOuWhXbfCEkw",
     "prev_content": {
-      "name": "Weather Assistant"
+      "name": "Weather Travel Advice"
     }
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "I'm",
+      "body": "The",
       "msgtype": "m.text",
-      "formatted_body": "I'm",
+      "formatted_body": "The",
       "format": "org.matrix.custom.html",
       "m.new_content": {
-        "body": "I'm",
+        "body": "The",
         "msgtype": "m.text",
-        "formatted_body": "I'm",
+        "formatted_body": "The",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
-        "event_id": "$Z7VbrzFx5Y7kthX21N1cCZUfFYQ8Hw9s75t49M2Rvio"
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
       }
     },
-    "origin_server_ts": 1736338260349,
+    "origin_server_ts": 1736864376150,
     "unsigned": {
-      "age": 247716
+      "age": 58009
     },
-    "event_id": "$HQotXSwL34PjcCooNrlDelvkk0nwi2f6Icm7qiIOkXc",
+    "event_id": "$BqFIFCOK_RFYBvuhdDKM1-pqyHiyajjyIzoSGvXbdgc",
     "user_id": "@aibot:localhost",
-    "age": 247716
+    "age": 58009
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "I'm retrieving the current weather information for London.",
+      "body": "The current weather",
       "msgtype": "m.text",
-      "formatted_body": "I'm retrieving the current weather information for London.",
+      "formatted_body": "The current weather",
       "format": "org.matrix.custom.html",
       "m.new_content": {
-        "body": "I'm retrieving the current weather information for London.",
+        "body": "The current weather",
         "msgtype": "m.text",
-        "formatted_body": "I'm retrieving the current weather information for London.",
+        "formatted_body": "The current weather",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
-        "event_id": "$Z7VbrzFx5Y7kthX21N1cCZUfFYQ8Hw9s75t49M2Rvio"
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
       }
     },
-    "origin_server_ts": 1736338260605,
+    "origin_server_ts": 1736864376701,
     "unsigned": {
-      "age": 247460
+      "age": 57458
     },
-    "event_id": "$H5HP9NCevS0b7Nk5JzTMMhxn5lHJ-EYcoRdOPH1p8c4",
+    "event_id": "$weXQDkD3nj7D3A7mvSkw7qCJxPbLr0zKE6jAR-PD5jU",
     "user_id": "@aibot:localhost",
-    "age": 247460
+    "age": 57458
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "I'm retrieving the current weather information for London. Please hold",
+      "body": "The current weather in",
       "msgtype": "m.text",
-      "formatted_body": "I'm retrieving the current weather information for London. Please hold",
+      "formatted_body": "The current weather in",
       "format": "org.matrix.custom.html",
       "m.new_content": {
-        "body": "I'm retrieving the current weather information for London. Please hold",
+        "body": "The current weather in",
         "msgtype": "m.text",
-        "formatted_body": "I'm retrieving the current weather information for London. Please hold",
+        "formatted_body": "The current weather in",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
-        "event_id": "$Z7VbrzFx5Y7kthX21N1cCZUfFYQ8Hw9s75t49M2Rvio"
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
       }
     },
-    "origin_server_ts": 1736338261400,
+    "origin_server_ts": 1736864376747,
     "unsigned": {
-      "age": 246665
+      "age": 57412
     },
-    "event_id": "$fSLbMvOdDD8EG-5mhDB82kMG6IP7t6iuqnMwoxw-38k",
+    "event_id": "$4j_Lr0PDpqevZ-bEbySJCR5sblKEBJIy2sdSQdZvQgs",
     "user_id": "@aibot:localhost",
-    "age": 246665
+    "age": 57412
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "I'm retrieving the current weather information for London. Please hold on",
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
       "msgtype": "m.text",
-      "formatted_body": "I'm retrieving the current weather information for London. Please hold on",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
       "format": "org.matrix.custom.html",
       "m.new_content": {
-        "body": "I'm retrieving the current weather information for London. Please hold on",
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
         "msgtype": "m.text",
-        "formatted_body": "I'm retrieving the current weather information for London. Please hold on",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
-        "event_id": "$Z7VbrzFx5Y7kthX21N1cCZUfFYQ8Hw9s75t49M2Rvio"
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
       }
     },
-    "origin_server_ts": 1736338261434,
+    "origin_server_ts": 1736864377718,
     "unsigned": {
-      "age": 246631
+      "age": 56441
     },
-    "event_id": "$5u9SViPj1o2Mme-s9ykm2DNeoMrTCj9B9DAJ3RPgAyo",
+    "event_id": "$tepkzDJHWwVZhMSZqJO1ghJkyoOq7om2qqz0uSeeYKU",
     "user_id": "@aibot:localhost",
-    "age": 246631
+    "age": 56441
   },
   {
     "type": "m.room.message",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "I'm retrieving the current weather information for London. Please hold on for a moment. Once I have the details, I'll provide you with an update.",
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
       "msgtype": "m.text",
-      "formatted_body": "I'm retrieving the current weather information for London. Please hold on for a moment. Once I have the details, I'll provide you with an update.",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
       "format": "org.matrix.custom.html",
       "m.new_content": {
-        "body": "I'm retrieving the current weather information for London. Please hold on for a moment. Once I have the details, I'll provide you with an update.",
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
         "msgtype": "m.text",
-        "formatted_body": "I'm retrieving the current weather information for London. Please hold on for a moment. Once I have the details, I'll provide you with an update.",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864378711,
+    "unsigned": {
+      "age": 55448
+    },
+    "event_id": "$FXOzMr2M9qS6Q6M8urSPZgzg9dwH7pQhKffPHp3Q7IM",
+    "user_id": "@aibot:localhost",
+    "age": 55448
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864379713,
+    "unsigned": {
+      "age": 54446
+    },
+    "event_id": "$KXfWZDRB62KypbbD1qOjUDWIA1GtDMcx_j1v94CwaLM",
+    "user_id": "@aibot:localhost",
+    "age": 54446
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864380706,
+    "unsigned": {
+      "age": 53453
+    },
+    "event_id": "$V2H_tIKw4z55f9VsQbmor8tB27RdVIPzx6EHmDX9ers",
+    "user_id": "@aibot:localhost",
+    "age": 53453
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864381711,
+    "unsigned": {
+      "age": 52448
+    },
+    "event_id": "$DEuswdCLtnANsVKIOqDDjJyK9iLuTWXeEpwNJignvZM",
+    "user_id": "@aibot:localhost",
+    "age": 52448
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864382712,
+    "unsigned": {
+      "age": 51447
+    },
+    "event_id": "$flkRYqtKZHbhXOfyVKQUP96JZIKSS1DWHJ3TiubGNjw",
+    "user_id": "@aibot:localhost",
+    "age": 51447
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864383711,
+    "unsigned": {
+      "age": 50448
+    },
+    "event_id": "$pnA-Wm6Y_UbtBF5NJx82AbMZNJZjESqlNEdriHaeS9M",
+    "user_id": "@aibot:localhost",
+    "age": 50448
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
+        "format": "org.matrix.custom.html"
+      },
+      "isStreamingFinished": false,
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
+      }
+    },
+    "origin_server_ts": 1736864384710,
+    "unsigned": {
+      "age": 49449
+    },
+    "event_id": "$k6LudyB8zdQC49VcVJKsmQlUOOhOsubYE3OWdu3YNhU",
+    "user_id": "@aibot:localhost",
+    "age": 49449
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
+      "msgtype": "m.text",
+      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
+        "msgtype": "m.text",
+        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": true,
       "m.relates_to": {
         "rel_type": "m.replace",
-        "event_id": "$Z7VbrzFx5Y7kthX21N1cCZUfFYQ8Hw9s75t49M2Rvio"
+        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
       }
     },
-    "origin_server_ts": 1736338262405,
+    "origin_server_ts": 1736864385711,
     "unsigned": {
-      "age": 245660
+      "age": 48448
     },
-    "event_id": "$IxEoqOBa-xMRSjEWBHJ9SUyOvF8TZmg0ccyQaAjx8J0",
+    "event_id": "$ZpMuOXcWqbeqqrejv0VdOiE7ePfQ0qZUbX5rXL7eSxo",
     "user_id": "@aibot:localhost",
-    "age": 245660
-  },
-  {
-    "type": "m.room.name",
-    "room_id": "!ZQdHjRkjfIFuIiQAZW:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "name": "Checking London's Current Weather Conditions"
-    },
-    "state_key": "",
-    "origin_server_ts": 1736338264413,
-    "unsigned": {
-      "replaces_state": "$JTMbcNHCdyKKkvMO963In-uWaI16F2KkZJbuYrxITl0",
-      "prev_content": {
-        "name": "Weather Inquiry for London Conditions"
-      },
-      "prev_sender": "@aibot:localhost",
-      "age": 243652
-    },
-    "event_id": "$GDkjaNXO1g-ArbixekPmQrsGhGcve40XhSHFfTM6Lkg",
-    "user_id": "@aibot:localhost",
-    "age": 243652,
-    "replaces_state": "$JTMbcNHCdyKKkvMO963In-uWaI16F2KkZJbuYrxITl0",
-    "prev_content": {
-      "name": "Weather Inquiry for London Conditions"
-    }
+    "age": 48448
   }
 ]
