@@ -29,8 +29,6 @@
       "urgencyTag": {
         "index": 1,
         "label": "Renewal Due Soon",
-        "value": "renewal-due-soon",
-        "buttonText": "Create Account",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#F57C00",
@@ -51,9 +49,14 @@
           "self": "../Contact/a01fc5c9-d70d-4b9c-aae4-384cf2b79b25"
         }
       },
-      "contacts": {
+      "contacts.0": {
         "links": {
-          "self": null
+          "self": "../Customer/0e5aec99-798b-4417-9426-a338432e0ee5"
+        }
+      },
+      "contacts.1": {
+        "links": {
+          "self": "../Lead/9d7b2f20-c7da-4ddc-8e77-b75d88c97b48"
         }
       }
     },
