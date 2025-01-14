@@ -1722,6 +1722,50 @@ module('Integration | ai-assistant-panel', function (hooks) {
         'ai-avatar-animated',
         'Answer to my current question is in progress',
       );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('French bulldog is a');
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'French bulldog is a French breed',
+        msgtype: 'm.text',
+        formatted_body: 'French bulldog is a French breed',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: partialEventId,
+        },
+      },
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-message-idx="3"] [data-test-ai-message-content]',
+      );
+      if (el) {
+        return (
+          (el as HTMLElement).innerText === 'French bulldog is a French breed'
+        );
+      } else {
+        return false;
+      }
+    });
+
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+      .hasClass(
+        'ai-avatar-animated',
+        'Answer to my current question is in progress',
+      );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('French bulldog is a French breed');
 
     await click('[data-test-past-sessions-button]');
     assert.dom(`[data-test-enter-room='${roomId}']`).includesText('Thinking');
@@ -1761,6 +1805,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         'ai-avatar-animated',
         'Answer to my last question is not in progress',
       );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('French bulldog is a French breed of companion dog or toy dog');
 
     assert
       .dom(`[data-test-enter-room='${roomId}']`)
@@ -1961,15 +2008,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
@@ -2021,15 +2066,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
@@ -2070,15 +2113,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                contains: {
-                  title: 'Mango',
-                },
-              },
+              title: 'Mango',
             },
           },
         },
@@ -2116,15 +2155,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
+              type: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
               },
             },
           },
@@ -2171,11 +2208,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
-        filter: {
-          type: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
         },
       },
     };
@@ -2187,7 +2222,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: toolArgs,
         },
         eventId: '__EVENT_ID__',
@@ -2231,11 +2266,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
       .hasText(
-        `Description Query: ${JSON.stringify(
-          toolArgs.attributes.filter,
-          null,
-          2,
-        )}`,
+        `Description Query: { "type": { "module": "http://test-realm/test/person", "name": "Person" } }`,
       );
 
     resultListItem = `${savedCard} ${resultListItem}`;
@@ -2251,11 +2282,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
-        filter: {
-          type: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
         },
       },
     };
@@ -2267,7 +2296,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: toolArgs,
         },
         eventId: '__EVENT_ID__',
@@ -2318,11 +2347,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
       .hasText(
-        `Description Query: ${JSON.stringify(
-          toolArgs.attributes.filter,
-          null,
-          2,
-        )}`,
+        `Description Query: { "type": { "module": "http://test-realm/test/person", "name": "Person" } }`,
       );
 
     resultListItem = `${savedCard} ${resultListItem}`;

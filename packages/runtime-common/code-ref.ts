@@ -34,8 +34,8 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
-export function isResolvedCodeRef(ref: CodeRef): ref is ResolvedCodeRef {
-  if ('module' in ref && 'name' in ref) {
+export function isResolvedCodeRef(ref?: CodeRef): ref is ResolvedCodeRef {
+  if (ref && 'module' in ref && 'name' in ref) {
     return true;
   } else {
     return false;

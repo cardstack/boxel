@@ -14,6 +14,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 interface BaseMatrixEvent {
@@ -227,6 +228,13 @@ export interface SkillsConfigEvent extends RoomStateEvent {
   };
 }
 
+export interface ActiveLLMEvent extends RoomStateEvent {
+  type: typeof APP_BOXEL_ACTIVE_LLM;
+  content: {
+    model: string;
+  };
+}
+
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
   content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
@@ -274,4 +282,5 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent
-  | SkillsConfigEvent;
+  | SkillsConfigEvent
+  | ActiveLLMEvent;

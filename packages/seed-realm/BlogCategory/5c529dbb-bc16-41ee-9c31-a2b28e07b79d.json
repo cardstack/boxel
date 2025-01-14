@@ -5,8 +5,12 @@
       "longName": "Movie Review",
       "shortName": "Movies",
       "slug": "movies",
-      "backgroundColor": "#fff500",
-      "textColor": null,
+      "backgroundColor": {
+        "hexValue": "#FBEB06"
+      },
+      "textColor": {
+        "hexValue": "#000000"
+      },
       "description": null,
       "title": "Movie Review",
       "thumbnailURL": null

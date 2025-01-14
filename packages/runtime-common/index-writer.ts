@@ -305,6 +305,7 @@ export class Batch {
         any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,
+      `ORDER BY i.display_names->>0 ASC`,
     ] as Expression);
 
     let { nameExpressions, valueExpressions } = asExpressions(

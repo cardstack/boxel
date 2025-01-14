@@ -9,7 +9,10 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  DEFAULT_LLM,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   CardFragmentContent,
@@ -69,6 +72,10 @@ export class RoomResource extends Resource<Args> {
     new TrackedMap();
   @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
+
+  // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
+  // that updates immediately after the user selects the LLM.
+  @tracked _activeLLM: string | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
   @service private declare cardService: CardService;
@@ -80,6 +87,7 @@ export class RoomResource extends Resource<Args> {
       }
       this._previousRoomId = named.roomId;
       this.loading = this.load.perform(named.roomId);
+      this._activeLLM = undefined;
     }
   }
 
@@ -210,6 +218,26 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
+  get activeLLM() {
+    return this._activeLLM ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+  }
+
+  activateLLM(model: string) {
+    this._activeLLM = model;
+    this.activateLLMTask.perform(model);
+  }
+
+  get isActivatingLLM() {
+    return this.activateLLMTask.isRunning;
+  }
+
+  private activateLLMTask = restartableTask(async (model: string) => {
+    if (!this.matrixRoom) {
+      throw new Error('matrixRoom is required to activate LLM');
+    }
+    await this.matrixService.sendActiveLLMEvent(this.matrixRoom.roomId, model);
+  });
+
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
     for (let event of this.events) {
@@ -266,7 +294,7 @@ export class RoomResource extends Resource<Args> {
         !event.content.isStreamingFinished
       ) {
         // we don't need to process this event if it's not finished streaming,
-        // but we do need to note it's creation time so that we can capture the earliest one
+        // but we do need to capture the earliest create time and update the message
         let earliestKnownCreateTime =
           this._messageCreateTimesCache.get(effectiveEventId);
         if (
@@ -281,6 +309,9 @@ export class RoomResource extends Resource<Args> {
             this._messageCache.get(effectiveEventId);
           if (alreadyProcessedMessage) {
             alreadyProcessedMessage.created = new Date(event.origin_server_ts);
+            alreadyProcessedMessage.message = event.content.body;
+            alreadyProcessedMessage.formattedMessage =
+              event.content.formatted_body;
           }
         }
         return;
