@@ -59,6 +59,62 @@ class IsolatedTemplate extends Component<typeof DealEvent> {
   </template>
 }
 
+class Atom extends Component<typeof DealEvent> {
+  <template>
+    <div class='event-summary'>
+      {{#if @model.eventDate}}
+        <EntityDisplayWithIcon>
+          <:icon>
+            <Info width='16px' height='16px' class='event-info-icon' />
+          </:icon>
+          <:title><label>Event Date</label></:title>
+          <:content>
+            <span class='event-item-value'><@fields.eventDate /></span>
+          </:content>
+        </EntityDisplayWithIcon>
+      {{/if}}
+
+      {{#if @model.attendees}}
+        <EntityDisplayWithIcon>
+          <:title><label>Attendees</label></:title>
+          <:content>
+            <span class='event-item-value'><@fields.attendees /></span>
+          </:content>
+        </EntityDisplayWithIcon>
+      {{/if}}
+
+      {{#if @model.location}}
+        <EntityDisplayWithIcon>
+          <:title><label>Venue</label></:title>
+          <:content>
+            <span class='event-item-value'><@fields.location /></span>
+          </:content>
+        </EntityDisplayWithIcon>
+      {{/if}}
+    </div>
+    <style scoped>
+      .event-summary {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xl);
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-200);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
+      label {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: #777;
+      }
+      .event-item-value {
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        color: var(--boxel-dark);
+      }
+    </style>
+  </template>
+}
+
 class EditTemplate extends Component<typeof DealEvent> {
   @tracked selectedEventType = { name: this.args.model.eventType };
   @tracked eventTypeItems = [
@@ -164,62 +220,7 @@ export class DealEvent extends Event {
     },
   });
 
-  static atom = class AtomTemplate extends Component<typeof this> {
-    <template>
-      <div class='event-summary'>
-        {{#if @model.eventDate}}
-          <EntityDisplayWithIcon>
-            <:icon>
-              <Info width='16px' height='16px' class='event-info-icon' />
-            </:icon>
-            <:title><label>Event Date</label></:title>
-            <:content>
-              <span class='event-item-value'><@fields.eventDate /></span>
-            </:content>
-          </EntityDisplayWithIcon>
-        {{/if}}
-
-        {{#if @model.attendees}}
-          <EntityDisplayWithIcon>
-            <:title><label>Attendees</label></:title>
-            <:content>
-              <span class='event-item-value'><@fields.attendees /></span>
-            </:content>
-          </EntityDisplayWithIcon>
-        {{/if}}
-
-        {{#if @model.location}}
-          <EntityDisplayWithIcon>
-            <:title><label>Venue</label></:title>
-            <:content>
-              <span class='event-item-value'><@fields.location /></span>
-            </:content>
-          </EntityDisplayWithIcon>
-        {{/if}}
-      </div>
-      <style scoped>
-        .event-summary {
-          display: inline-flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xl);
-          padding: var(--boxel-sp);
-          background-color: var(--boxel-200);
-          border-radius: var(--boxel-form-control-border-radius);
-        }
-        label {
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 600;
-          color: #777;
-        }
-        .event-item-value {
-          font-size: var(--boxel-font-size);
-          font-weight: 600;
-          color: var(--boxel-dark);
-        }
-      </style>
-    </template>
-  };
-
+  static atom = AtomTemplate;
   static isolated = IsolatedTemplate;
   static edit = EditTemplate;
 }
