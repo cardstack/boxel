@@ -648,13 +648,20 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: 'Person Card',
           description: 'Catalog entry for Person card',
           moduleHref: `${testRealmURL}person`,
-          realmName: 'Unnamed Workspace',
           thumbnailURL: null,
+          name: null,
           readMe: null,
           type: 'card',
           ref: {
             module: `./person`,
             name: 'Person',
+          },
+        },
+        relationships: {
+          examples: {
+            links: {
+              self: null,
+            },
           },
         },
         meta: {
@@ -678,10 +685,10 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Catalog Entry',
         description: 'Catalog entry for Person card',
+        examples: null,
         id: `${testRealmURL}person-catalog-entry`,
         type: 'card',
         moduleHref: `${testRealmURL}person`,
-        realmName: 'Unnamed Workspace',
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
       });
@@ -2016,7 +2023,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       description: 'Catalog entry for Booking',
       type: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
-      realmName: 'Unnamed Workspace',
+      examples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
     });
@@ -2375,7 +2382,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           type: 'card',
           moduleHref: `${testModuleRealm}pet-person`,
-          realmName: 'Unnamed Workspace',
+          name: null,
+        },
+        relationships: {
+          examples: {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -2409,10 +2423,10 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         id: `${testRealmURL}pet-person-catalog-entry`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
+        examples: null,
+        moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         type: 'card',
-        moduleHref: `${testModuleRealm}pet-person`,
-        realmName: 'Unnamed Workspace',
       });
     } else {
       assert.ok(
