@@ -976,6 +976,58 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test(`should handle events in order to prevent 'cardFragment not found' error`, async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let cardFragmentsEventId = '!card_fragments_event_id';
+    let now = Date.now();
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'Update mango card',
+        formatted_body: 'Update mango card',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        data: JSON.stringify({
+          attachedCardsEventIds: [cardFragmentsEventId],
+        }),
+      },
+      { origin_server_ts: now + 60000 },
+    );
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: '',
+        formatted_body: '',
+        msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+        data: JSON.stringify({
+          index: 0,
+          totalParts: 1,
+          cardFragment: JSON.stringify({
+            data: {
+              id: `${testRealmURL}Pet/mango`,
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}Pet`,
+                  name: 'Mango',
+                },
+              },
+            },
+          }),
+        }),
+      },
+      { event_id: cardFragmentsEventId, origin_server_ts: now },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert.dom('[data-test-message-idx="0"]').exists({ count: 1 });
+    assert.dom('[data-test-message-idx="0"]').containsText('Update mango card');
+  });
+
   module('suspending global error hook', (hooks) => {
     let tmp: any;
     let uncaughtException: any;

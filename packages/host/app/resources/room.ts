@@ -59,7 +59,6 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
-  private _loadedEventIds: Set<string> = new Set();
   private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
@@ -241,10 +240,14 @@ export class RoomResource extends Resource<Args> {
 
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
-    for (let event of this.events) {
-      if (this._loadedEventIds.has(event.event_id)) {
-        continue;
-      }
+
+    //Sort events in ascending order by origin_server_ts to prevent 'cardFragment not found' errors.
+    let sortedEvents = this.events.sort(
+      (event1: DiscreteMatrixEvent, event2: DiscreteMatrixEvent) =>
+        event1.origin_server_ts - event2.origin_server_ts,
+    );
+
+    for (let event of sortedEvents) {
       switch (event.type) {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
@@ -259,7 +262,6 @@ export class RoomResource extends Resource<Args> {
           await this.loadRoomNameEvent(event);
           break;
       }
-      this._loadedEventIds.add(event.event_id);
     }
   }
 
@@ -286,52 +288,11 @@ export class RoomResource extends Resource<Args> {
     event: MessageEvent | CommandEvent | CardMessageEvent,
     index: number,
   ) {
-    let effectiveEventId = event.event_id;
-    let update = false;
-    if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
-      // ensure that we update a message when we see a reaction event for it, since we merge data from the reaction event
-      // into the message state (i.e. apply button, command result)
-      update = true;
-    } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      effectiveEventId = event.content['m.relates_to'].event_id;
-      if (
-        'isStreamingFinished' in event.content &&
-        !event.content.isStreamingFinished
-      ) {
-        // we don't need to process this event if it's not finished streaming,
-        // but we do need to capture the earliest create time and update the message
-        let earliestKnownCreateTime =
-          this._messageCreateTimesCache.get(effectiveEventId);
-        if (
-          !earliestKnownCreateTime ||
-          earliestKnownCreateTime < event.origin_server_ts
-        ) {
-          this._messageCreateTimesCache.set(
-            effectiveEventId,
-            event.origin_server_ts,
-          );
-          let alreadyProcessedMessage =
-            this._messageCache.get(effectiveEventId);
-          if (alreadyProcessedMessage) {
-            alreadyProcessedMessage.created = new Date(event.origin_server_ts);
-            alreadyProcessedMessage.message = event.content.body;
-            alreadyProcessedMessage.formattedMessage =
-              event.content.formatted_body;
-          }
-        }
-        return;
-      }
-      update = true;
-    }
-    if (this._messageCache.has(effectiveEventId) && !update) {
+    // Skipping unnecessary updates to prevent messages from being re-rendered in the AI panel.
+    if (this.skipLoadingMessage(event)) {
       return;
     }
-    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      if (!this._fragmentCache.has(effectiveEventId)) {
-        this._fragmentCache.set(effectiveEventId, event.content);
-      }
-      return;
-    }
+    let effectiveEventId = this.getEffectiveEventId(event);
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
@@ -360,11 +321,71 @@ export class RoomResource extends Resource<Args> {
           ),
         );
       }
+      this._messageCreateTimesCache.set(
+        effectiveEventId,
+        event.origin_server_ts,
+      );
       this._messageCache.set(
         messageObject.clientGeneratedId ?? effectiveEventId,
         messageObject as any,
       );
     }
+  }
+
+  private skipLoadingMessage(
+    event: MessageEvent | CommandEvent | CardMessageEvent,
+  ) {
+    let effectiveEventId = this.getEffectiveEventId(event);
+    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
+      if (!this._fragmentCache.has(effectiveEventId)) {
+        this._fragmentCache.set(effectiveEventId, event.content);
+      }
+      return true;
+    }
+
+    let alreadyProcessedMessage = this._messageCache.get(effectiveEventId);
+    if (
+      event.content['m.relates_to']?.rel_type === 'm.annotation' ||
+      !alreadyProcessedMessage ||
+      ('data' in event.content && 'toolCall' in event.content.data)
+    ) {
+      return false;
+    } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      if (
+        !alreadyProcessedMessage.isStreamingFinished &&
+        'isStreamingFinished' in event.content &&
+        event.content.isStreamingFinished
+      ) {
+        return false;
+      }
+
+      let earliestKnownCreateTime =
+        this._messageCreateTimesCache.get(effectiveEventId);
+      if (
+        'isStreamingFinished' in event.content &&
+        !event.content.isStreamingFinished &&
+        (!earliestKnownCreateTime ||
+          earliestKnownCreateTime < event.origin_server_ts)
+      ) {
+        alreadyProcessedMessage.created = new Date(event.origin_server_ts);
+        alreadyProcessedMessage.message = event.content.body;
+        alreadyProcessedMessage.formattedMessage = event.content.formatted_body;
+        this._messageCreateTimesCache.set(
+          effectiveEventId,
+          event.origin_server_ts,
+        );
+      }
+    }
+
+    return true;
+  }
+
+  private getEffectiveEventId(
+    event: MessageEvent | CommandEvent | CardMessageEvent,
+  ) {
+    return event.content['m.relates_to']?.rel_type !== 'm.replace'
+      ? event.event_id
+      : event.content['m.relates_to'].event_id;
   }
 
   private async loadRoomNameEvent(event: RoomNameEvent) {
