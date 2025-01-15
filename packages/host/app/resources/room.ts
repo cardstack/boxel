@@ -59,6 +59,7 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
+  private _loadedEventIds: Set<string> = new Set();
   private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
@@ -241,6 +242,9 @@ export class RoomResource extends Resource<Args> {
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
     for (let event of this.events) {
+      if (this._loadedEventIds.has(event.event_id)) {
+        continue;
+      }
       switch (event.type) {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
@@ -255,6 +259,7 @@ export class RoomResource extends Resource<Args> {
           await this.loadRoomNameEvent(event);
           break;
       }
+      this._loadedEventIds.add(event.event_id);
     }
   }
 
@@ -299,7 +304,7 @@ export class RoomResource extends Resource<Args> {
           this._messageCreateTimesCache.get(effectiveEventId);
         if (
           !earliestKnownCreateTime ||
-          earliestKnownCreateTime > event.origin_server_ts
+          earliestKnownCreateTime < event.origin_server_ts
         ) {
           this._messageCreateTimesCache.set(
             effectiveEventId,
