@@ -475,10 +475,16 @@ export class Loader {
     }
   }
 
-  private createModuleProxy(module: any) {
+  private readOnlyProxy(module: any) {
     return new Proxy(module, {
-      set() {
-        throw new Error(`modules are read only`);
+      set(_target, prop) {
+        throw new TypeError(
+          `Failed to set the '${String(
+            prop,
+          )}' property on 'Module': Cannot assign to read only property '${String(
+            prop,
+          )}'`,
+        );
       },
     });
   }
@@ -594,9 +600,7 @@ export class Loader {
     }
 
     let privateModuleInstance = Object.create(null);
-    // Create a proxy for the module that will let other modules maintain a stable reference to this one
-    // while we walk dependencies and then evaluate the module
-    let moduleProxy = this.createModuleProxy(privateModuleInstance);
+    let moduleProxy = this.readOnlyProxy(privateModuleInstance);
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
         dep.type === 'dep' ? [dep.moduleURL.href] : [],
