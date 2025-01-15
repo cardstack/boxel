@@ -3,11 +3,11 @@
     "type": "card",
     "attributes": {
       "shippingAddress": {
-        "addressLine1": "220 Startup Avenue",
-        "addressLine2": "WeWork Floor 3",
+        "addressLine1": "234 Veterinary Lane",
+        "addressLine2": null,
         "city": "Seattle",
         "state": "WA",
-        "postalCode": "98104",
+        "postalCode": "98103",
         "country": {
           "name": "United States",
           "code": "US"
@@ -15,11 +15,11 @@
         "poBoxNumber": null
       },
       "billingAddress": {
-        "addressLine1": "220 Startup Avenue",
-        "addressLine2": "WeWork Floor 3",
+        "addressLine1": "234 Veterinary Lane",
+        "addressLine2": null,
         "city": "Seattle",
         "state": "WA",
-        "postalCode": "98104",
+        "postalCode": "98103",
         "country": {
           "name": "United States",
           "code": "US"
@@ -27,26 +27,26 @@
         "poBoxNumber": null
       },
       "urgencyTag": {
-        "index": 4,
-        "label": "Follow-Up Required",
+        "index": 5,
+        "label": "Pending Contract",
         "color": null,
         "colorScheme": {
-          "foregroundColor": "#1976D2",
-          "backgroundColor": "#E3F2FD"
+          "foregroundColor": "#512DA8",
+          "backgroundColor": "#EDE7F6"
         }
       },
-      "description": "Potential startup client interested in digital marketing services",
+      "description": "Proposal sent for website redesign and booking system integration",
       "thumbnailURL": null
     },
     "relationships": {
       "company": {
         "links": {
-          "self": "../Company/eb6a7c2d-6c94-4e42-aa01-c5823fb5af9a"
+          "self": "../Company/e1856419-27b0-4ce3-98fe-759d21c7144f"
         }
       },
       "primaryContact": {
         "links": {
-          "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"
+          "self": "../Customer/0c71bda7-f4d8-451a-97cb-567a8fa31763"
         }
       },
       "contacts": {
