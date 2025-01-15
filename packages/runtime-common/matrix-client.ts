@@ -162,7 +162,7 @@ export class MatrixClient {
     );
 
     let roomStateJson = await roomState.json();
-    console.log('roomState', roomStateJson);
+
     try {
       let retentionState = roomStateJson.find(
         (event) => event.type === 'm.room.retention',
@@ -170,19 +170,12 @@ export class MatrixClient {
 
       let retentionStateKey = retentionState?.content.key ?? '';
 
-      let retentionUpdateResponse = await this.request(
+      await this.request(
         `_matrix/client/v3/rooms/${roomId}/state/m.room.retention/${retentionStateKey}`,
         'PUT',
         {
           body: JSON.stringify({ max_lifetime: maxLifetimeMs }),
         },
-      );
-
-      console.log('retention update ok?', retentionUpdateResponse.ok);
-
-      console.log(
-        'retentionUpdateResponse',
-        await retentionUpdateResponse.json(),
       );
     } catch (e) {
       console.error('error setting retention policy', e);
