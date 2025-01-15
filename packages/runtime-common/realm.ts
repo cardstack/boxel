@@ -81,6 +81,8 @@ import {
   Utils,
 } from './matrix-backend-authentication';
 
+export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
+
 export interface RealmSession {
   canRead: boolean;
   canWrite: boolean;

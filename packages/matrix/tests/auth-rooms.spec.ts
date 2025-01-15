@@ -12,6 +12,7 @@ import {
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
+import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from '@cardstack/runtime-common/realm';
 
 import {
   appURL,
@@ -74,7 +75,7 @@ test.describe('Auth rooms', () => {
       );
 
       expect(retentionPolicy).toMatchObject({
-        max_lifetime: 60 * 60 * 1000,
+        max_lifetime: REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
       });
     }
   });

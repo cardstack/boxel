@@ -1,5 +1,6 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
+import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -147,7 +148,10 @@ export class MatrixClient {
       );
     }
 
-    await this.setRoomRetentionPolicy(json.room_id, 60 * 60 * 1000);
+    await this.setRoomRetentionPolicy(
+      json.room_id,
+      REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
+    );
 
     return json.room_id;
   }
