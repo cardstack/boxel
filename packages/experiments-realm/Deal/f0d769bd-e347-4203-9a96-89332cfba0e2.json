@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "",
+      "name": "Fitness First Membership Campaign & Scheduling System",
       "status": {
         "index": 3,
         "label": "Closed Won",
@@ -13,37 +13,65 @@
         }
       },
       "priority": {
-        "index": null,
-        "label": null,
+        "index": 2,
+        "label": "High Priority",
         "color": null,
         "colorScheme": {
-          "foregroundColor": null,
-          "backgroundColor": null
+          "foregroundColor": "#000000",
+          "backgroundColor": "#FFE0B2"
         }
       },
-      "closeDate": null,
+      "closeDate": "2024-03-15",
       "currentValue": {
-        "amount": null,
+        "amount": 85000,
         "currency": {
-          "code": null
+          "code": "USD"
         }
       },
       "predictedRevenue": {
-        "amount": null,
+        "amount": 250000,
         "currency": {
-          "code": null
+          "code": "USD"
         }
       },
-      "healthScore": null,
-      "notes": null,
-      "valueBreakdown": [],
-      "description": null,
-      "thumbnailURL": null
+      "healthScore": 90,
+      "notes": "Multi-location gym chain needs comprehensive digital solution. Project includes membership campaign system, class scheduling platform, and mobile app integration. Strong potential for recurring revenue.",
+      "valueBreakdown": [
+        {
+          "name": "Membership Campaign System",
+          "value": {
+            "amount": 45000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Class Scheduling Platform",
+          "value": {
+            "amount": 30000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Mobile App Integration",
+          "value": {
+            "amount": 10000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "description": "",
+      "thumbnailURL": "https://picsum.photos/id/416/200/300"
     },
     "relationships": {
       "account": {
         "links": {
-          "self": null
+          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
         }
       },
       "document": {
@@ -53,12 +81,12 @@
       },
       "primaryStakeholder": {
         "links": {
-          "self": null
+          "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"
         }
       },
-      "stakeholders": {
+      "stakeholders.0": {
         "links": {
-          "self": null
+          "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"
         }
       }
     },
