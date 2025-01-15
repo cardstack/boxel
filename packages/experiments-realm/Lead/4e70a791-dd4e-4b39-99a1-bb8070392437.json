@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "John",
+      "lastName": "Smith",
+      "position": "Marketing Manager",
+      "department": "Marketing",
+      "primaryEmail": "john.smith@newstartup.com",
+      "secondaryEmail": null,
+      "phoneMobile": {
+        "phoneNumber": {
+          "number": "2065551111",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
+      "phoneOffice": {
+        "phoneNumber": {
+          "number": null,
+          "countryCode": null
+        },
+        "type": {
+          "index": null,
+          "label": null
+        }
+      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "linkedin.com/in/johnsmith"
+        },
+        {
+          "label": "X",
+          "value": "@johnsmith"
+        }
+      ],
+      "statusTag": {
+        "lightColor": "#93C5FD",
+        "darkColor": "#3B82F6",
+        "index": null,
+        "label": "Lead",
+        "color": null,
+        "colorScheme": {
+          "foregroundColor": null,
+          "backgroundColor": null
+        }
+      },
+      "description": "Showed interest through website contact form",
+      "thumbnailURL": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg"
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../Company/eb6a7c2d-6c94-4e42-aa01-c5823fb5af9a"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/lead",
+        "name": "Lead"
+      }
+    }
+  }
+}
