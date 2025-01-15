@@ -1,4 +1,5 @@
 import { CardsGrid } from './components/grid';
+import { CardList } from './components/card-list';
 import { Layout, TitleGroup, type LayoutFilter } from './components/layout';
 import {
   SortMenu,
@@ -420,14 +421,22 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       </:contentHeader>
       <:grid>
         {{#if this.query}}
-          <CardsGrid
-            @query={{this.query}}
-            @realms={{this.realms}}
-            @selectedView={{this.selectedView}}
-            @context={{@context}}
-            @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
-            class='crm-app-grid'
-          />
+          {{#if (eq this.selectedView 'card')}}
+            <CardList
+              @context={{@context}}
+              @query={{this.query}}
+              @realms={{this.realms}}
+              class='crm-app-grid'
+            />
+          {{else}}
+            <CardsGrid
+              @query={{this.query}}
+              @realms={{this.realms}}
+              @selectedView={{this.selectedView}}
+              @context={{@context}}
+              class='crm-app-grid'
+            />
+          {{/if}}
         {{/if}}
       </:grid>
     </Layout>
@@ -518,10 +527,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         margin-left: auto;
       }
       /* Cards grid crm */
-      /* catch all tab */
-      .crm-app :where(.card-view-container) {
-        grid-template-columns: 1fr;
-      }
       /* contact tab */
       .crm-app.contact {
         --grid-view-min-width: 300px;
