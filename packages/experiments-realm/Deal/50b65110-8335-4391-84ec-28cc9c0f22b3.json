@@ -43,7 +43,7 @@
     "relationships": {
       "account": {
         "links": {
-          "self": null
+          "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
         }
       },
       "document": {

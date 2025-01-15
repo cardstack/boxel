@@ -2,6 +2,7 @@ import {
   CardDef,
   linksTo,
   contains,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
@@ -34,6 +35,9 @@ import ClockX from '@cardstack/boxel-icons/clock-x';
 import ClockUp from '@cardstack/boxel-icons/clock-up';
 import Contract from '@cardstack/boxel-icons/contract';
 import { Pill } from '@cardstack/boxel-ui/components';
+import { Query } from '@cardstack/runtime-common/query';
+import { getCards } from '@cardstack/runtime-common';
+import { Deal } from './deal';
 
 export const urgencyTagValues = [
   {
@@ -125,6 +129,66 @@ class IsolatedTemplate extends Component<typeof Account> {
       this.args.model.primaryContact?.name ||
       (this.args.model.contacts?.length ?? 0) > 0 //contacts is a proxy array
     );
+  }
+
+  // Query Acitve Deal that linked to current Account
+  get realmURL(): URL {
+    return this.args.model[realmURL]!;
+  }
+
+  get realmHrefs() {
+    return [this.realmURL?.href];
+  }
+
+  get dealQuery(): Query {
+    return {
+      filter: {
+        on: {
+          module: new URL('./deal', import.meta.url).href,
+          name: 'Deal',
+        },
+        eq: {
+          'account.id': this.args.model.id,
+        },
+      },
+    };
+  }
+
+  deals = getCards(this.dealQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  get activeDealsCount() {
+    const deals = this.deals;
+    if (!deals || deals.isLoading) {
+      return 0;
+    }
+    return deals.instances?.length ?? 0;
+  }
+
+  get totalDealsValue() {
+    const deals = this.deals;
+    if (!deals || deals.isLoading) {
+      return 'No deals';
+    }
+
+    if (!deals.instances?.length) {
+      return 'No active deals';
+    }
+
+    const total = deals.instances.reduce((total: number, deal: Deal) => {
+      return total + (deal.computedValue?.amount ?? 0);
+    }, 0);
+
+    const currencySymbol = deals.instances[0]?.computedValue?.currency?.symbol;
+
+    if (!total) {
+      return 'No deal value';
+    }
+
+    return currencySymbol
+      ? `${currencySymbol}${total} total value`
+      : `${total} total value`;
   }
 
   <template>
@@ -233,8 +297,13 @@ class IsolatedTemplate extends Component<typeof Account> {
               <TrendingUp class='header-icon' />
             </:icon>
             <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
+              {{#if this.deals.isLoading}}
+                <h3 class='summary-highlight'>Loading...</h3>
+                <p class='description'>Loading...</p>
+              {{else}}
+                <h3 class='summary-highlight'>{{this.activeDealsCount}}</h3>
+                <p class='description'>{{this.totalDealsValue}}</p>
+              {{/if}}
             </:content>
           </SummaryCard>
         </SummaryGridContainer>
