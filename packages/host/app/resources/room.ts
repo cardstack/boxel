@@ -141,6 +141,10 @@ export class RoomResource extends Resource<Args> {
     return this.matrixRoom?.events ?? [];
   }
 
+  private get sortedEvents() {
+    return this.events.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+  }
+
   get skillIds(): SkillId[] {
     let skillsConfig = this.matrixRoom?.skillsConfig;
     if (!skillsConfig) {
@@ -240,7 +244,7 @@ export class RoomResource extends Resource<Args> {
 
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
-    for (let event of this.events) {
+    for (let event of this.sortedEvents) {
       switch (event.type) {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
