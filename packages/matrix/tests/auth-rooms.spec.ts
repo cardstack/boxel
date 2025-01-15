@@ -7,8 +7,6 @@ import {
   getJoinedRooms,
   getRoomMembers,
   getRoomRetentionPolicy,
-  updateAccountData,
-  updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
@@ -19,7 +17,6 @@ import {
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 
 test.describe('Auth rooms', () => {
   let synapse: SynapseInstance;
