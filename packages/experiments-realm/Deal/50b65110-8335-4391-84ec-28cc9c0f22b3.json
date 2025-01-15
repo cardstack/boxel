@@ -4,12 +4,12 @@
     "attributes": {
       "name": "",
       "status": {
-        "index": 1,
-        "label": "Proposal",
+        "index": 4,
+        "label": "Closed Lost",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#000000",
-          "backgroundColor": "var(--boxel-lilac)"
+          "backgroundColor": "#FFEBEE"
         }
       },
       "priority": {

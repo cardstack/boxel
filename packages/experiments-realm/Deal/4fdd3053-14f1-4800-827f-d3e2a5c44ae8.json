@@ -4,12 +4,12 @@
     "attributes": {
       "name": "Demo Deal Name",
       "status": {
-        "index": 1,
-        "label": "Proposal",
+        "index": 3,
+        "label": "Closed Won",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#000000",
-          "backgroundColor": "var(--boxel-lilac)"
+          "backgroundColor": "#E8F5E9"
         }
       },
       "priority": {

@@ -131,7 +131,6 @@ class IsolatedTemplate extends Component<typeof Account> {
     );
   }
 
-  // Query Acitve Deal that linked to current Account
   get realmURL(): URL {
     return this.args.model[realmURL]!;
   }
@@ -140,6 +139,7 @@ class IsolatedTemplate extends Component<typeof Account> {
     return [this.realmURL?.href];
   }
 
+  // Query All Active Deal that linked to current Account
   get dealQuery(): Query {
     return {
       filter: {
@@ -147,9 +147,15 @@ class IsolatedTemplate extends Component<typeof Account> {
           module: new URL('./deal', import.meta.url).href,
           name: 'Deal',
         },
-        eq: {
-          'account.id': this.args.model.id,
-        },
+        every: [
+          { eq: { 'account.id': this.args.model.id } },
+          {
+            any: [
+              { eq: { 'status.label': 'Closed Won' } },
+              { eq: { 'status.label': 'Closed Lost' } },
+            ],
+          },
+        ],
       },
     };
   }
