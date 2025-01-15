@@ -148,7 +148,7 @@ class IsolatedTemplate extends Component<typeof Account> {
           name: 'Deal',
         },
         every: [
-          { eq: { 'account.id': this.args.model.id } },
+          { eq: { 'account.id': this.args.model.id ?? '' } },
           {
             any: [
               { eq: { 'status.label': 'Closed Won' } },
@@ -182,11 +182,15 @@ class IsolatedTemplate extends Component<typeof Account> {
       return 'No active deals';
     }
 
-    const total = deals.instances.reduce((total: number, deal: Deal) => {
-      return total + (deal.computedValue?.amount ?? 0);
+    const dealsInstances = deals.instances as Deal[];
+
+    const total = dealsInstances.reduce((sum, deal) => {
+      const value = deal?.computedValue?.amount ?? 0;
+      return sum + value;
     }, 0);
 
-    const currencySymbol = deals.instances[0]?.computedValue?.currency?.symbol;
+    const firstDeal = dealsInstances[0] as Deal;
+    const currencySymbol = firstDeal.computedValue?.currency?.symbol;
 
     if (!total) {
       return 'No deal value';
