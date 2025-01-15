@@ -165,7 +165,7 @@ export class MatrixClient {
 
     try {
       let retentionState = roomStateJson.find(
-        (event) => event.type === 'm.room.retention',
+        (event: any) => event.type === 'm.room.retention',
       );
 
       let retentionStateKey = retentionState?.content.key ?? '';
