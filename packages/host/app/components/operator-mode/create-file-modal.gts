@@ -243,7 +243,7 @@ export default class CreateFileModal extends Component<Signature> {
                       @loading={{this.createBoxelSpecInstance.isRunning}}
                       {{on 'click' (perform this.createBoxelSpecInstance)}}
                       {{onKeyMod 'Enter'}}
-                      data-test-duplicate-card-instance
+                      data-test-create-boxel-spec-instance
                     >
                       Create
                     </Button>

@@ -67,7 +67,7 @@ export class CatalogEntry extends CardDef {
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <CatalogEntryContainer class='fitted'>
-        <header class='title'>
+        <header class='title' data-test-title>
           <@fields.title />
         </header>
         <p class='description' data-test-description>

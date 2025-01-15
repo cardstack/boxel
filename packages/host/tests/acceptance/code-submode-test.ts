@@ -1794,39 +1794,5 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(createFileModalOverlay!);
       assert.dom('[data-test-create-file-modal]').doesNotExist();
     });
-
-    test('boxel-spec-preview is shown with module that has a single boxel spec instance', async function (assert) {
-      await visitOperatorMode({
-        submode: 'code',
-        codePath: `${testRealmURL}person.gts`,
-      });
-      await waitFor('[data-test-accordion-item="boxel-spec-preview"]');
-      assert.dom('[data-test-accordion-item="boxel-spec-preview"]').exists();
-      assert.dom('[data-test-has-boxel-spec]').containsText('card');
-      await click('[data-test-accordion-item="boxel-spec-preview"] button');
-      await waitFor('[data-test-boxel-spec-selector]');
-      assert.dom('[data-test-boxel-spec-selector]').exists();
-      await percySnapshot(assert);
-      assert.dom('[data-test-title]').containsText('Person');
-      assert.dom('[data-test-description]').containsText('Catalog entry');
-      assert
-        .dom('[data-test-module-href]')
-        .containsText(`${testRealmURL}person`);
-      assert.dom('[data-test-exported-name]').containsText('Person');
-      assert.dom('[data-test-exported-type]').containsText('card');
-    });
-    test('boxel-spec-preview is shown with module that has multple boxel spec instances', async function (assert) {
-      await visitOperatorMode({
-        submode: 'code',
-        codePath: `${testRealmURL}pet.gts`,
-      });
-      await waitFor('[data-test-accordion-item="boxel-spec-preview"]');
-      assert.dom('[data-test-accordion-item="boxel-spec-preview"]').exists();
-      assert.dom('[data-test-has-boxel-spec]').containsText('2 instances');
-      await click('[data-test-accordion-item="boxel-spec-preview"] button');
-      await waitFor('[data-test-boxel-spec-selector]');
-      assert.dom('[data-test-boxel-spec-selector]').exists();
-      assert.dom('[data-test-caret-down]').exists();
-    });
   });
 });

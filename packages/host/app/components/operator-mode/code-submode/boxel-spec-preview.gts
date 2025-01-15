@@ -117,6 +117,7 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
           @size='small'
           @disabled={{@isCreateModalShown}}
           {{on 'click' @createBoxelSpec}}
+          data-test-create-boxel-spec-button
         >
           Create
         </BoxelButton>
@@ -192,7 +193,10 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   <template>
     {{#if @showCreateBoxelSpecIntent}}
-      <div class='create-boxel-spec-intent-message'>
+      <div
+        class='create-boxel-spec-intent-message'
+        data-test-create-boxel-spec-intent-message
+      >
         Create a Boxel Specification to be able to create new instances
       </div>
     {{else}}
