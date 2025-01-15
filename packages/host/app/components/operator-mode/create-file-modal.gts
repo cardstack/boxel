@@ -44,6 +44,8 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
+
 import { cleanseString } from '../../lib/utils';
 
 import ModalContainer from '../modal-container';
@@ -54,7 +56,6 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
-import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
 export type NewFileType =
   | 'duplicate-instance'

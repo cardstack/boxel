@@ -325,7 +325,7 @@ module('boxel spec preview', function (hooks) {
     await click('[data-test-create-boxel-spec-button]');
     assert.dom('[data-test-create-file-modal]').exists();
     await waitFor('[data-test-create-boxel-spec-instance]');
-    assert.dom('[data-test-selected-type="NewSkill"]');
+    assert.dom('[data-test-selected-type="NewSkill"]').exists();
     await click('[data-test-create-boxel-spec-instance]');
     await waitFor('[data-test-field="type"]');
     assert.dom('[data-test-field="type"] input').hasValue('card');

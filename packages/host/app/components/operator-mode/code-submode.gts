@@ -56,6 +56,8 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
+import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
+
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
@@ -74,7 +76,6 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
 interface Signature {
   Args: {
