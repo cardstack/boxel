@@ -57,7 +57,10 @@ export class CatalogEntry extends CardDef {
   @field examples = linksToMany(CardDef);
   @field title = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
-      return this.name || this.ref.name;
+      if (this.name) {
+        return this.name;
+      }
+      return this.ref.name === 'default' ? undefined : this.ref.name;
     },
   });
 
