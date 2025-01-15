@@ -345,36 +345,30 @@ export class RoomResource extends Resource<Args> {
 
     let alreadyProcessedMessage = this._messageCache.get(effectiveEventId);
     if (
-      event.content['m.relates_to']?.rel_type === 'm.annotation' ||
       !alreadyProcessedMessage ||
+      event.content['m.relates_to']?.rel_type === 'm.annotation' ||
       ('data' in event.content && 'toolCall' in event.content.data)
     ) {
       return false;
-    } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      if (
-        !alreadyProcessedMessage.isStreamingFinished &&
-        'isStreamingFinished' in event.content &&
-        event.content.isStreamingFinished
-      ) {
-        return false;
-      }
+    }
 
-      let earliestKnownCreateTime =
-        this._messageCreateTimesCache.get(effectiveEventId);
-      if (
-        'isStreamingFinished' in event.content &&
-        !event.content.isStreamingFinished &&
-        (!earliestKnownCreateTime ||
-          earliestKnownCreateTime < event.origin_server_ts)
-      ) {
-        alreadyProcessedMessage.created = new Date(event.origin_server_ts);
-        alreadyProcessedMessage.message = event.content.body;
-        alreadyProcessedMessage.formattedMessage = event.content.formatted_body;
-        this._messageCreateTimesCache.set(
-          effectiveEventId,
-          event.origin_server_ts,
-        );
-      }
+    let earliestKnownCreateTime =
+      this._messageCreateTimesCache.get(effectiveEventId);
+    if (
+      event.content['m.relates_to']?.rel_type === 'm.replace' &&
+      (!earliestKnownCreateTime ||
+        earliestKnownCreateTime < event.origin_server_ts)
+    ) {
+      alreadyProcessedMessage.message = event.content.body;
+      alreadyProcessedMessage.formattedMessage = event.content.formatted_body;
+      alreadyProcessedMessage.isStreamingFinished =
+        'isStreamingFinished' in event.content
+          ? event.content.isStreamingFinished
+          : undefined;
+      this._messageCreateTimesCache.set(
+        effectiveEventId,
+        event.origin_server_ts,
+      );
     }
 
     return true;

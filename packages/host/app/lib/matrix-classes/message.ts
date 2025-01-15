@@ -45,12 +45,12 @@ interface RoomMessageOptional {
 export class Message implements RoomMessageInterface {
   @tracked formattedMessage: string;
   @tracked message: string;
+  @tracked isStreamingFinished?: boolean;
 
   attachedCardIds?: string[] | null;
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
-  isStreamingFinished?: boolean;
   errorMessage?: string;
   clientGeneratedId?: string;
   command?: MessageCommand | null;
