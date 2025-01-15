@@ -54,6 +54,7 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
+import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -355,6 +356,7 @@ export default class CreateFileModal extends Component<Signature> {
         definitionClass?: {
           displayName: string;
           ref: ResolvedCodeRef;
+          specType?: BoxelSpecType;
         };
         sourceInstance?: CardDef;
       }
@@ -380,6 +382,7 @@ export default class CreateFileModal extends Component<Signature> {
     definitionClass?: {
       displayName: string;
       ref: ResolvedCodeRef;
+      specType?: BoxelSpecType;
     },
     sourceInstance?: CardDef,
   ) {
@@ -402,6 +405,7 @@ export default class CreateFileModal extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: BoxelSpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -796,7 +800,7 @@ export class ${className} extends ${exportName} {
       );
     }
 
-    let { ref } = this.definitionClass;
+    let { ref, specType } = this.definitionClass;
 
     let relativeTo = new URL(catalogEntryRef.module);
     let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
@@ -810,6 +814,7 @@ export class ${className} extends ${exportName} {
     let doc: LooseSingleCardDocument = {
       data: {
         attributes: {
+          type: specType,
           ref,
         },
         meta: {

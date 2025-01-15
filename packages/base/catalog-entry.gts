@@ -23,6 +23,8 @@ import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import Brain from '@cardstack/boxel-icons/brain';
 
+export type BoxelSpecType = 'card' | 'field' | 'app' | 'skill';
+
 export class SpecType extends StringField {
   static displayName = 'Spec Type';
 }

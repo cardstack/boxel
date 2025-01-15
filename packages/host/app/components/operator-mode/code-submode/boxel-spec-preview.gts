@@ -26,9 +26,15 @@ import {
   catalogEntryRef,
   getCards,
   type Query,
+  isCardDef,
+  isFieldDef,
 } from '@cardstack/runtime-common';
 
-import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+import {
+  CardOrFieldDeclaration,
+  isCardOrFieldDeclaration,
+  type ModuleDeclaration,
+} from '@cardstack/host/resources/module-contents';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -37,7 +43,10 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import {
+  CatalogEntry,
+  type BoxelSpecType,
+} from 'https://cardstack.com/base/catalog-entry';
 
 import { type FileType } from '../create-file-modal';
 
@@ -52,6 +61,7 @@ interface Signature {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: BoxelSpecType;
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
@@ -304,10 +314,67 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
+  //TODO: Improve identification of isApp and isSkill
+  // isApp and isSkill are far from perfect functions
+  //We have good primitives to identify card and field but not for app and skill
+  //Here we are trying our best based upon schema analyses what is an app and a skill
+  //We don't try to capture deep ancestry of app and skill
+  isApp(selectedDeclaration: CardOrFieldDeclaration) {
+    if (selectedDeclaration.exportName === 'AppCard') {
+      return true;
+    }
+    if (
+      selectedDeclaration.super &&
+      selectedDeclaration.super.type === 'external' &&
+      selectedDeclaration.super.name === 'AppCard'
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  isSkill(selectedDeclaration: CardOrFieldDeclaration) {
+    if (selectedDeclaration.exportName === 'SkillCard') {
+      return true;
+    }
+    if (
+      selectedDeclaration.super &&
+      selectedDeclaration.super.type === 'external' &&
+      selectedDeclaration.super.name === 'SkillCard' &&
+      selectedDeclaration.super.module ===
+        'https://cardstack.com/base/skill-card'
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  guessSpecType(selectedDeclaration: ModuleDeclaration): BoxelSpecType {
+    if (isCardOrFieldDeclaration(selectedDeclaration)) {
+      if (isCardDef(selectedDeclaration.cardOrField)) {
+        if (this.isApp(selectedDeclaration)) {
+          return 'app';
+        }
+        if (this.isSkill(selectedDeclaration)) {
+          return 'skill';
+        }
+        return 'card';
+      }
+      if (isFieldDef(selectedDeclaration.cardOrField)) {
+        return 'field';
+      }
+    }
+    throw new Error('Unidentified boxel spec');
+  }
+
   @action private createBoxelSpec() {
+    if (!this.args.selectedDeclaration) {
+      throw new Error('bug: no selected declaration');
+    }
     if (!this.getSelectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
+    let specType = this.guessSpecType(this.args.selectedDeclaration);
     let displayName = this.getSelectedDeclarationAsCodeRef.name;
     this.args.createFile(
       {
@@ -317,6 +384,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
       {
         displayName: displayName,
         ref: this.getSelectedDeclarationAsCodeRef,
+        specType,
       },
     );
   }

@@ -74,6 +74,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
 interface Signature {
   Args: {
@@ -646,6 +647,7 @@ export default class CodeSubmode extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: BoxelSpecType;
       },
       sourceInstance?: CardDef,
     ) => {
