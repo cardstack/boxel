@@ -128,7 +128,7 @@ export function setupDB(
     prepareTestDB();
     dbAdapter = new PgAdapter({ autoMigrate: true });
     publisher = new PgQueuePublisher(dbAdapter);
-    runner = new PgQueueRunner(dbAdapter, 'test-worker');
+    runner = new PgQueueRunner({ adapter: dbAdapter, workerId: 'test-worker' });
   };
 
   const runAfterHook = async () => {

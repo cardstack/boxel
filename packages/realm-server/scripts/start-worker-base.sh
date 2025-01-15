@@ -11,7 +11,6 @@ NODE_ENV=development \
   REALM_SECRET_SEED="shhh! it's a secret" \
   ts-node \
   --transpileOnly worker-manager \
-  --count="${WORKER_COUNT:-1}" \
   --port=4213 \
   --matrixURL='http://localhost:8008' \
   --distURL="${HOST_URL:-http://localhost:4200}" \

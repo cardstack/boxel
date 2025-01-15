@@ -1,6 +1,10 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  userInitiatedPriority,
+  systemInitiatedPriority,
+} from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import { createServer } from 'net';
@@ -21,7 +25,8 @@ if (!REALM_SECRET_SEED) {
 let {
   port,
   matrixURL,
-  count = 1,
+  allPriorityCount = 1,
+  highPriorityCount = 0,
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -32,8 +37,14 @@ let {
       description: 'TCP port for worker to communicate readiness (for tests)',
       type: 'number',
     },
-    count: {
-      description: 'The number of workers to start',
+    highPriorityCount: {
+      description:
+        'The number of workers that service high priority jobs (user initiated) to start (default 0)',
+      type: 'number',
+    },
+    allPriorityCount: {
+      description:
+        'The number of workers that service all jobs regardless of priority to start (default 1)',
       type: 'number',
     },
     fromUrl: {
@@ -123,14 +134,25 @@ if (port != null) {
 }
 
 (async () => {
-  log.info(`starting ${count} ${pluralize('worker', count)}`);
+  log.info(
+    `starting ${highPriorityCount} high-priority ${pluralize(
+      'worker',
+      highPriorityCount,
+    )} and ${allPriorityCount} all-priority ${pluralize(
+      'worker',
+      allPriorityCount,
+    )}`,
+  );
   let urlMappings = fromUrls.map((fromUrl, i) => [
     new URL(String(fromUrl)),
     new URL(String(toUrls[i])),
   ]);
 
-  for (let i = 0; i < count; i++) {
-    await startWorker(urlMappings);
+  for (let i = 0; i < highPriorityCount; i++) {
+    await startWorker(userInitiatedPriority, urlMappings);
+  }
+  for (let i = 0; i < allPriorityCount; i++) {
+    await startWorker(systemInitiatedPriority, urlMappings);
   }
   isReady = true;
   log.info('All workers have been started');
@@ -143,7 +165,7 @@ if (port != null) {
   process.exit(1);
 });
 
-async function startWorker(urlMappings: URL[][]) {
+async function startWorker(priority: number, urlMappings: URL[][]) {
   let worker = spawn(
     'ts-node',
     [
@@ -151,6 +173,7 @@ async function startWorker(urlMappings: URL[][]) {
       'worker',
       `--matrixURL='${matrixURL}'`,
       `--distURL='${distURL}'`,
+      `--priority=${priority}`,
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
           `--fromUrl='${from.href}'`,
@@ -166,18 +189,22 @@ async function startWorker(urlMappings: URL[][]) {
   worker.on('exit', () => {
     if (!isExiting) {
       log.info(`worker ${worker.pid} exited. spawning replacement worker`);
-      startWorker(urlMappings);
+      startWorker(priority, urlMappings);
     }
   });
 
   if (worker.stdout) {
     worker.stdout.on('data', (data: Buffer) =>
-      log.info(`[worker ${worker.pid}]: ${data.toString()}`),
+      log.info(
+        `[worker ${worker.pid} priority ${priority}]: ${data.toString()}`,
+      ),
     );
   }
   if (worker.stderr) {
     worker.stderr.on('data', (data: Buffer) =>
-      log.error(`[worker ${worker.pid}]: ${data.toString()}`),
+      log.error(
+        `[worker ${worker.pid} priority ${priority}]: ${data.toString()}`,
+      ),
     );
   }
 
@@ -185,7 +212,7 @@ async function startWorker(urlMappings: URL[][]) {
     new Promise<void>((r) => {
       worker.on('message', (message) => {
         if (message === 'ready') {
-          log.info(`[worker ${worker.pid}]: worker ready`);
+          log.info(`[worker ${worker.pid} priority ${priority}]: worker ready`);
           r();
         }
       });
