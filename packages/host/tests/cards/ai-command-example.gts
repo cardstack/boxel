@@ -25,10 +25,13 @@ export class WeatherReport extends CardDef {
   @field conditions = contains(StringField);
 }
 
-class GetWeatherCommand extends Command<WeatherLocationInput, WeatherReport> {
+class GetWeatherCommand extends Command<
+  typeof WeatherLocationInput,
+  typeof WeatherReport
+> {
   inputType = WeatherLocationInput;
 
-  async getInputType(): Promise<new (args: any) => WeatherLocationInput> {
+  async getInputType() {
     return WeatherLocationInput;
   }
 
