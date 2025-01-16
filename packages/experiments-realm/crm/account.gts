@@ -150,10 +150,12 @@ class IsolatedTemplate extends Component<typeof Account> {
         every: [
           { eq: { 'account.id': this.args.model.id ?? '' } },
           {
-            any: [
-              { eq: { 'status.label': 'Closed Won' } },
-              { eq: { 'status.label': 'Closed Lost' } },
-            ],
+            not: {
+              any: [
+                { eq: { 'status.label': 'Closed Won' } },
+                { eq: { 'status.label': 'Closed Lost' } },
+              ],
+            },
           },
         ],
       },

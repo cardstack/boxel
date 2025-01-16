@@ -1021,8 +1021,8 @@ export class Deal extends CardDef {
   @field isActive = contains(BooleanField, {
     computeVia: function (this: Deal) {
       return (
-        this.status.label === 'Closed Won' ||
-        this.status.label === 'Closed Lost'
+        this.status.label !== 'Closed Won' &&
+        this.status.label !== 'Closed Lost'
       );
     },
   });
