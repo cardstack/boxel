@@ -5,7 +5,7 @@
       "translation": "",
       "headline": "",
       "slug": null,
-      "body": "Bitcoin is the first and most well-known cryptocurrency, introduced in 2008 by an anonymous person or group known as Satoshi Nakamoto. It offers several significant advantages and serves as a pioneering model in the realm of digital currency.\n\n### Key Reasons for Bitcoin's Importance:\n\n1. **Decentralization**: \n   - Bitcoin operates without a central authority or banks, relying on a decentralized network of nodes. This decentralized nature offers financial sovereignty to users.\n\n2. **Limited Supply**:\n   - Bitcoin has a capped supply of 21 million coins, which introduces scarcity and positions it as a potential hedge against inflation.\n\n3. **Security**:\n   - Utilizes strong cryptographic principles to secure transactions, making it highly resistant to fraud and counterfeiting.\n\n4. **Store of Value**:\n   - Often referred to as \"digital gold,\" Bitcoin is frequently used as a store of value and investment, appealing due to its finite supply and global recognition.\n\n5. **Global Reach**:\n   - Bitcoin enables borderless transactions, allowing people to send and receive money worldwide without intermediaries, reducing traditional banking limitations.\n\n6. **Innovation and Influence**:\n   - As the first cryptocurrency, Bitcoin sparked the development of thousands of other digital currencies and blockchain projects, influencing technology and finance globally.\n\nBitcoin's disruptive approach to traditional finance, characterised by its decentralization, security, and scarcity, has played a significant role in shaping the future of money and digital assets. Its impact extends beyond finance, influencing technology, policy, and the future of decentralized systems.",
+      "body": "To quote wikipedia:\n\nMicroblogging is a form of blogging using short posts without titles known as microposts[1][2][3] (or status updates on a minority of websites like Meta Platforms'). Microblogs \"allow users to exchange small elements of content such as short sentences, individual images, or video links\",[1] which may be the major reason for their popularity.[4] Some popular social networks such as Twitter, Threads, Mastodon, Tumblr, Koo, and Instagram can be viewed as collections of microblogs.",
       "publishDate": null,
       "featuredImage": {
         "imageUrl": null,
@@ -20,22 +20,12 @@
       "thumbnailURL": null
     },
     "relationships": {
-      "authors": {
+      "authorBio": {
         "links": {
           "self": null
         }
       },
       "blog": {
-        "links": {
-          "self": null
-        }
-      },
-      "categories": {
-        "links": {
-          "self": null
-        }
-      },
-      "editors": {
         "links": {
           "self": null
         }
