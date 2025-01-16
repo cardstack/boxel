@@ -386,14 +386,13 @@ class IsolatedTemplate extends Component<typeof Account> {
                 <h3 class='summary-highlight'>Loading...</h3>
                 <p class='description'>Loading...</p>
               {{else}}
-                <div class='lifetime-value-container'>
-                  <h3
-                    class='lifetime-total'
-                  >{{this.formattedLifetimeTotal}}</h3>
-                  <p
-                    class='lifetime-current'
-                  >{{this.formattedCurrentYearValue}}</p>
-                </div>
+                <h3 class='summary-highlight'>
+                  {{this.formattedLifetimeTotal}}
+                </h3>
+                <p class='description'>
+                  {{this.formattedCurrentYearValue}}
+                </p>
+
               {{/if}}
             </:content>
           </SummaryCard>
@@ -564,24 +563,6 @@ class IsolatedTemplate extends Component<typeof Account> {
         .activity-time {
           margin-left: 0;
         }
-      }
-
-      .lifetime-value-container {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxs);
-      }
-
-      .lifetime-total {
-        font: 600 var(--boxel-font-xl);
-        margin: 0;
-        color: var(--boxel-purple-900);
-      }
-
-      .lifetime-current {
-        font: 500 var(--boxel-font-sm);
-        margin: 0;
-        color: var(--boxel-purple-700);
       }
     </style>
   </template>
