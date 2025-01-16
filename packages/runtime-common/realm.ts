@@ -166,6 +166,7 @@ export interface RealmAdapter {
 interface Options {
   disableModuleCaching?: true;
   invalidateEntireRealm?: true;
+  userInitiatedRealmCreation?: true;
 }
 
 interface UpdateItem {
@@ -256,6 +257,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #invalidateEntireRealm = false;
+  #userInitiatedRealmCreation = false;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -310,6 +312,9 @@ export class Realm {
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#invalidateEntireRealm = Boolean(opts?.invalidateEntireRealm);
+    this.#userInitiatedRealmCreation = Boolean(
+      opts?.userInitiatedRealmCreation,
+    );
 
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -596,7 +601,10 @@ export class Realm {
     await Promise.resolve();
     let startTime = Date.now();
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    let promise = this.#realmIndexUpdater.run(this.#invalidateEntireRealm);
+    let promise = this.#realmIndexUpdater.run({
+      invalidateEntireRealm: this.#invalidateEntireRealm,
+      userInitiatedRequest: this.#userInitiatedRealmCreation,
+    });
     if (isNewIndex) {
       // we only await the full indexing at boot if this is a brand new index
       await promise;
