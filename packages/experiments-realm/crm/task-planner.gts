@@ -162,17 +162,15 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
         };
   }
 
-  get assigneeQuery() {
-    return getCards(
-      {
-        filter: {
-          type: this.config.filters.assignee.codeRef,
-        },
+  assigneeQuery = getCards(
+    {
+      filter: {
+        type: this.config.filters.assignee.codeRef,
       },
-      this.realmHrefs,
-      { isLive: true },
-    );
-  }
+    },
+    this.realmHrefs,
+    { isLive: true },
+  );
 
   get assigneeCards() {
     return this.assigneeQuery?.instances ?? [];

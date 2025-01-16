@@ -510,6 +510,7 @@ export class BaseTaskPlannerIsolated<
         </DndKanbanBoard>
       </div>
     </div>
+    {{! template-lint-disable require-scoped-style }}
     <style>
       .ember-power-select-dropdown.ember-basic-dropdown-content--below,
       .ember-power-select-dropdown.ember-basic-dropdown-content--in-place {
