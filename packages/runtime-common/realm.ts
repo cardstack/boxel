@@ -316,9 +316,6 @@ export class Realm {
       opts?.userInitiatedRealmCreation,
     );
 
-    // TODO: remove after running in all environments; CS-7875
-    this.backfillRetentionPolicies();
-
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -333,6 +330,9 @@ export class Realm {
         new RealmAuthDataSource(this.#matrixClient, () => virtualNetwork.fetch),
       ),
     ]);
+
+    // TODO: remove after running in all environments; CS-7875
+    this.backfillRetentionPolicies();
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
@@ -455,6 +455,8 @@ export class Realm {
 
   // TODO: remove after running in all environments; CS-7875
   private async backfillRetentionPolicies() {
+    await this.#matrixClient.waitForLogin();
+
     let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
     for (let roomId of roomIds) {
       await this.#matrixClient.setRoomRetentionPolicy(

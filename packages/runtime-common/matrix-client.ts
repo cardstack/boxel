@@ -1,6 +1,7 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
+import { Deferred } from './deferred';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -14,6 +15,7 @@ export class MatrixClient {
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
+  private loggedIn = new Deferred<void>();
 
   constructor({
     matrixURL,
@@ -43,6 +45,10 @@ export class MatrixClient {
 
   isLoggedIn() {
     return this.access !== undefined;
+  }
+
+  async waitForLogin() {
+    return this.loggedIn.promise;
   }
 
   private async request(
@@ -97,11 +103,13 @@ export class MatrixClient {
     let json = await response.json();
 
     if (!response.ok) {
-      throw new Error(
+      let error = new Error(
         `Unable to login to matrix ${this.matrixURL.href} as user ${
           this.username
         }: status ${response.status} - ${JSON.stringify(json)}`,
       );
+      this.loggedIn.reject(error);
+      throw error;
     }
     let {
       access_token: accessToken,
@@ -109,6 +117,7 @@ export class MatrixClient {
       user_id: userId,
     } = json;
     this.access = { accessToken, deviceId, userId };
+    this.loggedIn.fulfill();
   }
 
   async getJoinedRooms() {
