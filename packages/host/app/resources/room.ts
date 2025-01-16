@@ -344,6 +344,7 @@ export class RoomResource extends Resource<Args> {
         'isStreamingFinished' in event.content
           ? event.content.isStreamingFinished
           : undefined;
+      message.updated = new Date();
 
       if (event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
         this.upsertMessageCommand({

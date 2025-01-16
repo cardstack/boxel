@@ -1028,6 +1028,92 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-message-idx="0"]').containsText('Update mango card');
   });
 
+  test('it renders only new/updated messages', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@testuser:staging', {
+      body: `question #0`,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: `question #1`,
+      format: 'org.matrix.custom.html',
+    });
+    let messageEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Thinking...`,
+      msgtype: 'm.text',
+      formatted_body: `Thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    let commandEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Thinking...`,
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: `Thinking...`,
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {},
+        eventId: '__EVENT_ID__',
+      }),
+    });
+    setReadReceipt(roomId, messageEventId, '@testuser:staging');
+    setReadReceipt(roomId, commandEventId, '@testuser:staging');
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-message-idx="1"]');
+
+    let instanceIds = Array.from(
+      document.querySelectorAll('[data-test-boxel-message-instance-id]'),
+    ).map((el) => el.getAttribute('data-test-boxel-message-instance-id'));
+    assert.strictEqual(instanceIds.length, 3);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `answer #0`,
+      msgtype: 'm.text',
+      formatted_body: `answer #0`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      'm.relates_to': {
+        event_id: messageEventId,
+        rel_type: 'm.replace',
+      },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      'm.relates_to': {
+        event_id: commandEventId,
+        rel_type: 'm.replace',
+      },
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+    });
+    let newInstanceIds = Array.from(
+      document.querySelectorAll('[data-test-boxel-message-instance-id]'),
+    ).map((el) => el.getAttribute('data-test-boxel-message-instance-id'));
+
+    assert.deepEqual(newInstanceIds, instanceIds);
+  });
+
   module('suspending global error hook', (hooks) => {
     let tmp: any;
     let uncaughtException: any;

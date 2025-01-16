@@ -1,3 +1,4 @@
+import { guidFor } from '@ember/object/internals';
 import { tracked } from '@glimmer/tracking';
 
 import { EventStatus } from 'matrix-js-sdk';
@@ -62,6 +63,9 @@ export class Message implements RoomMessageInterface {
   eventId: string;
   roomId: string;
 
+  //This property is used for testing purpose
+  instanceId: string;
+
   constructor(init: RoomMessageInterface) {
     Object.assign(this, init);
     this.author = init.author;
@@ -72,6 +76,7 @@ export class Message implements RoomMessageInterface {
     this.updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
+    this.instanceId = guidFor(this);
   }
   get isRetryable() {
     return (
