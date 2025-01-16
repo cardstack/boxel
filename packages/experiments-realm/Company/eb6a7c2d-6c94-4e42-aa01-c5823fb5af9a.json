@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "TechFlow Solutions",
+      "industry": "Software & Technology",
+      "headquartersAddress": {
+        "addressLine1": "220 Startup Avenue",
+        "addressLine2": "WeWork Floor 3",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98104",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "phone": 12065554444,
+      "website": "https://techflow.io",
+      "stockSymbol": null,
+      "description": "Early-stage startup developing productivity tools for remote teams. Looking to improve their market presence and lead generation through digital marketing.",
+      "thumbnailURL": "https://example.com/techflow-logo.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/company",
+        "name": "Company"
+      }
+    }
+  }
+}
