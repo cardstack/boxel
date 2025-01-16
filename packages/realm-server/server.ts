@@ -360,7 +360,7 @@ export class RealmServer {
           username,
         },
       },
-      { invalidateEntireRealm: true },
+      { invalidateEntireRealm: true, userInitiatedRealmCreation: true },
     );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);

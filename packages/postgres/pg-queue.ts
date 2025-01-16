@@ -24,6 +24,7 @@ interface JobsTable {
   job_type: string;
   concurrency_group: string | null;
   timeout: number;
+  priority: number;
   args: Record<string, any>;
   status: 'unfulfilled' | 'resolved' | 'rejected';
   created_at: Date;
@@ -107,10 +108,9 @@ class WorkLoop {
 export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
   #pgClient: PgAdapter;
-
-  private pollInterval = 10000;
-  private notifiers: Map<number, Deferred<any>> = new Map();
-  private notificationRunner: WorkLoop | undefined;
+  #pollInterval = 10000;
+  #notifiers: Map<number, Deferred<any>> = new Map();
+  #notificationRunner: WorkLoop | undefined;
 
   constructor(pgClient: PgAdapter) {
     this.#pgClient = pgClient;
@@ -121,12 +121,12 @@ export class PgQueuePublisher implements QueuePublisher {
   }
 
   private addNotifier(id: number, n: Deferred<any>) {
-    if (!this.notificationRunner && !this.#isDestroyed) {
-      this.notificationRunner = new WorkLoop(
+    if (!this.#notificationRunner && !this.#isDestroyed) {
+      this.#notificationRunner = new WorkLoop(
         'notificationRunner',
-        this.pollInterval,
+        this.#pollInterval,
       );
-      this.notificationRunner.run(async (loop) => {
+      this.#notificationRunner.run(async (loop) => {
         await this.#pgClient.listen(
           'jobs_finished',
           loop.wake.bind(loop),
@@ -139,12 +139,12 @@ export class PgQueuePublisher implements QueuePublisher {
         );
       });
     }
-    this.notifiers.set(id, n);
+    this.#notifiers.set(id, n);
   }
 
   private async drainNotifications(loop: WorkLoop) {
     while (!loop.shuttingDown) {
-      let waitingIds = [...this.notifiers.keys()];
+      let waitingIds = [...this.#notifiers.keys()];
       log.debug('jobs waiting for notification: %s', waitingIds);
       let result = (await this.#query([
         `SELECT id, status, result FROM jobs WHERE status != 'unfulfilled' AND (`,
@@ -163,8 +163,8 @@ export class PgQueuePublisher implements QueuePublisher {
         );
         // "!" because we only searched for rows matching our notifiers Map, and
         // we are the only code that deletes from that Map.
-        let notifier = this.notifiers.get(row.id)!;
-        this.notifiers.delete(row.id);
+        let notifier = this.#notifiers.get(row.id)!;
+        this.#notifiers.delete(row.id);
         if (row.status === 'resolved') {
           notifier.fulfill(row.result);
         } else {
@@ -174,20 +174,28 @@ export class PgQueuePublisher implements QueuePublisher {
     }
   }
 
-  async publish<T>(
-    jobType: string,
-    concurrencyGroup: string | null,
-    timeout: number, // in seconds
-    args: PgPrimitive,
-  ): Promise<Job<T>> {
+  async publish<T>({
+    jobType,
+    concurrencyGroup,
+    timeout, // in seconds
+    priority = 0,
+    args,
+  }: {
+    jobType: string;
+    concurrencyGroup: string | null;
+    priority?: number;
+    timeout: number; // in seconds
+    args: PgPrimitive;
+  }): Promise<Job<T>> {
     let { nameExpressions, valueExpressions } = asExpressions({
       args,
       job_type: jobType,
       concurrency_group: concurrencyGroup,
+      priority,
       timeout,
     } as Pick<
       JobsTable,
-      'args' | 'job_type' | 'concurrency_group' | 'timeout'
+      'args' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority'
     >);
     let [{ id: jobId }] = (await this.#query([
       'INSERT INTO JOBS',
@@ -206,34 +214,52 @@ export class PgQueuePublisher implements QueuePublisher {
 
   async destroy() {
     this.#isDestroyed = true;
-    if (this.notificationRunner) {
-      await this.notificationRunner.shutDown();
+    if (this.#notificationRunner) {
+      await this.#notificationRunner.shutDown();
     }
   }
 }
 
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
+  #pgClient: PgAdapter;
+  #workerId: string;
+  #maxTimeoutSec: number;
+  #pollInterval = 10000;
+  #handlers: Map<string, Function> = new Map();
+  #jobRunner: WorkLoop | undefined;
+  #priority: number;
 
-  private pollInterval = 10000;
-  private handlers: Map<string, Function> = new Map();
-  private jobRunner: WorkLoop | undefined;
+  constructor({
+    adapter,
+    workerId,
+    maxTimeoutSec = 10 * 60,
+    priority = 0,
+  }: {
+    adapter: PgAdapter;
+    workerId: string;
+    priority?: number;
+    maxTimeoutSec?: number;
+  }) {
+    this.#pgClient = adapter;
+    this.#workerId = workerId;
+    this.#maxTimeoutSec = maxTimeoutSec;
+    this.#priority = priority;
+  }
 
-  constructor(
-    private pgClient: PgAdapter,
-    private workerId: string,
-    private maxTimeoutSec = 10 * 60,
-  ) {}
+  get priority() {
+    return this.#priority;
+  }
 
   register<A, T>(jobType: string, handler: (arg: A) => Promise<T>) {
-    this.handlers.set(jobType, handler);
+    this.#handlers.set(jobType, handler);
   }
 
   async start() {
-    if (!this.jobRunner && !this.#isDestroyed) {
-      this.jobRunner = new WorkLoop('jobRunner', this.pollInterval);
-      this.jobRunner.run(async (loop) => {
-        await this.pgClient.listen('jobs', loop.wake.bind(loop), async () => {
+    if (!this.#jobRunner && !this.#isDestroyed) {
+      this.#jobRunner = new WorkLoop('jobRunner', this.#pollInterval);
+      this.#jobRunner.run(async (loop) => {
+        await this.#pgClient.listen('jobs', loop.wake.bind(loop), async () => {
           while (!loop.shuttingDown) {
             await this.processJobs(loop);
             await loop.sleep();
@@ -244,7 +270,7 @@ export class PgQueueRunner implements QueueRunner {
   }
 
   private async runJob(jobType: string, args: PgPrimitive) {
-    let handler = this.handlers.get(jobType);
+    let handler = this.#handlers.get(jobType);
     if (!handler) {
       throw new Error(`unknown job handler ${jobType}`);
     }
@@ -252,10 +278,10 @@ export class PgQueueRunner implements QueueRunner {
   }
 
   private async processJobs(workLoop: WorkLoop) {
-    await this.pgClient.withConnection(async (query) => {
+    await this.#pgClient.withConnection(async (query) => {
       try {
         while (!workLoop.shuttingDown) {
-          log.debug(`%s: processing jobs`, this.workerId);
+          log.debug(`%s: processing jobs`, this.#workerId);
 
           await query(['BEGIN']);
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
@@ -264,8 +290,9 @@ export class PgQueueRunner implements QueueRunner {
             // find the queue with the oldest job that isn't running and lock it.
             `WITH
               pending_jobs AS (
-                SELECT * FROM jobs WHERE status='unfulfilled'
-              ),
+                SELECT * FROM jobs WHERE status='unfulfilled' and priority >=`,
+            param(this.#priority),
+            `),
               valid_reservations AS (
                 SELECT * FROM job_reservations WHERE locked_until > NOW() AND completed_at IS NULL
               ),
@@ -283,14 +310,14 @@ export class PgQueueRunner implements QueueRunner {
               LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
-            log.debug(`%s: found no work`, this.workerId);
+            log.debug(`%s: found no work`, this.#workerId);
             await query(['ROLLBACK']);
             return;
           }
           let jobToRun = jobs[0];
           log.debug(
             `%s: found job to run, job id: %s`,
-            this.workerId,
+            this.#workerId,
             jobToRun.id,
           );
 
@@ -300,10 +327,10 @@ export class PgQueueRunner implements QueueRunner {
               [param(jobToRun.id)],
               [
                 '(',
-                param(Math.min(jobToRun.timeout, this.maxTimeoutSec)),
+                param(Math.min(jobToRun.timeout, this.#maxTimeoutSec)),
                 ` || ' seconds')::interval + now()`,
               ],
-              [param(this.workerId)],
+              [param(this.#workerId)],
             ]),
             ') RETURNING id',
           ] as Expression)) as Pick<JobReservationsTable, 'id'>[];
@@ -312,14 +339,14 @@ export class PgQueueRunner implements QueueRunner {
 
           log.debug(
             `%s: claimed job %s, reservation %s`,
-            this.workerId,
+            this.#workerId,
             jobToRun.id,
             jobReservationId,
           );
           let newStatus: string;
           let result: PgPrimitive;
           try {
-            log.debug(`%s: running %s`, this.workerId, jobToRun.id);
+            log.debug(`%s: running %s`, this.#workerId, jobToRun.id);
             result = await Promise.race([
               this.runJob(jobToRun.job_type, jobToRun.args),
               // we race the job so that it doesn't hold this worker hostage if
@@ -327,12 +354,14 @@ export class PgQueueRunner implements QueueRunner {
               new Promise<'timeout'>((r) =>
                 setTimeout(() => {
                   r('timeout');
-                }, this.maxTimeoutSec * 1000),
+                }, this.#maxTimeoutSec * 1000),
               ),
             ]);
             if (result === 'timeout') {
               throw new Error(
-                `Timed-out after ${this.maxTimeoutSec}s waiting for job ${jobToRun.id} to complete`,
+                `Timed-out after ${this.#maxTimeoutSec}s waiting for job ${
+                  jobToRun.id
+                } to complete`,
               );
             }
             newStatus = 'resolved';
@@ -349,7 +378,7 @@ export class PgQueueRunner implements QueueRunner {
           }
           log.debug(
             `%s: finished %s as %s`,
-            this.workerId,
+            this.#workerId,
             jobToRun.id,
             newStatus,
           );
@@ -362,7 +391,7 @@ export class PgQueueRunner implements QueueRunner {
           if (jobStatus !== 'unfulfilled') {
             log.debug(
               '%s: rolling back because our job is already marked done',
-              this.workerId,
+              this.#workerId,
             );
             await query(['ROLLBACK']);
             return;
@@ -374,7 +403,7 @@ export class PgQueueRunner implements QueueRunner {
           if (jobReservation.completed_at) {
             log.debug(
               '%s: rolling back because someone else processed our job',
-              this.workerId,
+              this.#workerId,
             );
             await query(['ROLLBACK']);
             return;
@@ -390,7 +419,7 @@ export class PgQueueRunner implements QueueRunner {
             if (total > 0) {
               log.debug(
                 '%s: rolling back because someone else has reserved our (timed-out) job',
-                this.workerId,
+                this.#workerId,
               );
               await query(['ROLLBACK']);
               return;
@@ -415,14 +444,14 @@ export class PgQueueRunner implements QueueRunner {
           await query(['COMMIT']);
           log.debug(
             `%s: committed job completion, notified jobs_finished`,
-            this.workerId,
+            this.#workerId,
           );
         }
       } catch (e: any) {
         if (e.code === '40001') {
           log.debug(
             `%s: detected concurrency conflict, rolling back`,
-            this.workerId,
+            this.#workerId,
           );
           await query(['ROLLBACK']);
           return;
@@ -434,8 +463,8 @@ export class PgQueueRunner implements QueueRunner {
 
   async destroy() {
     this.#isDestroyed = true;
-    if (this.jobRunner) {
-      await this.jobRunner.shutDown();
+    if (this.#jobRunner) {
+      await this.#jobRunner.shutDown();
     }
   }
 }

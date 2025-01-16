@@ -37,6 +37,7 @@ let {
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
   toUrl: toUrls,
+  priority = 0,
   migrateDB,
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
@@ -66,10 +67,15 @@ let {
       demandOption: true,
       type: 'string',
     },
+    priority: {
+      description:
+        'The minimum priority of jobs that the worker should process (defaults to 0)',
+      type: 'number',
+    },
   })
   .parseSync();
 
-log.info(`starting worker with pid ${process.pid}`);
+log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
 
 if (fromUrls.length !== toUrls.length) {
   log.error(
@@ -94,7 +100,7 @@ let autoMigrate = migrateDB || undefined;
 
 (async () => {
   let dbAdapter = new PgAdapter({ autoMigrate });
-  let queue = new PgQueueRunner(dbAdapter, workerId);
+  let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let manager = new RunnerOptionsManager();
   let { getRunner } = await makeFastBootIndexRunner(
     dist,
