@@ -316,6 +316,9 @@ export class Realm {
       opts?.userInitiatedRealmCreation,
     );
 
+    // TODO: remove after running in all environments; CS-7875
+    this.backfillRetentionPolicies();
+
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -448,6 +451,17 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // TODO: remove after running in all environments; CS-7875
+  private async backfillRetentionPolicies() {
+    let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
+    for (let roomId of roomIds) {
+      await this.#matrixClient.setRoomRetentionPolicy(
+        roomId,
+        REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
+      );
+    }
   }
 
   async indexing() {
