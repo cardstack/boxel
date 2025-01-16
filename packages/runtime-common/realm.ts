@@ -455,13 +455,21 @@ export class Realm {
 
   // TODO: remove after running in all environments; CS-7875
   private async backfillRetentionPolicies() {
+    console.log('backfillRetentionPolicies: waiting for login');
     await this.#matrixClient.waitForLogin();
+    console.log('backfillRetentionPolicies: login complete');
 
     let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
     for (let roomId of roomIds) {
+      console.log(
+        `backfillRetentionPolicies: setting retention policy for ${roomId}`,
+      );
       await this.#matrixClient.setRoomRetentionPolicy(
         roomId,
         REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
+      );
+      console.log(
+        `backfillRetentionPolicies: set retention policy for ${roomId}`,
       );
     }
   }
