@@ -45,6 +45,7 @@ interface RoomMessageOptional {
 export class Message implements RoomMessageInterface {
   @tracked formattedMessage: string;
   @tracked message: string;
+  @tracked command?: MessageCommand | null;
   @tracked isStreamingFinished?: boolean;
 
   attachedCardIds?: string[] | null;
@@ -53,7 +54,6 @@ export class Message implements RoomMessageInterface {
   transactionId?: string | null;
   errorMessage?: string;
   clientGeneratedId?: string;
-  command?: MessageCommand | null;
 
   author: RoomMember;
   status: EventStatus | null;

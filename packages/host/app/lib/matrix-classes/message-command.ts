@@ -9,21 +9,32 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Message } from './message';
+import { tracked } from '@glimmer/tracking';
 
 type CommandStatus = 'applied' | 'ready' | 'applying';
 
 export default class MessageCommand {
+  @tracked name: string;
+  @tracked payload: any;
+  @tracked commandStatus?: CommandStatus;
+  @tracked commandResultCardEventId?: string;
+
   constructor(
     public message: Message,
     public toolCallId: string,
-    public name: string,
-    public payload: any, //arguments of toolCall. Its not called arguments due to lint
+    name: string,
+    payload: any, //arguments of toolCall. Its not called arguments due to lint
     public eventId: string,
-    private commandStatus: CommandStatus,
-    public commandResultCardEventId: string | undefined,
+    commandStatus: CommandStatus,
+    commandResultCardEventId: string | undefined,
     owner: Owner,
   ) {
     setOwner(this, owner);
+
+    this.name = name;
+    this.payload = payload;
+    this.commandStatus = commandStatus;
+    this.commandResultCardEventId = commandResultCardEventId;
   }
 
   @service declare commandService: CommandService;

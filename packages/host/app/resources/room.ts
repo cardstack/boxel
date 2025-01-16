@@ -11,6 +11,9 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -25,6 +28,7 @@ import type {
   LeaveEvent,
   CardMessageEvent,
   MessageEvent,
+  CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -38,11 +42,14 @@ import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
+import { buildMessageCommand, formattedMessageForCommand } from '../lib/matrix-classes/message-builder';
+
 import type Room from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import { CommandStatus } from 'https://cardstack.com/base/command';
 
 interface SkillId {
   skillCardId: string;
@@ -252,8 +259,11 @@ export class RoomResource extends Resource<Args> {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
           break;
+        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          await this.updateMessageCommand(event);
+          break;
         case 'm.room.message':
-          await this.loadRoomMessage(roomId, event, index);
+          await this.loadRoomMessage({ roomId, event, index });
           break;
         case 'm.room.create':
           await this.loadRoomCreateEvent(event);
@@ -283,16 +293,105 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
-  private async loadRoomMessage(
-    roomId: string,
-    event: MessageEvent | CommandEvent | CardMessageEvent,
-    index: number,
-  ) {
-    // Skipping unnecessary updates to prevent messages from being re-rendered in the AI panel.
-    if (this.skipLoadingMessage(event)) {
+  private async updateMessageCommand(event: CommandResultEvent) {
+    let effectiveEventId = this.getEffectiveEventId(event);
+    let message = this._messageCache.get(effectiveEventId);
+    if (!message) {
       return;
     }
+
+    let commandEvent = this.events.find(
+      (e: any) => e.type === 'm.room.message' && e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE && e.content['m.relates_to'].event_id === effectiveEventId,
+    )! as CommandEvent;
+    if (!message.command) {
+      message.command = buildMessageCommand({
+        effectiveEventId,
+        commandEvent,
+        message,
+        owner: getOwner(this)!,
+      });
+    }
+
+    message.command.commandStatus = (event?.content['m.relates_to']?.key ||
+      'ready') as CommandStatus;
+    message.command.commandResultCardEventId = event?.content.msgtype ===
+        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+          ? event.content.data.cardEventId
+          : undefined;
+  }
+
+  private async loadRoomMessage({
+    roomId,
+    event,
+    index,
+  }: {
+    roomId: string;
+    event: MessageEvent | CommandEvent | CardMessageEvent;
+    index: number;
+  }) {
+    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
+      this._fragmentCache.set(event.event_id, event.content);
+      return;
+    }
+
     let effectiveEventId = this.getEffectiveEventId(event);
+    let message = this._messageCache.get(effectiveEventId);
+    if (!message) {
+      message = await this.buildMessage({
+        effectiveEventId,
+        roomId,
+        event,
+        index,
+      });
+    }
+
+    let earliestKnownCreateTime =
+      this._messageCreateTimesCache.get(effectiveEventId);
+    if (
+      event.content['m.relates_to']?.rel_type === 'm.replace' &&
+      (!earliestKnownCreateTime ||
+        earliestKnownCreateTime <= event.origin_server_ts)
+    ) {
+      message.message = event.content.body;
+      message.formattedMessage = event.content.formatted_body;
+      message.isStreamingFinished =
+        'isStreamingFinished' in event.content
+          ? event.content.isStreamingFinished
+          : undefined;
+      if (event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
+        if (!message.command) {
+          message.command = buildMessageCommand({
+            effectiveEventId,
+            commandEvent: event as CommandEvent,
+            message,
+            owner: getOwner(this)!,
+          });
+        } else {
+          message.formattedMessage = formattedMessageForCommand(event.content.formatted_body);
+
+          let command = event.content.data.toolCall;
+          message.command.name = command.name;
+          message.command.payload = command.arguments;
+        }
+      }
+      this._messageCreateTimesCache.set(
+        effectiveEventId,
+        event.origin_server_ts,
+      );
+    }
+  }
+
+  private async buildMessage({
+    effectiveEventId,
+    roomId,
+    event,
+    index,
+  }: {
+    effectiveEventId: string;
+    roomId: string;
+    event: MessageEvent | CommandEvent | CardMessageEvent;
+    index: number;
+  }) {
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
@@ -307,79 +406,34 @@ export class RoomResource extends Resource<Args> {
     });
 
     let messageObject = await messageBuilder.buildMessage();
-    if (messageObject) {
-      // if the message is a replacement for other messages,
-      // use `created` from the oldest one.
-      if (this._messageCache.has(effectiveEventId)) {
-        messageObject.created = new Date(
-          Math.min(
-            ...[
-              +this._messageCache.get(effectiveEventId)!.created!,
-              +messageObject.created!,
-              this._messageCreateTimesCache.get(effectiveEventId) ?? +Infinity,
-            ],
-          ),
-        );
-      }
-      this._messageCreateTimesCache.set(
-        effectiveEventId,
-        event.origin_server_ts,
-      );
-      this._messageCache.set(
-        messageObject.clientGeneratedId ?? effectiveEventId,
-        messageObject as any,
+    // if the message is a replacement for other messages,
+    // use `created` from the oldest one.
+    if (this._messageCache.has(effectiveEventId)) {
+      messageObject.created = new Date(
+        Math.min(
+          ...[
+            +this._messageCache.get(effectiveEventId)!.created!,
+            +messageObject.created!,
+            this._messageCreateTimesCache.get(effectiveEventId) ?? +Infinity,
+          ],
+        ),
       );
     }
-  }
+    this._messageCreateTimesCache.set(effectiveEventId, event.origin_server_ts);
+    this._messageCache.set(
+      messageObject.clientGeneratedId ?? effectiveEventId,
+      messageObject as any,
+    );
 
-  private skipLoadingMessage(
-    event: MessageEvent | CommandEvent | CardMessageEvent,
-  ) {
-    let effectiveEventId = this.getEffectiveEventId(event);
-    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      if (!this._fragmentCache.has(effectiveEventId)) {
-        this._fragmentCache.set(effectiveEventId, event.content);
-      }
-      return true;
-    }
-
-    let alreadyProcessedMessage = this._messageCache.get(effectiveEventId);
-    if (
-      !alreadyProcessedMessage ||
-      event.content['m.relates_to']?.rel_type === 'm.annotation' ||
-      ('data' in event.content && 'toolCall' in event.content.data)
-    ) {
-      return false;
-    }
-
-    let earliestKnownCreateTime =
-      this._messageCreateTimesCache.get(effectiveEventId);
-    if (
-      event.content['m.relates_to']?.rel_type === 'm.replace' &&
-      (!earliestKnownCreateTime ||
-        earliestKnownCreateTime < event.origin_server_ts)
-    ) {
-      alreadyProcessedMessage.message = event.content.body;
-      alreadyProcessedMessage.formattedMessage = event.content.formatted_body;
-      alreadyProcessedMessage.isStreamingFinished =
-        'isStreamingFinished' in event.content
-          ? event.content.isStreamingFinished
-          : undefined;
-      this._messageCreateTimesCache.set(
-        effectiveEventId,
-        event.origin_server_ts,
-      );
-    }
-
-    return true;
+    return messageObject;
   }
 
   private getEffectiveEventId(
-    event: MessageEvent | CommandEvent | CardMessageEvent,
+    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
   ) {
-    return event.content['m.relates_to']?.rel_type !== 'm.replace'
-      ? event.event_id
-      : event.content['m.relates_to'].event_id;
+    return event.content['m.relates_to']?.rel_type === 'm.replace' || event.content['m.relates_to']?.rel_type === 'm.annotation'
+      ? event.content['m.relates_to'].event_id
+      : event.event_id;
   }
 
   private async loadRoomNameEvent(event: RoomNameEvent) {
