@@ -5,7 +5,7 @@
       "status": {
         "index": 1,
         "label": "In Progress",
-        "color": "#FFB74D",
+        "color": null,
         "completed": false
       },
       "dateRange": {
@@ -16,8 +16,8 @@
         "index": null,
         "label": null
       },
-      "name": "Edit Quotation on Item A",
-      "details": "The quantity should be 50, instead of 100.",
+      "name": null,
+      "details": null,
       "description": null,
       "thumbnailURL": null
     },
@@ -34,7 +34,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../Representative/880c1d41-2563-43da-999d-ef577fa3eac9"
+          "self": null
         }
       },
       "contact": {

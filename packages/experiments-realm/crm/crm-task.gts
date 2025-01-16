@@ -15,6 +15,7 @@ import {
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { Contact } from './contact';
+import { Representative } from './representative';
 import { Account } from './account';
 import { Deal } from './deal';
 import { Task, TaskStatusField, getDueDateStatus } from '../task';
@@ -386,7 +387,7 @@ export class CRMTask extends Task {
     },
   });
 
-  @field assignee = linksTo(() => Contact);
+  @field assignee = linksTo(() => Representative);
   @field contact = linksTo(Contact);
   @field account = linksTo(Account);
   @field deal = linksTo(Deal);

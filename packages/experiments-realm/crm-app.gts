@@ -431,7 +431,15 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         {{/if}}
       </:contentHeader>
       <:grid>
-        {{#if this.query}}
+        {{#if (eq this.activeTabId 'Task')}}
+          <CRMTaskPlannerIsolated
+            @model={{@model}}
+            @context={{@context}}
+            @fields={{@fields}}
+            @set={{@set}}
+            @fieldName={{@fieldName}}
+          />
+        {{else if this.query}}
           <CardsGrid
             @query={{this.query}}
             @realms={{this.realms}}
@@ -441,9 +449,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             class='crm-app-grid'
           />
         {{/if}}
-        {{#if (eq this.activeTabId 'Task')}}
-          <CRMTaskPlannerIsolated @model={{@model}} @context={{@context}} />
-        {{/if}}
+
       </:grid>
     </Layout>
     <style scoped>
