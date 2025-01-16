@@ -165,6 +165,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
+      class='blog-app'
     >
       <:sidebar>
         <TitleGroup
@@ -232,6 +233,9 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       </:grid>
     </Layout>
     <style scoped>
+      .blog-app {
+        --content-max-width: 1040px;
+      }
       .sidebar-create-button {
         --icon-color: currentColor;
         --boxel-loading-indicator-size: 15px;
