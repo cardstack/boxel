@@ -17,6 +17,7 @@ import {
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
   CommandEvent,
@@ -42,14 +43,16 @@ import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
-import { buildMessageCommand, formattedMessageForCommand } from '../lib/matrix-classes/message-builder';
+import {
+  buildMessageCommand,
+  formattedMessageForCommand,
+} from '../lib/matrix-classes/message-builder';
 
 import type Room from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
-import { CommandStatus } from 'https://cardstack.com/base/command';
 
 interface SkillId {
   skillCardId: string;
@@ -259,11 +262,11 @@ export class RoomResource extends Resource<Args> {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
           break;
-        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-          await this.updateMessageCommand(event);
-          break;
         case 'm.room.message':
-          await this.loadRoomMessage({ roomId, event, index });
+          this.loadRoomMessage({ roomId, event, index });
+          break;
+        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          this.updateMessageCommandResult(event);
           break;
         case 'm.room.create':
           await this.loadRoomCreateEvent(event);
@@ -293,34 +296,7 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
-  private async updateMessageCommand(event: CommandResultEvent) {
-    let effectiveEventId = this.getEffectiveEventId(event);
-    let message = this._messageCache.get(effectiveEventId);
-    if (!message) {
-      return;
-    }
-
-    let commandEvent = this.events.find(
-      (e: any) => e.type === 'm.room.message' && e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE && e.content['m.relates_to'].event_id === effectiveEventId,
-    )! as CommandEvent;
-    if (!message.command) {
-      message.command = buildMessageCommand({
-        effectiveEventId,
-        commandEvent,
-        message,
-        owner: getOwner(this)!,
-      });
-    }
-
-    message.command.commandStatus = (event?.content['m.relates_to']?.key ||
-      'ready') as CommandStatus;
-    message.command.commandResultCardEventId = event?.content.msgtype ===
-        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-          ? event.content.data.cardEventId
-          : undefined;
-  }
-
-  private async loadRoomMessage({
+  private loadRoomMessage({
     roomId,
     event,
     index,
@@ -334,10 +310,22 @@ export class RoomResource extends Resource<Args> {
       return;
     }
 
+    this.upsertMessage({ roomId, event, index });
+  }
+
+  private upsertMessage({
+    roomId,
+    event,
+    index,
+  }: {
+    roomId: string;
+    event: MessageEvent | CommandEvent | CardMessageEvent;
+    index: number;
+  }) {
     let effectiveEventId = this.getEffectiveEventId(event);
     let message = this._messageCache.get(effectiveEventId);
     if (!message) {
-      message = await this.buildMessage({
+      message = this.buildMessage({
         effectiveEventId,
         roomId,
         event,
@@ -358,21 +346,13 @@ export class RoomResource extends Resource<Args> {
         'isStreamingFinished' in event.content
           ? event.content.isStreamingFinished
           : undefined;
-      if (event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
-        if (!message.command) {
-          message.command = buildMessageCommand({
-            effectiveEventId,
-            commandEvent: event as CommandEvent,
-            message,
-            owner: getOwner(this)!,
-          });
-        } else {
-          message.formattedMessage = formattedMessageForCommand(event.content.formatted_body);
 
-          let command = event.content.data.toolCall;
-          message.command.name = command.name;
-          message.command.payload = command.arguments;
-        }
+      if (event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
+        this.upsertMessageCommand({
+          effectiveEventId,
+          event: event as CommandEvent,
+          message,
+        });
       }
       this._messageCreateTimesCache.set(
         effectiveEventId,
@@ -381,7 +361,64 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private async buildMessage({
+  private upsertMessageCommand({
+    effectiveEventId,
+    event,
+    message,
+  }: {
+    effectiveEventId: string;
+    event: CommandEvent;
+    message: Message;
+  }) {
+    if (!message.command) {
+      message.command = buildMessageCommand({
+        effectiveEventId,
+        commandEvent: event as CommandEvent,
+        message,
+        owner: getOwner(this)!,
+      });
+    }
+
+    message.formattedMessage = formattedMessageForCommand(
+      event.content.formatted_body,
+    );
+
+    let command = event.content.data.toolCall;
+    message.command.name = command.name;
+    message.command.payload = command.arguments;
+  }
+
+  private updateMessageCommandResult(event: CommandResultEvent) {
+    let effectiveEventId = this.getEffectiveEventId(event);
+    let message = this._messageCache.get(effectiveEventId);
+    if (!message) {
+      return;
+    }
+
+    let commandEvent = this.events.find(
+      (e: any) =>
+        e.type === 'm.room.message' &&
+        e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
+        e.content['m.relates_to'].event_id === effectiveEventId,
+    )! as CommandEvent;
+    if (!message.command) {
+      message.command = buildMessageCommand({
+        effectiveEventId,
+        commandEvent,
+        message,
+        owner: getOwner(this)!,
+      });
+    }
+
+    message.command.commandStatus = (event?.content['m.relates_to']?.key ||
+      'ready') as CommandStatus;
+    message.command.commandResultCardEventId =
+      event?.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ? event.content.data.cardEventId
+        : undefined;
+  }
+
+  private buildMessage({
     effectiveEventId,
     roomId,
     event,
@@ -405,7 +442,7 @@ export class RoomResource extends Resource<Args> {
       events: this.events,
     });
 
-    let messageObject = await messageBuilder.buildMessage();
+    let messageObject = messageBuilder.buildMessage();
     // if the message is a replacement for other messages,
     // use `created` from the oldest one.
     if (this._messageCache.has(effectiveEventId)) {
@@ -431,7 +468,8 @@ export class RoomResource extends Resource<Args> {
   private getEffectiveEventId(
     event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
   ) {
-    return event.content['m.relates_to']?.rel_type === 'm.replace' || event.content['m.relates_to']?.rel_type === 'm.annotation'
+    return event.content['m.relates_to']?.rel_type === 'm.replace' ||
+      event.content['m.relates_to']?.rel_type === 'm.annotation'
       ? event.content['m.relates_to'].event_id
       : event.event_id;
   }

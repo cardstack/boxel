@@ -2,6 +2,8 @@ import { setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
+import { tracked } from '@glimmer/tracking';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -9,7 +11,6 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Message } from './message';
-import { tracked } from '@glimmer/tracking';
 
 type CommandStatus = 'applied' | 'ready' | 'applying';
 

@@ -110,7 +110,7 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
-  async buildMessage(): Promise<Message> {
+  buildMessage(): Message {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
@@ -123,7 +123,9 @@ export default class MessageBuilder {
       event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
       event.content.data.toolCall
     ) {
-      message.formattedMessage = formattedMessageForCommand(event.content.formatted_body);
+      message.formattedMessage = formattedMessageForCommand(
+        event.content.formatted_body,
+      );
       message.command = this.buildMessageCommand(message);
       message.isStreamingFinished = true;
     }
