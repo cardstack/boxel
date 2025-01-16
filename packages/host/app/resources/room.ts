@@ -377,6 +377,7 @@ export class RoomResource extends Resource<Args> {
       });
     }
 
+    message.isStreamingFinished = true;
     message.formattedMessage = formattedMessageForCommand(
       event.content.formatted_body,
     );
