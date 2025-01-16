@@ -462,14 +462,18 @@ export class Realm {
     let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
     for (let roomId of roomIds) {
       console.log(
-        `backfillRetentionPolicies: setting retention policy for ${roomId}`,
+        `backfillRetentionPolicies: setting retention policy for ${roomId}, user ${
+          this.#matrixClient.username
+        }`,
       );
       await this.#matrixClient.setRoomRetentionPolicy(
         roomId,
         REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
       );
       console.log(
-        `backfillRetentionPolicies: set retention policy for ${roomId}`,
+        `backfillRetentionPolicies: set retention policy for ${roomId}, user ${
+          this.#matrixClient.username
+        }`,
       );
     }
   }
