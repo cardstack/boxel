@@ -2,25 +2,25 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Innovative Tech Solutions",
-      "industry": "Technology",
+      "name": "Fitness First Gym",
+      "industry": "Health & Fitness",
       "headquartersAddress": {
-        "addressLine1": "123 Innovation Drive",
-        "addressLine2": "Suite 400",
-        "city": "San Francisco",
-        "state": "California",
-        "postalCode": "94105",
+        "addressLine1": "789 Athletic Avenue",
+        "addressLine2": "Building B",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98102",
         "country": {
           "name": "United States",
           "code": "US"
         },
         "poBoxNumber": null
       },
-      "phone": 14155552671,
-      "website": "https://innovativetechsolutions.com/",
-      "stockSymbol": "ITS",
-      "description": "A leading provider of cutting-edge AI and cloud solutions for enterprises worldwide.",
-      "thumbnailURL": "https://picsum.photos/id/500/200/300"
+      "phone": 12065555678,
+      "website": "https://fitnessfirstgym.com",
+      "stockSymbol": null,
+      "description": "Modern fitness center with 3 locations. Needs help with membership campaigns and class scheduling system.",
+      "thumbnailURL": "https://example.com/fitness-first-logo.png"
     },
     "meta": {
       "adoptsFrom": {

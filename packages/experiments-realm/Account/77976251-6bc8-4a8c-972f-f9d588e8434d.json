@@ -3,41 +3,39 @@
     "type": "card",
     "attributes": {
       "shippingAddress": {
-        "addressLine1": null,
+        "addressLine1": "456 Pine Street",
         "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98101",
         "country": {
-          "name": null,
-          "code": null
+          "name": "United States",
+          "code": "US"
         },
         "poBoxNumber": null
       },
       "billingAddress": {
-        "addressLine1": null,
+        "addressLine1": "456 Pine Street",
         "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98101",
         "country": {
-          "name": null,
-          "code": null
+          "name": "United States",
+          "code": "US"
         },
         "poBoxNumber": null
       },
       "urgencyTag": {
         "index": 3,
         "label": "Expiring Soon",
-        "value": "expiring-soon",
-        "buttonText": "Create Account",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#FBC02D",
           "backgroundColor": "#FFF9C4"
         }
       },
-      "description": null,
+      "description": "Current client with website and social media package expiring in 30 days",
       "thumbnailURL": null
     },
     "relationships": {
@@ -48,7 +46,7 @@
       },
       "primaryContact": {
         "links": {
-          "self": null
+          "self": "../Customer/1274acf3-5b66-4373-89a2-fe8106c3d586"
         }
       },
       "contacts": {
