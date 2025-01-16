@@ -254,7 +254,7 @@ export class RoomResource extends Resource<Args> {
 
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
-    
+
     for (let event of this.sortedEvents) {
       switch (event.type) {
         case 'm.room.member':
