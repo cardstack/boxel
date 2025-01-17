@@ -149,14 +149,7 @@ class IsolatedTemplate extends Component<typeof Account> {
         },
         every: [
           { eq: { 'account.id': this.args.model.id ?? '' } },
-          {
-            not: {
-              any: [
-                { eq: { 'status.label': 'Closed Won' } },
-                { eq: { 'status.label': 'Closed Lost' } },
-              ],
-            },
-          },
+          { eq: { isActive: true } },
         ],
       },
     };
@@ -277,7 +270,9 @@ class IsolatedTemplate extends Component<typeof Account> {
     if (total === 0) {
       return '$0';
     }
-    const formattedTotal = (total / 1000).toFixed(1);
+    const formattedTotal = (total / 1000).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+    });
     return `$${formattedTotal}k`;
   }
 
@@ -286,7 +281,9 @@ class IsolatedTemplate extends Component<typeof Account> {
     const formattedValue =
       currentYearValue === 0
         ? '+$0'
-        : `+$${(currentYearValue / 1000).toFixed(1)}k`;
+        : `+$${(currentYearValue / 1000).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+          })}k`;
     const currentYear = new Date().getFullYear();
     return `${formattedValue} in ${currentYear}`;
   }

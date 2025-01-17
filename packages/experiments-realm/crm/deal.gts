@@ -1025,6 +1025,7 @@ export class Deal extends CardDef {
         this.status.label !== 'Closed Lost'
       );
     },
+    isUsed: true,
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
