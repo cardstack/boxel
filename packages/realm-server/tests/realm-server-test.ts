@@ -719,6 +719,7 @@ module(basename(__filename), function () {
             meta: {
               lastKnownGoodHtml: null,
               scopedCssUrls: [],
+              cardTitle: null,
             },
           });
         });
