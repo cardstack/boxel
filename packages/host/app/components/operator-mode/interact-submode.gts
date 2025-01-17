@@ -30,7 +30,6 @@ import {
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
-  isCardDef,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
@@ -41,10 +40,10 @@ import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgr
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import type {
-  CardContext,
-  CardDef,
-  Format,
+import {
+  type CardContext,
+  type CardDef,
+  type Format,
 } from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
@@ -290,7 +289,7 @@ export default class InteractSubmode extends Component<Signature> {
 
         let cardToDelete: CardToDelete | undefined;
 
-        if (isCardDef(card)) {
+        if (typeof card === 'object' && 'id' in card) {
           let loadedCard = card as CardDef;
           cardToDelete = {
             id: loadedCard.id,

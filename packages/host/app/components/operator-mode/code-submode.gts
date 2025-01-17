@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -73,7 +74,6 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-import { hash } from '@ember/helper';
 
 interface Signature {
   Args: {
@@ -117,6 +117,13 @@ const defaultPanelHeights: PanelHeights = {
 };
 
 const waiter = buildWaiter('code-submode:waiter');
+
+function urlToFilename(url: URL) {
+  if (url) {
+    return decodeURIComponent(url.href?.split('/').pop() ?? '');
+  }
+  return undefined;
+}
 
 export default class CodeSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
@@ -1019,7 +1026,7 @@ export default class CodeSubmode extends Component<Signature> {
               <strong>{{this.itemToDeleteAsCard.title}}</strong>?
             {{else}}
               Delete the file
-              <strong>{{this.itemToDeleteAsFile.href}}</strong>?
+              <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?
             {{/if}}
           </:content>
         </DeleteModal>
