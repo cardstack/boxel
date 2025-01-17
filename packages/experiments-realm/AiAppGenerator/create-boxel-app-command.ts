@@ -12,15 +12,14 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 export { CreateProductRequirementsInput };
 
 export default class CreateBoxelApp extends Command<
-  CreateProductRequirementsInput,
-  CardDef
+  typeof CreateProductRequirementsInput,
+  typeof CardDef
 > {
   inputType = CreateProductRequirementsInput;
 
   protected async run(input: CreateProductRequirementsInput): Promise<CardDef> {
     let createPRDCommand = new CreateProductRequirementsInstance(
       this.commandContext,
-      undefined,
     );
 
     let { productRequirements: prdCard, roomId } =
@@ -78,9 +77,7 @@ export default class CreateBoxelApp extends Command<
     return myAppCard;
   }
 
-  async getInputType(): Promise<
-    new (args: any) => CreateProductRequirementsInput
-  > {
+  async getInputType() {
     return CreateProductRequirementsInput;
   }
 }

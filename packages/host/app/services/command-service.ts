@@ -35,6 +35,11 @@ import type LoaderService from './loader-service';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
+type GenericCommand = Command<
+  typeof CardDef | undefined,
+  typeof CardDef | undefined
+>;
+
 export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
@@ -46,13 +51,13 @@ export default class CommandService extends Service {
 
   private commands: Map<
     string,
-    { command: Command<any, any, any>; autoExecute: boolean }
+    {
+      command: GenericCommand;
+      autoExecute: boolean;
+    }
   > = new Map();
 
-  public registerCommand(
-    command: Command<any, any, any>,
-    autoExecute: boolean,
-  ) {
+  public registerCommand(command: GenericCommand, autoExecute: boolean) {
     let name = `${command.name}_${shortenUuid(uuidv4())}`;
     this.commands.set(name, { command, autoExecute });
     return name;
@@ -95,7 +100,7 @@ export default class CommandService extends Service {
       } else {
         typedInput = undefined;
       }
-      let resultCard = await command.execute(typedInput);
+      let resultCard = await command.execute(typedInput as any);
       await this.matrixService.sendCommandResultEvent(
         event.room_id!,
         eventId,
@@ -141,7 +146,7 @@ export default class CommandService extends Service {
           typedInput = undefined;
         }
         [resultCard] = await all([
-          await commandToRun.execute(typedInput),
+          await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
         ]);
       } else if (command.name === 'patchCard') {
