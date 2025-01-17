@@ -377,7 +377,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private createCard = restartableTask(async () => {
     let preselectedCardTypeQuery: Query | undefined;
-    let activeFilterRef = this.activeFilter?.query?.filter?.type;
+    let activeFilterRef = this.activeFilter?.query?.filter?.specType;
     if (activeFilterRef) {
       preselectedCardTypeQuery = {
         filter: {
@@ -396,7 +396,7 @@ class Isolated extends Component<typeof CardsGrid> {
       {
         filter: {
           on: catalogEntryRef,
-          every: [{ eq: { type: 'card' } }],
+          every: [{ eq: { specType: 'card' } }],
         },
       },
       { preselectedCardTypeQuery },

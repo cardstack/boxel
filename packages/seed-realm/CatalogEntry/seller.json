@@ -8,7 +8,7 @@
         "module": "../seller",
         "name": "Seller"
       },
-      "type": "card"
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

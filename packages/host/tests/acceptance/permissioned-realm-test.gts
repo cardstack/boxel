@@ -80,7 +80,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
         'person-entry.json': new CatalogEntry({
           name: 'Person',
           description: 'Catalog entry',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `./person`,
             name: 'Person',

@@ -130,8 +130,8 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
           </div>
         </div>
       {{else}}
-        {{#if @selectedInstance.type}}
-          <SpecTag @type={{@selectedInstance.type}} />
+        {{#if @selectedInstance.specType}}
+          <SpecTag @specType={{@selectedInstance.specType}} />
         {{/if}}
       {{/if}}
     </span>
@@ -438,13 +438,13 @@ function getComponent(cardOrField: CatalogEntry) {
 interface SpecTagSignature {
   Element: HTMLDivElement;
   Args: {
-    type: string;
+    specType: string;
   };
 }
 
 export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   get icon() {
-    return getIcon(this.args.type);
+    return getIcon(this.args.specType);
   }
   <template>
     {{#if this.icon}}
@@ -455,7 +455,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
           </div>
         </:iconLeft>
         <:default>
-          {{@type}}
+          {{@specType}}
         </:default>
       </Pill>
 

@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Mortgage Calculator",
       "description": "Catalog entry for Mortgage Calculator card",
-      "type": "card",
+      "specType": "card",
       "ref": {
         "module": "../mortgage-calculator",
         "name": "MortgageCalculator"

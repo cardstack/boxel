@@ -8,7 +8,7 @@
         "module": "../blog-app",
         "name": "BlogApp"
       },
-      "type": "card"
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

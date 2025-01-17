@@ -4,7 +4,7 @@
     "attributes": {
       "title": "CrmApp",
       "description": "Catalog entry for CRM App",
-      "type": "app",
+      "specType": "app",
       "ref": {
         "module": "../crm-app",
         "name": "CrmApp"

@@ -36,17 +36,17 @@ export class CatalogEntry extends CardDef {
   @field readMe = contains(MarkdownField);
 
   @field ref = contains(CodeRef);
-  @field type = contains(SpecType);
+  @field specType = contains(SpecType);
 
   @field isField = contains(BooleanField, {
     computeVia: function (this: CatalogEntry) {
-      return this.type === 'field';
+      return this.specType === 'field';
     },
   });
 
   @field isCard = contains(BooleanField, {
     computeVia: function (this: CatalogEntry) {
-      return this.type === 'card';
+      return this.specType === 'card';
     },
   });
   @field moduleHref = contains(StringField, {
@@ -149,7 +149,7 @@ export class CatalogEntry extends CardDef {
                     {{@model.ref.name}}
                   </div>
                   <div class='exported-type' data-test-exported-type>
-                    {{@model.type}}
+                    {{@model.specType}}
                   </div>
                 </div>
               </div>
@@ -249,8 +249,8 @@ export class CatalogEntry extends CardDef {
           <p class='description'><@fields.description /></p>
         </div>
         <div class='pill-container'>
-          {{#if @model.type}}
-            <SpecTag @type={{@model.type}} />
+          {{#if @model.specType}}
+            <SpecTag @specType={{@model.specType}} />
           {{/if}}
         </div>
       </div>
@@ -317,24 +317,24 @@ class CatalogEntryContainer extends GlimmerComponent<Signature> {
 interface SpecTagSignature {
   Element: HTMLDivElement;
   Args: {
-    type: string;
+    specType: string;
   };
 }
 
 export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   get icon() {
-    return getIcon(this.args.type);
+    return getIcon(this.args.specType);
   }
   <template>
     {{#if this.icon}}
       <Pill class='spec-tag-pill' ...attributes>
         <:iconLeft>
-          <div class='spec-tagicon'>
+          <div>
             {{this.icon}}
           </div>
         </:iconLeft>
         <:default>
-          {{@type}}
+          {{@specType}}
         </:default>
       </Pill>
 

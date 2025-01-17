@@ -256,7 +256,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       [`${fileName}.json`]: new CatalogEntry({
         title,
         description: `Catalog entry for ${title}`,
-        type: 'card',
+        specType: 'card',
         ref,
       }),
     });
@@ -282,7 +282,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'person-entry.json': new CatalogEntry({
           name: 'Person Card',
           description: 'Catalog entry for Person Card',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -291,7 +291,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'pet-entry.json': new CatalogEntry({
           name: 'Pet Card',
           description: 'Catalog entry for Pet Card',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
@@ -301,7 +301,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'puppy-entry.json': new CatalogEntry({
           name: 'Puppy Card',
           description: 'Catalog entry for Puppy Card',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Puppy',

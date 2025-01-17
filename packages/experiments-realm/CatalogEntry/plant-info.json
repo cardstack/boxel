@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Plant Info",
       "description": "Catalog entry for Plant Info card",
-      "type": "card",
+      "specType": "card",
       "ref": {
         "module": "../plant-info",
         "name": "PlantInfo"

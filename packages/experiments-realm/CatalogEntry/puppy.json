@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Puppy",
       "description": "Catalog entry for Puppy card",
-      "type": "card",
+      "specType": "card",
       "ref": {
         "module": "../puppy-card",
         "name": "PuppyCard"

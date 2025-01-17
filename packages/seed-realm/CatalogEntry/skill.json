@@ -8,7 +8,7 @@
         "module": "../skill-card",
         "name": "SkillCard"
       },
-      "type": "card"
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

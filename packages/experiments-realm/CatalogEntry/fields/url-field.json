@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Url Field",
       "description": "Url string field with basic validation",
-      "type": "field",
+      "specType": "field",
       "ref": {
         "module": "../../url",
         "name": "UrlField"

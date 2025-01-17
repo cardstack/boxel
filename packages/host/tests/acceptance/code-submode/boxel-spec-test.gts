@@ -4,8 +4,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import {
   setupLocalIndexing,
   testRealmURL,
@@ -138,7 +136,7 @@ module('boxel spec preview', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -156,7 +154,7 @@ module('boxel spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `./employee`,
                 name: 'default',
@@ -174,7 +172,7 @@ module('boxel spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `./pet`,
                 name: 'Pet',
@@ -192,7 +190,7 @@ module('boxel spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `./pet`,
                 name: 'Pet',

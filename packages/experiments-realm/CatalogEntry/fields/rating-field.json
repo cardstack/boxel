@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Rating Summary Field",
-      "type": "field",
+      "specType": "field",
       "ref": {
         "module": "../../ratings-summary",
         "name": "RatingsSummary"

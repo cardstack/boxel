@@ -467,7 +467,7 @@ module('Integration | operator-mode', function (hooks) {
           'CatalogEntry/publishing-packet.json': new CatalogEntry({
             name: 'Publishing Packet',
             description: 'Catalog entry for PublishingPacket',
-            type: 'card',
+            specType: 'card',
             ref: {
               module: `${testRealmURL}publishing-packet`,
               name: 'PublishingPacket',
@@ -476,7 +476,7 @@ module('Integration | operator-mode', function (hooks) {
           'CatalogEntry/pet-room.json': new CatalogEntry({
             name: 'General Pet Room',
             description: 'Catalog entry for Pet Room Card',
-            type: 'card',
+            specType: 'card',
             ref: {
               module: `${testRealmURL}pet-room`,
               name: 'PetRoom',
@@ -485,7 +485,7 @@ module('Integration | operator-mode', function (hooks) {
           'CatalogEntry/pet-card.json': new CatalogEntry({
             name: 'Pet',
             description: 'Catalog entry for Pet',
-            type: 'card',
+            specType: 'card',
             ref: {
               module: `${testRealmURL}pet`,
               name: 'Pet',

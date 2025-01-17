@@ -8,7 +8,7 @@
         "name": "Todo",
         "module": "../todo"
       },
-      "type": "card"
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

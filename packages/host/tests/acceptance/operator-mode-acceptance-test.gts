@@ -299,7 +299,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person Card',
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `${testRealmURL}person`,
                 name: 'Person',

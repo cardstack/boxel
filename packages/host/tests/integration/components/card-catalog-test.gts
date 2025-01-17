@@ -118,7 +118,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/publishing-packet.json': new CatalogEntry({
           name: 'Publishing Packet',
           description: 'Catalog entry for PublishingPacket',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `../publishing-packet`,
             name: 'PublishingPacket',
@@ -127,7 +127,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/author.json': new CatalogEntry({
           name: 'Author',
           description: 'Catalog entry for Author',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
@@ -136,7 +136,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/person.json': new CatalogEntry({
           name: 'Person',
           description: 'Catalog entry for Person',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -145,7 +145,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/pet.json': new CatalogEntry({
           name: 'Pet',
           description: 'Catalog entry for Pet',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
@@ -154,7 +154,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/tree.json': new CatalogEntry({
           name: 'Tree',
           description: 'Catalog entry for Tree',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
             name: 'Tree',
@@ -163,7 +163,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/blog-post.json': new CatalogEntry({
           name: 'BlogPost',
           description: 'Catalog entry for BlogPost',
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
             name: 'BlogPost',
@@ -172,7 +172,7 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/address.json': new CatalogEntry({
           name: 'Address',
           description: 'Catalog entry for Address field',
-          type: 'field',
+          specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
             name: 'Address',

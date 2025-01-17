@@ -7,7 +7,7 @@
         "module": "../pet",
         "name": "Pet"
       },
-      "type": "card"
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

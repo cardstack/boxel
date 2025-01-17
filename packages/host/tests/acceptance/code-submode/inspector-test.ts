@@ -443,7 +443,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',

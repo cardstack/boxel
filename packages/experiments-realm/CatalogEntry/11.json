@@ -4,7 +4,7 @@
     "attributes": {
       "title": "ContactCard",
       "description": "Catalog entry for ContactCard",
-      "type": "card",
+      "specType": "card",
       "ref": {
         "module": "../contact-card",
         "name": "ContactCard"

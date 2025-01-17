@@ -617,7 +617,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person card',
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: './person',
                 name: 'Person',
@@ -651,7 +651,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           thumbnailURL: null,
           name: null,
           readMe: null,
-          type: 'card',
+          specType: 'card',
           ref: {
             module: `./person`,
             name: 'Person',
@@ -687,7 +687,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         description: 'Catalog entry for Person card',
         examples: null,
         id: `${testRealmURL}person-catalog-entry`,
-        type: 'card',
+        specType: 'card',
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
@@ -1997,7 +1997,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'Booking',
               description: 'Catalog entry for Booking',
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
@@ -2021,7 +2021,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       _cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
       description: 'Catalog entry for Booking',
-      type: 'card',
+      specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       examples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
@@ -2331,7 +2331,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
-              type: 'card',
+              specType: 'card',
               ref: {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
@@ -2380,7 +2380,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
           },
-          type: 'card',
+          specType: 'card',
           moduleHref: `${testModuleRealm}pet-person`,
           name: null,
         },
@@ -2426,7 +2426,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         examples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
-        type: 'card',
+        specType: 'card',
       });
     } else {
       assert.ok(
@@ -3795,7 +3795,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
-            type: 'card',
+            specType: 'card',
             ref: {
               module: `${testModuleRealm}post`,
               name: 'Post',
@@ -3815,7 +3815,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
-            type: 'card',
+            specType: 'card',
             ref: {
               module: `${testModuleRealm}article`,
               name: 'Article',

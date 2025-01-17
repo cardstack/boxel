@@ -562,7 +562,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               attributes: {
                 title: 'Person',
                 description: 'Catalog entry',
-                type: 'card',
+                specType: 'card',
                 ref: {
                   module: `./person`,
                   name: 'Person',
@@ -580,7 +580,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             data: {
               type: 'card',
               attributes: {
-                type: 'card',
+                specType: 'card',
                 ref: {
                   module: `./pet`,
                   name: 'Pet',
@@ -598,7 +598,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             data: {
               type: 'card',
               attributes: {
-                type: 'card',
+                specType: 'card',
                 ref: {
                   module: `./pet`,
                   name: 'Pet',
