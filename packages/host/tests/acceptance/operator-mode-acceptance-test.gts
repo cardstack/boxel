@@ -43,6 +43,7 @@ import {
   testRealmSecretSeed,
   setupUserSubscription,
   setupRealmServerEndpoints,
+  TestContextWithSSE,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -552,7 +553,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
       });
 
-      test('can delete a card', async function (assert) {
+      test<TestContextWithSSE>('can delete a card', async function (assert) {
         await visit('/');
         await click('[data-test-workspace="Test Workspace B"]');
         await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -572,9 +573,15 @@ module('Acceptance | operator mode tests', function (hooks) {
           .dom(`[data-test-delete-modal-container]`)
           .containsText('Delete the card Fadhlan?');
 
-        await click('[data-test-confirm-delete-button]');
+        await this.expectEvents({
+          assert,
+          realm: testRealm,
+          expectedNumberOfEvents: 1,
+          callback: async () => {
+            await click('[data-test-confirm-delete-button]');
+          },
+        });
 
-        // TODO: why is the index not reloaded?
         assert
           .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
           .doesNotExist('the card is deleted');
