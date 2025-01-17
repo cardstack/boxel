@@ -2,6 +2,7 @@ import {
   CardDef,
   linksTo,
   contains,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
@@ -34,6 +35,9 @@ import ClockX from '@cardstack/boxel-icons/clock-x';
 import ClockUp from '@cardstack/boxel-icons/clock-up';
 import Contract from '@cardstack/boxel-icons/contract';
 import { Pill } from '@cardstack/boxel-ui/components';
+import { Query } from '@cardstack/runtime-common/query';
+import { getCards } from '@cardstack/runtime-common';
+import { Deal } from './deal';
 
 export const urgencyTagValues = [
   {
@@ -125,6 +129,163 @@ class IsolatedTemplate extends Component<typeof Account> {
       this.args.model.primaryContact?.name ||
       (this.args.model.contacts?.length ?? 0) > 0 //contacts is a proxy array
     );
+  }
+
+  get realmURL(): URL {
+    return this.args.model[realmURL]!;
+  }
+
+  get realmHrefs() {
+    return [this.realmURL?.href];
+  }
+
+  // Query All Active Deal that linked to current Account
+  get dealQuery(): Query {
+    return {
+      filter: {
+        on: {
+          module: new URL('./deal', import.meta.url).href,
+          name: 'Deal',
+        },
+        every: [
+          { eq: { 'account.id': this.args.model.id ?? '' } },
+          { eq: { isActive: true } },
+        ],
+      },
+    };
+  }
+
+  deals = getCards(this.dealQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  get activeDealsCount() {
+    const deals = this.deals;
+    if (!deals || deals.isLoading) {
+      return 0;
+    }
+    return deals.instances?.length ?? 0;
+  }
+
+  get totalDealsValue() {
+    const deals = this.deals;
+    if (!deals || deals.isLoading) {
+      return 'No deals';
+    }
+
+    if (!deals.instances?.length) {
+      return 'No active deals';
+    }
+
+    const dealsInstances = deals.instances as Deal[];
+
+    const total = dealsInstances.reduce((sum, deal) => {
+      const value = deal?.computedValue?.amount ?? 0;
+      return sum + value;
+    }, 0);
+
+    const firstDeal = dealsInstances[0] as Deal;
+    const currencySymbol = firstDeal.computedValue?.currency?.symbol;
+
+    if (!total) {
+      return 'No deal value';
+    }
+
+    // Format total with 1 decimal place
+    const formattedTotal = (total / 1000).toFixed(1);
+    return currencySymbol
+      ? `${currencySymbol}${formattedTotal}k total value`
+      : `${formattedTotal}k total value`;
+  }
+
+  // Query All lifetime Value from Closed Won Deal
+  get lifetimeValueQuery(): Query {
+    return {
+      filter: {
+        on: {
+          module: new URL('./deal', import.meta.url).href,
+          name: 'Deal',
+        },
+        every: [
+          { eq: { 'account.id': this.args.model.id ?? '' } },
+          { eq: { 'status.label': 'Closed Won' } },
+        ],
+      },
+    };
+  }
+
+  lifetimeValueDeals = getCards(this.lifetimeValueQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  get lifetimeMetrics() {
+    if (!this.lifetimeValueDeals) {
+      return { total: 0, currentYear: 0, lastYear: 0, growth: 0 };
+    }
+
+    if (
+      this.lifetimeValueDeals.isLoading ||
+      !this.lifetimeValueDeals.instances
+    ) {
+      return { total: 0, currentYear: 0, lastYear: 0, growth: 0 };
+    }
+
+    const currentYear = new Date().getFullYear();
+    const lifetimeValueDealsInstances = this.lifetimeValueDeals
+      .instances as Deal[];
+
+    // Calculate the Total Value of All Time
+    const total = lifetimeValueDealsInstances.reduce(
+      (sum, deal) => sum + (deal.computedValue?.amount ?? 0),
+      0,
+    );
+
+    // Calculate the Value of This Year
+    const currentYearValue = lifetimeValueDealsInstances
+      .filter((deal) => new Date(deal.closeDate).getFullYear() === currentYear)
+      .reduce((sum, deal) => sum + (deal.computedValue?.amount ?? 0), 0);
+
+    // Calculate the Value of Last Year
+    const lastYearValue = lifetimeValueDealsInstances
+      .filter(
+        (deal) => new Date(deal.closeDate).getFullYear() === currentYear - 1,
+      )
+      .reduce((sum, deal) => sum + (deal.computedValue?.amount ?? 0), 0);
+
+    // Calculate growth rate
+    const growth = lastYearValue
+      ? ((currentYearValue - lastYearValue) / lastYearValue) * 100
+      : 0;
+
+    return {
+      total,
+      currentYear: currentYearValue,
+      lastYear: lastYearValue,
+      growth,
+    };
+  }
+
+  get formattedLifetimeTotal() {
+    const total = this.lifetimeMetrics.total;
+    if (total === 0) {
+      return '$0';
+    }
+    const formattedTotal = (total / 1000).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+    });
+    return `$${formattedTotal}k`;
+  }
+
+  get formattedCurrentYearValue() {
+    const currentYearValue = this.lifetimeMetrics.currentYear;
+    const formattedValue =
+      currentYearValue === 0
+        ? '+$0'
+        : `+$${(currentYearValue / 1000).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+          })}k`;
+    const currentYear = new Date().getFullYear();
+    return `${formattedValue} in ${currentYear}`;
   }
 
   <template>
@@ -220,8 +381,18 @@ class IsolatedTemplate extends Component<typeof Account> {
               <ChartBarPopular class='header-icon' />
             </:icon>
             <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
+              {{#if this.lifetimeValueDeals.isLoading}}
+                <h3 class='summary-highlight'>Loading...</h3>
+                <p class='description'>Loading...</p>
+              {{else}}
+                <h3 class='summary-highlight'>
+                  {{this.formattedLifetimeTotal}}
+                </h3>
+                <p class='description'>
+                  {{this.formattedCurrentYearValue}}
+                </p>
+
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -233,8 +404,13 @@ class IsolatedTemplate extends Component<typeof Account> {
               <TrendingUp class='header-icon' />
             </:icon>
             <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
+              {{#if this.deals.isLoading}}
+                <h3 class='summary-highlight'>Loading...</h3>
+                <p class='description'>Loading...</p>
+              {{else}}
+                <h3 class='summary-highlight'>{{this.activeDealsCount}}</h3>
+                <p class='description'>{{this.totalDealsValue}}</p>
+              {{/if}}
             </:content>
           </SummaryCard>
         </SummaryGridContainer>

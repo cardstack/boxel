@@ -361,7 +361,7 @@ class DashboardTab extends GlimmerComponent<{
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-    let command = new CreateBoxelApp(commandContext, undefined);
+    let command = new CreateBoxelApp(commandContext);
 
     this.isGenerating = true;
     try {

@@ -49,7 +49,10 @@ module('Integration | commands | commands-calling', function (hooks) {
       @field outputField = contains(StringField);
     }
 
-    class ExampleCommand extends Command<CommandInput, CommandOutput> {
+    class ExampleCommand extends Command<
+      typeof CommandInput,
+      typeof CommandOutput
+    > {
       inputType = CommandInput;
 
       async getInputType() {
@@ -82,7 +85,10 @@ module('Integration | commands | commands-calling', function (hooks) {
       @field outputField = contains(StringField);
     }
 
-    class ExampleCommand extends Command<CommandInput, CommandOutput> {
+    class ExampleCommand extends Command<
+      typeof CommandInput,
+      typeof CommandOutput
+    > {
       inputType = CommandInput;
 
       async getInputType() {
@@ -112,7 +118,10 @@ module('Integration | commands | commands-calling', function (hooks) {
       @field outputField = contains(StringField);
     }
 
-    class ExampleCommand extends Command<CommandInput, CommandOutput> {
+    class ExampleCommand extends Command<
+      typeof CommandInput,
+      typeof CommandOutput
+    > {
       inputType = CommandInput;
 
       async getInputType() {
@@ -142,7 +151,10 @@ module('Integration | commands | commands-calling', function (hooks) {
       @field outputField = contains(StringField);
     }
 
-    class ExampleCommand extends Command<CommandInput, CommandOutput> {
+    class ExampleCommand extends Command<
+      typeof CommandInput,
+      typeof CommandOutput
+    > {
       inputType = CommandInput;
 
       async getInputType() {
@@ -170,7 +182,7 @@ module('Integration | commands | commands-calling', function (hooks) {
       @field outputField = contains(StringField);
     }
 
-    class ExampleCommand extends Command<undefined, CommandOutput> {
+    class ExampleCommand extends Command<undefined, typeof CommandOutput> {
       inputType = undefined;
 
       async getInputType() {
@@ -185,7 +197,7 @@ module('Integration | commands | commands-calling', function (hooks) {
     }
     let exampleCommand = new ExampleCommand(commandContext);
 
-    let output = await exampleCommand.execute(undefined);
+    let output = await exampleCommand.execute();
     assert.strictEqual(output.outputField, 'Hello');
   });
 });
