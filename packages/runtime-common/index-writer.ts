@@ -515,7 +515,6 @@ export class Batch {
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
         ]),
-        'ORDER BY i.url COLLATE "POSIX"',
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: 'instance' | 'module' | 'error';
