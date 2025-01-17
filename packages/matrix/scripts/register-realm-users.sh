@@ -3,7 +3,8 @@
 COUNT=0
 MAX_ATTEMPTS=10
 
-until $(curl --output /dev/null --silent --head --fail http://localhost:8008); do
+# FIXME restore other flags
+until $(curl --head --fail http://localhost:8008); do
   printf '.'
   sleep 5
 
