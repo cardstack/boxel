@@ -166,13 +166,13 @@ export class MatrixClient {
   }
 
   async setRoomRetentionPolicy(roomId: string, maxLifetimeMs: number) {
-    let roomState = await this.request(
-      `_matrix/client/v3/rooms/${roomId}/state`,
-    );
-
-    let roomStateJson = await roomState.json();
-
     try {
+      let roomState = await this.request(
+        `_matrix/client/v3/rooms/${roomId}/state`,
+      );
+
+      let roomStateJson = await roomState.json();
+
       let retentionState = roomStateJson.find(
         (event: any) => event.type === 'm.room.retention',
       );
