@@ -28,7 +28,7 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
             return;
           }
 
-          let index = CRMTaskStatusField.values.find((value) => {
+          let index = this.config.status.values.find((value) => {
             return value.label === statusLabel;
           })?.index;
 
@@ -84,7 +84,7 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
             cardInNewCol &&
             cardInNewCol.status.label !== targetColumn.title
           ) {
-            let statusValue = CRMTaskStatusField.values.find(
+            let statusValue = this.config.status.values.find(
               (value) => value.label === targetColumn.title,
             );
             cardInNewCol.status = new CRMTaskStatusField(statusValue);
