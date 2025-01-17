@@ -112,7 +112,6 @@ const newSkillCardSource = `
 
 let matrixRoomId: string;
 module('boxel spec preview', function (hooks) {
-  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -127,7 +126,7 @@ module('boxel spec preview', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ realm } = await setupAcceptanceTestRealm({
+    await setupAcceptanceTestRealm({
       contents: {
         'person.gts': personCardSource,
         'pet.gts': petCardSource,
@@ -272,7 +271,7 @@ module('boxel spec preview', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+    });
     setActiveRealms([testRealmURL]);
   });
   test('view when there is a single boxel spec instance', async function (assert) {
