@@ -20,10 +20,11 @@ NODE_ENV=development \
   --transpileOnly main \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
-  --realmsRootPath='./realms/localhost_4201' \
+  --realmsRootPath='./realms/localhost_4201_base' \
   --migrateDB \
+  $1 \
   \
   --path='../base' \
   --username='base_realm' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='/base/'
+  --toUrl='http://localhost:4201/base/'

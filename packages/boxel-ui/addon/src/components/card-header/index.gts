@@ -1,4 +1,3 @@
-import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -37,33 +36,27 @@ export default class CardHeader extends Component<Signature> {
   get safeMoreOptionsMenuItems() {
     return this.args.moreOptionsMenuItems || [];
   }
-  get headerColor() {
-    return (
-      this.args.headerColor ||
-      getComputedStyle(document.documentElement).getPropertyValue(
-        '--boxel-light',
-      )
-    );
-  }
   <template>
     <header
       data-test-card-header
       class={{cn is-editing=(bool @onFinishEditing)}}
       {{setCssVar
-        boxel-card-header-background-color=this.headerColor
-        boxel-card-header-text-color=(getContrastColor this.headerColor)
+        boxel-card-header-background-color=@headerColor
+        boxel-card-header-text-color=(getContrastColor @headerColor)
       }}
       ...attributes
     >
       <div
         class='realm-icon-container'
-        style={{cssVar
-          boxel-realm-icon-background-color=(getContrastColor
-            this.headerColor 'transparent'
-          )
-          boxel-realm-icon-border=(concat
-            '1px solid '
-            (getContrastColor this.headerColor 'rgba(0, 0, 0, 0.15)')
+        style={{if
+          @headerColor
+          (cssVar
+            boxel-realm-icon-background-color=(getContrastColor
+              @headerColor 'transparent'
+            )
+            boxel-realm-icon-border-color=(getContrastColor
+              @headerColor 'rgba(0, 0, 0, 0.15)'
+            )
           )
         }}
       >
@@ -264,12 +257,14 @@ export default class CardHeader extends Component<Signature> {
           align-items: center;
           min-width: var(--boxel-card-header-icon-container-min-width);
           justify-content: left;
-          --boxel-realm-icon-background-color: var(--boxel-light);
-          --boxel-realm-icon-border-radius: 7px;
-        }
-        .is-editing .realm-icon-container {
-          --boxel-realm-icon-background-color: var(--boxel-light);
-          --boxel-realm-icon-border: 1px solid var(--boxel-light);
+          --boxel-realm-icon-background-color: var(
+            --realm-icon-background-color
+          );
+          --boxel-realm-icon-border-color: var(--realm-icon-border-color);
+          --boxel-realm-icon-border-radius: var(
+            --realm-icon-border-radius,
+            7px
+          );
         }
 
         .realm-icon {

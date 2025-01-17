@@ -2,80 +2,80 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Demo Deal Name",
+      "name": "TechFlow Digital Marketing Package",
       "status": {
-        "index": 1,
-        "label": "Proposal",
+        "index": 3,
+        "label": "Closed Won",
         "color": null,
         "colorScheme": {
           "foregroundColor": "#000000",
-          "backgroundColor": "var(--boxel-lilac)"
+          "backgroundColor": "#E8F5E9"
         }
       },
       "priority": {
-        "index": 2,
-        "label": "High",
-        "color": "#FFF3E0",
+        "index": 1,
+        "label": "Medium Priority",
+        "color": null,
         "colorScheme": {
           "foregroundColor": "#000000",
-          "backgroundColor": "#FFF3E0"
+          "backgroundColor": "#FFF0B3"
         }
       },
-      "closeDate": "2024-12-18",
+      "closeDate": "2024-04-30",
       "currentValue": {
-        "amount": 20000,
+        "amount": 15000,
         "currency": {
           "code": "USD"
         }
       },
       "predictedRevenue": {
-        "amount": 300000,
+        "amount": 180000,
         "currency": {
-          "code": null
+          "code": "USD"
         }
       },
-      "healthScore": 80,
-      "notes": "Finalize venue contract and confirm catering options to lock in current pricing",
+      "healthScore": 75,
+      "notes": "Startup needs complete digital presence setup. Initial meeting showed strong interest in SEO and content marketing. Budget confirmed by CEO.",
       "valueBreakdown": [
         {
-          "name": "Venue Rental",
+          "name": "Website Optimization",
           "value": {
-            "amount": 100000,
-            "currency": {
-              "code": null
-            }
-          }
-        },
-        {
-          "name": "Catering",
-          "value": {
-            "amount": 75000,
+            "amount": 40000,
             "currency": {
               "code": "USD"
             }
           }
         },
         {
-          "name": "AV Equiipment",
+          "name": "SEO Package",
           "value": {
-            "amount": 50000,
+            "amount": 60000,
             "currency": {
-              "code": null
+              "code": "USD"
             }
           }
         },
         {
-          "name": "Staff and Management",
+          "name": "Content Marketing",
           "value": {
-            "amount": 25000,
+            "amount": 50000,
             "currency": {
-              "code": null
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Social Media Management",
+          "value": {
+            "amount": 30000,
+            "currency": {
+              "code": "USD"
             }
           }
         }
       ],
-      "description": null,
-      "thumbnailURL": "https://picsum.photos/id/500/200/300"
+      "description": "",
+      "thumbnailURL": "https://picsum.photos/id/3/200/300"
     },
     "relationships": {
       "account": {
@@ -95,7 +95,7 @@
       },
       "stakeholders.0": {
         "links": {
-          "self": "../Customer/0e5aec99-798b-4417-9426-a338432e0ee5"
+          "self": "../Lead/4e70a791-dd4e-4b39-99a1-bb8070392437"
         }
       }
     },

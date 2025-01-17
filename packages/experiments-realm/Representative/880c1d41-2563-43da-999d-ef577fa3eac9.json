@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Alex",
+      "lastName": "Martinez",
+      "position": "Account Manager",
+      "department": "Sales",
+      "primaryEmail": "alex.m@ourcompany.com",
+      "secondaryEmail": null,
+      "phoneMobile": {
+        "phoneNumber": {
+          "number": "2065553333",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
+      "phoneOffice": {
+        "phoneNumber": {
+          "number": null,
+          "countryCode": null
+        },
+        "type": {
+          "index": null,
+          "label": null
+        }
+      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "linkedin.com/in/alexmartinez"
+        }
+      ],
+      "description": "Manages accounts in the Seattle region",
+      "thumbnailURL": "https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg"
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/representative",
+        "name": "Representative"
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Green Thumb Garden Center",
+      "industry": "Retail - Garden & Nursery",
+      "headquartersAddress": {
+        "addressLine1": "567 Garden Way",
+        "addressLine2": null,
+        "city": "Bellevue",
+        "state": "WA",
+        "postalCode": "98004",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "phone": 14255553456,
+      "website": "https://greenthumbgarden.com",
+      "stockSymbol": null,
+      "description": "Garden center and nursery wanting to launch seasonal marketing campaigns and e-commerce platform.",
+      "thumbnailURL": "https://example.com/green-thumb-logo.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/company",
+        "name": "Company"
+      }
+    }
+  }
+}

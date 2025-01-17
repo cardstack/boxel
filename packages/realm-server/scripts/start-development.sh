@@ -24,6 +24,7 @@ NODE_ENV=development \
   --realmsRootPath='./realms/localhost_4201' \
   --seedPath='../seed-realm' \
   --migrateDB \
+  $1 \
   \
   --path='../base' \
   --username='base_realm' \

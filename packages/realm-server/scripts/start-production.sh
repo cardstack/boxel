@@ -4,7 +4,6 @@ pnpm setup:experiments-in-deployment
 pnpm setup:seed-in-deployment
 pnpm setup:catalog-in-deployment
 NODE_NO_WARNINGS=1 \
-  LOG_LEVELS='*=info' \
   MATRIX_URL=https://matrix.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \

@@ -21,7 +21,13 @@ export class Person extends CardDef {
       <h1 data-test-card><@fields.firstName /></h1>
     </template>
   };
-}`.trim();
+}
+
+export let counter = 0;
+export function increment() {
+  counter++;
+}
+`.trim();
 
 export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
@@ -60,5 +66,8 @@ export class Person extends CardDef {
     "isStrictMode": true
   }), class Isolated extends Component {});
 }
-  `.trim();
+export let counter = 0;
+export function increment() {
+  counter++;
+}`.trim();
 }
