@@ -42,14 +42,12 @@ export class ConstructApplicationCodeInput extends CardDef {
 }
 
 class ConstructApplicationCodeCommand extends Command<
-  ConstructApplicationCodeInput,
-  ConstructApplicationCodeInput
+  typeof ConstructApplicationCodeInput,
+  typeof ConstructApplicationCodeInput
 > {
   public result: ConstructApplicationCodeInput =
     new ConstructApplicationCodeInput();
-  async getInputType(): Promise<
-    new (args: any) => ConstructApplicationCodeInput
-  > {
+  async getInputType() {
     console.log('Getting input type NEW', ConstructApplicationCodeInput);
     return ConstructApplicationCodeInput;
   }
@@ -112,10 +110,10 @@ import { restartableTask } from 'ember-concurrency';
 }
 
 export default class GenerateCodeCommand extends Command<
-  GenerateCodeInput,
-  ConstructApplicationCodeInput
+  typeof GenerateCodeInput,
+  typeof ConstructApplicationCodeInput
 > {
-  async getInputType(): Promise<new (args: any) => GenerateCodeInput> {
+  async getInputType() {
     return GenerateCodeInput;
   }
 

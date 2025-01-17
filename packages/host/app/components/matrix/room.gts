@@ -26,9 +26,8 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton, BoxelSelect } from '@cardstack/boxel-ui/components';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import { unixTime } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
@@ -51,6 +50,7 @@ import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
@@ -139,29 +139,12 @@ export default class Room extends Component<Signature> {
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
               />
-              <BoxelSelect
-                class='supported-llms'
+              <LLMSelect
                 @selected={{this.roomResource.activeLLM}}
-                @verticalPosition='above'
                 @onChange={{this.roomResource.activateLLM}}
                 @options={{this.supportedLLMs}}
-                @matchTriggerWidth={{false}}
                 @disabled={{this.roomResource.isActivatingLLM}}
-                @dropdownClass='supported-llms__dropdown'
-                as |item|
-              >
-                <div class='llm'>
-                  <div class='check-mark'>
-                    {{#if (eq this.roomResource.activeLLM item)}}
-                      <CheckMark width='12' height='12' />
-                    {{/if}}
-                  </div>
-                  <span
-                    class='llm-name'
-                    data-test-llm-name={{item}}
-                  >{{item}}</span>
-                </div>
-              </BoxelSelect>
+              />
             </div>
           </div>
         </footer>
@@ -215,63 +198,6 @@ export default class Room extends Component<Signature> {
       }
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
-      }
-      .supported-llms {
-        border: none;
-        padding: 0;
-        width: auto;
-        flex: 1;
-        padding-right: var(--boxel-sp-xxs);
-        cursor: pointer;
-        font:;
-      }
-      .supported-llms :deep(.boxel-trigger) {
-        padding: 0;
-      }
-      .supported-llms :deep(.boxel-trigger-content) {
-        flex: 1;
-      }
-      .supported-llms[aria-disabled='true'],
-      .supported-llms[aria-disabled='true']
-        :deep(.boxel-trigger-content .llm-name) {
-        background-color: var(--boxel-light);
-        color: var(--boxel-500);
-      }
-      .llm {
-        display: grid;
-        grid-template-columns: 12px 1fr;
-        gap: var(--boxel-sp-xs);
-        width: 100%;
-      }
-      .supported-llms :deep(.boxel-trigger-content .llm) {
-        grid-template-columns: 1fr;
-      }
-      .supported-llms :deep(.boxel-trigger-content .check-mark) {
-        display: none;
-      }
-      .supported-llms :deep(.boxel-trigger-content .llm-name) {
-        text-align: right;
-      }
-      .check-mark {
-        height: 12px;
-      }
-      .llm-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        text-wrap: nowrap;
-        color: var(--boxel-dark);
-        font: 600 var(--boxel-font-sm);
-      }
-      .loading-indicator {
-        width: 100%;
-        text-align: right;
-      }
-
-      :global(
-          .supported-llms__dropdown
-            .ember-power-select-option[aria-current='true']
-        ) {
-        background-color: var(--boxel-teal) !important;
       }
     </style>
   </template>

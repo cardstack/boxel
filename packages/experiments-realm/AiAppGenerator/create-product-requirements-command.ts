@@ -29,8 +29,8 @@ class CreateProductRequirementsResult extends CardDef {
 }
 
 export default class CreateProductRequirementsInstance extends Command<
-  CreateProductRequirementsInput,
-  CreateProductRequirementsResult
+  typeof CreateProductRequirementsInput,
+  typeof CreateProductRequirementsResult
 > {
   inputType = CreateProductRequirementsInput;
 
@@ -117,9 +117,7 @@ export default class CreateProductRequirementsInstance extends Command<
     return result;
   }
 
-  async getInputType(): Promise<
-    new (args: any) => CreateProductRequirementsInput
-  > {
+  async getInputType() {
     return CreateProductRequirementsInput;
   }
 }

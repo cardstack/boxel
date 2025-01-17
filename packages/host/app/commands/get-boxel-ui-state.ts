@@ -8,7 +8,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 
 export default class GetBoxelUIStateCommand extends HostBaseCommand<
   undefined,
-  GetBoxelUIStateResult
+  typeof GetBoxelUIStateResult
 > {
   @service declare operatorModeStateService: OperatorModeStateService;
   static displayName = 'GetBoxelUIStateCommand';
