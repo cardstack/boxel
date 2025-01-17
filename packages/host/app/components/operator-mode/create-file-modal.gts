@@ -815,7 +815,7 @@ export class ${className} extends ${exportName} {
     let doc: LooseSingleCardDocument = {
       data: {
         attributes: {
-          type: specType,
+          specType,
           ref,
         },
         meta: {
