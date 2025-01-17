@@ -594,7 +594,8 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (item: CardDef | URL) => {
+  private delete = dropTask(async () => {
+    let item = this.itemToDelete;
     if (!item) {
       return;
     }
