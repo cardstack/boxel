@@ -504,7 +504,7 @@ export class Batch {
           [
             dbExpression({
               sqlite: `deps_array_element =`,
-              pg: `COALESCE(i.deps, '[]'::jsonb) @>`,
+              pg: `i.deps @>`,
             }),
             param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
           ],
