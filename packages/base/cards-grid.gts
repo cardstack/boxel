@@ -377,7 +377,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private createCard = restartableTask(async () => {
     let preselectedCardTypeQuery: Query | undefined;
-    let activeFilterRef = this.activeFilter?.query?.filter?.specType;
+    let activeFilterRef = this.activeFilter?.query?.filter?.type;
     if (activeFilterRef) {
       preselectedCardTypeQuery = {
         filter: {
