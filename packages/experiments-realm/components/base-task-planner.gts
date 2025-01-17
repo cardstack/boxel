@@ -3,7 +3,6 @@ import {
   realmURL,
   CardDef,
   BaseDef,
-  CardContext,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
@@ -151,19 +150,9 @@ export interface TaskCollection {
   columns: TaskColumn[];
 }
 
-export interface BaseTaskPlannerIsolatedSignature {
-  Args: {
-    model: CardDef;
-    context?: CardContext;
-  };
-  Element: HTMLDivElement;
-}
-
 export class BaseTaskPlannerIsolated<
   T extends typeof CardDef = typeof CardDef,
-> extends GlimmerComponent<
-  BaseTaskPlannerIsolatedSignature & { Args: { model: InstanceType<T> } }
-> {
+> extends Component<T> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
   config: TaskPlannerConfig;
