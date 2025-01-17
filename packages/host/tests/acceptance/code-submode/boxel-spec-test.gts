@@ -324,7 +324,7 @@ module('boxel spec preview', function (hooks) {
     await waitFor('[data-test-create-boxel-spec-instance]');
     assert.dom('[data-test-selected-type="NewSkill"]').exists();
     await click('[data-test-create-boxel-spec-instance]');
-    await waitFor('[data-test-field="type"]');
+    await waitFor('[data-test-field="specType"]');
     assert.dom('[data-test-field="type"] input').hasValue('card');
   });
   test('title does not default to "default"', async function (assert) {
