@@ -562,9 +562,12 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action private setRoomToDelete(room: SessionRoomData | undefined) {
     this.roomDeleteError = undefined;
-    if (!room?.roomId) {
-      throw new Error('roomId is required');
+
+    if (!room) {
+      this.roomToDelete = undefined;
+      return;
     }
+
     this.roomToDelete = {
       id: room.roomId,
       name: room.name || room.roomId,
