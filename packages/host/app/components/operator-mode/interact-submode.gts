@@ -61,7 +61,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type Realm from '../../services/realm';
 
 import type { Submode } from '../submode-switcher';
-import { removeFileExtension } from '../search-sheet/utils';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
