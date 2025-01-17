@@ -54,7 +54,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
 
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
@@ -73,6 +73,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import { hash } from '@ember/helper';
 
 interface Signature {
   Args: {
@@ -478,6 +479,14 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
+  private get itemToDeleteAsCard() {
+    return this.itemToDelete as CardDef;
+  }
+
+  private get itemToDeleteAsFile() {
+    return this.itemToDelete as URL;
+  }
+
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this.goToDefinition(undefined, dec.localName);
@@ -600,7 +609,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (!(item instanceof URL)) {
       let card = item;
       await this.withTestWaiters(async () => {
-        await this.operatorModeStateService.deleteCard(card);
+        await this.operatorModeStateService.deleteCard(card.id);
       });
     } else {
       let file = item;
@@ -735,6 +744,15 @@ export default class CodeSubmode extends Component<Signature> {
   @provide(PermissionsContextName)
   get permissions() {
     return this.realm.permissions(this.readyFile.url);
+  }
+
+  get itemToDeleteId() {
+    if (!this.itemToDelete) {
+      return '';
+    }
+    return this.itemToDelete instanceof URL
+      ? this.itemToDelete.href
+      : this.itemToDelete.id;
   }
 
   <template>
@@ -989,11 +1007,21 @@ export default class CodeSubmode extends Component<Signature> {
       </div>
       {{#if this.itemToDelete}}
         <DeleteModal
-          @itemToDelete={{this.itemToDelete}}
+          @itemToDelete={{hash id=this.itemToDeleteId}}
           @onConfirm={{perform this.delete}}
           @onCancel={{this.onCancelDelete}}
           @isDeleteRunning={{this.delete.isRunning}}
-        />
+        >
+          <:content>
+            {{#if this.isCard}}
+              Delete the card
+              <strong>{{this.itemToDeleteAsCard.title}}</strong>?
+            {{else}}
+              Delete the file
+              <strong>{{this.itemToDeleteAsFile.href}}</strong>?
+            {{/if}}
+          </:content>
+        </DeleteModal>
       {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
       <FromElseWhere @name='schema-editor-modal' />
