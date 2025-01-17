@@ -127,10 +127,7 @@ module('Acceptance | Commands tests', function (hooks) {
       @field topic = contains(StringField);
     }
 
-    class ScheduleMeetingCommand extends Command<
-      ScheduleMeetingInput,
-      undefined
-    > {
+    class ScheduleMeetingCommand extends Command<typeof ScheduleMeetingInput> {
       @service private declare loaderService: LoaderService;
       @service
       private declare operatorModeStateService: OperatorModeStateService;
@@ -182,7 +179,7 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
-    class SleepCommand extends Command<ScheduleMeetingInput, undefined> {
+    class SleepCommand extends Command<typeof ScheduleMeetingInput> {
       static displayName = 'SleepCommand';
       async getInputType() {
         return ScheduleMeetingInput;
@@ -244,10 +241,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let scheduleMeeting = new ScheduleMeetingCommand(
-            commandContext,
-            undefined,
-          );
+          let scheduleMeeting = new ScheduleMeetingCommand(commandContext);
           setOwner(scheduleMeeting, getOwner(this)!);
           await scheduleMeeting.execute({
             topic: 'Meeting with Hassan',

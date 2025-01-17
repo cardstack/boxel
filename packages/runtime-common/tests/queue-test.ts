@@ -3,7 +3,12 @@ import { type SharedTests } from '../helpers';
 
 const tests = Object.freeze({
   'it can run a job': async (assert, { publisher, runner }) => {
-    let job = await publisher.publish<number>('increment', null, 5, 17);
+    let job = await publisher.publish<number>({
+      jobType: 'increment',
+      concurrencyGroup: null,
+      timeout: 5,
+      args: 17,
+    });
     runner.register('increment', async (a: number) => a + 1);
     let result = await job.done;
     assert.strictEqual(result, 18);
@@ -15,8 +20,18 @@ const tests = Object.freeze({
       throw new Error('boom!');
     });
     let [errorJob, nonErrorJob] = await Promise.all([
-      publisher.publish<number>('boom', null, 5, null),
-      publisher.publish<number>('increment', null, 5, 17),
+      publisher.publish<number>({
+        jobType: 'boom',
+        concurrencyGroup: null,
+        timeout: 5,
+        args: null,
+      }),
+      publisher.publish<number>({
+        jobType: 'increment',
+        concurrencyGroup: null,
+        timeout: 5,
+        args: 17,
+      }),
     ]);
 
     // assert that the error that was thrown does not prevent subsequent jobs
@@ -73,8 +88,18 @@ const tests = Object.freeze({
     };
 
     runner.register('count', count);
-    let job1 = await publisher.publish('count', 'count-group', 5, 0);
-    let job2 = await publisher.publish('count', 'count-group', 5, 1);
+    let job1 = await publisher.publish({
+      jobType: 'count',
+      concurrencyGroup: 'count-group',
+      timeout: 5,
+      args: 0,
+    });
+    let job2 = await publisher.publish({
+      jobType: 'count',
+      concurrencyGroup: 'count-group',
+      timeout: 5,
+      args: 1,
+    });
 
     await Promise.all([job2.done, job1.done]);
   },

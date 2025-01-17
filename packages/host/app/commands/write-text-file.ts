@@ -6,9 +6,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import NetworkService from '../services/network';
 
 export default class WriteTextFileCommand extends HostBaseCommand<
-  BaseCommandModule.WriteTextFileInput,
-  undefined,
-  undefined
+  typeof BaseCommandModule.WriteTextFileInput
 > {
   @service private declare network: NetworkService;
 

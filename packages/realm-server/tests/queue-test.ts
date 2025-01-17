@@ -25,13 +25,14 @@ module(basename(__filename), function () {
       prepareTestDB();
       adapter = new PgAdapter({ autoMigrate: true });
       publisher = new PgQueuePublisher(adapter);
-      runner = new PgQueueRunner(adapter, 'q1', 2);
+      runner = new PgQueueRunner({ adapter, workerId: 'q1', maxTimeoutSec: 2 });
       await runner.start();
     });
 
     hooks.afterEach(async function () {
       await runner.destroy();
       await publisher.destroy();
+      await adapter.close();
     });
 
     test('it can run a job', async function (assert) {
@@ -61,7 +62,12 @@ module(basename(__filename), function () {
 
       runner.register('logJob', logJob);
 
-      let job = await publisher.publish('logJob', 'log-group', 1, null);
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'log-group',
+        timeout: 1,
+        args: null,
+      });
 
       try {
         await job.done;
@@ -81,7 +87,7 @@ module(basename(__filename), function () {
       let adapter2: PgAdapter;
       nestedHooks.beforeEach(async function () {
         adapter2 = new PgAdapter({ autoMigrate: true });
-        runner2 = new PgQueueRunner(adapter2, 'q2');
+        runner2 = new PgQueueRunner({ adapter: adapter2, workerId: 'q2' });
         await runner2.start();
 
         // Because we need tight timing control for this test, we don't want any
@@ -93,6 +99,7 @@ module(basename(__filename), function () {
 
       nestedHooks.afterEach(async function () {
         await runner2.destroy();
+        await adapter2.close();
       });
 
       test('jobs in different concurrency groups can run in parallel', async function (assert) {
@@ -107,15 +114,20 @@ module(basename(__filename), function () {
         runner.register('logJob', logJob);
         runner2.register('logJob', logJob);
 
-        let promiseForJob1 = publisher.publish('logJob', 'log-group', 5000, 1);
+        let promiseForJob1 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 5000,
+          args: 1,
+        });
         // start the 2nd job before the first job finishes
         await new Promise((r) => setTimeout(r, 100));
-        let promiseForJob2 = publisher.publish(
-          'logJob',
-          'other-group',
-          5000,
-          2,
-        );
+        let promiseForJob2 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'other-group',
+          timeout: 5000,
+          args: 2,
+        });
         let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
         await Promise.all([job1.done, job2.done]);
@@ -139,10 +151,20 @@ module(basename(__filename), function () {
         runner.register('logJob', logJob);
         runner2.register('logJob', logJob);
 
-        let promiseForJob1 = publisher.publish('logJob', 'log-group', 5000, 1);
+        let promiseForJob1 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 5000,
+          args: 1,
+        });
         // start the 2nd job before the first job finishes
         await new Promise((r) => setTimeout(r, 100));
-        let promiseForJob2 = publisher.publish('logJob', 'log-group', 5000, 2);
+        let promiseForJob2 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 5000,
+          args: 2,
+        });
         let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
         await Promise.all([job1.done, job2.done]);
@@ -170,7 +192,12 @@ module(basename(__filename), function () {
         runner.register('logJob', logJob);
         runner2.register('logJob', logJob);
 
-        let job = await publisher.publish('logJob', 'log-group', 1, null);
+        let job = await publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 1,
+          args: null,
+        });
 
         // just after our job has timed out, kick the queue so that another worker
         // will notice it. Otherwise we'd be stuck until the polling comes around.
@@ -186,6 +213,75 @@ module(basename(__filename), function () {
         // afterEach
         assert.deepEqual(events, ['job0 start', 'job1 start', 'job1 finish']);
       });
+    });
+  });
+
+  module('queue - high priority worker', function (hooks) {
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
+    let adapter: PgAdapter;
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = new PgAdapter({ autoMigrate: true });
+      publisher = new PgQueuePublisher(adapter);
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q1',
+        maxTimeoutSec: 1,
+        priority: 10,
+      });
+      await runner.start();
+    });
+
+    hooks.afterEach(async function () {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    });
+
+    test('worker can be set to only process jobs greater or equal to a particular priority', async function (assert) {
+      let events: string[] = [];
+      let logJob = async ({ name }: { name: string }) => {
+        events.push(name);
+      };
+      runner.register('logJob', logJob);
+
+      let lowPriorityJob = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: null,
+        timeout: 1,
+        args: { name: 'low priority' },
+        priority: 0,
+      });
+      let highPriorityJob1 = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'logGroup',
+        timeout: 1,
+        args: { name: 'high priority 1' },
+        priority: 10,
+      });
+      let highPriorityJob2 = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'logGroup',
+        timeout: 1,
+        args: { name: 'high priority 2' },
+        priority: 11,
+      });
+
+      await highPriorityJob1.done;
+      await highPriorityJob2.done;
+      await Promise.race([
+        lowPriorityJob.done,
+        // the low priority job will never get picked up, so we race it against a timeout
+        new Promise((r) => setTimeout(r, 2)),
+      ]);
+
+      assert.deepEqual(
+        events.sort(),
+        ['high priority 1', 'high priority 2'],
+        'only the high priority jobs were processed',
+      );
     });
   });
 });

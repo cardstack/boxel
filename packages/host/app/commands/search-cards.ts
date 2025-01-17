@@ -12,8 +12,8 @@ import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 
 export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
-  BaseCommandModule.SearchCardsByTypeAndTitleInput,
-  BaseCommandModule.SearchCardsResult
+  typeof BaseCommandModule.SearchCardsByTypeAndTitleInput,
+  typeof BaseCommandModule.SearchCardsResult
 > {
   description = 'Search for card instances by type and/or title';
 
@@ -50,8 +50,8 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
 }
 
 export class SearchCardsByQueryCommand extends HostBaseCommand<
-  BaseCommandModule.SearchCardsByQueryInput,
-  BaseCommandModule.SearchCardsResult
+  typeof BaseCommandModule.SearchCardsByQueryInput,
+  typeof BaseCommandModule.SearchCardsResult
 > {
   @service private declare cardService: CardService;
   @service private declare realmServer: RealmServerService;
