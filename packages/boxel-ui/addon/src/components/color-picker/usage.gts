@@ -6,7 +6,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import ColorPicker from './index.gts';
 
 export default class ColorPickerUsage extends Component {
-  @tracked color = '#ff0000';
+  @tracked color = '';
   @tracked disabled = false;
   @tracked showHexString = true;
 
@@ -35,7 +35,6 @@ export default class ColorPickerUsage extends Component {
           @description='Hex color value.'
           @value={{this.color}}
           @onInput={{fn (mut this.color)}}
-          @defaultValue='#ff0000'
         />
         <Args.Action
           @name='onChange'

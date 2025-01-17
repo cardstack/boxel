@@ -9,19 +9,21 @@ import StringField from 'https://cardstack.com/base/string';
 import { BlogApp as BlogAppCard } from './blog-app';
 import { htmlSafe } from '@ember/template';
 import { ColorField } from './color';
-
-function htmlSafeColor(color?: string) {
-  return htmlSafe(`background-color: ${color || ''}`);
-}
+import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
 
 export const categoryStyle = (category: Partial<BlogCategory>) => {
   if (!category) {
     return;
   }
+  const pillColor = category.pillColor ?? '#e8e8e8'; // var(--boxel-200)
+  const borderColor = category.pillColor ?? '#d3d3d3'; // var(--boxel-border-color)
   return htmlSafe(`
-    background-color: ${category.backgroundColor?.hexValue || '#000000'};
-    color: ${category.textColor?.hexValue || '#ffffff'};
-  `);
+      background-color: ${pillColor};
+      color: ${getContrastColor(pillColor, undefined, undefined, {
+        isSmallText: true,
+      })};
+      border: 1px solid ${borderColor}
+    `);
 };
 
 let BlogCategoryTemplate = class Embedded extends Component<
@@ -34,15 +36,17 @@ let BlogCategoryTemplate = class Embedded extends Component<
         padding: var(--boxel-sp);
       }
       .category-name {
-        padding: var(--boxel-sp-xxs);
-        color: white;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-sm);
-        font-weight: bold;
+        font: 600 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
         display: inline-block;
       }
       .category-label {
-        color: var(--boxel-400);
-        margin-top: var(--boxel-sp-sm);
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+        margin-top: var(--boxel-sp);
       }
       .category-full-name {
         font-size: var(--boxel-font-size);
@@ -50,7 +54,8 @@ let BlogCategoryTemplate = class Embedded extends Component<
       }
       .category-description {
         margin-top: var(--boxel-sp-sm);
-        color: var(--boxel-400);
+        font: 400 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
       }
     </style>
     <div class='blog-category'>
@@ -75,8 +80,7 @@ export class BlogCategory extends CardDef {
   @field longName = contains(StringField);
   @field shortName = contains(StringField);
   @field slug = contains(StringField);
-  @field backgroundColor = contains(ColorField);
-  @field textColor = contains(ColorField);
+  @field pillColor = contains(ColorField);
   @field description = contains(StringField);
   @field blog = linksTo(BlogAppCard, { isUsed: true });
 
@@ -91,18 +95,17 @@ export class BlogCategory extends CardDef {
           border-radius: 50%;
           display: inline-block;
           margin-right: var(--boxel-sp-xxs);
+          background-color: var(--category-swatch);
         }
         .category-atom {
           display: inline-flex;
           align-items: center;
+          font-weight: 600;
         }
       </style>
       <div class='category-atom'>
         {{! template-lint-disable no-inline-styles }}
-        <div
-          class='circle'
-          style={{htmlSafeColor @model.backgroundColor.hexValue}}
-        />
+        <div class='circle' style={{cssVar category-swatch=@model.pillColor}} />
         <@fields.longName />
       </div>
     </template>
@@ -116,14 +119,16 @@ export class BlogCategory extends CardDef {
           padding: var(--boxel-sp-xs);
         }
         .category-name {
-          padding: var(--boxel-sp-xxs);
-          color: white;
+          padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius-sm);
-          font-weight: bold;
+          font: 600 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
           display: inline-block;
         }
         .category-label {
-          color: var(--boxel-400);
+          color: var(--boxel-450);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
           margin-top: var(--boxel-sp-sm);
         }
         .category-full-name {
@@ -136,12 +141,13 @@ export class BlogCategory extends CardDef {
         }
         .category-description {
           margin-top: var(--boxel-sp-sm);
-          color: var(--boxel-400);
           display: -webkit-box;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 3;
           overflow: hidden;
           text-overflow: ellipsis;
+          font: 400 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp);
         }
         @container fitted-card ((aspect-ratio <= 0.92) and (height <= 182px)) {
           .category-description {

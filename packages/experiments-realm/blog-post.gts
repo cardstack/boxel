@@ -31,10 +31,9 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
       {{#if @model.categories.length}}
         <div class='categories'>
           {{#each @model.categories as |category|}}
-            <div
-              class='category'
-              style={{categoryStyle category}}
-            >{{category.shortName}}</div>
+            <div class='category' style={{categoryStyle category}}>
+              {{category.shortName}}
+            </div>
           {{/each}}
         </div>
       {{/if}}
@@ -130,10 +129,9 @@ class FittedTemplate extends Component<typeof BlogPost> {
       <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
       <div class='categories'>
         {{#each @model.categories as |category|}}
-          <div
-            class='category'
-            style={{categoryStyle category}}
-          >{{category.shortName}}</div>
+          <div class='category' style={{categoryStyle category}}>
+            {{category.shortName}}
+          </div>
         {{/each}}
       </div>
       <div class='content'>
@@ -221,12 +219,12 @@ class FittedTemplate extends Component<typeof BlogPost> {
 
       .category {
         font-size: 0.6rem;
-        height: 18px;
+        height: 20px;
         padding: 3px 4px;
         border-radius: var(--boxel-border-radius-sm);
         display: inline-block;
-        font-family: var(--boxel-font-family);
-        font-weight: 600;
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
         margin-right: var(--boxel-sp-xxxs);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -712,12 +710,7 @@ export class BlogPost extends CardDef {
           {{/if}}
           {{#if @model.categories.length}}
             <div class='categories'>
-              {{#each @model.categories as |category|}}
-                <div
-                  class='category'
-                  style={{categoryStyle category}}
-                >{{category.shortName}}</div>
-              {{/each}}
+              <@fields.categories @format='atom' @displayContainer={{false}} />
             </div>
           {{/if}}
           <h1><@fields.title /></h1>
@@ -841,13 +834,12 @@ export class BlogPost extends CardDef {
         }
         .categories {
           margin-top: var(--boxel-sp);
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xxs);
         }
-        .category {
-          display: inline-block;
-          padding: 3px var(--boxel-sp-xxxs);
-          border-radius: var(--boxel-border-radius-sm);
-          font: 500 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-xs);
+        .featured-image + .categories {
+          margin-top: var(--boxel-sp-xl);
         }
       </style>
     </template>
