@@ -12,6 +12,7 @@ until $(curl --head --fail http://localhost:8008); do
   if [ "$COUNT" -eq "$MAX_ATTEMPTS" ]; then
     echo "Failed to reach Synapse after $MAX_ATTEMPTS attempts."
     curl --head --fail http://localhost:8008
+    cat /tmp/server.log
     exit 1
   fi
 done
