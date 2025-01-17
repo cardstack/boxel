@@ -15,7 +15,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { not, eq } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   TabbedHeader,
@@ -38,6 +38,7 @@ import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
+import { CRMTaskPlannerIsolated } from './crm/task-planner';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -103,6 +104,14 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     createNewButtonText: tag.buttonText,
   })),
 ];
+const TASK_FILTERS: LayoutFilter[] = [
+  {
+    displayName: 'All Tasks',
+    icon: CalendarExclamation,
+    cardTypeName: 'CRM Task',
+    createNewButtonText: 'Create Task',
+  },
+];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
 class CrmAppTemplate extends Component<typeof AppCard> {
@@ -111,6 +120,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     ['Contact', CONTACT_FILTERS],
     ['Deal', DEAL_FILTERS],
     ['Account', ACCOUNT_FILTERS],
+    ['Task', TASK_FILTERS],
   ]);
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
@@ -402,11 +412,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @setSearchKey={{this.setSearchKey}}
           />
         </div>
-        <ViewSelector
-          class='view-menu content-header-row-2'
-          @selectedId={{this.selectedView}}
-          @onChange={{this.onChangeView}}
-        />
+        {{#if (not (eq this.activeTabId 'Task'))}}
+          <ViewSelector
+            class='view-menu content-header-row-2'
+            @selectedId={{this.selectedView}}
+            @onChange={{this.onChangeView}}
+          />
+        {{/if}}
         {{#if this.activeFilter.sortOptions.length}}
           {{#if this.selectedSort}}
             <SortMenu
@@ -419,7 +431,15 @@ class CrmAppTemplate extends Component<typeof AppCard> {
         {{/if}}
       </:contentHeader>
       <:grid>
-        {{#if this.query}}
+        {{#if (eq this.activeTabId 'Task')}}
+          <CRMTaskPlannerIsolated
+            @model={{@model}}
+            @context={{@context}}
+            @fields={{@fields}}
+            @set={{@set}}
+            @fieldName={{@fieldName}}
+          />
+        {{else if this.query}}
           <CardsGrid
             @query={{this.query}}
             @realms={{this.realms}}
@@ -429,6 +449,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             class='crm-app-grid'
           />
         {{/if}}
+
       </:grid>
     </Layout>
     <style scoped>

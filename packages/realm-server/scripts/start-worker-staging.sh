@@ -3,7 +3,8 @@
 NODE_NO_WARNINGS=1 \
   ts-node \
   --transpileOnly worker-manager \
-  --count="${WORKER_COUNT:-1}" \
+  --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
+  --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --matrixURL='https://matrix-staging.stack.cards' \
   --distURL='https://boxel-host-staging.stack.cards' \
   \
