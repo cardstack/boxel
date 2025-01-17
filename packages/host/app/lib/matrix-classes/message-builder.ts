@@ -4,7 +4,7 @@ import { getOwner, setOwner } from '@ember/owner';
 
 import { inject as service } from '@ember/service';
 
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { LooseSingleCardDocument, sanitizeHtml } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
@@ -190,5 +190,5 @@ export function buildMessageCommand({
 }
 
 export function formattedMessageForCommand(formattedBody: string) {
-  return `<p data-test-command-message class="command-message">${formattedBody}</p>`;
+  return `<p data-test-command-message class="command-message">${sanitizeHtml(formattedBody)}</p>`;
 }
