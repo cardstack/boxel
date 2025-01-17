@@ -1,6 +1,6 @@
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type Owner from '@ember/owner';
-import { CRMTaskStatusField } from './crm-task';
+import { CRMTaskStatusField } from './task';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
 import {
   BaseTaskPlannerIsolated,
@@ -93,7 +93,7 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
         },
       },
       taskSource: {
-        module: new URL('./crm-task', import.meta.url).href,
+        module: new URL('./task', import.meta.url).href,
         name: 'CRMTask',
         getQuery: () => this.getTaskQuery,
       },
@@ -102,7 +102,7 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
           searchKey: 'label',
           label: 'Status',
           codeRef: {
-            module: new URL('./crm-task', import.meta.url).href,
+            module: new URL('./task', import.meta.url).href,
             name: 'Status',
           },
           options: () => CRMTaskStatusField.values,

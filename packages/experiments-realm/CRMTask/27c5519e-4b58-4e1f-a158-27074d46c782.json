@@ -60,7 +60,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/crm-task",
+        "module": "../crm/task",
         "name": "CRMTask"
       }
     }
