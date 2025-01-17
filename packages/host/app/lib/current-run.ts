@@ -408,9 +408,8 @@ export class CurrentRun {
   }
 
   private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
-    let module: Record<string, unknown>;
     try {
-      module = await this.loaderService.loader.import(url.href);
+      await this.loaderService.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
@@ -431,11 +430,6 @@ export class CurrentRun {
       return;
     }
 
-    if (module) {
-      for (let exportName of Object.keys(module)) {
-        module[exportName]; // we do this so that we can allow code ref identifies to be wired up in the loader
-      }
-    }
     if (ref.isShimmed) {
       log.debug(`skipping indexing of shimmed module ${url.href}`);
       return;

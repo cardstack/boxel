@@ -73,7 +73,7 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `start:all`
 
-Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Use the environment variable `WORKER_COUNT` to add additional workers. By default there is 1 worker for each realm server. Here's what is spun up with `start:all`:
+Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `start:all`:
 
 | Port  | Description                                                   | Running `start:all` | Running `start:base` |
 | ----- | ------------------------------------------------------------- | ------------------- | -------------------- |
@@ -123,7 +123,7 @@ When running tests we isolate the database between each test run by actually cre
 If you wish to drop the development databases you can execute:
 
 ```
-pnpm drop-all-dbs
+pnpm full-reset
 ```
 
 You can then run `pnpm migrate up` (with `PGDATABASE` set accordingly if you want to migrate a database other than `boxel`) or just start the realm server (`pnpm start:all`) to create the database again.

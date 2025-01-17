@@ -9,8 +9,8 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 
 export default class CopyCardCommand extends HostBaseCommand<
-  BaseCommandModule.CopyCardInput,
-  BaseCommandModule.CopyCardResult
+  typeof BaseCommandModule.CopyCardInput,
+  typeof BaseCommandModule.CopyCardResult
 > {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
