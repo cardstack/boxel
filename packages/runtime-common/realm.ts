@@ -455,14 +455,18 @@ export class Realm {
 
   // TODO: remove after running in all environments; CS-7875
   private async backfillRetentionPolicies() {
-    await this.#matrixClient.waitForLogin();
+    try {
+      await this.#matrixClient.waitForLogin();
 
-    let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
-    for (let roomId of roomIds) {
-      await this.#matrixClient.setRoomRetentionPolicy(
-        roomId,
-        REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
-      );
+      let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
+      for (let roomId of roomIds) {
+        await this.#matrixClient.setRoomRetentionPolicy(
+          roomId,
+          REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
+        );
+      }
+    } catch (e) {
+      console.error('backfillRetentionPolicies: error', e);
     }
   }
 
