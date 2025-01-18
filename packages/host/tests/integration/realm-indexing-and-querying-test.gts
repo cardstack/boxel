@@ -658,7 +658,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
         },
         relationships: {
-          examples: {
+          linkedExamples: {
             links: {
               self: null,
             },
@@ -685,7 +685,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Catalog Entry',
         description: 'Catalog entry for Person card',
-        examples: null,
         id: `${testRealmURL}person-catalog-entry`,
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
@@ -2023,7 +2022,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       description: 'Catalog entry for Booking',
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
-      examples: null,
+      linkedExamples: null,
+      containedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
     });
@@ -2383,9 +2383,10 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           specType: 'card',
           moduleHref: `${testModuleRealm}pet-person`,
           name: null,
+          containedExamples: [],
         },
         relationships: {
-          examples: {
+          linkedExamples: {
             links: {
               self: null,
             },
@@ -2423,7 +2424,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         id: `${testRealmURL}pet-person-catalog-entry`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
-        examples: null,
+        linkedExamples: null,
+        containedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',

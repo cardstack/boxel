@@ -5,6 +5,8 @@ import {
   CardDef,
   relativeTo,
   linksToMany,
+  FieldDef,
+  containsMany,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -54,7 +56,8 @@ export class CatalogEntry extends CardDef {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
-  @field examples = linksToMany(CardDef);
+  @field linkedExamples = linksToMany(CardDef);
+  @field containedExamples = containsMany(FieldDef);
   @field title = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       if (this.name) {
@@ -127,7 +130,8 @@ export class CatalogEntry extends CardDef {
             <LayersSubtract />
             Examples
           </div>
-          <@fields.examples />
+          <@fields.linkedExamples />
+          <@fields.containedExamples />
         </div>
         <div class='module section'>
           <div class='row-header'>
