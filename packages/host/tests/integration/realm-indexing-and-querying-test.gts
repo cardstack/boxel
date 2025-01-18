@@ -656,6 +656,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             module: `./person`,
             name: 'Person',
           },
+          containedExamples: [],
         },
         relationships: {
           linkedExamples: {
@@ -690,6 +691,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
+        linkedExamples: null,
+        containedExamples: null,
       });
     } else {
       assert.ok(
