@@ -7,11 +7,15 @@ import {
   linksToMany,
   FieldDef,
   containsMany,
+  type CardorFieldTypeIcon,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
 import CodeRef from './code-ref';
 import MarkdownField from './markdown';
+import { restartableTask } from 'ember-concurrency';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { loadCard } from '@cardstack/runtime-common';
 
 import GlimmerComponent from '@glimmer/component';
 import BoxModel from '@cardstack/boxel-icons/box-model';
@@ -98,14 +102,39 @@ export class CatalogEntry extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof this> {
-    get icon() {
+    icon: CardorFieldTypeIcon | undefined;
+
+    get defaultIcon() {
       return this.args.model.constructor?.icon;
     }
+    constructor(owner: any, args: any) {
+      super(owner, args);
+      this.loadCardIcon.perform();
+    }
+
+    private loadCardIcon = restartableTask(async () => {
+      if (this.args.model.ref && this.args.model.id) {
+        let card = await loadCard(this.args.model.ref, {
+          loader: (import.meta as any).loader,
+          relativeTo: new URL(this.args.model.id),
+        });
+        this.icon = card.icon;
+      }
+    });
+
     <template>
       <div class='container'>
         <div class='header'>
           <div class='header-icon-container'>
-            <this.icon class='box header-icon-svg' />
+            {{#if this.loadCardIcon.isRunning}}
+              <LoadingIndicator class='box header-icon-svg' />
+            {{else}}
+              {{#if this.icon}}
+                <this.icon class='box header-icon-svg' />
+              {{else}}
+                <this.defaultIcon class='box header-icon-svg' />
+              {{/if}}
+            {{/if}}
           </div>
           <div class='header-info-container'>
             <div class='box'>
