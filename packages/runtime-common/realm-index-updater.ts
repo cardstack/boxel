@@ -4,6 +4,8 @@ import {
   Deferred,
   logger,
   fetchUserPermissions,
+  systemInitiatedPriority,
+  userInitiatedPriority,
   type Stats,
   type DBAdapter,
   type QueuePublisher,
@@ -17,6 +19,11 @@ import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import ignore, { type Ignore } from 'ignore';
 import { getMatrixUsername } from './matrix-client';
+
+interface FullIndexOpts {
+  invalidateEntireRealm?: boolean;
+  userInitiatedRequest?: boolean;
+}
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -81,8 +88,8 @@ export class RealmIndexUpdater {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
 
-  async run(invalidateEntireRealm?: boolean) {
-    await this.fullIndex(invalidateEntireRealm);
+  async run(opts?: FullIndexOpts) {
+    await this.fullIndex(opts);
   }
 
   indexing() {
@@ -92,20 +99,23 @@ export class RealmIndexUpdater {
   // TODO consider triggering SSE events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
-  async fullIndex(invalidateEntireRealm?: boolean) {
+  async fullIndex(opts?: FullIndexOpts) {
     this.#indexingDeferred = new Deferred<void>();
     try {
       let args: FromScratchArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.getRealmUsername(),
-        invalidateEntireRealm: Boolean(invalidateEntireRealm),
+        invalidateEntireRealm: Boolean(opts?.invalidateEntireRealm),
       };
-      let job = await this.#queue.publish<FromScratchResult>(
-        `from-scratch-index`,
-        `indexing:${this.#realm.url}`,
-        4 * 60,
+      let job = await this.#queue.publish<FromScratchResult>({
+        jobType: `from-scratch-index`,
+        concurrencyGroup: `indexing:${this.#realm.url}`,
+        timeout: 4 * 60,
+        priority: opts?.userInitiatedRequest
+          ? userInitiatedPriority
+          : systemInitiatedPriority,
         args,
-      );
+      });
       let { ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
@@ -138,12 +148,13 @@ export class RealmIndexUpdater {
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
       };
-      let job = await this.#queue.publish<IncrementalResult>(
-        `incremental-index`,
-        `indexing:${this.#realm.url}`,
-        4 * 60,
+      let job = await this.#queue.publish<IncrementalResult>({
+        jobType: `incremental-index`,
+        concurrencyGroup: `indexing:${this.#realm.url}`,
+        timeout: 4 * 60,
+        priority: userInitiatedPriority,
         args,
-      );
+      });
       let { invalidations, ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;

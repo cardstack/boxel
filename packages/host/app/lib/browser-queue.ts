@@ -21,7 +21,7 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
   private jobs: {
     jobId: number;
     jobType: string;
-    arg: PgPrimitive;
+    args: PgPrimitive;
     notifier: Deferred<any>;
   }[] = [];
   private types: Map<string, (arg: any) => Promise<any>> = new Map();
@@ -50,12 +50,17 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
     this.debouncedDrainJobs();
   }
 
-  async publish<T>(
-    jobType: string,
-    _concurrencyGroup: string | null,
-    _timeout: number,
-    arg: PgPrimitive,
-  ): Promise<Job<T>> {
+  async publish<T>({
+    jobType,
+    concurrencyGroup: _concurrencyGroup,
+    timeout: _timeout,
+    args,
+  }: {
+    jobType: string;
+    concurrencyGroup: string | null;
+    timeout: number;
+    args: PgPrimitive;
+  }): Promise<Job<T>> {
     if (this.isDestroyed) {
       throw new Error(`Cannot publish job on a destroyed Queue`);
     }
@@ -66,7 +71,7 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
       jobId,
       notifier,
       jobType,
-      arg,
+      args,
     });
     this.debouncedDrainJobs();
     return job;
@@ -84,7 +89,7 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
     let jobs = [...this.jobs];
     this.jobs = [];
     for (let workItem of jobs) {
-      let { jobId, jobType, notifier, arg } = workItem;
+      let { jobId, jobType, notifier, args } = workItem;
       let handler = this.types.get(jobType);
       if (!handler) {
         // no handler for this job, add it back to the queue
@@ -96,7 +101,7 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
         this.onBeforeJob(jobId);
       }
       try {
-        notifier.fulfill(await handler(arg));
+        notifier.fulfill(await handler(args));
       } catch (e: any) {
         notifier.reject(e);
       }

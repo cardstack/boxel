@@ -25,7 +25,8 @@ import {
   sortByCardTitleAsc,
   SortMenu,
 } from './components/sort';
-import { type ViewOption, CardsGrid } from './components/grid';
+import { CardList } from './components/card-list';
+import { CardsGrid } from './components/grid';
 import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
@@ -44,6 +45,8 @@ import BlogAppIcon from '@cardstack/boxel-icons/notebook';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
 import type { BlogPost } from './blog-post';
+
+type ViewOption = 'card' | 'strip' | 'grid';
 
 export const toISOString = (datetime: Date) => datetime.toISOString();
 
@@ -215,27 +218,32 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       </:contentHeader>
       <:grid>
         {{#if this.query}}
-          <CardsGrid
-            @selectedView={{this.selectedView}}
-            @context={{@context}}
-            @format={{if (eq this.selectedView 'card') 'embedded' 'fitted'}}
-            @query={{this.query}}
-            @realms={{this.realms}}
-            class={{this.gridClass}}
-          >
-            <:meta as |card|>
-              {{#if this.showAdminData}}
-                <BlogAdminData @cardId={{card.url}} />
-              {{/if}}
-            </:meta>
-          </CardsGrid>
+          {{#if (eq this.selectedView 'card')}}
+            <CardList
+              @context={{@context}}
+              @query={{this.query}}
+              @realms={{this.realms}}
+              class='blog-app-card-list {{this.gridClass}}'
+            >
+              <:meta as |card|>
+                {{#if this.showAdminData}}
+                  <BlogAdminData @cardId={{card.url}} />
+                {{/if}}
+              </:meta>
+            </CardList>
+          {{else}}
+            <CardsGrid
+              @selectedView={{this.selectedView}}
+              @context={{@context}}
+              @query={{this.query}}
+              @realms={{this.realms}}
+              class={{this.gridClass}}
+            />
+          {{/if}}
         {{/if}}
       </:grid>
     </Layout>
     <style scoped>
-      .blog-app {
-        --content-max-width: 1040px;
-      }
       .sidebar-create-button {
         --icon-color: currentColor;
         --boxel-loading-indicator-size: 15px;
@@ -255,8 +263,11 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
-      :deep(.categories-grid) {
-        --card-view-height: 150px;
+      .blog-app-card-list {
+        --embedded-card-max-width: 715px;
+      }
+      .categories-grid {
+        --embedded-card-min-height: 150px;
       }
     </style>
   </template>

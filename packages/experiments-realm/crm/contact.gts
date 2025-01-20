@@ -694,6 +694,12 @@ export class Contact extends CardDef {
     },
   });
 
+  @field email = contains(StringField, {
+    computeVia: function (this: Contact) {
+      return this.primaryEmail ?? this.secondaryEmail;
+    },
+  });
+
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static atom = AtomTemplate;

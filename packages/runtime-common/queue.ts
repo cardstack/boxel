@@ -1,6 +1,9 @@
 import { type PgPrimitive } from './index';
 import { Deferred } from './deferred';
 
+export const systemInitiatedPriority = 0;
+export const userInitiatedPriority = 10;
+
 export interface QueueRunner {
   start: () => Promise<void>;
   register: <A, T>(category: string, handler: (arg: A) => Promise<T>) => void;
@@ -8,12 +11,13 @@ export interface QueueRunner {
 }
 
 export interface QueuePublisher {
-  publish: <T>(
-    jobType: string,
-    concurrencyGroup: string | null,
-    timeout: number,
-    args: PgPrimitive,
-  ) => Promise<Job<T>>;
+  publish: <T>(args: {
+    jobType: string;
+    priority?: number;
+    concurrencyGroup: string | null;
+    timeout: number;
+    args: PgPrimitive;
+  }) => Promise<Job<T>>;
   destroy: () => Promise<void>;
 }
 

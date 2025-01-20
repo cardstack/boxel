@@ -7,8 +7,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type CardService from '../services/card-service';
 
 export default class SaveCardCommand extends HostBaseCommand<
-  BaseCommandModule.SaveCardInput,
-  undefined
+  typeof BaseCommandModule.SaveCardInput
 > {
   @service private declare cardService: CardService;
 
