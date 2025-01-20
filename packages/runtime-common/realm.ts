@@ -1417,6 +1417,7 @@ export class Realm {
             realm: this.url,
             meta: {
               lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
+              cardTitle: maybeError.error.cardTitle,
               scopedCssUrls: maybeError.error.scopedCssUrls,
               stack: maybeError.error.errorDetail.stack,
             },
