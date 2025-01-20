@@ -334,6 +334,7 @@ class RealmResource {
 
     if (!this.claims.sessionRoom) {
       console.log('JWT has no session room, renewing');
+      // Force JWT renewal to unsure presence of sessionRoom property
     } else {
       // token expiration is unix time (seconds)
       let expirationMs = this.claims.exp * 1000;
