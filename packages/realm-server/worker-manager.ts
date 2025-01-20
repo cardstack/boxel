@@ -4,15 +4,19 @@ import {
   logger,
   userInitiatedPriority,
   systemInitiatedPriority,
+  query,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
-import { createServer } from 'net';
 import flattenDeep from 'lodash/flattenDeep';
 import { spawn } from 'child_process';
 import pluralize from 'pluralize';
+import Koa from 'koa';
+import Router from '@koa/router';
+import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
+import { PgAdapter } from '@cardstack/postgres';
 
-let log = logger('worker');
+let log = logger('worker-manager');
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -34,8 +38,10 @@ let {
   .usage('Start worker manager')
   .options({
     port: {
-      description: 'TCP port for worker to communicate readiness (for tests)',
+      description:
+        'HTTP port for worker manager to communicate readiness and status',
       type: 'number',
+      demandOption: true,
     },
     highPriorityCount: {
       description:
@@ -75,63 +81,93 @@ let isExiting = false;
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
 
-if (port != null) {
-  // in tests we start a simple TCP server to communicate to the realm when
-  // the worker is ready to start processing jobs
-  let server = createServer((socket) => {
-    log.info(`realm connected to worker manager`);
-    socket.on('data', (data) => {
-      if (data.toString() === 'ready?') {
-        socket.write(isReady ? 'ready' : 'not-ready');
-      }
-    });
-    socket.on('close', (hadError) => {
-      log.info(`realm has disconnected${hadError ? ' due to an error' : ''}.`);
-    });
-    socket.on('error', (err: any) => {
-      console.error(`realm disconnected from worker manager: ${err.message}`);
-    });
-  });
-  server.unref();
+let dbAdapter = new PgAdapter({});
 
-  server.listen(port, () => {
-    log.info(`worker manager listening for realm on port ${port}`);
-  });
+let webServer = new Koa<Koa.DefaultState, Koa.Context>();
+let router = new Router();
+router.head('/', livenessCheck);
+router.get('/', async (ctxt: Koa.Context, _next: Koa.Next) => {
+  let result = {
+    ready: isReady,
+  } as Record<string, boolean | number>;
+  if (isReady) {
+    let [{ queue_depth }] = (await query(dbAdapter, [
+      `SELECT COUNT(*) as queue_depth FROM jobs WHERE status='unfulfilled'`,
+    ])) as {
+      queue_depth: string;
+    }[];
+    result = {
+      ...result,
+      highPriorityWorkers: highPriorityCount,
+      allPriorityWorkers: allPriorityCount,
+      queueDepth: parseInt(queue_depth, 10),
+    };
+  }
+  ctxt.set('Content-Type', 'application/json');
+  ctxt.body = JSON.stringify(result);
+  ctxt.status = isReady ? 200 : 503;
+});
 
-  const shutdown = () => {
-    log.info(`Shutting down server for worker manager...`);
-    server.close((err) => {
-      if (err) {
-        log.error(`Error while closing the server for worker manager:`, err);
-        process.exit(1);
-      }
-      log.info(`Server closed for worker manager.`);
-      process.exit(0);
+webServer
+  .use(router.routes())
+  .use((ctxt: Koa.Context, next: Koa.Next) => {
+    log.info(
+      `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
+        fullRequestURL(ctxt).href
+      }`,
+    );
+
+    ctxt.res.on('finish', () => {
+      log.info(
+        `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
+          fullRequestURL(ctxt).href
+        }: ${ctxt.status}`,
+      );
+      log.debug(JSON.stringify(ctxt.req.headers));
     });
-  };
+    return next();
+  })
+  .use(ecsMetadata);
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  process.on('uncaughtException', (err) => {
-    log.error(`Uncaught exception in worker manager:`, err);
-    shutdown();
-  });
+webServer.on('error', (err: any) => {
+  console.error(`worker manager HTTP server error: ${err.message}`);
+});
 
-  process.on('message', (message) => {
-    if (message === 'stop') {
-      console.log(`stopping realm server on port ${port}...`);
-      server.close(() => {
-        console.log(`worker manager on port ${port} has stopped`);
-        if (process.send) {
-          process.send('stopped');
-        }
-      });
-    } else if (message === 'kill') {
-      console.log(`Ending worker manager process for ${port}...`);
-      process.exit(0);
+let webServerInstance = webServer.listen(port);
+log.info(`worker manager HTTP listening on port ${port}`);
+
+const shutdown = (onShutdown?: () => void) => {
+  log.info(`Shutting down server for worker manager...`);
+  webServerInstance.closeAllConnections();
+  webServerInstance.close((err?: Error) => {
+    if (err) {
+      log.error(`Error while closing the server for worker manager HTTP:`, err);
+      process.exit(1);
     }
+    dbAdapter.close(); // warning this is async
+    log.info(`worker manager HTTP on port ${port} has stopped.`);
+    onShutdown?.();
+    process.exit(0);
   });
-}
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('uncaughtException', (err) => {
+  log.error(`Uncaught exception in worker manager:`, err);
+  shutdown();
+});
+
+process.on('message', (message) => {
+  if (message === 'stop') {
+    shutdown(() => {
+      process.send?.('stopped');
+    });
+  } else if (message === 'kill') {
+    console.log(`Ending worker manager process for ${port}...`);
+    process.exit(0);
+  }
+});
 
 (async () => {
   log.info(
