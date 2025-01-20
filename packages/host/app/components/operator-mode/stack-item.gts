@@ -282,7 +282,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return cardTypeDisplayName(this.card);
   }
 
-  private get moreOptionsMenuItemsForCardInError() {
+  private get moreOptionsMenuItemsForErrorCard() {
     if (this.isBuried) {
       return undefined;
     }
@@ -630,7 +630,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @cardTypeDisplayName={{this.cardErrorTitle}}
             @cardTypeIcon={{ExclamationCircle}}
             @isTopCard={{this.isTopCard}}
-            @moreOptionsMenuItems={{this.moreOptionsMenuItemsForCardInError}}
+            @moreOptionsMenuItems={{this.moreOptionsMenuItemsForErrorCard}}
             @onClose={{unless this.isBuried (perform this.closeItem)}}
             class='stack-item-header stack-item-header-error'
             style={{cssVar

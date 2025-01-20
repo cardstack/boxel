@@ -304,18 +304,25 @@ export default class InteractSubmode extends Component<Signature> {
               title: loadedCard.title,
             };
           } catch (error: any) {
-            // Case when card is in error state
-            let cardTitle = JSON.parse(error.responseText)?.errors?.[0]?.meta
-              ?.cardTitle;
+            // If we get a 500 Internal Server Error, it is probable that the card is in error state.
+            // In this case a cardTitle should be present - we use this to display the card title in the delete modal.
+            if (error.status === 500) {
+              let cardTitle = JSON.parse(error.responseText)?.errors?.[0]?.meta
+                ?.cardTitle;
 
-            if (!cardTitle) {
-              throw new Error(`Could not get card title for ${card}`);
+              if (!cardTitle) {
+                throw new Error(
+                  `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
+                );
+              }
+
+              cardToDelete = {
+                id: cardUrl.href,
+                title: cardTitle,
+              };
+            } else {
+              throw error;
             }
-
-            cardToDelete = {
-              id: cardUrl.href,
-              title: cardTitle,
-            };
           }
         }
 
