@@ -179,6 +179,7 @@ export class MatrixClient {
 
       let retentionStateKey = retentionState?.content.key ?? '';
 
+      console.log('setting retention policy', roomId, retentionStateKey);
       await this.request(
         `_matrix/client/v3/rooms/${roomId}/state/m.room.retention/${retentionStateKey}`,
         'PUT',
@@ -186,6 +187,7 @@ export class MatrixClient {
           body: JSON.stringify({ max_lifetime: maxLifetimeMs }),
         },
       );
+      console.log('set retention policy', roomId, retentionStateKey);
     } catch (e) {
       console.error('error setting retention policy', e);
     }
