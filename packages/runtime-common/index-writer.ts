@@ -413,6 +413,8 @@ export class Batch {
 
   async invalidate(url: URL): Promise<string[]> {
     await this.ready;
+    let start = Date.now();
+    this.#perfLog.debug(`starting invalidation of ${url.href}`);
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
     let invalidations = [
@@ -447,6 +449,7 @@ export class Batch {
     );
 
     let names = flattenDeep(columns);
+    let insertStart = Date.now();
     await this.#query([
       'INSERT INTO boxel_index_working',
       ...addExplicitParens(separatedByCommas(columns)),
@@ -457,6 +460,15 @@ export class Batch {
       'ON CONFLICT ON CONSTRAINT boxel_index_working_pkey DO UPDATE SET',
       ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
     ] as Expression);
+    this.#perfLog.debug(
+      `inserted invalidated rows for  ${url.href} in ${
+        Date.now() - insertStart
+      } ms`,
+    );
+
+    this.#perfLog.debug(
+      `completed invalidation of ${url.href} in ${Date.now() - start} ms`,
+    );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
     return invalidations;
@@ -492,7 +504,7 @@ export class Batch {
           [
             dbExpression({
               sqlite: `deps_array_element =`,
-              pg: `COALESCE(i.deps, '[]'::jsonb) @>`,
+              pg: `i.deps @>`,
             }),
             param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
           ],
@@ -503,7 +515,6 @@ export class Batch {
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
         ]),
-        'ORDER BY i.url COLLATE "POSIX"',
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: 'instance' | 'module' | 'error';
@@ -514,7 +525,7 @@ export class Batch {
     this.#perfLog.debug(
       `time to determine items that reference ${resolvedPath} ${
         Date.now() - start
-      } ms`,
+      } ms (page count=${pageNumber})`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,

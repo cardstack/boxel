@@ -97,7 +97,15 @@ let createJWT = (
   user: string,
   permissions: RealmPermissions['user'] = [],
 ) => {
-  return realm.createJWT({ user, realm: realm.url, permissions }, '7d');
+  return realm.createJWT(
+    {
+      user,
+      realm: realm.url,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+    },
+    '7d',
+  );
 };
 
 module(basename(__filename), function () {
