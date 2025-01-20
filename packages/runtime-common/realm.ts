@@ -109,6 +109,7 @@ export interface FileRef {
 export interface TokenClaims {
   user: string;
   realm: string;
+  sessionRoom: string;
   permissions: RealmPermissions['user'];
 }
 
@@ -654,7 +655,7 @@ export class Realm {
             requestContext,
           });
         },
-        createJWT: async (user: string) => {
+        createJWT: async (user: string, sessionRoom: string) => {
           let permissions = requestContext.permissions;
 
           let userPermissions = await new RealmPermissionChecker(
@@ -666,6 +667,7 @@ export class Realm {
             {
               user,
               realm: this.url,
+              sessionRoom,
               permissions: userPermissions,
             },
             '7d',
