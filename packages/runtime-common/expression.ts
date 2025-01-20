@@ -320,6 +320,29 @@ export function upsert(
   ] as Expression;
 }
 
+export function upsertMultipleRows(
+  table: string,
+  constraint: string,
+  nameExpressions: string[][],
+  valueExpressions: Expression[][],
+) {
+  let names = flattenDeep(nameExpressions);
+  return [
+    'INSERT INTO',
+    table,
+    ...addExplicitParens(separatedByCommas(nameExpressions)),
+    'VALUES',
+    ...separatedByCommas(
+      valueExpressions.map((expression) =>
+        addExplicitParens(separatedByCommas(expression)),
+      ),
+    ),
+    'ON CONFLICT ON CONSTRAINT',
+    constraint,
+    'DO UPDATE SET',
+    ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+  ] as Expression;
+}
 export function insert(
   table: string,
   nameExpressions: string[][],
@@ -385,7 +408,9 @@ export function expressionToSql(
         return element[dbAdapterKind] ?? '';
       } else if (isParam(element)) {
         let value = element[dbAdapterKind] ?? element.param ?? null;
-        values.push(value);
+        values.push(
+          value && typeof value === 'object' ? JSON.stringify(value) : value,
+        );
         return `$${values.length}`;
       } else if (typeof element === 'string') {
         return element;

@@ -21,6 +21,7 @@ import {
   query,
   upsert,
   dbExpression,
+  upsertMultipleRows,
 } from './expression';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -99,6 +100,7 @@ export class Batch {
   #invalidations = new Set<string>();
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
+  #log = logger('index-writer');
   private declare realmVersion: number;
 
   constructor(
@@ -139,6 +141,89 @@ export class Batch {
       });
     }
     return result;
+  }
+
+  async copyFrom(realmURL: URL): Promise<void> {
+    let columns: string[][] | undefined;
+    let sources = (await this.#query([
+      `SELECT * FROM boxel_index WHERE`,
+      // intentionally copying over error docs--perhaps these can be resolved in
+      // the new realm?
+      ...every([
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [`realm_url =`, param(realmURL.href)],
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let now = String(Date.now());
+    let values = sources.map((entry) => {
+      let destURL = this.copiedRealmURL(realmURL, new URL(entry.url)).href;
+      this.#invalidations.add(destURL);
+      entry.url = destURL;
+      entry.realm_url = this.realmURL.href;
+      entry.realm_version = this.realmVersion;
+      entry.file_alias = this.copiedRealmURL(
+        realmURL,
+        new URL(entry.file_alias),
+      ).href;
+      entry.types = entry.types
+        ? entry.types.map(
+            (type) => this.copiedRealmURL(realmURL, new URL(type)).href,
+          )
+        : entry.types;
+      entry.deps = entry.deps
+        ? entry.deps.map(
+            (dep) => this.copiedRealmURL(realmURL, new URL(dep)).href,
+          )
+        : entry.deps;
+      entry.pristine_doc = entry.pristine_doc
+        ? {
+            ...entry.pristine_doc,
+            id: this.copiedRealmURL(realmURL, new URL(entry.pristine_doc.id))
+              .href,
+          }
+        : entry.pristine_doc;
+      entry.fitted_html = entry.fitted_html
+        ? this.objectWithCopiedRealmKeys(realmURL, entry.fitted_html)
+        : entry.fitted_html;
+      entry.embedded_html = entry.embedded_html
+        ? this.objectWithCopiedRealmKeys(realmURL, entry.embedded_html)
+        : entry.embedded_html;
+      entry.indexed_at = now;
+
+      if (entry.type === 'instance' && entry.source) {
+        let json: CardResource<string> | undefined;
+        try {
+          json = JSON.parse(entry.source);
+        } catch (e: any) {
+          this.#log.info(
+            `Cannot parse instance source for ${entry.url}: ${e.message}`,
+          );
+        }
+        if (json) {
+          entry.source = JSON.stringify({
+            ...json,
+            id: this.copiedRealmURL(realmURL, new URL(json.id)).href,
+          });
+        }
+      }
+
+      let { valueExpressions, nameExpressions } = asExpressions(entry);
+      columns = nameExpressions;
+      return valueExpressions;
+    });
+    if (!columns) {
+      this.#log.info(`nothing to copy from ${realmURL.href}`);
+      return;
+    }
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        values,
+      ),
+    ]);
   }
 
   async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
@@ -448,18 +533,15 @@ export class Batch {
       ].map((v) => [param(v)]),
     );
 
-    let names = flattenDeep(columns);
     let insertStart = Date.now();
     await this.#query([
-      'INSERT INTO boxel_index_working',
-      ...addExplicitParens(separatedByCommas(columns)),
-      'VALUES',
-      ...separatedByCommas(
-        rows.map((value) => addExplicitParens(separatedByCommas(value))),
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        rows,
       ),
-      'ON CONFLICT ON CONSTRAINT boxel_index_working_pkey DO UPDATE SET',
-      ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
-    ] as Expression);
+    ]);
     this.#perfLog.debug(
       `inserted invalidated rows for  ${url.href} in ${
         Date.now() - insertStart
@@ -560,5 +642,26 @@ export class Batch {
       ),
     ];
     return [...new Set(results)];
+  }
+
+  private copiedRealmURL(fromRealm: URL, file: URL): URL {
+    let source = new RealmPaths(fromRealm);
+    let dest = new RealmPaths(this.realmURL);
+    if (!source.inRealm(file)) {
+      return file;
+    }
+    let local = source.local(file);
+    return dest.fileURL(local);
+  }
+
+  private objectWithCopiedRealmKeys(
+    fromRealm: URL,
+    obj: Record<string, any>,
+  ): Record<string, any> {
+    let result: Record<string, any> = {};
+    for (let [key, value] of Object.entries(obj)) {
+      result[this.copiedRealmURL(fromRealm, new URL(key)).href] = value;
+    }
+    return result;
   }
 }

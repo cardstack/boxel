@@ -420,6 +420,185 @@ const tests = Object.freeze({
     );
   },
 
+  'can copy index entries': async (assert, { indexWriter, adapter }) => {
+    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
+      internalKeyFor(i, new URL(testRealmURL)),
+    );
+    let destTypes = [{ module: `./person`, name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL2)),
+    );
+    let modified = Date.now();
+    let resource: CardResource = {
+      id: `${testRealmURL}1`,
+      type: 'card',
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
+    let source = JSON.stringify(resource);
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          source,
+          transpiled_code: null,
+          search_doc: { name: 'Mango' },
+          display_names: [`Person`],
+          deps: [`${testRealmURL}person`],
+          types,
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+          embedded_html: Object.fromEntries(
+            types.map((type) => [
+              type,
+              `<div class="embedded">Embedded HTML for ${type
+                .split('/')
+                .pop()!}</div>`,
+            ]),
+          ),
+          fitted_html: Object.fromEntries(
+            types.map((type) => [
+              type,
+              `<div class="fitted">Fitted HTML for ${type
+                .split('/')
+                .pop()!}</div>`,
+            ]),
+          ),
+          isolated_html: `<div class="isolated">Isolated HTML</div>`,
+          atom_html: `<span class="atom">Atom HTML</span>`,
+          icon_html: '<svg>test icon</svg>',
+        },
+        {
+          url: `${testRealmURL}person.gts`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'module',
+          source: `// person.gts source`,
+          transpiled_code: `// person.gts transpiled code`,
+          pristine_doc: null,
+          search_doc: null,
+          display_names: null,
+          deps: [`https://cardstack.com/base/card-api.gts`],
+          types: null,
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+          embedded_html: null,
+          fitted_html: null,
+          isolated_html: null,
+          atom_html: null,
+          icon_html: null,
+        },
+      ],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL2));
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let results = (await adapter.execute(
+      'SELECT * FROM boxel_index WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"',
+      { coerceTypes, bind: [testRealmURL2] },
+    )) as unknown as BoxelIndexTable[];
+    assert.strictEqual(
+      results.length,
+      2,
+      'correct number of items were copied',
+    );
+
+    let [copiedIndex, copiedModule] = results;
+    assert.ok(copiedIndex.indexed_at, 'indexed_at was set');
+    assert.ok(copiedModule.indexed_at, 'indexed_at was set');
+
+    delete (copiedIndex as Partial<BoxelIndexTable>).indexed_at;
+    delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
+
+    assert.deepEqual(
+      copiedIndex as Omit<BoxelIndexTable, 'indexed_at'>,
+      {
+        url: `${testRealmURL2}1.json`,
+        file_alias: `${testRealmURL2}1`,
+        realm_version: 2,
+        realm_url: testRealmURL2,
+        type: 'instance',
+        pristine_doc: { ...resource, id: `${testRealmURL2}1` },
+        source: JSON.stringify({
+          ...JSON.parse(source),
+          id: `${testRealmURL2}1`,
+        }),
+        error_doc: null,
+        transpiled_code: null,
+        search_doc: { name: 'Mango' },
+        display_names: [`Person`],
+        deps: [`${testRealmURL2}person`],
+        types: destTypes,
+        last_modified: String(modified),
+        resource_created_at: String(modified),
+        embedded_html: Object.fromEntries(
+          destTypes.map((type) => [
+            type,
+            `<div class="embedded">Embedded HTML for ${type
+              .split('/')
+              .pop()!}</div>`,
+          ]),
+        ),
+        fitted_html: Object.fromEntries(
+          destTypes.map((type) => [
+            type,
+            `<div class="fitted">Fitted HTML for ${type
+              .split('/')
+              .pop()!}</div>`,
+          ]),
+        ),
+        isolated_html: `<div class="isolated">Isolated HTML</div>`,
+        atom_html: `<span class="atom">Atom HTML</span>`,
+        icon_html: '<svg>test icon</svg>',
+        is_deleted: null,
+      },
+      'the copied instance is correct',
+    );
+    assert.deepEqual(
+      copiedModule as Omit<BoxelIndexTable, 'indexed_at'>,
+      {
+        url: `${testRealmURL2}person.gts`,
+        file_alias: `${testRealmURL2}person`,
+        realm_version: 2,
+        realm_url: testRealmURL2,
+        type: 'module',
+        source: `// person.gts source`,
+        transpiled_code: `// person.gts transpiled code`,
+        error_doc: null,
+        pristine_doc: null,
+        search_doc: null,
+        display_names: null,
+        deps: [`https://cardstack.com/base/card-api.gts`],
+        types: null,
+        last_modified: String(modified),
+        resource_created_at: String(modified),
+        embedded_html: null,
+        fitted_html: null,
+        isolated_html: null,
+        atom_html: null,
+        icon_html: null,
+        is_deleted: null,
+      },
+      'the copied module is correct',
+    );
+  },
+
   'error entry includes last known good state when available': async (
     assert,
     { indexWriter, adapter },
