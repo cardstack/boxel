@@ -332,15 +332,20 @@ class RealmResource {
       return;
     }
 
-    // token expiration is unix time (seconds)
-    let expirationMs = this.claims.exp * 1000;
+    if (!this.claims.sessionRoom) {
+      console.log('JWT has no session room, renewing');
+    } else {
+      // token expiration is unix time (seconds)
+      let expirationMs = this.claims.exp * 1000;
 
-    let refreshMs = Math.max(
-      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-      0,
-    );
+      let refreshMs = Math.max(
+        expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
+        0,
+      );
 
-    await rawTimeout(refreshMs);
+      await rawTimeout(refreshMs);
+    }
+
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
       await this.loggingIn;
