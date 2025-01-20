@@ -16,6 +16,7 @@ import MarkdownField from './markdown';
 import { restartableTask } from 'ember-concurrency';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { loadCard } from '@cardstack/runtime-common';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import GlimmerComponent from '@glimmer/component';
 import BoxModel from '@cardstack/boxel-icons/box-model';
@@ -159,8 +160,11 @@ export class CatalogEntry extends CardDef {
             <LayersSubtract />
             Examples
           </div>
-          <@fields.linkedExamples />
-          <@fields.containedExamples />
+          {{#if (eq @model.specType 'field')}}
+            <@fields.containedExamples />
+          {{else}}
+            <@fields.linkedExamples />
+          {{/if}}
         </div>
         <div class='module section'>
           <div class='row-header'>
