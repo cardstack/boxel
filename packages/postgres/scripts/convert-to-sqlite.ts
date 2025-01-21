@@ -111,6 +111,13 @@ function createColumns(
           if ('value' in constraint.expr) {
             column.push('DEFAULT', String(constraint.expr.value));
             break;
+          } else if (
+            constraint.expr.type === 'cast_operator_expr' &&
+            'expr' in constraint.expr &&
+            'text' in constraint.expr.expr
+          ) {
+            column.push('DEFAULT', String(constraint.expr.expr.text));
+            break;
           } else {
             throw new Error(
               `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
