@@ -38,6 +38,15 @@ import { Pill } from '@cardstack/boxel-ui/components';
 import { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { Deal } from './deal';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+import { on } from '@ember/modifier';
+import { not } from '@cardstack/boxel-ui/helpers';
+
+const taskSource = {
+  module: new URL('./task', import.meta.url).href,
+  name: 'CRMTask',
+};
 
 export const urgencyTagValues = [
   {
@@ -139,6 +148,10 @@ class IsolatedTemplate extends Component<typeof Account> {
     return [this.realmURL?.href];
   }
 
+  get accountId() {
+    return this.args.model.id;
+  }
+
   // Query All Active Deal that linked to current Account
   get dealQuery(): Query {
     return {
@@ -155,9 +168,80 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
   }
 
+  get activeTasksQuery(): Query {
+    let everyArr = [];
+    if (this.accountId) {
+      everyArr.push({
+        eq: {
+          'account.id': this.accountId,
+        },
+      });
+    }
+    return {
+      filter: {
+        on: taskSource,
+        every: everyArr,
+      },
+    };
+  }
+
   deals = getCards(this.dealQuery, this.realmHrefs, {
     isLive: true,
   });
+
+  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  private _createNewTask = restartableTask(async () => {
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          name: null,
+          details: null,
+          status: {
+            index: 1,
+            label: 'In Progress',
+          },
+          priority: {
+            index: null,
+            label: null,
+          },
+          description: null,
+          thumbnailURL: null,
+        },
+        relationships: {
+          assignee: {
+            links: {
+              self: null,
+            },
+          },
+          account: {
+            links: {
+              self: this.accountId ?? null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: taskSource,
+        },
+      },
+    };
+
+    await this.args.context?.actions?.createCard?.(
+      taskSource,
+      new URL(taskSource.module),
+      {
+        realmURL: this.realmURL,
+        doc,
+      },
+    );
+  });
+
+  createNewTask = () => {
+    this._createNewTask.perform();
+  };
 
   get activeDealsCount() {
     const deals = this.deals;
@@ -445,6 +529,45 @@ class IsolatedTemplate extends Component<typeof Account> {
           </:content>
         </SummaryCard>
       </:activities>
+
+      <:tasks>
+        <SummaryCard class='tasks-summary-card'>
+          <:title>
+            <h2 class='activity-title'>Upcoming Tasks</h2>
+          </:title>
+          <:icon>
+            <BoxelButton
+              @kind='primary'
+              class='activity-button-mobile'
+              data-test-settings-button
+              @disabled={{this.activeTasks.isLoading}}
+              @loading={{this._createNewTask.isRunning}}
+              {{on 'click' this.createNewTask}}
+            >
+              {{#if (not this._createNewTask.isRunning)}}
+                <PlusIcon />
+              {{/if}}
+            </BoxelButton>
+            <BoxelButton
+              @kind='primary'
+              @size='base'
+              class='activity-button-desktop'
+              @disabled={{this.activeTasks.isLoading}}
+              @loading={{this._createNewTask.isRunning}}
+              data-test-settings-button
+              {{on 'click' this.createNewTask}}
+            >
+              {{#if (not this._createNewTask.isRunning)}}
+                <PlusIcon />
+              {{/if}}
+              New Task
+            </BoxelButton>
+          </:icon>
+          <:content>
+            {{! UI for upcoming tasks }}
+          </:content>
+        </SummaryCard>
+      </:tasks>
     </AccountPageLayout>
 
     <style scoped>
@@ -516,7 +639,8 @@ class IsolatedTemplate extends Component<typeof Account> {
       .activity-button-desktop {
         display: inline-flex;
       }
-      .activities-summary-card {
+      .activities-summary-card,
+      .tasks-summary-card {
         --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
         container-type: inline-size;
         container-name: activities-summary-card;
@@ -772,6 +896,7 @@ interface AccountPageLayoutArgs {
     header: [];
     summary: [];
     activities: [];
+    tasks: [];
   };
   Element: HTMLElement;
 }
@@ -782,6 +907,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
       {{yield to='header'}}
       {{yield to='summary'}}
       {{yield to='activities'}}
+      {{yield to='tasks'}}
     </div>
 
     <style scoped>
