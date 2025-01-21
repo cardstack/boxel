@@ -4,8 +4,8 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import ColorPicker from '../color-picker/index.gts';
 import IconTrash from '../../icons/icon-trash.gts';
+import ColorPicker from '../color-picker/index.gts';
 import IconButton from '../icon-button/index.gts';
 
 interface Signature {
