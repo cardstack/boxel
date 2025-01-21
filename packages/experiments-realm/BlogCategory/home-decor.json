@@ -5,12 +5,7 @@
       "longName": "Home decoration & interior design",
       "shortName": "Home Decor",
       "slug": "home",
-      "backgroundColor": {
-        "hexValue": "#FCF8A6"
-      },
-      "textColor": {
-        "hexValue": "#FA2200"
-      },
+      "pillColor": "#FCF8A6",
       "description": "Articles about the aesthetic side of home building and renovation",
       "title": "Home decoration & interior design",
       "thumbnailURL": null

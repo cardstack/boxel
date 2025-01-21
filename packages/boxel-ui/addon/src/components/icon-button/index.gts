@@ -58,6 +58,7 @@ class IconButton extends Component<Signature> {
         padding: 0;
         background: var(--boxel-icon-button-background, none);
         border: 1px solid transparent;
+        color: var(--boxel-icon-button-color, currentColor);
         z-index: 0;
         overflow: hidden;
       }

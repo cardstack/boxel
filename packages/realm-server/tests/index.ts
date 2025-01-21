@@ -9,7 +9,8 @@ import './loader-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';
 import './queue-test';
-import './realm-server-test';
+import './realm-endpoints-test';
+import './server-endpoints-test';
 import './virtual-network-test';
 import './billing-test';
 

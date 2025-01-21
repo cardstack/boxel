@@ -3,9 +3,9 @@ import Component from '@glimmer/component';
 
 interface Signature {
   Args: {
-    color: string;
+    color: string | null;
     disabled?: boolean;
-    onChange: (color: string) => void;
+    onChange: (color: string | null) => void;
     showHexString?: boolean;
   };
   Element: HTMLDivElement;
@@ -21,14 +21,14 @@ export default class ColorPicker extends Component<Signature> {
     <div class='color-picker' ...attributes>
       <input
         type='color'
-        value={{@color}}
+        value={{if @color @color '#ffffff'}}
         class='input'
         disabled={{@disabled}}
         aria-label='Choose color'
         {{on 'input' this.handleColorChange}}
       />
       {{#if @showHexString}}
-        <span class='hex-value'>{{@color}}</span>
+        <code class='hex-value'>{{@color}}</code>
       {{/if}}
     </div>
 
@@ -44,10 +44,8 @@ export default class ColorPicker extends Component<Signature> {
         width: var(--swatch-size);
         height: var(--swatch-size);
         padding: 0;
-        border: none;
         cursor: pointer;
-        background: transparent;
-        border: 1px solid var(--boxel-200);
+        border: var(--boxel-border);
         border-radius: 50%;
       }
 
@@ -65,8 +63,6 @@ export default class ColorPicker extends Component<Signature> {
       }
 
       .hex-value {
-        font: var(--boxel-font);
-        color: var(--boxel-dark);
         text-transform: uppercase;
       }
     </style>
