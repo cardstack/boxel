@@ -216,9 +216,10 @@ export class IsolatedRealmServer {
     this.workerManagerStopped = undefined;
     this.workerManagerProcess.send('kill');
 
-    // worker manager seems to not not always be dying in CI, the ports are
-    // sometimes unavailable (perhaps worker manager HTTP server shutdown leaky
+    // realm and worker manager seems to not not always be dying in CI, the ports are
+    // sometimes unavailable (perhaps HTTP server shutdown leaky
     // async?)
     execSync(`kill -9 ${this.workerManagerProcess.pid}`);
+    execSync(`kill -9 ${this.realmServerProcess.pid}`);
   }
 }
