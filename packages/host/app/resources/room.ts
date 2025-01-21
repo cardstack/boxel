@@ -98,7 +98,6 @@ export class RoomResource extends Resource<Args> {
   }
 
   private resetCache() {
-    this._messageCreateTimesCache = new Map();
     this._messageCache = new TrackedMap();
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
