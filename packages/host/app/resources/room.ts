@@ -62,7 +62,6 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
-  private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
@@ -337,19 +336,7 @@ export class RoomResource extends Resource<Args> {
       );
     }
 
-    let earliestKnownCreateTime =
-      this._messageCreateTimesCache.get(effectiveEventId);
-    if (
-      event.content['m.relates_to']?.rel_type === 'm.replace' &&
-      (!earliestKnownCreateTime ||
-        earliestKnownCreateTime <= event.origin_server_ts)
-    ) {
-      messageBuilder.updateMessage(message);
-      this._messageCreateTimesCache.set(
-        effectiveEventId,
-        event.origin_server_ts,
-      );
-    }
+    messageBuilder.updateMessage(message);
   }
 
   private updateMessageCommandResult({

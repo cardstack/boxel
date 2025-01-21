@@ -58,7 +58,7 @@ export class Message implements RoomMessageInterface {
 
   author: RoomMember;
   status: EventStatus | null;
-  created: Date;
+  @tracked created: Date;
   updated: Date;
   eventId: string;
   roomId: string;

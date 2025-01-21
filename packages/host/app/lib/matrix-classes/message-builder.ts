@@ -141,7 +141,12 @@ export default class MessageBuilder {
   }
 
   updateMessage(message: Message) {
-    if (this.event.content['m.relates_to']?.rel_type === 'm.replace') {
+    if (this.event.content['m.relates_to']?.rel_type !== 'm.replace') {
+      return;
+    }
+
+    if (message.created.getTime() > this.event.origin_server_ts) {
+      message.created = new Date(this.event.origin_server_ts);
       return;
     }
 
