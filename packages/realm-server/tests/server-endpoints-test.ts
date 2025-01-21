@@ -35,6 +35,7 @@ import {
   insertUser,
   insertPlan,
   fetchSubscriptionsByUserId,
+  insertJob,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '../lib/externals';
@@ -1542,6 +1543,39 @@ module(basename(__filename), function () {
             .set('Content-Type', 'application/json')
             .set('stripe-signature', signature);
           waitForBillingNotification(assert, assert.async());
+        });
+      });
+
+      module('_queue-status', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          '*': ['read', 'write'],
+        });
+
+        hooks.beforeEach(async function () {
+          shimExternals(virtualNetwork);
+        });
+
+        test('returns 200 with JSON-API doc', async function (assert) {
+          await insertJob(dbAdapter, {
+            job_type: 'test-job',
+          });
+          await insertJob(dbAdapter, {
+            job_type: 'test-job',
+            status: 'resolved',
+            finished_at: new Date().toISOString(),
+          });
+          let response = await request.get('/_queue-status');
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(json, {
+            data: {
+              type: 'queue-status',
+              id: 'queue-status',
+              attributes: {
+                pending: 1,
+              },
+            },
+          });
         });
       });
     },

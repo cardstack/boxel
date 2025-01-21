@@ -10,6 +10,7 @@ import { healthCheck, jwtMiddleware, livenessCheck } from './middleware';
 import Koa from 'koa';
 import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
+import handleQueueStatusRequest from './handlers/handle-queue-status';
 
 export type CreateRoutesArgs = {
   dbAdapter: DBAdapter;
@@ -46,6 +47,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateRealmRequest(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get('/_queue-status', handleQueueStatusRequest(args));
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.get(
     '/_user',

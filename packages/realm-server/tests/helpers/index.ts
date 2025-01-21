@@ -522,3 +522,43 @@ export function mtimes(
   traverseDir(path);
   return mtimes;
 }
+
+export async function insertJob(
+  dbAdapter: PgAdapter,
+  params: {
+    job_type: string;
+    args?: Record<string, any>;
+    concurrency_group?: string | null;
+    timeout?: number;
+    status?: string;
+    finished_at?: string | null;
+    result?: Record<string, any> | null;
+    priority?: number;
+  },
+): Promise<Record<string, any>> {
+  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+    job_type: params.job_type,
+    args: params.args ?? {},
+    concurrency_group: params.concurrency_group ?? null,
+    timeout: params.timeout ?? 240,
+    status: params.status ?? 'unfulfilled',
+    finished_at: params.finished_at ?? null,
+    result: params.result ?? null,
+    priority: params.priority ?? 0,
+  });
+  let result = await query(
+    dbAdapter,
+    insert('jobs', nameExpressions, valueExpressions),
+  );
+  return {
+    id: result[0].id,
+    job_type: result[0].job_type,
+    args: result[0].args,
+    concurrency_group: result[0].concurrency_group,
+    timeout: result[0].timeout,
+    status: result[0].status,
+    finished_at: result[0].finished_at,
+    result: result[0].result,
+    priority: result[0].priority,
+  };
+}
