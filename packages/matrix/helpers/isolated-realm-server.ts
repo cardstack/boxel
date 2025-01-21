@@ -219,7 +219,7 @@ export class IsolatedRealmServer {
     // realm and worker manager seems to not not always be dying in CI, the ports are
     // sometimes unavailable (perhaps HTTP server shutdown leaky
     // async?)
-    execSync(`kill -9 ${this.workerManagerProcess.pid}`);
-    execSync(`kill -9 ${this.realmServerProcess.pid}`);
+    // execSync(`kill -9 ${this.workerManagerProcess.pid}`);
+    // execSync(`kill -9 ${this.realmServerProcess.pid}`);
   }
 }
