@@ -243,6 +243,18 @@ class IsolatedTemplate extends Component<typeof Account> {
     this._createNewTask.perform();
   };
 
+  get activeTasksCount() {
+    const tasks = this.activeTasks;
+    if (!tasks || tasks.isLoading) {
+      return 0;
+    }
+    return tasks.instances?.length ?? 0;
+  }
+
+  get hasActiveTasks() {
+    return this.activeTasksCount > 0;
+  }
+
   get activeDealsCount() {
     const deals = this.deals;
     if (!deals || deals.isLoading) {
@@ -564,7 +576,19 @@ class IsolatedTemplate extends Component<typeof Account> {
             </BoxelButton>
           </:icon>
           <:content>
-            {{! UI for upcoming tasks }}
+            {{#if this.activeTasks.isLoading}}
+              <div class='loading-skeleton'>Loading...</div>
+            {{else}}
+              {{#if this.hasActiveTasks}}
+                {{#each this.activeTasks.instances as |task|}}
+                  {{#let (getComponent task) as |Component|}}
+                    <Component @format='embedded' @displayContainer={{false}} />
+                  {{/let}}
+                {{/each}}
+              {{else}}
+                <p class='description'>No Upcoming Tasks</p>
+              {{/if}}
+            {{/if}}
           </:content>
         </SummaryCard>
       </:tasks>
@@ -642,8 +666,13 @@ class IsolatedTemplate extends Component<typeof Account> {
       .activities-summary-card,
       .tasks-summary-card {
         --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
+        --summary-card-gap: var(--boxel-sp-lg);
         container-type: inline-size;
         container-name: activities-summary-card;
+      }
+      .tasks-summary-card :where(.task-card) {
+        --task-card-padding: var(--boxel-sp) 0;
+        border-top: 1px solid var(--boxel-200);
       }
       .activity-title {
         font: 600 var(--boxel-font-med);
@@ -668,6 +697,15 @@ class IsolatedTemplate extends Component<typeof Account> {
         --profile-avatar-icon-size: 20px;
         --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
+      }
+      .loading-skeleton {
+        height: 60px;
+        width: 100%;
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       @container activities-summary-card (max-width: 447px) {
@@ -921,4 +959,8 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
       }
     </style>
   </template>
+}
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }
