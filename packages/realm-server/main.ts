@@ -11,7 +11,6 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
-import { createConnection, type Socket } from 'net';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
@@ -331,49 +330,20 @@ let autoMigrate = migrateDB || undefined;
   process.exit(-3);
 });
 
-let workerReadyDeferred: Deferred<boolean> | undefined;
 async function waitForWorkerManager(port: number) {
-  const workerManager = await new Promise<Socket>((r) => {
-    let socket = createConnection({ port }, () => {
-      log.info(`Connected to worker manager on port ${port}`);
-      r(socket);
-    });
-  });
-
-  workerManager.on('data', (data) => {
-    let res = data.toString();
-    if (!workerReadyDeferred) {
-      throw new Error(
-        `received unsolicited message from worker manager on port ${port}`,
-      );
+  let isReady = false;
+  let timeout = Date.now() + 30_000;
+  do {
+    let response = await fetch(`http://localhost:${port}/`);
+    if (response.ok) {
+      let json = await response.json();
+      isReady = json.ready;
     }
-    switch (res) {
-      case 'ready':
-      case 'not-ready':
-        workerReadyDeferred.fulfill(res === 'ready' ? true : false);
-        break;
-      default:
-        workerReadyDeferred.reject(
-          `unexpected response from worker manager: ${res}`,
-        );
-    }
-  });
-
-  try {
-    let isReady = false;
-    let timeout = Date.now() + 30_000;
-    do {
-      workerReadyDeferred = new Deferred();
-      workerManager.write('ready?');
-      isReady = await workerReadyDeferred.promise;
-    } while (!isReady && Date.now() < timeout);
-    if (!isReady) {
-      throw new Error(
-        `timed out trying to connect to worker manager on port ${port}`,
-      );
-    }
-  } finally {
-    workerManager.end();
+  } while (!isReady && Date.now() < timeout);
+  if (!isReady) {
+    throw new Error(
+      `timed out trying to waiting for worker manager to be ready on port ${port}`,
+    );
   }
   log.info('workers are ready');
 }
