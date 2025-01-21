@@ -39,6 +39,7 @@ interface SearchResultError {
     lastKnownGoodHtml: string | null;
     scopedCssUrls: string[];
     errorDetail: SerializedError;
+    cardTitle: string | null;
   };
 }
 
@@ -152,6 +153,7 @@ export class RealmIndexQueryEngine {
           errorDetail: instance.error,
           scopedCssUrls,
           lastKnownGoodHtml: instance.isolatedHtml ?? null,
+          cardTitle: instance.searchDoc?.title ?? null,
         },
       };
     }

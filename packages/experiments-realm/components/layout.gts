@@ -207,7 +207,7 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
         gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
       }
       .content-grid {
-        max-width: var(--content-max-width, 100%);
+        max-width: 100%;
         padding-left: var(--layout-padding);
         padding-bottom: var(--layout-padding);
       }

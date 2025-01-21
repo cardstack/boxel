@@ -1,29 +1,17 @@
 import GlimmerComponent from '@glimmer/component';
 
-import { Format, type CardContext } from 'https://cardstack.com/base/card-api';
+import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import { type Query } from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
-
-export type ViewOption = 'card' | 'strip' | 'grid';
-
-interface PrerenderedCard {
-  url: string;
-  component: any;
-}
 
 interface CardsGridSignature {
   Args: {
     query: Query;
     realms: URL[];
-    selectedView: ViewOption;
+    selectedView: string;
     context?: CardContext;
-    format: Format;
-  };
-  Blocks: {
-    meta: [card: PrerenderedCard];
   };
   Element: HTMLElement;
 }
@@ -40,7 +28,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       }}
         <PrerenderedCardSearch
           @query={{@query}}
-          @format={{@format}}
+          @format='fitted'
           @realms={{@realms}}
         >
           <:loading>
@@ -61,11 +49,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                 >
                   <card.component />
                 </CardContainer>
-                {{#if (eq @selectedView 'card')}}
-                  {{#if (has-block 'meta')}}
-                    {{yield card to='meta'}}
-                  {{/if}}
-                {{/if}}
               </li>
             {{/each}}
           </:response>
@@ -74,9 +57,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
     </ul>
     <style scoped>
       .cards {
-        --default-card-view-min-width: 750px;
-        --default-card-view-max-width: 1fr;
-        --default-card-view-height: 347px;
         --default-grid-view-min-width: 224px;
         --default-grid-view-max-width: 1fr;
         --default-grid-view-height: max-content;
@@ -85,35 +65,10 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         --default-strip-view-height: 180px;
 
         display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(
-            var(--card-view-min-width, var(--default-card-view-min-width)),
-            var(--card-view-max-width, var(--default-card-view-max-width))
-          )
-        );
-        grid-auto-rows: var(
-          --card-view-height,
-          var(--default-card-view-height)
-        );
         gap: var(--boxel-sp);
         list-style-type: none;
         margin: 0;
         padding: var(--boxel-sp-6xs);
-      }
-
-      .cards.card-view {
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(
-            var(--card-view-min-width, var(--default-card-view-min-width)),
-            var(--card-view-max-width, var(--default-card-view-max-width))
-          )
-        );
-        grid-auto-rows: var(
-          --card-view-height,
-          var(--default-card-view-height)
-        );
       }
 
       .cards.strip-view {
@@ -147,18 +102,9 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       .grid-view-container {
         aspect-ratio: 5/6;
       }
-      .card-view-container {
-        display: grid;
-        grid-template-columns: 1fr 247px;
-        gap: var(--boxel-sp-lg);
-      }
       .card {
         container-name: fitted-card;
         container-type: size;
-      }
-      .bordered-items > .card-view-container > * {
-        border-radius: var(--boxel-border-radius);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-500);
       }
     </style>
   </template>
