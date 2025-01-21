@@ -59,7 +59,6 @@ let BlogCategoryTemplate = class Embedded extends Component<
       }
     </style>
     <div class='blog-category'>
-      {{! template-lint-disable no-inline-styles }}
       <div class='category-name' style={{categoryStyle @model}}>
         <@fields.shortName />
       </div>
@@ -104,7 +103,6 @@ export class BlogCategory extends CardDef {
         }
       </style>
       <div class='category-atom'>
-        {{! template-lint-disable no-inline-styles }}
         <div class='circle' style={{cssVar category-swatch=@model.pillColor}} />
         <@fields.longName />
       </div>
@@ -207,7 +205,6 @@ export class BlogCategory extends CardDef {
         }
       </style>
       <div class='blog-category'>
-        {{! template-lint-disable no-inline-styles }}
         <div class='category-name' style={{categoryStyle @model}}>
           <@fields.shortName />
         </div>
