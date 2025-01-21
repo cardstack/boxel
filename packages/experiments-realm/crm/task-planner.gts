@@ -10,10 +10,16 @@ import {
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
 
 export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
   typeof CRMTaskPlanner
 > {
+  @tracked cardsQuery: { instances: CardDef[]; isLoading?: boolean };
+  private lastTaskFilter: any;
+  private lastSearchFilter: any;
+
   constructor(owner: Owner, args: any) {
     const config: TaskPlannerConfig = {
       status: {
@@ -119,7 +125,37 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
       },
     };
     super(owner, args, config);
+
+    // Initialize query once
+    this.cardsQuery = getCards(this.getTaskQuery, this.realmHrefs, {
+      isLive: true,
+    });
+
+    // Store initial filter states
+    this.lastTaskFilter = this.args.taskFilter;
+    this.lastSearchFilter = this.args.searchFilter;
   }
+
+  get cardInstances() {
+    // Check if filters have changed
+    if (
+      this.lastTaskFilter !== this.args.taskFilter ||
+      this.lastSearchFilter !== this.args.searchFilter
+    ) {
+      this.lastTaskFilter = this.args.taskFilter;
+      this.lastSearchFilter = this.args.searchFilter;
+      // Only reload when filters actually change
+      this.loadCards.perform();
+    }
+    return this.cardsQuery?.instances ?? [];
+  }
+
+  private loadCards = restartableTask(async () => {
+    this.cardsQuery = getCards(this.getTaskQuery, this.realmHrefs, {
+      isLive: true,
+    });
+    return this.cardsQuery;
+  });
 
   get parentId() {
     return this.args.model?.id;
@@ -127,6 +163,14 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
 
   override get emptyStateMessage() {
     return 'Link a CRM App to continue';
+  }
+
+  get reactiveTaskFilter() {
+    return this.args.taskFilter || [];
+  }
+
+  get reactiveSearchFilter() {
+    return this.args.searchFilter || [];
   }
 
   override get getTaskQuery(): Query {
@@ -140,6 +184,17 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
       everyArr.push({ eq: { 'crmApp.id': null } });
     } else {
       everyArr.push({ eq: { 'crmApp.id': this.parentId } });
+    }
+
+    const taskFilter = this.args.taskFilter || [];
+    const searchFilter = this.args.searchFilter || [];
+
+    if (taskFilter.length > 0) {
+      everyArr.push(...taskFilter);
+    }
+
+    if (searchFilter.length > 0) {
+      everyArr.push(...searchFilter);
     }
 
     return everyArr.length > 0

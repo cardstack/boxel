@@ -13,6 +13,9 @@ import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
+import { format, startOfWeek } from 'date-fns';
+
+const dateFormat = `yyyy-MM-dd`;
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
@@ -273,7 +276,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    const { loadAllFilters, activeFilter, activeTabId, searchKey } = this;
+    const { loadAllFilters, activeFilter, activeTabId } = this;
 
     if (!loadAllFilters.isIdle || !activeFilter?.query) return;
 
@@ -307,19 +310,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           ]
         : [];
 
-    const searchFilter = searchKey
-      ? [
-          {
-            any: [
-              {
-                on: activeFilter.cardRef,
-                contains: { name: searchKey },
-              },
-            ],
-          },
-        ]
-      : [];
-
     return {
       filter: {
         on: activeFilter.cardRef,
@@ -327,11 +317,63 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           defaultFilter,
           ...accountFilter,
           ...dealFilter,
-          ...searchFilter,
+          ...this.searchFilter,
+          ...this.taskFilter,
         ],
       },
       sort: this.selectedSort?.sort ?? sortByCardTitleAsc,
     } as Query;
+  }
+
+  get searchFilter() {
+    return this.searchKey
+      ? [
+          {
+            any: [
+              {
+                on: this.activeFilter.cardRef,
+                contains: { name: this.searchKey },
+              },
+            ],
+          },
+        ]
+      : [];
+  }
+
+  get taskFilter() {
+    let taskFilter: Query['filter'][] = [];
+    if (
+      this.activeTabId === 'Task' &&
+      this.activeFilter.displayName !== 'All Tasks'
+    ) {
+      const today = new Date();
+      switch (this.activeFilter.displayName) {
+        case 'Overdue':
+          const formattedDate = format(today, dateFormat);
+          taskFilter = [{ range: { 'dateRange.end': { lt: formattedDate } } }];
+          break;
+        case 'Due Today':
+          const formattedDueToday = format(today, dateFormat);
+          taskFilter = [{ eq: { 'dateRange.end': formattedDueToday } }];
+          break;
+        case 'Due this week':
+          const dueThisWeek = startOfWeek(today, { weekStartsOn: 1 });
+          const formattedDueThisWeek = format(dueThisWeek, dateFormat);
+          taskFilter = [
+            { range: { 'dateRange.start': { gt: formattedDueThisWeek } } },
+          ];
+          break;
+        case 'High Priority':
+          taskFilter = [{ eq: { 'priority.label': 'High' } }];
+          break;
+        case 'Unassigned':
+          taskFilter = [{ eq: { 'assignee.id': null } }];
+          break;
+        default:
+          break;
+      }
+    }
+    return taskFilter;
   }
 
   get searchPlaceholder() {
@@ -447,6 +489,8 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @fields={{@fields}}
             @set={{@set}}
             @fieldName={{@fieldName}}
+            @searchFilter={{this.searchFilter}}
+            @taskFilter={{this.taskFilter}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}

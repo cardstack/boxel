@@ -9,14 +9,14 @@
         "completed": false
       },
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2025-01-21",
+        "end": "2025-01-22"
       },
       "priority": {
-        "index": 3,
-        "label": "High"
+        "index": null,
+        "label": null
       },
-      "name": "Meet Prospect Customer",
+      "name": "Today",
       "details": null,
       "description": null,
       "thumbnailURL": null
@@ -34,7 +34,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../Representative/e0b16307-04bd-4e48-bdf8-517bb35b8119"
+          "self": null
         }
       },
       "contact": {
