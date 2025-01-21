@@ -118,9 +118,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
     if (this.dealId) {
       everyArr.push({
         eq: {
-          'deal.id': {
-            id: this.dealId,
-          },
+          'deal.id': this.dealId,
         },
       });
     }
