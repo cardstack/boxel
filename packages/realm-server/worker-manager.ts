@@ -4,7 +4,6 @@ import {
   logger,
   userInitiatedPriority,
   systemInitiatedPriority,
-  query,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -14,7 +13,14 @@ import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
-import { PgAdapter } from '@cardstack/postgres';
+import { Server } from 'http';
+
+/* About the Worker Manager
+ *
+ * This process runs on each queue worker container and is responsible starting and monitoring the worker processes. It does this via IPC (inter-process communication).
+ * In test and development environments, the worker manager is also responsible for providing a readiness check HTTP endpoint so that tests can wait until the worker
+ * manager is ready before proceeding.
+ */
 
 let log = logger('worker-manager');
 
@@ -41,7 +47,6 @@ let {
       description:
         'HTTP port for worker manager to communicate readiness and status',
       type: 'number',
-      demandOption: true,
     },
     highPriorityCount: {
       description:
@@ -81,70 +86,65 @@ let isExiting = false;
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
 
-let dbAdapter = new PgAdapter({});
+let webServerInstance: Server | undefined;
 
-let webServer = new Koa<Koa.DefaultState, Koa.Context>();
-let router = new Router();
-router.head('/', livenessCheck);
-router.get('/', async (ctxt: Koa.Context, _next: Koa.Next) => {
-  let result = {
-    ready: isReady,
-  } as Record<string, boolean | number>;
-  if (isReady) {
-    let [{ queue_depth }] = (await query(dbAdapter, [
-      `SELECT COUNT(*) as queue_depth FROM jobs WHERE status='unfulfilled'`,
-    ])) as {
-      queue_depth: string;
-    }[];
-    result = {
-      ...result,
-      highPriorityWorkers: highPriorityCount,
-      allPriorityWorkers: allPriorityCount,
-      queueDepth: parseInt(queue_depth, 10),
-    };
-  }
-  ctxt.set('Content-Type', 'application/json');
-  ctxt.body = JSON.stringify(result);
-  ctxt.status = isReady ? 200 : 503;
-});
+if (port) {
+  let webServer = new Koa<Koa.DefaultState, Koa.Context>();
+  let router = new Router();
+  router.head('/', livenessCheck);
+  router.get('/', async (ctxt: Koa.Context, _next: Koa.Next) => {
+    let result = {
+      ready: isReady,
+    } as Record<string, boolean | number>;
+    if (isReady) {
+      result = {
+        ...result,
+        highPriorityWorkers: highPriorityCount,
+        allPriorityWorkers: allPriorityCount,
+      };
+    }
+    ctxt.set('Content-Type', 'application/json');
+    ctxt.body = JSON.stringify(result);
+    ctxt.status = isReady ? 200 : 503;
+  });
 
-webServer
-  .use(router.routes())
-  .use((ctxt: Koa.Context, next: Koa.Next) => {
-    log.info(
-      `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
-        fullRequestURL(ctxt).href
-      }`,
-    );
-
-    ctxt.res.on('finish', () => {
+  webServer
+    .use(router.routes())
+    .use((ctxt: Koa.Context, next: Koa.Next) => {
       log.info(
-        `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
+        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
           fullRequestURL(ctxt).href
-        }: ${ctxt.status}`,
+        }`,
       );
-      log.debug(JSON.stringify(ctxt.req.headers));
-    });
-    return next();
-  })
-  .use(ecsMetadata);
 
-webServer.on('error', (err: any) => {
-  console.error(`worker manager HTTP server error: ${err.message}`);
-});
+      ctxt.res.on('finish', () => {
+        log.info(
+          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
+            fullRequestURL(ctxt).href
+          }: ${ctxt.status}`,
+        );
+        log.debug(JSON.stringify(ctxt.req.headers));
+      });
+      return next();
+    })
+    .use(ecsMetadata);
 
-let webServerInstance = webServer.listen(port);
-log.info(`worker manager HTTP listening on port ${port}`);
+  webServer.on('error', (err: any) => {
+    log.error(`worker manager HTTP server error: ${err.message}`);
+  });
+
+  webServerInstance = webServer.listen(port);
+  log.info(`worker manager HTTP listening on port ${port}`);
+}
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
-  webServerInstance.closeAllConnections();
-  webServerInstance.close((err?: Error) => {
+  webServerInstance?.closeAllConnections();
+  webServerInstance?.close((err?: Error) => {
     if (err) {
       log.error(`Error while closing the server for worker manager HTTP:`, err);
       process.exit(1);
     }
-    dbAdapter.close(); // warning this is async
     log.info(`worker manager HTTP on port ${port} has stopped.`);
     onShutdown?.();
     process.exit(0);
@@ -164,7 +164,7 @@ process.on('message', (message) => {
       process.send?.('stopped');
     });
   } else if (message === 'kill') {
-    console.log(`Ending worker manager process for ${port}...`);
+    log.info(`Ending worker manager process for ${port}...`);
     process.exit(0);
   }
 });

@@ -82,8 +82,8 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4201 | `/seed` seed realm                                            | ✅                  | 🚫                   |
 | :4202 | `/test` host test realm, `/node-test` node test realm         | ✅                  | 🚫                   |
 | :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
-| :4210 | Worker Manager (spins up 1 worker by default in development)  | ✅                  | 🚫                   |
-| :4211 | Worker Manager (spins up 1 worker by default)                 | ✅                  | 🚫                   |
+| :4210 | Development Worker Manager (spins up 1 worker by default)     | ✅                  | 🚫                   |
+| :4211 | Test Worker Manager (spins up 1 worker by default)            | ✅                  | 🚫                   |
 | :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅      | 🚫                   |
 | :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅ | 🚫    |
 | :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
@@ -290,7 +290,7 @@ To run the `packages/realm-server/` workspace tests start:
 ### Boxel UI
 
 1. `cd packages/boxel-ui/test-app`
-2. `pnpm test` (or `pnpm start` and visit http://localhost:4210/tests to run tests in the browser)
+2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
 
 ### Boxel Motion
 
