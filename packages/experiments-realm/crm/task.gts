@@ -437,7 +437,7 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
             class='task-status-pill'
             @pillBackgroundColor='var(--boxel-100)'
           >
-            <:default>{{this.args.model.shortId}}</:default>
+            <:default>{{@model.shortId}}</:default>
           </Pill>
         {{/if}}
 
@@ -458,9 +458,9 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
         {{#if this.hasStatus}}
           <Pill
             class='task-status-pill'
-            @pillBackgroundColor={{this.args.model.status.color}}
+            @pillBackgroundColor={{@model.status.color}}
           >
-            <:default>{{this.args.model.status.label}}</:default>
+            <:default>{{@model.status.label}}</:default>
           </Pill>
         {{/if}}
       </aside>
