@@ -284,21 +284,27 @@ export class CurrentRun {
   ): Promise<string[]> {
     log.debug(`discovering invalidations in dir ${url.href}`);
     perfLog.debug(`discovering invalidations in dir ${url.href}`);
-    let ignoreStart = Date.now();
-    let ignorePatterns = await this.#reader.readFile(
-      new URL('.gitignore', url),
-    );
-    perfLog.debug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
-    if (ignorePatterns && ignorePatterns.content) {
-      this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
-      this.#ignoreData[url.href] = ignorePatterns.content;
-    }
-
     let mtimesStart = Date.now();
     let filesystemMtimes = await this.#reader.mtimes();
     perfLog.debug(
       `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
     );
+
+    let ignoreFile = new URL('.gitignore', url).href;
+    // it costs about 10 sec to try to get the ignore file when it doesn't
+    // exist, so don't get it if it's not there.
+    if (filesystemMtimes[ignoreFile]) {
+      let ignoreStart = Date.now();
+      let ignorePatterns = await this.#reader.readFile(new URL(ignoreFile));
+      perfLog.debug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
+      if (ignorePatterns && ignorePatterns.content) {
+        this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
+        this.#ignoreData[url.href] = ignorePatterns.content;
+      }
+    } else {
+      perfLog.debug(`skip getting the ignore file--there is nothing to ignore`);
+    }
+
     let invalidationList: string[] = [];
     let skipList: string[] = [];
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {

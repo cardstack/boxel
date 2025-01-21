@@ -112,10 +112,12 @@ test.describe('Login', () => {
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
       realm: string;
+      sessionRoom: string;
       permissions: ('read' | 'write' | 'realm-owner')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
     expect(claims.realm).toStrictEqual(`${appURL}/`);
+    expect(claims.sessionRoom).toMatch(/!\w*:localhost/);
     expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
