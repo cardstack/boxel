@@ -3,6 +3,7 @@ import flatten from 'lodash/flatten';
 import flattenDeep from 'lodash/flattenDeep';
 import {
   type CardResource,
+  type RealmInfo,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
@@ -143,7 +144,7 @@ export class Batch {
     return result;
   }
 
-  async copyFrom(realmURL: URL): Promise<void> {
+  async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
     let columns: string[][] | undefined;
     let sources = (await this.#query([
       `SELECT * FROM boxel_index WHERE`,
@@ -151,47 +152,18 @@ export class Batch {
       // the new realm?
       ...every([
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        [`realm_url =`, param(realmURL.href)],
+        [`realm_url =`, param(sourceRealmURL.href)],
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
     let values = sources.map((entry) => {
-      let destURL = this.copiedRealmURL(realmURL, new URL(entry.url)).href;
-      this.#invalidations.add(destURL);
-      entry.url = destURL;
-      entry.realm_url = this.realmURL.href;
-      entry.realm_version = this.realmVersion;
-      entry.file_alias = this.copiedRealmURL(
-        realmURL,
-        new URL(entry.file_alias),
+      let destURL = this.copiedRealmURL(
+        sourceRealmURL,
+        new URL(entry.url),
       ).href;
-      entry.types = entry.types
-        ? entry.types.map(
-            (type) => this.copiedRealmURL(realmURL, new URL(type)).href,
-          )
-        : entry.types;
-      entry.deps = entry.deps
-        ? entry.deps.map(
-            (dep) => this.copiedRealmURL(realmURL, new URL(dep)).href,
-          )
-        : entry.deps;
-      entry.pristine_doc = entry.pristine_doc
-        ? {
-            ...entry.pristine_doc,
-            id: this.copiedRealmURL(realmURL, new URL(entry.pristine_doc.id))
-              .href,
-          }
-        : entry.pristine_doc;
-      entry.fitted_html = entry.fitted_html
-        ? this.objectWithCopiedRealmKeys(realmURL, entry.fitted_html)
-        : entry.fitted_html;
-      entry.embedded_html = entry.embedded_html
-        ? this.objectWithCopiedRealmKeys(realmURL, entry.embedded_html)
-        : entry.embedded_html;
-      entry.indexed_at = now;
-
+      this.#invalidations.add(destURL);
       if (entry.type === 'instance' && entry.source) {
-        let json: CardResource<string> | undefined;
+        let json: { data: CardResource<string> } | undefined;
         try {
           json = JSON.parse(entry.source);
         } catch (e: any) {
@@ -200,19 +172,58 @@ export class Batch {
           );
         }
         if (json) {
-          entry.source = JSON.stringify({
-            ...json,
-            id: this.copiedRealmURL(realmURL, new URL(json.id)).href,
-          });
+          json.data.id = destURL.replace(/\.json$/, '');
+          entry.source = JSON.stringify(json);
         }
       }
+
+      entry.url = destURL;
+      entry.realm_url = this.realmURL.href;
+      entry.realm_version = this.realmVersion;
+      entry.file_alias = this.copiedRealmURL(
+        sourceRealmURL,
+        new URL(entry.file_alias),
+      ).href;
+      entry.types = entry.types
+        ? entry.types.map(
+            (type) => this.copiedRealmURL(sourceRealmURL, new URL(type)).href,
+          )
+        : entry.types;
+      entry.deps = entry.deps
+        ? entry.deps.map(
+            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
+          )
+        : entry.deps;
+      entry.pristine_doc = entry.pristine_doc
+        ? {
+            ...entry.pristine_doc,
+            id: this.copiedRealmURL(
+              sourceRealmURL,
+              new URL(entry.pristine_doc.id),
+            ).href,
+          }
+        : entry.pristine_doc;
+      if (entry.type === 'instance' && entry.pristine_doc) {
+        entry.pristine_doc.meta = {
+          ...entry.pristine_doc.meta,
+          realmURL: this.realmURL.href,
+          realmInfo: destRealmInfo,
+        };
+      }
+      entry.fitted_html = entry.fitted_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
+        : entry.fitted_html;
+      entry.embedded_html = entry.embedded_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
+        : entry.embedded_html;
+      entry.indexed_at = now;
 
       let { valueExpressions, nameExpressions } = asExpressions(entry);
       columns = nameExpressions;
       return valueExpressions;
     });
     if (!columns) {
-      this.#log.info(`nothing to copy from ${realmURL.href}`);
+      this.#log.info(`nothing to copy from ${sourceRealmURL.href}`);
       return;
     }
 

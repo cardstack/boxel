@@ -169,6 +169,7 @@ class RealmResource {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;
+            case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
               break;

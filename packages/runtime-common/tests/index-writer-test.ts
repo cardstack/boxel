@@ -7,8 +7,10 @@ import {
   type IndexedInstance,
   type BoxelIndexTable,
   type CardResource,
+  type RealmInfo,
 } from '../index';
 import { cardSrc, compiledCard } from '../etc/test-fixtures';
+import merge from 'lodash/merge';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
@@ -427,6 +429,14 @@ const tests = Object.freeze({
     let destTypes = [{ module: `./person`, name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL2)),
     );
+    const testRealmInfo: RealmInfo = {
+      name: 'Test Realm',
+      backgroundURL: null,
+      iconURL: null,
+      showAsCatalog: null,
+      visibility: 'public',
+    };
+
     let modified = Date.now();
     let resource: CardResource = {
       id: `${testRealmURL}1`,
@@ -441,7 +451,7 @@ const tests = Object.freeze({
         },
       },
     };
-    let source = JSON.stringify(resource);
+    let source = JSON.stringify({ data: resource });
     await setupIndex(
       adapter,
       [
@@ -506,7 +516,7 @@ const tests = Object.freeze({
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL2));
-    await batch.copyFrom(new URL(testRealmURL));
+    await batch.copyFrom(new URL(testRealmURL), testRealmInfo);
     await batch.done();
 
     let results = (await adapter.execute(
@@ -534,11 +544,18 @@ const tests = Object.freeze({
         realm_version: 2,
         realm_url: testRealmURL2,
         type: 'instance',
-        pristine_doc: { ...resource, id: `${testRealmURL2}1` },
-        source: JSON.stringify({
-          ...JSON.parse(source),
+        pristine_doc: {
+          ...resource,
           id: `${testRealmURL2}1`,
-        }),
+          meta: {
+            ...resource.meta,
+            realmURL: testRealmURL2,
+            realmInfo: testRealmInfo,
+          },
+        },
+        source: JSON.stringify(
+          merge(JSON.parse(source), { data: { id: `${testRealmURL2}1` } }),
+        ),
         error_doc: null,
         transpiled_code: null,
         search_doc: { name: 'Mango' },
