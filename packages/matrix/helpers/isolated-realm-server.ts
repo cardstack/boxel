@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
