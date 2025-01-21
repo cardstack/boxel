@@ -44,7 +44,7 @@
       },
       "account": {
         "links": {
-          "self": null
+          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
         }
       },
       "deal": {
@@ -52,9 +52,9 @@
           "self": null
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/8a14f671-4daf-4195-aca5-85dc143d15b8"
         }
       }
     },
