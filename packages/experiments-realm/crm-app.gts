@@ -38,7 +38,7 @@ import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics
 import ListDetails from '@cardstack/boxel-icons/list-details';
 import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
-import { taskStatusValues } from './crm/task';
+import { taskStatusValues } from './crm/shared';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlannerIsolated } from './crm/task-planner';
