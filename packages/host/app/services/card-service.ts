@@ -429,12 +429,12 @@ export default class CardService extends Service {
     return result;
   }
 
-  async deleteCard(card: CardDef): Promise<void> {
-    if (!card.id) {
+  async deleteCard(cardId: string): Promise<void> {
+    if (!cardId) {
       // the card isn't actually saved yet, so do nothing
       return;
     }
-    await this.fetchJSON(card.id, { method: 'DELETE' });
+    await this.fetchJSON(cardId, { method: 'DELETE' });
   }
 
   // TODO consider retiring this.  i don't think it really does what we want

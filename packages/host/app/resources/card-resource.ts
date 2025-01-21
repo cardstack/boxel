@@ -44,6 +44,7 @@ interface CardErrors {
     realm: string | undefined;
     meta: {
       lastKnownGoodHtml: string | null;
+      cardTitle: string | null;
       scopedCssUrls: string[];
       stack: string | null;
     };
@@ -503,6 +504,7 @@ function processCardError(url: URL | undefined, error: any): CardErrors {
                 lastKnownGoodHtml: null,
                 scopedCssUrls: [],
                 stack: null,
+                cardTitle: null,
               },
             },
           ],
@@ -526,6 +528,7 @@ function processCardError(url: URL | undefined, error: any): CardErrors {
                 lastKnownGoodHtml: null,
                 scopedCssUrls: [],
                 stack: null,
+                cardTitle: null,
               },
             },
           ],

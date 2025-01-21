@@ -3,9 +3,9 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 1,
-        "label": "In Progress",
-        "color": null,
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
         "completed": false
       },
       "dateRange": {
@@ -44,7 +44,7 @@
       },
       "account": {
         "links": {
-          "self": null
+          "self": "../Account/77976251-6bc8-4a8c-972f-f9d588e8434d"
         }
       },
       "deal": {

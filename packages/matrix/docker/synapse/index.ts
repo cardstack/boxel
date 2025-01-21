@@ -429,6 +429,45 @@ export async function getJoinedRooms(accessToken: string) {
   return joined_rooms;
 }
 
+export async function getRoomStateEventType(
+  accessToken: string,
+  roomId: string,
+  eventType: string,
+) {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/state/${eventType}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  return await response.json();
+}
+
+export async function getRoomName(accessToken: string, roomId: string) {
+  return await getRoomStateEventType(accessToken, roomId, 'm.room.name');
+}
+
+export async function getRoomRetentionPolicy(
+  accessToken: string,
+  roomId: string,
+) {
+  return await getRoomStateEventType(accessToken, roomId, 'm.room.retention');
+}
+
+export async function getRoomMembers(roomId: string, accessToken: string) {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/joined_members`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  return await response.json();
+}
+
 export async function sync(accessToken: string) {
   let response = await fetch(
     `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/sync`,

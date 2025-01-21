@@ -4,7 +4,7 @@ import {
   contains,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import {
   field,
@@ -38,6 +38,15 @@ import { Pill } from '@cardstack/boxel-ui/components';
 import { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { Deal } from './deal';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+import { on } from '@ember/modifier';
+import { not } from '@cardstack/boxel-ui/helpers';
+
+const taskSource = {
+  module: new URL('./task', import.meta.url).href,
+  name: 'CRMTask',
+};
 
 export const urgencyTagValues = [
   {
@@ -139,6 +148,10 @@ class IsolatedTemplate extends Component<typeof Account> {
     return [this.realmURL?.href];
   }
 
+  get accountId() {
+    return this.args.model.id;
+  }
+
   // Query All Active Deal that linked to current Account
   get dealQuery(): Query {
     return {
@@ -155,9 +168,92 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
   }
 
+  get activeTasksQuery(): Query {
+    let everyArr = [];
+    if (this.accountId) {
+      everyArr.push({
+        eq: {
+          'account.id': this.accountId,
+        },
+      });
+    }
+    return {
+      filter: {
+        on: taskSource,
+        every: everyArr,
+      },
+    };
+  }
+
   deals = getCards(this.dealQuery, this.realmHrefs, {
     isLive: true,
   });
+
+  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  private _createNewTask = restartableTask(async () => {
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          name: null,
+          details: null,
+          status: {
+            index: 1,
+            label: 'In Progress',
+          },
+          priority: {
+            index: null,
+            label: null,
+          },
+          description: null,
+          thumbnailURL: null,
+        },
+        relationships: {
+          assignee: {
+            links: {
+              self: null,
+            },
+          },
+          account: {
+            links: {
+              self: this.accountId ?? null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: taskSource,
+        },
+      },
+    };
+
+    await this.args.context?.actions?.createCard?.(
+      taskSource,
+      new URL(taskSource.module),
+      {
+        realmURL: this.realmURL,
+        doc,
+      },
+    );
+  });
+
+  createNewTask = () => {
+    this._createNewTask.perform();
+  };
+
+  get activeTasksCount() {
+    const tasks = this.activeTasks;
+    if (!tasks || tasks.isLoading) {
+      return 0;
+    }
+    return tasks.instances?.length ?? 0;
+  }
+
+  get hasActiveTasks() {
+    return this.activeTasksCount > 0;
+  }
 
   get activeDealsCount() {
     const deals = this.deals;
@@ -445,6 +541,57 @@ class IsolatedTemplate extends Component<typeof Account> {
           </:content>
         </SummaryCard>
       </:activities>
+
+      <:tasks>
+        <SummaryCard class='tasks-summary-card'>
+          <:title>
+            <h2 class='activity-title'>Upcoming Tasks</h2>
+          </:title>
+          <:icon>
+            <BoxelButton
+              @kind='primary'
+              class='activity-button-mobile'
+              data-test-settings-button
+              @disabled={{this.activeTasks.isLoading}}
+              @loading={{this._createNewTask.isRunning}}
+              {{on 'click' this.createNewTask}}
+            >
+              {{#if (not this._createNewTask.isRunning)}}
+                <PlusIcon />
+              {{/if}}
+            </BoxelButton>
+            <BoxelButton
+              @kind='primary'
+              @size='base'
+              class='activity-button-desktop'
+              @disabled={{this.activeTasks.isLoading}}
+              @loading={{this._createNewTask.isRunning}}
+              data-test-settings-button
+              {{on 'click' this.createNewTask}}
+            >
+              {{#if (not this._createNewTask.isRunning)}}
+                <PlusIcon />
+              {{/if}}
+              New Task
+            </BoxelButton>
+          </:icon>
+          <:content>
+            {{#if this.activeTasks.isLoading}}
+              <div class='loading-skeleton'>Loading...</div>
+            {{else}}
+              {{#if this.hasActiveTasks}}
+                {{#each this.activeTasks.instances as |task|}}
+                  {{#let (getComponent task) as |Component|}}
+                    <Component @format='embedded' @displayContainer={{false}} />
+                  {{/let}}
+                {{/each}}
+              {{else}}
+                <p class='description'>No Upcoming Tasks</p>
+              {{/if}}
+            {{/if}}
+          </:content>
+        </SummaryCard>
+      </:tasks>
     </AccountPageLayout>
 
     <style scoped>
@@ -516,10 +663,16 @@ class IsolatedTemplate extends Component<typeof Account> {
       .activity-button-desktop {
         display: inline-flex;
       }
-      .activities-summary-card {
+      .activities-summary-card,
+      .tasks-summary-card {
         --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
+        --summary-card-gap: var(--boxel-sp-lg);
         container-type: inline-size;
         container-name: activities-summary-card;
+      }
+      .tasks-summary-card :where(.task-card) {
+        --task-card-padding: var(--boxel-sp) 0;
+        border-top: 1px solid var(--boxel-200);
       }
       .activity-title {
         font: 600 var(--boxel-font-med);
@@ -544,6 +697,15 @@ class IsolatedTemplate extends Component<typeof Account> {
         --profile-avatar-icon-size: 20px;
         --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
+      }
+      .loading-skeleton {
+        height: 60px;
+        width: 100%;
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       @container activities-summary-card (max-width: 447px) {
@@ -772,6 +934,7 @@ interface AccountPageLayoutArgs {
     header: [];
     summary: [];
     activities: [];
+    tasks: [];
   };
   Element: HTMLElement;
 }
@@ -782,6 +945,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
       {{yield to='header'}}
       {{yield to='summary'}}
       {{yield to='activities'}}
+      {{yield to='tasks'}}
     </div>
 
     <style scoped>
@@ -795,4 +959,8 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
       }
     </style>
   </template>
+}
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }

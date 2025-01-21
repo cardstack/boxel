@@ -58,7 +58,7 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
         text-overflow: ellipsis;
         overflow: hidden;
         margin: 0;
-        font-size: var(--boxel-font-size-med);
+        font-size: var(--boxel-font-size);
         font-weight: 600;
         letter-spacing: var(--boxel-lsp-sm);
       }
