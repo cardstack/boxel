@@ -3,6 +3,7 @@ import {
   calculateLuminance,
   hexToRgb,
   targetContrast,
+  targetContrastAAA,
 } from './color-tools.ts';
 
 /*
@@ -16,6 +17,7 @@ export function getContrastColor(
   value: string | undefined,
   darkColor = 'var(--boxel-dark, #000000)',
   lightColor = 'var(--boxel-light, #ffffff)',
+  opts?: { isSmallText: true },
 ) {
   if (!value) {
     return;
@@ -25,5 +27,6 @@ export function getContrastColor(
     return;
   }
   let ratio = calculateContrast(calculateLuminance(rgb), 0); // luminocity of black is 0
-  return ratio >= targetContrast ? darkColor : lightColor;
+  let contrastLevel = opts?.isSmallText ? targetContrastAAA : targetContrast;
+  return ratio >= contrastLevel ? darkColor : lightColor;
 }
