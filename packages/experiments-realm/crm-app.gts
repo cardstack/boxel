@@ -35,8 +35,10 @@ import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
+import ListDetails from '@cardstack/boxel-icons/list-details';
 import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
+import { taskStatusValues } from './crm/task';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlannerIsolated } from './crm/task-planner';
@@ -108,10 +110,16 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
 const TASK_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Tasks',
-    icon: CalendarExclamation,
+    icon: ListDetails,
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
   },
+  ...taskStatusValues.map((status) => ({
+    displayName: status.label,
+    icon: status.icon,
+    cardTypeName: 'CRM Task',
+    createNewButtonText: 'Create Task',
+  })),
 ];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
