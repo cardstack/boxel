@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
@@ -215,5 +215,8 @@ export class IsolatedRealmServer {
     await workerManagerStop;
     this.workerManagerStopped = undefined;
     this.workerManagerProcess.send('kill');
+
+    // worker manager seems to not be dying in CI, using a more extreme method
+    execSync(`kill -9 ${this.workerManagerProcess.pid}`);
   }
 }
