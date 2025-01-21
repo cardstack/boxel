@@ -468,6 +468,7 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
 
     <style scoped>
       .task-card {
+        --entity-display-icon-size: 18px;
         --entity-display-title-font-weight: 600;
         width: 100%;
         height: 100%;
