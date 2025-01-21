@@ -1300,7 +1300,7 @@ export default class MatrixService extends Service {
         Array.isArray(data.attachedCardsEventIds)
       ) {
         for (let attachedCardEventId of data.attachedCardsEventIds) {
-          this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
+          await this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
         }
       }
     } else if (
@@ -1313,7 +1313,7 @@ export default class MatrixService extends Service {
           ? JSON.parse(event.content.data)
           : event.content.data
       ) as CommandResultWithOutputContent['data'];
-      this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
+      await this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
     } else if (
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE

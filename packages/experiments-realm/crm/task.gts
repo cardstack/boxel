@@ -18,8 +18,14 @@ import { Contact } from './contact';
 import { Representative } from './representative';
 import { Account } from './account';
 import { Deal } from './deal';
-import { Task, TaskStatusField, getDueDateStatus } from '../task';
+import {
+  Task,
+  TaskStatusField,
+  getDueDateStatus,
+  TaskCompletionStatus,
+} from '../task';
 import { CrmApp } from '../crm-app';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 export class Issues extends CardDef {
   static displayName = 'Issues';
@@ -40,6 +46,10 @@ function shortenId(id: string): string {
 }
 
 class TaskIsolated extends Component<typeof CRMTask> {
+  get taskTitle() {
+    return this.args.model.name ?? 'No Task Title';
+  }
+
   get dueDate() {
     return this.args.model.dateRange?.end;
   }
@@ -60,7 +70,7 @@ class TaskIsolated extends Component<typeof CRMTask> {
     <div class='task-container'>
       <header>
         <div class='left-column'>
-          <h2 class='task-title'>{{@model.name}}</h2>
+          <h2 class='task-title'>{{this.taskTitle}}</h2>
           <div class='status-label'>
             <span class='text-gray'>in</span>
             {{@model.status.label}}
@@ -188,7 +198,7 @@ class TaskIsolated extends Component<typeof CRMTask> {
       .task-container {
         --task-font-weight-500: 500;
         --task-font-weight-600: 600;
-        --tasl-font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
+        --task-font-size-extra-small: calc(var(--boxel-font-size-xs) * 0.95);
         padding: var(--boxel-sp-lg);
         container-type: inline-size;
       }
@@ -270,7 +280,7 @@ class TaskIsolated extends Component<typeof CRMTask> {
         height: 24px;
         border: none;
         border-radius: 5px 0 0 5px;
-        font-size: var(--tasl-font-size-extra-small);
+        font-size: var(--task-font-size-extra-small);
         font-weight: var(--task-font-weight-500);
         position: relative;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
@@ -284,7 +294,7 @@ class TaskIsolated extends Component<typeof CRMTask> {
         );
       }
       .calendar-icon-container {
-        font-size: var(--tasl-font-size-extra-small);
+        font-size: var(--task-font-size-extra-small);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
@@ -356,6 +366,153 @@ class TaskIsolated extends Component<typeof CRMTask> {
   }
 }
 
+export class TaskEmbedded extends Component<typeof CRMTask> {
+  get taskTitle() {
+    return this.args.model.name ?? 'No Task Title';
+  }
+
+  get shortId() {
+    return this.args.model.shortId;
+  }
+
+  get hasShortId() {
+    return Boolean(this.shortId);
+  }
+
+  get visibleTags() {
+    return [this.args.fields.tags[0], this.args.fields.tags[1]].filter(Boolean);
+  }
+
+  get dueDate() {
+    return this.args.model.dateRange?.end;
+  }
+
+  get dueDateStatus() {
+    return this.dueDate ? getDueDateStatus(this.dueDate.toString()) : undefined;
+  }
+
+  get hasDueDate() {
+    return Boolean(this.dueDate);
+  }
+
+  get hasDueDateStatus() {
+    return Boolean(this.dueDateStatus);
+  }
+
+  get isCompleted() {
+    return this.args.model.status?.completed ?? false;
+  }
+
+  get hasStatus() {
+    return this.args.model.status?.label ?? false;
+  }
+
+  <template>
+    <div class='task-card'>
+      <EntityDisplayWithIcon
+        @title={{this.taskTitle}}
+        class='task-entity-display'
+      >
+        <:icon>
+          <TaskCompletionStatus
+            class='task-completion-status'
+            @completed={{this.isCompleted}}
+          />
+        </:icon>
+        <:content>
+          <div class='task-mobile-due-date-content'>
+            {{#if this.hasDueDate}}
+              <@fields.dateRange.end @format='atom' />
+            {{else}}
+              <span class='no-data-found-txt'>No Due Date Assigned</span>
+            {{/if}}
+          </div>
+        </:content>
+
+      </EntityDisplayWithIcon>
+
+      <aside class='task-desktop-side-info'>
+        {{#if this.hasShortId}}
+          <Pill
+            class='task-status-pill'
+            @pillBackgroundColor='var(--boxel-100)'
+          >
+            <:default>{{@model.shortId}}</:default>
+          </Pill>
+        {{/if}}
+
+        {{#if this.hasDueDate}}
+          <Pill
+            class='task-status-pill'
+            @pillBackgroundColor='var(--boxel-100)'
+          >
+            <:iconLeft>
+              <Calendar width='14px' height='14px' class='calendar-icon' />
+            </:iconLeft>
+            <:default>
+              <@fields.dateRange.end @format='atom' />
+            </:default>
+          </Pill>
+        {{/if}}
+
+        {{#if this.hasStatus}}
+          <Pill
+            class='task-status-pill'
+            @pillBackgroundColor={{@model.status.color}}
+          >
+            <:default>{{@model.status.label}}</:default>
+          </Pill>
+        {{/if}}
+      </aside>
+    </div>
+
+    <style scoped>
+      .task-card {
+        --entity-display-icon-size: 18px;
+        --entity-display-title-font-weight: 600;
+        width: 100%;
+        height: 100%;
+        padding: var(--task-card-padding, var(--boxel-sp));
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--task-card-gap, var(--boxel-sp-sm));
+        overflow: hidden;
+        container-type: inline-size;
+      }
+      .task-mobile-due-date-content {
+        display: none;
+      }
+      .task-entity-display :where(.entity-info) {
+        gap: 0;
+      }
+      .task-completion-status {
+        --boxel-circle-size: 14px;
+        --boxel-border-radius: var(--boxel-border-radius-xs);
+      }
+      .task-status-pill {
+        flex-shrink: 0;
+      }
+      aside.task-desktop-side-info {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: end;
+        gap: var(--boxel-sp-xs);
+      }
+
+      @container (max-width: 600px) {
+        aside.task-desktop-side-info {
+          display: none;
+        }
+        .task-mobile-due-date-content {
+          display: block;
+        }
+      }
+    </style>
+  </template>
+}
+
 export class CRMTaskStatusField extends TaskStatusField {
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
@@ -405,4 +562,5 @@ export class CRMTask extends Task {
   });
 
   static isolated = TaskIsolated;
+  static embedded = TaskEmbedded;
 }
