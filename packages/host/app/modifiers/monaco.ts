@@ -22,7 +22,6 @@ interface Signature {
       language?: string;
       readOnly?: boolean;
       monacoSDK: typeof MonacoSDK;
-      darkTheme?: boolean;
       editorDisplayOptions?: MonacoEditorOptions;
     };
   };
@@ -54,7 +53,6 @@ export default class Monaco extends Modifier<Signature> {
       onSetup,
       readOnly,
       monacoSDK,
-      darkTheme,
       editorDisplayOptions,
     }: Signature['Args']['Named'],
   ) {
@@ -73,21 +71,12 @@ export default class Monaco extends Modifier<Signature> {
         this.model.setValue(content);
       }
     } else {
-      monacoSDK.editor.defineTheme('boxel-theme', {
+      monacoSDK.editor.defineTheme('boxel-monaco-light-theme', {
         base: 'vs',
         inherit: true,
         rules: [],
         colors: {
-          'editor.background': readOnly ? '#EBEAED' : '#FFFFFF',
-        },
-      });
-
-      monacoSDK.editor.defineTheme('boxel-dark-theme', {
-        base: 'vs-dark',
-        inherit: true,
-        rules: [],
-        colors: {
-          'editor.background': '#000000',
+          'editor.background': '#FFFFFF',
         },
       });
 
@@ -100,7 +89,7 @@ export default class Monaco extends Modifier<Signature> {
         minimap: {
           enabled: false,
         },
-        theme: darkTheme ? 'boxel-dark-theme' : 'boxel-theme',
+        theme: 'boxel-monaco-light-theme',
         ...editorDisplayOptions,
       };
 
