@@ -6,9 +6,9 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import ColorPalette from './index.gts';
 
 export default class ColorPaletteUsage extends Component {
-  @tracked color = '';
+  @tracked color: string | null = null;
 
-  private handleColorChange = (newColor: string) => {
+  private handleColorChange = (newColor: string | null) => {
     this.color = newColor;
   };
 

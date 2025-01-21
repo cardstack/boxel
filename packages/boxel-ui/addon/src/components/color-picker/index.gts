@@ -3,9 +3,9 @@ import Component from '@glimmer/component';
 
 interface Signature {
   Args: {
-    color: string;
+    color: string | null;
     disabled?: boolean;
-    onChange: (color: string) => void;
+    onChange: (color: string | null) => void;
     showHexString?: boolean;
   };
   Element: HTMLDivElement;

@@ -110,6 +110,9 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 
       .categories {
         margin-top: var(--boxel-sp);
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxxs);
       }
 
       .category {
@@ -215,10 +218,10 @@ class FittedTemplate extends Component<typeof BlogPost> {
         height: 20px;
         margin-left: 7px;
         display: none;
+        overflow: hidden;
       }
 
       .category {
-        font-size: 0.6rem;
         height: 20px;
         padding: 3px 4px;
         border-radius: var(--boxel-border-radius-sm);
@@ -710,7 +713,11 @@ export class BlogPost extends CardDef {
           {{/if}}
           {{#if @model.categories.length}}
             <div class='categories'>
-              <@fields.categories @format='atom' @displayContainer={{false}} />
+              {{#each @model.categories as |category|}}
+                <div class='category' style={{categoryStyle category}}>
+                  {{category.shortName}}
+                </div>
+              {{/each}}
             </div>
           {{/if}}
           <h1><@fields.title /></h1>
@@ -840,6 +847,13 @@ export class BlogPost extends CardDef {
         }
         .featured-image + .categories {
           margin-top: var(--boxel-sp-xl);
+        }
+        .category {
+          display: inline-block;
+          padding: 3px var(--boxel-sp-xxxs);
+          border-radius: var(--boxel-border-radius-sm);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
         }
       </style>
     </template>

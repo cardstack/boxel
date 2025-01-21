@@ -10,8 +10,8 @@ import IconButton from '../icon-button/index.gts';
 
 interface Signature {
   Args: {
-    color: string;
-    onChange: (color: string) => void;
+    color: string | null;
+    onChange: (color: string | null) => void;
   };
   Element: HTMLDivElement;
 }
@@ -62,7 +62,7 @@ export default class ColorPalette extends Component<Signature> {
               @width='16px'
               @height='16px'
               class='remove'
-              {{on 'click' (fn @onChange '')}}
+              {{on 'click' (fn @onChange null)}}
               aria-label='Unset color'
             />
           </div>

@@ -6,11 +6,11 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import ColorPicker from './index.gts';
 
 export default class ColorPickerUsage extends Component {
-  @tracked color = '';
+  @tracked color: string | null = null;
   @tracked disabled = false;
   @tracked showHexString = true;
 
-  private onChange = (newColor: string) => {
+  private onChange = (newColor: string | null) => {
     this.color = newColor;
   };
 
