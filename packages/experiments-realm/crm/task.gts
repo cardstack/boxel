@@ -432,7 +432,6 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
       </EntityDisplayWithIcon>
 
       <aside class='task-desktop-side-info'>
-
         {{#if this.hasShortId}}
           <Pill
             class='task-status-pill'

@@ -4,7 +4,7 @@ import {
   contains,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import {
   field,
