@@ -122,50 +122,26 @@ export class CurrentRun {
     this.#render = render;
   }
 
-  static async fromScratch(
-    current: CurrentRun,
-    invalidateEntireRealm?: boolean,
-  ): Promise<IndexResults> {
+  static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from scratch indexing`);
     perfLog.debug(
       `starting from scratch indexing for realm ${current.realmURL.href}`,
     );
-
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
     let invalidations: URL[] = [];
-    if (invalidateEntireRealm) {
-      perfLog.debug(
-        `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
-      );
-      let mtimesStart = Date.now();
-      let filesystemMtimes = await current.#reader.mtimes();
-      perfLog.debug(
-        `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
-      );
-      invalidations = Object.keys(filesystemMtimes)
-        .filter(
-          (url) =>
-            // Only allow json and executable files to be invalidated so that we
-            // don't end up with invalidated files that weren't meant to be indexed
-            // (images, etc)
-            url.endsWith('.json') || hasExecutableExtension(url),
-        )
-        .map((url) => new URL(url));
-    } else {
-      let mtimesStart = Date.now();
-      let mtimes = await current.batch.getModifiedTimes();
-      perfLog.debug(
-        `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
-      );
-      let invalidateStart = Date.now();
-      invalidations = (
-        await current.discoverInvalidations(current.realmURL, mtimes)
-      ).map((href) => new URL(href));
-      perfLog.debug(
-        `completed invalidations in ${Date.now() - invalidateStart} ms`,
-      );
-    }
+    let mtimesStart = Date.now();
+    let mtimes = await current.batch.getModifiedTimes();
+    perfLog.debug(
+      `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+    );
+    let invalidateStart = Date.now();
+    invalidations = (
+      await current.discoverInvalidations(current.realmURL, mtimes)
+    ).map((href) => new URL(href));
+    perfLog.debug(
+      `completed invalidations in ${Date.now() - invalidateStart} ms`,
+    );
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
