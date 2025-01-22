@@ -454,15 +454,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:icon>
             <:content>
               {{#if this.activeTasks.isLoading}}
-                  Loading...
-                {{else if this.activeTasks.instances}}
-                  {{this.activeTasks.instances.length}}
+                Loading...
+              {{else if this.activeTasks.instances}}
+                {{this.activeTasks.instances.length}}
               {{else}}
-                  <div class='default-value'>
-                    No Active Tasks
-                  </div>
-                {{/if}}
-              </div>
+                <div class='default-value'>
+                  No Active Tasks
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
         </SummaryGridContainer>
@@ -603,7 +602,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-left: auto;
       }
     </style>
-
   </template>
 }
 
