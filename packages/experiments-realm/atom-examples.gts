@@ -74,32 +74,20 @@ class Isolated extends Component<typeof AtomExamples> {
           <h4>Using default atom template for Pet card:</h4>
           <div>
             Pet:
-            {{#if @model.pet}}
-              <@fields.pet @format='atom' />
-            {{else}}
-              (Bug: CS-7734)
-            {{/if}}
+            <@fields.pet @format='atom' />
           </div>
           <div>
             Pets:
-            {{#if @model.pets}}
-              <@fields.pets @format='atom' />
-            {{else}}
-              (Bug: CS-7734)
-            {{/if}}
+            <@fields.pets @format='atom' />
           </div>
           <h4>Default atom template without container:</h4>
           <div>
             Pet:
-            {{#if @model.pet}}
-              <@fields.pet @format='atom' @displayContainer={{false}} />
-            {{/if}}
+            <@fields.pet @format='atom' @displayContainer={{false}} />
           </div>
           <div>
             Pets:
-            {{#if @model.pets}}
-              <@fields.pets @format='atom' @displayContainer={{false}} />
-            {{/if}}
+            <@fields.pets @format='atom' @displayContainer={{false}} />
           </div>
         </section>
         <section>
