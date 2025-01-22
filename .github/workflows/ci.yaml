@@ -252,7 +252,8 @@ jobs:
             "loader-test.ts",
             "module-syntax-test.ts",
             "queue-test.ts",
-            "realm-server-test.ts",
+            "realm-endpoints-test.ts",
+            "server-endpoints-test.ts",
             "virtual-network-test.ts",
           ]
     steps:

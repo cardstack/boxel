@@ -3,21 +3,21 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 2,
-        "label": "Done",
-        "color": "#66BB6A",
-        "completed": true
+        "index": 1,
+        "label": "In Progress",
+        "color": null,
+        "completed": false
       },
       "dateRange": {
-        "start": "2025-01-22",
-        "end": "2025-02-04"
+        "start": "2025-01-01",
+        "end": "2025-01-16"
       },
       "priority": {
         "index": 2,
         "label": "Medium"
       },
-      "name": "Meet Prospect Customer",
-      "details": null,
+      "name": "Prepare Startup Marketing Proposal",
+      "details": "Create comprehensive digital marketing strategy proposal",
       "description": null,
       "thumbnailURL": null
     },
@@ -34,7 +34,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../Representative/e0b16307-04bd-4e48-bdf8-517bb35b8119"
+          "self": null
         }
       },
       "contact": {
@@ -44,7 +44,7 @@
       },
       "account": {
         "links": {
-          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
+          "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
         }
       },
       "deal": {
