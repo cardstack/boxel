@@ -3,21 +3,21 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 0,
-        "label": "Not Started",
-        "color": "#B0BEC5",
+        "index": 1,
+        "label": "In Progress",
+        "color": null,
         "completed": false
       },
       "dateRange": {
-        "start": "2024-12-01",
-        "end": "2024-12-31"
+        "start": "2024-12-04",
+        "end": "2024-12-25"
       },
       "priority": {
         "index": 3,
         "label": "High"
       },
-      "name": "Schedule Website Planning Meeting",
-      "details": "Initial consultation for website redesign project",
+      "name": "Techflow SEO Strategy Planning",
+      "details": "Prepare detailed SEO strategy document for TechFlow's $60k package component",
       "description": null,
       "thumbnailURL": null
     },
@@ -44,12 +44,12 @@
       },
       "account": {
         "links": {
-          "self": "../Account/c78762d3-9ab5-4f62-9370-d0b6a0261b08"
+          "self": null
         }
       },
       "deal": {
         "links": {
-          "self": null
+          "self": "../Deal/4fdd3053-14f1-4800-827f-d3e2a5c44ae8"
         }
       },
       "tags": {
