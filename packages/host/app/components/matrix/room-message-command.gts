@@ -242,7 +242,7 @@ export default class RoomMessageCommand extends Component<Signature> {
     </div>
 
     {{! template-lint-disable no-whitespace-for-layout  }}
-    {{! ignore the above error because it doesn't like the multi-line comment about the filter below }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       .is-pending .view-code-button,
       .is-error .view-code-button {
