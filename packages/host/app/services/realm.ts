@@ -333,15 +333,23 @@ class RealmResource {
       return;
     }
 
-    // token expiration is unix time (seconds)
-    let expirationMs = this.claims.exp * 1000;
+    let refreshMs = 0;
 
-    let refreshMs = Math.max(
-      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-      0,
-    );
+    if (!this.claims.sessionRoom) {
+      // Force JWT renewal to ensure presence of sessionRoom property
+      console.log(`JWT for realm ${this.url} has no session room, renewing`);
+    } else {
+      // token expiration is unix time (seconds)
+      let expirationMs = this.claims.exp * 1000;
+
+      refreshMs = Math.max(
+        expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
+        0,
+      );
+    }
 
     await rawTimeout(refreshMs);
+
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
       await this.loggingIn;
