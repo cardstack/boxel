@@ -3,6 +3,7 @@ type RGB = { r: number; g: number; b: number };
 
 // contrast ratio should be at least 4.5 for regular sized text based on WCAG guidelines
 export const targetContrast = 4.5;
+export const targetContrastAAA = 7;
 
 export function rgbToHex({ r, g, b }: RGB): string {
   return (

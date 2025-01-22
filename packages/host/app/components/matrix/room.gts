@@ -82,7 +82,7 @@ export default class Room extends Component<Signature> {
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#each this.messages as |message i|}}
+          {{#each this.messages key='eventId' as |message i|}}
             <RoomMessage
               @roomId={{@roomId}}
               @message={{message}}

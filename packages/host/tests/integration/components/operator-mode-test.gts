@@ -597,80 +597,117 @@ module('Integration | operator-mode', function (hooks) {
     );
   });
 
-  test('it renders a card with an error that has a last known good state', async function (assert) {
-    await testRealm.write(
-      'FriendWithCSS/friend-a.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            name: 'Friend A',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: './does-not-exist',
+  module(
+    'card with an error that has a last known good state',
+    function (hooks) {
+      hooks.beforeEach(async function () {
+        await testRealm.write(
+          'FriendWithCSS/friend-a.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Friend A',
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './does-not-exist',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../friend-with-css.gts',
+                  name: 'FriendWithCSS',
+                },
               },
             },
+          } as LooseSingleCardDocument),
+        );
+      });
+
+      test('it renders a card with an error that has a last known good state', async function (assert) {
+        await setCardInOperatorModeState(
+          `${testRealmURL}FriendWithCSS/friend-a`,
+        );
+        await renderComponent(
+          class TestDriver extends GlimmerComponent {
+            <template>
+              <OperatorMode @onClose={{noop}} />
+              <CardPrerender />
+            </template>
           },
-          meta: {
-            adoptsFrom: {
-              module: '../friend-with-css.gts',
-              name: 'FriendWithCSS',
-            },
+        );
+
+        assert
+          .dom('[data-test-boxel-card-header-title]')
+          .includesText('Link Not Found', 'card error title is displayed');
+        assert
+          .dom('[data-test-card-error]')
+          .includesText(
+            'Hassan has a friend Jade',
+            'the last known good HTML is rendered',
+          );
+
+        // use percy snapshot to ensure the CSS has been applied--a red color
+        await percySnapshot(assert);
+
+        await click('[data-test-error-detail-toggle] button');
+        assert
+          .dom('[data-test-error-detail]')
+          .containsText(
+            `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+          );
+        assert
+          .dom('[data-test-error-stack]')
+          .containsText('at CurrentRun.visitFile');
+        assert.strictEqual(
+          operatorModeStateService.state?.submode,
+          'interact',
+          'in interact mode',
+        );
+        await click('[data-test-view-in-code-mode-button]');
+        assert.strictEqual(
+          operatorModeStateService.state?.submode,
+          'code',
+          'in code mode',
+        );
+        assert.strictEqual(
+          operatorModeStateService.state?.codePath?.href,
+          `${testRealmURL}FriendWithCSS/friend-a.json`,
+          'codePath is correct',
+        );
+      });
+
+      test('it has the ability to delete the card that has an error', async function (assert) {
+        await setCardInOperatorModeState(
+          `${testRealmURL}FriendWithCSS/friend-a`,
+        );
+        await renderComponent(
+          class TestDriver extends GlimmerComponent {
+            <template>
+              <OperatorMode @onClose={{noop}} />
+              <CardPrerender />
+            </template>
           },
-        },
-      } as LooseSingleCardDocument),
-    );
-    await setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
+        );
 
-    assert
-      .dom('[data-test-boxel-card-header-title]')
-      .includesText('Link Not Found', 'card error title is displayed');
-    assert
-      .dom('[data-test-card-error]')
-      .includesText(
-        'Hassan has a friend Jade',
-        'the last known good HTML is rendered',
-      );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Delete Card"]');
+        assert
+          .dom('[data-test-delete-modal-container]')
+          .includesText('Delete the card Hassan?');
+        await click('[data-test-confirm-delete-button]');
 
-    // use percy snapshot to ensure the CSS has been applied--a red color
-    await percySnapshot(assert);
-
-    await click('[data-test-error-detail-toggle] button');
-    assert
-      .dom('[data-test-error-detail]')
-      .containsText(
-        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-      );
-    assert
-      .dom('[data-test-error-stack]')
-      .containsText('at CurrentRun.visitFile');
-    assert.strictEqual(
-      operatorModeStateService.state?.submode,
-      'interact',
-      'in interact mode',
-    );
-    await click('[data-test-view-in-code-mode-button]');
-    assert.strictEqual(
-      operatorModeStateService.state?.submode,
-      'code',
-      'in code mode',
-    );
-    assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
-      `${testRealmURL}FriendWithCSS/friend-a.json`,
-      'codePath is correct',
-    );
-  });
+        await waitUntil(
+          () => !document.querySelector('[data-test-stack-card]'),
+        );
+        assert.dom('[data-test-stack-card]').doesNotExist();
+        assert.dom('[data-test-workspace-list]').exists();
+      });
+    },
+  );
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
     assert.expect(7);

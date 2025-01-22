@@ -3,14 +3,14 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 0,
-        "label": "Not Started",
-        "color": null,
-        "completed": false
+        "index": 2,
+        "label": "Done",
+        "color": "#66BB6A",
+        "completed": true
       },
       "dateRange": {
-        "start": null,
-        "end": null
+        "start": "2025-01-22",
+        "end": "2025-02-04"
       },
       "priority": {
         "index": 2,
@@ -44,7 +44,7 @@
       },
       "account": {
         "links": {
-          "self": null
+          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
         }
       },
       "deal": {

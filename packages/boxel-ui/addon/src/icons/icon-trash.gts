@@ -10,7 +10,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   ><g
       fill='none'
-      stroke='var(--icon-color, #000)'
+      stroke='var(--icon-color, currentColor)'
       stroke-linecap='round'
       stroke-linejoin='round'
       stroke-width='var(--icon-stroke-width, 1px)'
