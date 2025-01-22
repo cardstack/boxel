@@ -3033,7 +3033,7 @@ module(basename(__filename), function () {
       });
     });
 
-    module.only('various other realm tests', function (hooks) {
+    module('various other realm tests', function (hooks) {
       let testRealmHttpServer2: Server;
       let testRealm2: Realm;
       let dbAdapter: PgAdapter;

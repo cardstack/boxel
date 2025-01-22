@@ -29,7 +29,7 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-    copyFromSeedRealm?: boolean,
+    copyFromSeedRealm?: boolean;
   }) => Promise<Realm>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

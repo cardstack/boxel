@@ -422,7 +422,7 @@ module(basename(__filename), function () {
                 },
               }),
             );
-  
+
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
           let json = response.body;
           assert.deepEqual(
@@ -442,7 +442,7 @@ module(basename(__filename), function () {
             },
             'realm creation JSON is correct',
           );
-  
+
           let realmPath = join(dir.name, 'realm_server_2', owner, endpoint);
           let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
           assert.deepEqual(
