@@ -484,7 +484,6 @@ module(basename(__filename), function () {
             'ignored seed file tsconfig.json does not exist',
           );
         });
-      });
 
         test('dynamically created realms are not publicly readable or writable', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
