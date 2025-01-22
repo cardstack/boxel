@@ -1141,5 +1141,26 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
     });
+
+    test(`ai panel continues being open when switching to code submode`, async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-open-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      await click('[data-test-open-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+    });
   });
 });
