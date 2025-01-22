@@ -3,21 +3,21 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 0,
-        "label": "Not Started",
-        "color": "#B0BEC5",
+        "index": 1,
+        "label": "In Progress",
+        "color": null,
         "completed": false
       },
       "dateRange": {
-        "start": "2024-12-01",
-        "end": "2024-12-31"
+        "start": "2025-01-01",
+        "end": "2025-01-16"
       },
       "priority": {
-        "index": 3,
-        "label": "High"
+        "index": 2,
+        "label": "Medium"
       },
-      "name": "Schedule Website Planning Meeting",
-      "details": "Initial consultation for website redesign project",
+      "name": "Prepare Startup Marketing Proposal",
+      "details": "Create comprehensive digital marketing strategy proposal",
       "description": null,
       "thumbnailURL": null
     },
@@ -44,7 +44,7 @@
       },
       "account": {
         "links": {
-          "self": "../Account/c78762d3-9ab5-4f62-9370-d0b6a0261b08"
+          "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
         }
       },
       "deal": {
