@@ -16,6 +16,7 @@ interface EntityDisplayWithIconArgs {
   Element: HTMLElement;
 }
 
+// TODO: refactor EntityDisplayWithIcon and EntityDisplayWithThumbnail
 export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDisplayWithIconArgs> {
   get shouldAlignCenter() {
     return this.args.center;
