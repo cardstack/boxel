@@ -130,32 +130,56 @@ export class ContactPhoneNumber extends FieldDef {
   @field type = contains(PhoneNumberType);
 
   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
+    get hasPhoneNumber() {
+      return Boolean(this.args.model?.phoneNumber?.number);
+    }
+
+    get hasCountryCode() {
+      return Boolean(this.args.model?.phoneNumber?.countryCode);
+    }
+
+    get hasTypeLabel() {
+      return Boolean(this.args.model?.type?.label?.length);
+    }
+
+    get hasCountryCodeAndPhoneNumber() {
+      return (
+        this.args.model &&
+        this.hasCountryCode &&
+        this.hasPhoneNumber &&
+        this.hasTypeLabel
+      );
+    }
+
     <template>
-      <EntityDisplayWithIcon @underline={{false}}>
-        <:title>
-          {{#if @model.phoneNumber.countryCode}}
-            +{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}
-          {{else}}
-            {{@model.phoneNumber.number}}
-          {{/if}}
-        </:title>
-        <:icon>
-          <PhoneIcon class='icon' />
-        </:icon>
-        <:tag>
-          {{#if @model.type.label}}
-            <Pill class='pill-gray'>
-              {{@model.type.label}}
-            </Pill>
-          {{/if}}
-        </:tag>
-      </EntityDisplayWithIcon>
+      {{#if this.hasCountryCodeAndPhoneNumber}}
+        <EntityDisplayWithIcon @underline={{false}}>
+          <:title>
+            {{#if this.hasCountryCode}}
+              +{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}
+            {{else if this.hasPhoneNumber}}
+              {{@model.phoneNumber.number}}
+            {{/if}}
+          </:title>
+          <:icon>
+            <PhoneIcon class='icon' />
+          </:icon>
+          <:tag>
+            {{#if this.hasTypeLabel}}
+              <Pill class='pill-gray'>
+                {{@model.type.label}}
+              </Pill>
+            {{/if}}
+          </:tag>
+        </EntityDisplayWithIcon>
+      {{/if}}
       <style scoped>
         .icon {
           color: var(--boxel-400);
         }
         .pill-gray {
           --default-pill-padding: 0 var(--boxel-sp-xxxs);
+          --default-pill-font: 300 var(--boxel-font-xs);
           background-color: var(--boxel-200);
           border-color: transparent;
         }

@@ -5,8 +5,7 @@
       "longName": "Movie Review",
       "shortName": "Movies",
       "slug": "movies",
-      "backgroundColor": "#fff500",
-      "textColor": null,
+      "pillColor": "#FBEB06",
       "description": null,
       "title": "Movie Review",
       "thumbnailURL": null

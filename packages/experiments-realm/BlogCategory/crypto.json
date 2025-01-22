@@ -5,8 +5,7 @@
       "longName": "Cryptocurrencies",
       "shortName": "Crypto",
       "slug": "crypto",
-      "backgroundColor": "#37f6d6",
-      "textColor": "black",
+      "pillColor": "#FA2200",
       "description": "News about cryptocurrencies, price predictions, charts and everything about Satoshi Nakamoto",
       "title": "Cryptocurrency",
       "thumbnailURL": null

@@ -19,7 +19,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -30,8 +30,6 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
-
-import type { CommandResultEvent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   percySnapshot,
@@ -978,6 +976,144 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test(`should handle events in order to prevent 'cardFragment not found' error`, async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let cardFragmentsEventId = '!card_fragments_event_id';
+    let now = Date.now();
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'Update mango card',
+        formatted_body: 'Update mango card',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        data: JSON.stringify({
+          attachedCardsEventIds: [cardFragmentsEventId],
+        }),
+      },
+      { origin_server_ts: now + 60000 },
+    );
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: '',
+        formatted_body: '',
+        msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+        data: JSON.stringify({
+          index: 0,
+          totalParts: 1,
+          cardFragment: JSON.stringify({
+            data: {
+              id: `${testRealmURL}Pet/mango`,
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}Pet`,
+                  name: 'Mango',
+                },
+              },
+            },
+          }),
+        }),
+      },
+      { event_id: cardFragmentsEventId, origin_server_ts: now },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert.dom('[data-test-message-idx="0"]').exists({ count: 1 });
+    assert.dom('[data-test-message-idx="0"]').containsText('Update mango card');
+  });
+
+  test('it renders only new/updated messages', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@testuser:staging', {
+      body: `question #0`,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: `question #1`,
+      format: 'org.matrix.custom.html',
+    });
+    let messageEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Thinking...`,
+      msgtype: 'm.text',
+      formatted_body: `Thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    let commandEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Thinking...`,
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: `Thinking...`,
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {},
+        eventId: '__EVENT_ID__',
+      }),
+    });
+    setReadReceipt(roomId, messageEventId, '@testuser:staging');
+    setReadReceipt(roomId, commandEventId, '@testuser:staging');
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-message-idx="1"]');
+
+    let instanceIds = Array.from(
+      document.querySelectorAll('[data-test-boxel-message-instance-id]'),
+    ).map((el) => el.getAttribute('data-test-boxel-message-instance-id'));
+    assert.strictEqual(instanceIds.length, 3);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `answer #0`,
+      msgtype: 'm.text',
+      formatted_body: `answer #0`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      'm.relates_to': {
+        event_id: messageEventId,
+        rel_type: 'm.replace',
+      },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      'm.relates_to': {
+        event_id: commandEventId,
+        rel_type: 'm.replace',
+      },
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+    });
+    let newInstanceIds = Array.from(
+      document.querySelectorAll('[data-test-boxel-message-instance-id]'),
+    ).map((el) => el.getAttribute('data-test-boxel-message-instance-id'));
+
+    assert.deepEqual(newInstanceIds, instanceIds);
+  });
+
   module('suspending global error hook', (hooks) => {
     let tmp: any;
     let uncaughtException: any;
@@ -1724,6 +1860,50 @@ module('Integration | ai-assistant-panel', function (hooks) {
         'ai-avatar-animated',
         'Answer to my current question is in progress',
       );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('French bulldog is a');
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'French bulldog is a French breed',
+        msgtype: 'm.text',
+        formatted_body: 'French bulldog is a French breed',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: partialEventId,
+        },
+      },
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-message-idx="3"] [data-test-ai-message-content]',
+      );
+      if (el) {
+        return (
+          (el as HTMLElement).innerText === 'French bulldog is a French breed'
+        );
+      } else {
+        return false;
+      }
+    });
+
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+      .hasClass(
+        'ai-avatar-animated',
+        'Answer to my current question is in progress',
+      );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('French bulldog is a French breed');
 
     await click('[data-test-past-sessions-button]');
     assert.dom(`[data-test-enter-room='${roomId}']`).includesText('Thinking');
@@ -1763,6 +1943,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         'ai-avatar-animated',
         'Answer to my last question is not in progress',
       );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('French bulldog is a French breed of companion dog or toy dog');
 
     assert
       .dom(`[data-test-enter-room='${roomId}']`)
@@ -1907,16 +2090,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    let commandReactionEvents = getRoomEvents(roomId).filter(
+    let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === 'm.reaction' &&
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type === 'm.annotation' &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
-      commandReactionEvents.length,
+      commandResultEvents.length,
       0,
-      'reaction event is not dispatched',
+      'command result event is not dispatched',
     );
 
     await settled();
@@ -1931,16 +2114,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandReactionEvents = await getRoomEvents(roomId).filter(
+    commandResultEvents = await getRoomEvents(roomId).filter(
       (event) =>
-        event.type === 'm.reaction' &&
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type === 'm.annotation' &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
-      commandReactionEvents.length,
+      commandResultEvents.length,
       1,
-      'reaction event is dispatched',
+      'command result event is dispatched',
     );
   });
 
@@ -1963,15 +2146,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
@@ -1983,11 +2164,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    let commandResultEvents = getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === 'm.room.message' &&
-        typeof event.content === 'object' &&
-        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+    let commandResultEvents = await getRoomEvents(roomId).filter(
+      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
       commandResultEvents.length,
@@ -2006,10 +2184,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
 
     commandResultEvents = await getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === 'm.room.message' &&
-        typeof event.content === 'object' &&
-        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
       commandResultEvents.length,
@@ -2029,15 +2204,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
@@ -2051,28 +2224,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-boxel-command-result]');
     await waitFor('.result-list li:nth-child(2)');
-    let commandResultEvent = (await getRoomEvents(roomId)).find(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation',
-    ) as CommandResultEvent;
-    let serializedResults =
-      typeof commandResultEvent?.content?.result === 'string'
-        ? JSON.parse(commandResultEvent.content.result)
-        : commandResultEvent.content.result;
-    serializedResults = Array.isArray(serializedResults)
-      ? serializedResults
-      : [];
-    assert.equal(serializedResults.length, 2, 'number of search results');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 2 Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
+
+    assert.dom('.result-list li').exists({ count: 2 });
 
     assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
     assert.dom('.result-list li:nth-child(2)').containsText('Mango');
@@ -2090,15 +2251,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                contains: {
-                  title: 'Mango',
-                },
-              },
+              title: 'Mango',
             },
           },
         },
@@ -2111,28 +2268,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-boxel-card-header-title]',
+    );
     await waitFor('.result-list li:nth-child(1)');
-    let commandResultEvent = (await getRoomEvents(roomId)).find(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE &&
-        e.content['m.relates_to']?.rel_type === 'm.annotation',
-    ) as CommandResultEvent;
-    let serializedResults =
-      typeof commandResultEvent?.content?.result === 'string'
-        ? JSON.parse(commandResultEvent.content.result)
-        : commandResultEvent.content.result;
-    serializedResults = Array.isArray(serializedResults)
-      ? serializedResults
-      : [];
-    assert.equal(serializedResults.length, 1, 'number of search results');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 1 Result');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
 
     assert.dom('.result-list li:nth-child(1)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
@@ -2148,15 +2293,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
+              type: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
               },
             },
           },
@@ -2170,7 +2313,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-boxel-command-result]');
     await waitFor('.result-list li:nth-child(5)');
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
@@ -2203,11 +2346,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
-        filter: {
-          type: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
         },
       },
     };
@@ -2219,7 +2360,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: toolArgs,
         },
         eventId: '__EVENT_ID__',
@@ -2235,8 +2376,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 8 Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
 
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
@@ -2246,24 +2387,25 @@ module('Integration | ai-assistant-panel', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]';
     assert.dom(rightStackItem).doesNotExist();
 
-    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click(
+      '[data-test-command-result-container] [data-test-more-options-button]',
+    );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Command Result');
+      .hasText('Search Results');
 
     const savedCardId = document
       .querySelector(rightStackItem)
       ?.getAttribute('data-stack-card');
     const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
     assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
-    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 3 });
+    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 2 });
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
-      .hasText(`Description ${toolArgs.description}`);
-    assert
-      .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
+      .hasText(
+        `Description Query: { "type": { "module": "http://test-realm/test/person", "name": "Person" } }`,
+      );
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
@@ -2278,11 +2420,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
-        filter: {
-          type: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
         },
       },
     };
@@ -2294,7 +2434,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: toolArgs,
         },
         eventId: '__EVENT_ID__',
@@ -2312,9 +2452,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
-      .dom('[data-test-command-result-header]')
-      .containsText('Search Results 8 Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
+      .containsText('Search Results');
 
+    assert
+      .dom(
+        '[data-test-command-result-container] [data-test-toggle-show-button]',
+      )
+      .containsText('Show 3 more results');
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
     assert.dom(`${resultListItem}:nth-child(5)`).containsText('Ian');
@@ -2323,29 +2468,92 @@ module('Integration | ai-assistant-panel', function (hooks) {
       '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]';
     assert.dom(stackItem).doesNotExist();
 
-    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click(
+      '[data-test-command-result-container] [data-test-more-options-button]',
+    );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${stackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Command Result');
+      .hasText('Search Results');
 
     const savedCardId = document
       .querySelector(stackItem)
       ?.getAttribute('data-stack-card');
     const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
     assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
-    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 3 });
+    assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 2 });
     assert
       .dom(`${savedCard} [data-test-boxel-field]:nth-child(1)`)
-      .hasText(`Description ${toolArgs.description}`);
-    assert
-      .dom(`${savedCard} [data-test-boxel-field]:nth-child(2)`)
-      .hasText(`Filter ${JSON.stringify(toolArgs.attributes.filter, null, 2)}`);
+      .hasText(
+        `Description Query: { "type": { "module": "http://test-realm/test/person", "name": "Person" } }`,
+      );
 
     resultListItem = `${savedCard} ${resultListItem}`;
     assert.dom(resultListItem).exists({ count: 8 });
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
     assert.dom(`${resultListItem}:nth-child(6)`).containsText('Justin');
     assert.dom(`${resultListItem}:nth-child(8)`).containsText('Mickey');
+  });
+
+  test('it maintains status of View Code panel as additional events stream in', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+
+    simulateRemoteMessage(room1Id, '@aibot:localhost', {
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .doesNotExist('View Code panel should not yet be open');
+    await click('[data-test-view-code-button]');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .exists('View Code panel should be open');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'Asking a question about what I saw in the proposed code...',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // previously, a new event would cause re-rendering and the open-ness of the View Code panel to be lost
+    assert
+      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .exists('View Code panel should remain open');
   });
 });

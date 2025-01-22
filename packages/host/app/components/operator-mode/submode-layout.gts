@@ -327,6 +327,7 @@ export default class SubmodeLayout extends Component<Signature> {
           )
         }}
           <ResizablePanel
+            class='ai-assistant-resizable-panel'
             @defaultSize={{this.aiPanelWidths.defaultWidth}}
             @minSize={{this.aiPanelWidths.minWidth}}
             @collapsible={{false}}
@@ -366,6 +367,10 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .submode-layout > .boxel-panel-group {
         width: 100%;
+      }
+
+      .ai-assistant-resizable-panel {
+        overflow: initial;
       }
 
       .main-panel {

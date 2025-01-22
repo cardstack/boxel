@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -29,6 +30,7 @@ import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import { unixTime } from '@cardstack/runtime-common';
+import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
@@ -48,6 +50,7 @@ import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
@@ -78,7 +81,7 @@ export default class Room extends Component<Signature> {
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#each this.messages as |message i|}}
+          {{#each this.messages key='eventId' as |message i|}}
             <RoomMessage
               @roomId={{@roomId}}
               @message={{message}}
@@ -87,6 +90,8 @@ export default class Room extends Component<Signature> {
               @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
+              @isDisplayingCode={{this.isDisplayingCode message}}
+              @onToggleViewCode={{fn this.toggleViewCode message}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               @retryAction={{this.maybeRetryAction i message}}
@@ -127,12 +132,20 @@ export default class Room extends Component<Signature> {
               @canSend={{this.canSend}}
               data-test-message-field={{@roomId}}
             />
-            <AiAssistantCardPicker
-              @autoAttachedCards={{this.autoAttachedCards}}
-              @cardsToAttach={{this.cardsToAttach}}
-              @chooseCard={{this.chooseCard}}
-              @removeCard={{this.removeCard}}
-            />
+            <div class='chat-input-area__bottom-section'>
+              <AiAssistantCardPicker
+                @autoAttachedCards={{this.autoAttachedCards}}
+                @cardsToAttach={{this.cardsToAttach}}
+                @chooseCard={{this.chooseCard}}
+                @removeCard={{this.removeCard}}
+              />
+              <LLMSelect
+                @selected={{this.roomResource.activeLLM}}
+                @onChange={{this.roomResource.activateLLM}}
+                @options={{this.supportedLLMs}}
+                @disabled={{this.roomResource.isActivatingLLM}}
+              />
+            </div>
           </div>
         </footer>
       </section>
@@ -167,6 +180,18 @@ export default class Room extends Component<Signature> {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
+      }
+      .chat-input-area__bottom-section {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        padding-right: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxl);
+      }
+      .chat-input-area__bottom-section
+        :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute; /* This prevents layout shift when menu opens */
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
@@ -419,7 +444,7 @@ export default class Room extends Component<Signature> {
     return undefined;
   };
 
-  @action private isMessageStreaming(message: Message, messageIndex: number) {
+  private isMessageStreaming = (message: Message, messageIndex: number) => {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -429,7 +454,15 @@ export default class Room extends Component<Signature> {
       // threshold)
       unixTime(new Date().getTime() - message.created.getTime()) < 60
     );
-  }
+  };
+
+  private isDisplayingCode = (message: Message) => {
+    return this.roomResource?.isDisplayingCode(message);
+  };
+
+  private toggleViewCode = (message: Message) => {
+    this.roomResource.toggleViewCode(message);
+  };
 
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
@@ -443,6 +476,10 @@ export default class Room extends Component<Signature> {
 
   private get skills(): Skill[] {
     return this.roomResource.skills;
+  }
+
+  private get supportedLLMs(): string[] {
+    return DEFAULT_LLM_LIST.sort();
   }
 
   private get sortedSkills(): Skill[] {

@@ -81,7 +81,7 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
 // we can relax the resource here since we will be asserting an ID when we
 // setup the index
 type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
-  pristine_doc: LooseCardResource;
+  pristine_doc: LooseCardResource | null;
 };
 
 export type TestIndexRow =
@@ -112,22 +112,119 @@ export async function setupIndex(
 export async function setupIndex(
   client: DBAdapter,
   versionRows: RealmVersionsTable[],
+  indexRows: { working: TestIndexRow[]; production: TestIndexRow[] },
+): Promise<void>;
+export async function setupIndex(
+  client: DBAdapter,
+  versionRows: RealmVersionsTable[],
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
   maybeVersionRows: RealmVersionsTable[] | TestIndexRow[] = [],
-  indexRows?: TestIndexRow[],
+  maybeWorkingProductionRows?:
+    | TestIndexRow[]
+    | { working: TestIndexRow[]; production: TestIndexRow[] },
 ): Promise<void> {
   let versionRows: RealmVersionsTable[];
-  if (!indexRows) {
+  let workingRows: TestIndexRow[] = [];
+  let productionRows: TestIndexRow[] = [];
+  if (!maybeWorkingProductionRows) {
     versionRows = [{ realm_url: testRealmURL, current_version: 1 }];
-    indexRows = maybeVersionRows as TestIndexRow[];
+    workingRows = maybeVersionRows as TestIndexRow[];
+    productionRows = maybeVersionRows as TestIndexRow[];
   } else {
     versionRows = maybeVersionRows as RealmVersionsTable[];
+    if (Array.isArray(maybeWorkingProductionRows)) {
+      workingRows = maybeWorkingProductionRows as TestIndexRow[];
+      productionRows = maybeWorkingProductionRows as TestIndexRow[];
+    } else {
+      workingRows = maybeWorkingProductionRows.working;
+      productionRows = maybeWorkingProductionRows.production;
+    }
   }
   let now = Date.now();
-  let indexedCardsExpressions = await Promise.all(
+  let workingIndexedCardsExpressions = await indexedCardsExpressions({
+    indexRows: workingRows,
+    now,
+    client,
+  });
+  let productionIndexedCardsExpressions = await indexedCardsExpressions({
+    indexRows: productionRows,
+    now,
+    client,
+  });
+  let versionExpressions = versionRows.map((r) => asExpressions(r));
+
+  if (workingIndexedCardsExpressions.length > 0) {
+    await query(
+      client,
+      [
+        `INSERT INTO boxel_index_working`,
+        ...addExplicitParens(
+          separatedByCommas(workingIndexedCardsExpressions[0].nameExpressions),
+        ),
+        'VALUES',
+        ...separatedByCommas(
+          workingIndexedCardsExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
+  }
+  if (productionIndexedCardsExpressions.length > 0) {
+    await query(
+      client,
+      [
+        `INSERT INTO boxel_index`,
+        ...addExplicitParens(
+          separatedByCommas(
+            productionIndexedCardsExpressions[0].nameExpressions,
+          ),
+        ),
+        'VALUES',
+        ...separatedByCommas(
+          productionIndexedCardsExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
+  }
+
+  if (versionExpressions.length > 0) {
+    await query(
+      client,
+      [
+        `INSERT INTO realm_versions`,
+        ...addExplicitParens(
+          separatedByCommas(versionExpressions[0].nameExpressions),
+        ),
+        'VALUES',
+        ...separatedByCommas(
+          versionExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
+  }
+}
+
+async function indexedCardsExpressions({
+  indexRows,
+  now,
+  client,
+}: {
+  indexRows: TestIndexRow[];
+  now: number;
+  client: DBAdapter;
+}) {
+  return await Promise.all(
     indexRows.map(async (r) => {
       let row: Pick<RelaxedBoxelIndexTable, 'url'> &
         Partial<Omit<RelaxedBoxelIndexTable, 'url'>>;
@@ -182,43 +279,4 @@ export async function setupIndex(
       });
     }),
   );
-  let versionExpressions = versionRows.map((r) => asExpressions(r));
-
-  if (indexedCardsExpressions.length > 0) {
-    await query(
-      client,
-      [
-        `INSERT INTO boxel_index`,
-        ...addExplicitParens(
-          separatedByCommas(indexedCardsExpressions[0].nameExpressions),
-        ),
-        'VALUES',
-        ...separatedByCommas(
-          indexedCardsExpressions.map((row) =>
-            addExplicitParens(separatedByCommas(row.valueExpressions)),
-          ),
-        ),
-      ] as Expression,
-      coerceTypes,
-    );
-  }
-
-  if (versionExpressions.length > 0) {
-    await query(
-      client,
-      [
-        `INSERT INTO realm_versions`,
-        ...addExplicitParens(
-          separatedByCommas(versionExpressions[0].nameExpressions),
-        ),
-        'VALUES',
-        ...separatedByCommas(
-          versionExpressions.map((row) =>
-            addExplicitParens(separatedByCommas(row.valueExpressions)),
-          ),
-        ),
-      ] as Expression,
-      coerceTypes,
-    );
-  }
 }

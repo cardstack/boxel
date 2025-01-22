@@ -11,11 +11,15 @@ import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   type PromptParts,
   constructHistory,
-  isCommandReactionStatusApplied,
+  isCommandResultStatusApplied,
   getPromptParts,
   extractCardFragmentsFromEvents,
+  eventRequiresResponse,
 } from './helpers';
-import { APP_BOXEL_CARDFRAGMENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_LLM,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
@@ -24,12 +28,14 @@ import {
 } from './lib/set-title';
 import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient } from './lib/matrix';
+import { MatrixClient, updateStateEvent } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
+import { ChatCompletionMessageParam } from 'openai/resources';
+import { OpenAIError } from 'openai/error';
 
 let log = logger('ai-bot');
 
@@ -69,12 +75,12 @@ class Assistant {
     if (prompt.tools.length === 0) {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
-        messages: prompt.messages,
+        messages: prompt.messages as ChatCompletionMessageParam[],
       });
     } else {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
-        messages: prompt.messages,
+        messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
       });
@@ -97,6 +103,12 @@ class Assistant {
     event?: MatrixEvent,
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
+  }
+
+  async setDefaultLLM(roomId: string) {
+    await updateStateEvent(this.client, roomId, APP_BOXEL_ACTIVE_LLM, {
+      model: DEFAULT_LLM,
+    });
   }
 }
 
@@ -137,8 +149,9 @@ Common issues are:
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
-        .then(function () {
+        .then(async function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
+          await assistant.setDefaultLLM(member.roomId);
         })
         .catch(function (err) {
           log.info(
@@ -166,11 +179,8 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (event.getType() !== 'm.room.message') {
+        if (!eventRequiresResponse(event)) {
           return; // only print messages
-        }
-        if (event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-          return; // don't respond to card fragments, we just gather these in our history
         }
 
         if (senderMatrixUserId === aiBotUserId) {
@@ -250,7 +260,7 @@ Common issues are:
           finalContent = await runner.finalContent();
           await responder.finalize(finalContent);
         } catch (error) {
-          await responder.onError(error);
+          await responder.onError(error as OpenAIError);
         } finally {
           if (generationId) {
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
@@ -278,7 +288,7 @@ Common issues are:
     if (!room) {
       return;
     }
-    if (!isCommandReactionStatusApplied(event)) {
+    if (!isCommandResultStatusApplied(event)) {
       return;
     }
     log.info(

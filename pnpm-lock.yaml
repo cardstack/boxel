@@ -163,6 +163,9 @@ importers:
       '@sinonjs/fake-timers':
         specifier: ^11.2.2
         version: 11.2.2
+      '@types/qunit':
+        specifier: ^2.19.12
+        version: 2.19.12
       '@types/sinonjs__fake-timers':
         specifier: ^8.1.5
         version: 8.1.5
@@ -1780,6 +1783,9 @@ importers:
       '@types/fs-extra':
         specifier: ^9.0.13
         version: 9.0.13
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/jsdom':
         specifier: ^21.1.1
         version: 21.1.1
@@ -1810,6 +1816,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.5
         version: 8.11.5
+      '@types/pluralize':
+        specifier: ^0.0.30
+        version: 0.0.30
       '@types/qs':
         specifier: ^6.9.17
         version: 6.9.17
@@ -1864,6 +1873,9 @@ importers:
       http-server:
         specifier: ^14.1.1
         version: 14.1.1
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.1.0
       jsdom:
         specifier: ^21.1.1
         version: 21.1.1
@@ -1891,6 +1903,9 @@ importers:
       npm-run-all:
         specifier: ^4.1.5
         version: 4.1.5
+      pluralize:
+        specifier: ^8.0.0
+        version: 8.0.0
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
@@ -7278,6 +7293,10 @@ packages:
     resolution: {integrity: sha512-s3Tz/P+u4X78n0TdgNR0l9Yu1jyH2dRwofi/DqGLpbbjiuIs0n6W8W4XfUI6+9K0lPK1fF4KHA5HcqtOsy1V0Q==}
     dev: true
 
+  /@types/js-yaml@4.0.9:
+    resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
+    dev: true
+
   /@types/jsdom@21.1.1:
     resolution: {integrity: sha512-cZFuoVLtzKP3gmq9eNosUL1R50U+USkbLtUQ1bYVgl/lKp0FZM7Cq4aIHAL8oIvQ17uSHi7jXPtfDOdjPwBE7A==}
     dependencies:
@@ -7435,6 +7454,10 @@ packages:
 
   /@types/qunit@2.19.10:
     resolution: {integrity: sha512-gVB+rxvxmbyPFWa6yjjKgcumWal3hyqoTXI0Oil161uWfo1OCzWZ/rnEumsx+6uVgrwPrCrhpQbLkzfildkSbg==}
+    dev: true
+
+  /@types/qunit@2.19.12:
+    resolution: {integrity: sha512-II+C1wgzUia0g+tGAH+PBb4XiTm8/C/i6sN23r21NNskBYOYrv+qnW0tFQ/IxZzKVwrK4CTglf8YO3poJUclQA==}
     dev: true
 
   /@types/range-parser@1.2.6:

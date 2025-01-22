@@ -1297,17 +1297,22 @@ class LinksToMany<FieldT extends CardDefConstructor>
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        let resourceId = new URL(value.links.self, relativeTo).href;
+        let resourceId = new URL(
+          value.links.self,
+          !Array.isArray(doc.data) && 'id' in doc.data && doc.data.id
+            ? doc.data.id
+            : relativeTo,
+        ).href;
+        if (loadedValues && Array.isArray(loadedValues)) {
+          let loadedValue = loadedValues.find(
+            (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
+          );
+          if (loadedValue) {
+            return loadedValue;
+          }
+        }
         let resource = resourceFrom(doc, resourceId);
         if (!resource) {
-          if (loadedValues && Array.isArray(loadedValues)) {
-            let loadedValue = loadedValues.find(
-              (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
-            );
-            if (loadedValue) {
-              return loadedValue;
-            }
-          }
           return {
             type: 'not-loaded',
             reference: value.links.self,

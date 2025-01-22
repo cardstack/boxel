@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { type CommandContext } from '@cardstack/runtime-common';
 import {
   type AttributesSchema,
   type CardSchema,
@@ -19,13 +20,19 @@ interface Configuration {
   cardType: typeof CardDef;
 }
 export default class PatchCardCommand extends HostBaseCommand<
-  BaseCommandModule.PatchCardInput,
-  undefined,
-  Configuration
+  typeof BaseCommandModule.PatchCardInput,
+  undefined
 > {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   description = `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making. Do NOT leave out the cardId or patch fields or this tool will not work.`;
+
+  constructor(
+    commandContext: CommandContext,
+    private readonly configuration: Configuration,
+  ) {
+    super(commandContext);
+  }
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

@@ -30,9 +30,11 @@ import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { type Stack } from '../components/operator-mode/interact-submode';
+
+import { removeFileExtension } from '../components/search-sheet/utils';
+
+import NetworkService from './network';
 
 import type CardService from './card-service';
 import type ResetService from './reset';
@@ -94,6 +96,7 @@ export default class OperatorModeStateService extends Service {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
+  @service private declare network: NetworkService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -172,27 +175,32 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  async deleteCard(card: CardDef) {
+  async deleteCard(cardId: string) {
+    let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
+      'X-Boxel-Realm-Url',
+    );
+    if (!cardRealmUrl) {
+      throw new Error(`Could not determine the realm for card "${cardId}"`);
+    }
+
+    await this.cardService.deleteCard(cardId);
+
     // remove all stack items for the deleted card
     let items: StackItem[] = [];
     for (let stack of this.state.stacks || []) {
       items.push(
-        ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
+        ...(stack.filter(
+          (i) => i.url?.href && removeFileExtension(i.url.href) === cardId,
+        ) as StackItem[]),
       );
     }
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    this.recentCardsService.remove(card.id);
-
-    let cardRealmUrl = await this.cardService.getRealmURL(card);
-    if (!cardRealmUrl) {
-      throw new Error(`Could not determine the realm for card "${card.id}"`);
-    }
-    let realmPaths = new RealmPaths(cardRealmUrl);
-    let cardPath = realmPaths.local(new URL(`${card.id}.json`));
-    await this.cardService.deleteCard(card);
+    let realmPaths = new RealmPaths(new URL(cardRealmUrl));
+    let cardPath = realmPaths.local(new URL(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
+    this.recentCardsService.remove(cardId);
   }
 
   trimItemsFromStack(item: StackItem) {

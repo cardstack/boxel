@@ -1,56 +1,39 @@
 import {
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
   linksTo,
   linksToMany,
-  primitive,
-  queryableValue,
 } from './card-api';
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
+import NumberField from './number';
 import { SkillCard } from './skill-card';
+import {
+  JsonField,
+  SearchCardsByQueryInput,
+  SearchCardsByTypeAndTitleInput,
+  SearchCardsResult,
+} from './commands/search-card-result';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
-
-class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
-  <template>
-    <pre>{{this.stringValue}}</pre>
-    <style scoped>
-      pre {
-        margin: 0;
-        white-space: pre-wrap;
-      }
-    </style>
-  </template>
-
-  get stringValue() {
-    return JSON.stringify(this.args.model, null, 2);
-  }
-}
-
-export class CommandObjectField extends FieldDef {
-  static [primitive]: Record<string, any>;
-  static [queryableValue](value: Record<string, any> | undefined) {
-    return Boolean(value) && typeof value === 'object'
-      ? JSON.stringify(value)
-      : undefined;
-  }
-  static edit = CommandObjectFieldTemplate;
-  static embedded = CommandObjectFieldTemplate;
-}
 
 export class SaveCardInput extends CardDef {
   @field realm = contains(StringField);
   @field card = linksTo(CardDef);
 }
 
-class JsonField extends FieldDef {
-  static [primitive]: Record<string, any>;
+export class CopyCardInput extends CardDef {
+  @field sourceCard = linksTo(CardDef);
+  @field targetRealmUrl = contains(StringField);
+  @field targetStackIndex = contains(NumberField);
+}
+
+export class CopyCardResult extends CardDef {
+  @field newCard = linksTo(CardDef);
 }
 
 export class PatchCardInput extends CardDef {
@@ -114,6 +97,29 @@ export class SendAiAssistantMessageResult extends CardDef {
   @field eventId = contains(StringField);
 }
 
+export class GetBoxelUIStateResult extends CardDef {
+  @field submode = contains(StringField);
+  //TODO expand this to include more of the UI state:
+  // - open cards
+  // - current room ID
+  static embedded = class Embedded extends Component<
+    typeof GetBoxelUIStateResult
+  > {
+    <template>
+      <div>
+        <h2>Boxel UI State</h2>
+        <div>Submode: {{@model.submode}}</div>
+      </div>
+    </template>
+  };
+}
+
 export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
 }
+
+export {
+  SearchCardsByQueryInput,
+  SearchCardsByTypeAndTitleInput,
+  SearchCardsResult,
+};

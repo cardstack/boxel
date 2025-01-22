@@ -67,6 +67,7 @@ export class RealmServer {
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private seedPath: string | undefined;
+  private seedRealmURL: URL | undefined;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
   private getRegistrationSecret:
@@ -87,6 +88,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     seedPath,
+    seedRealmURL,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -99,6 +101,7 @@ export class RealmServer {
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
+    seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
   }) {
@@ -116,6 +119,7 @@ export class RealmServer {
     this.secretSeed = secretSeed;
     this.realmsRootPath = realmsRootPath;
     this.seedPath = seedPath;
+    this.seedRealmURL = seedRealmURL;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.assetsURL = assetsURL;
@@ -347,18 +351,23 @@ export class RealmServer {
       this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
     }
 
-    let realm = new Realm({
-      url,
-      adapter,
-      secretSeed: this.secretSeed,
-      virtualNetwork: this.virtualNetwork,
-      dbAdapter: this.dbAdapter,
-      queue: this.queue,
-      matrix: {
-        url: this.matrixClient.matrixURL,
-        username,
+    let realm = new Realm(
+      {
+        url,
+        adapter,
+        secretSeed: this.secretSeed,
+        virtualNetwork: this.virtualNetwork,
+        dbAdapter: this.dbAdapter,
+        queue: this.queue,
+        matrix: {
+          url: this.matrixClient.matrixURL,
+          username,
+        },
       },
-    });
+      {
+        ...(this.seedRealmURL ? { copiedFromRealm: this.seedRealmURL } : {}),
+      },
+    );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;

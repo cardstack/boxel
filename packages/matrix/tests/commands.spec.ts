@@ -3,7 +3,7 @@ import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '../helpers/matrix-constants';
 
 import {
@@ -12,6 +12,7 @@ import {
   sendMessage,
   registerRealmUsers,
   getRoomEvents,
+  getSearchTool,
   showAllCards,
   waitUntil,
   setupUserSubscribed,
@@ -120,55 +121,9 @@ test.describe('Commands', () => {
       },
     });
     let searchCardTool = boxelMessageData.context.tools.find(
-      (t: any) => t.function.name === 'searchCard',
+      (t: any) => t.function.name === 'searchCardsByTypeAndTitle',
     );
-    expect(searchCardTool).toMatchObject({
-      type: 'function',
-      function: {
-        name: 'searchCard',
-        description:
-          'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            attributes: {
-              type: 'object',
-              properties: {
-                filter: {
-                  type: 'object',
-                  properties: {
-                    contains: {
-                      type: 'object',
-                      properties: {
-                        title: {
-                          type: 'string',
-                          description: 'title of the card',
-                        },
-                      },
-                      required: ['title'],
-                    },
-                    eq: {
-                      type: 'object',
-                      properties: {
-                        _cardType: {
-                          type: 'string',
-                          description: 'name of the card type',
-                        },
-                      },
-                      required: ['_cardType'],
-                    },
-                  },
-                },
-              },
-            },
-          },
-          required: ['attributes', 'description'],
-        },
-      },
-    });
+    expect(searchCardTool).toMatchObject(getSearchTool());
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
@@ -199,7 +154,7 @@ test.describe('Commands', () => {
       );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([]);
+    expect(boxelMessageData.context.tools).toMatchObject([getSearchTool()]);
   });
 
   // TODO: currently we need isolated realm server to get payment setup to work
@@ -232,7 +187,7 @@ test.describe('Commands', () => {
     expect(boxelMessageData.context.tools).toMatchObject([]);
   }); */
 
-  test(`applying a command dispatches a reaction event if command is succesful`, async ({
+  test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
@@ -273,10 +228,10 @@ test.describe('Commands', () => {
 
     await expect(async () => {
       let events = await getRoomEvents('user1', 'pass', room1);
-      let reactionEvent = (events as any).find(
-        (e: any) => e.type === 'm.reaction',
+      let commandResultEvent = (events as any).find(
+        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      await expect(reactionEvent).toBeDefined();
+      await expect(commandResultEvent).toBeDefined();
     }).toPass();
   });
 
@@ -293,15 +248,13 @@ test.describe('Commands', () => {
       formatted_body: 'some command',
       data: JSON.stringify({
         toolCall: {
-          name: 'searchCard',
+          name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
               description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${appURL}person`,
-                  name: 'Person',
-                },
+              type: {
+                module: `${appURL}person`,
+                name: 'Person',
               },
             },
           },
@@ -322,9 +275,12 @@ test.describe('Commands', () => {
     await expect(async () => {
       let events = await getRoomEvents('user1', 'pass', room1);
       let commandResultEvent = (events as any).find(
-        (e: any) => e.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
       await expect(commandResultEvent).toBeDefined();
+      await expect(
+        JSON.parse(commandResultEvent.content.data).cardEventId,
+      ).toBeDefined();
     }).toPass();
   });
 

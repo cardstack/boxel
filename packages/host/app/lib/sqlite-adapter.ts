@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 
 export default class SQLiteAdapter implements DBAdapter {
+  readonly kind = 'sqlite';
   private _sqlite: typeof SQLiteWorker | undefined;
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();

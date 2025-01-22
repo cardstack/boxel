@@ -126,20 +126,13 @@ export class Loader {
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    let proxiedModule = this.createModuleProxy(module, moduleIdentifier);
+    this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
 
-    for (let propName of Object.keys(module)) {
-      // Normal modules always end up in our identity map because the only way for other code to gain access to the module's exports is by getting it through the
-      // proxy our loader has wrapped around it. But shimmed modules may be used directly by our caller before we've had a chance to put them in the dientity map.
-      // So this eagerly puts them into the identity map.
-      proxiedModule[propName]; // Makes sure the shimmed modules get into the identity map.
-    }
-
-    this.moduleShims.set(moduleIdentifier, proxiedModule);
+    this.moduleShims.set(moduleIdentifier, module);
 
     this.setModule(moduleIdentifier, {
       state: 'evaluated',
-      moduleInstance: proxiedModule,
+      moduleInstance: module,
       consumedModules: new Set(),
     });
   }
@@ -163,12 +156,7 @@ export class Loader {
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
-        let m = await this.import<Record<string, any>>(moduleIdentifier);
-        if (m) {
-          for (let exportName of Object.keys(m)) {
-            m[exportName];
-          }
-        }
+        await this.import<Record<string, any>>(moduleIdentifier);
       } catch (err: any) {
         this.log.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
@@ -227,7 +215,6 @@ export class Loader {
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
 
@@ -466,24 +453,38 @@ export class Loader {
     this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
   }
 
-  private createModuleProxy(module: any, moduleIdentifier: string) {
+  private captureIdentitiesOfModuleExports(
+    module: any,
+    moduleIdentifier: string,
+  ) {
     let moduleId = trimExecutableExtension(new URL(moduleIdentifier)).href;
-    return new Proxy(module, {
-      get: (target, property, received) => {
-        let value = Reflect.get(target, property, received);
-        if (typeof value === 'function' && typeof property === 'string') {
-          if (!this.identities.has(value)) {
-            this.identities.set(value, {
-              module: moduleId,
-              name: property,
-            });
-            Loader.loaders.set(value, this);
-          }
+    for (let propName of Object.keys(module)) {
+      let exportedEntity = module[propName];
+      if (
+        typeof exportedEntity === 'function' &&
+        typeof propName === 'string'
+      ) {
+        if (!this.identities.has(exportedEntity)) {
+          this.identities.set(exportedEntity, {
+            module: moduleId,
+            name: propName,
+          });
+          Loader.loaders.set(exportedEntity, this);
         }
-        return value;
-      },
-      set() {
-        throw new Error(`modules are read only`);
+      }
+    }
+  }
+
+  private readOnlyProxy(module: any) {
+    return new Proxy(module, {
+      set(_target, prop) {
+        throw new TypeError(
+          `Failed to set the '${String(
+            prop,
+          )}' property on 'Module': Cannot assign to read only property '${String(
+            prop,
+          )}'`,
+        );
       },
     });
   }
@@ -517,14 +518,11 @@ export class Loader {
     }
 
     if (loaded.type === 'shimmed') {
-      let proxiedModule = this.createModuleProxy(
-        loaded.module,
-        moduleIdentifier,
-      );
+      this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
-        moduleInstance: proxiedModule,
+        moduleInstance: loaded.module,
         consumedModules: new Set(),
       });
       module.deferred.fulfill();
@@ -602,10 +600,7 @@ export class Loader {
     }
 
     let privateModuleInstance = Object.create(null);
-    let moduleInstance = this.createModuleProxy(
-      privateModuleInstance,
-      moduleIdentifier,
-    );
+    let moduleProxy = this.readOnlyProxy(privateModuleInstance);
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
         dep.type === 'dep' ? [dep.moduleURL.href] : [],
@@ -615,7 +610,7 @@ export class Loader {
     this.setModule(moduleIdentifier, {
       state: 'preparing',
       implementation: module.implementation,
-      moduleInstance,
+      moduleInstance: moduleProxy,
       consumedModules,
     });
 
@@ -640,14 +635,14 @@ export class Loader {
             throw assertNever(entry);
         }
       });
-
       module.implementation(...dependencies);
+      this.captureIdentitiesOfModuleExports(moduleProxy, moduleIdentifier);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
-        moduleInstance,
+        moduleInstance: moduleProxy,
         consumedModules,
       });
-      return moduleInstance;
+      return moduleProxy;
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',

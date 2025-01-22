@@ -8,6 +8,8 @@ import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
+import ColorPalette from './components/color-palette/index.gts';
+import ColorPicker from './components/color-picker/index.gts';
 import DateRangePicker from './components/date-range-picker/index.gts';
 import DndKanbanBoard, {
   type DndItem,
@@ -78,6 +80,8 @@ export {
   CardContentContainer,
   CardHeader,
   CircleSpinner,
+  ColorPalette,
+  ColorPicker,
   DateRangePicker,
   DndColumn,
   DndItem,

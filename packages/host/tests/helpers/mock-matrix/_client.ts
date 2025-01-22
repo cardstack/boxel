@@ -5,8 +5,10 @@ import * as MatrixSDK from 'matrix-js-sdk';
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import {
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -88,6 +90,7 @@ export class MockClient implements ExtendedClient {
       exp: expires,
       user: this.loggedInAs,
       realm: realmURL.href,
+      sessionRoom: `test-session-room-for-${this.loggedInAs}`,
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
@@ -423,7 +426,8 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_REALMS_EVENT_TYPE:
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
-      case 'm.reaction':
+      case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+      case APP_BOXEL_ACTIVE_LLM:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':

@@ -33,7 +33,11 @@ export class MockUtils {
     roomId: string,
     sender: string,
     content: MatrixSDK.IEvent['content'],
-    overrides?: { state_key?: string; origin_server_ts?: number },
+    overrides?: {
+      event_id?: string;
+      state_key?: string;
+      origin_server_ts?: number;
+    },
   ) => {
     return this.testState.sdk!.serverState.addRoomEvent(
       sender,

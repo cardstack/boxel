@@ -11,13 +11,14 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   CardFragmentContent,
   CommandEvent,
-  CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
@@ -26,6 +27,7 @@ import type {
   LeaveEvent,
   CardMessageEvent,
   MessageEvent,
+  CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -60,7 +62,6 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
-  private _messageCreateTimesCache: Map<string, number> = new Map();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
@@ -69,8 +70,14 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
+  private _isDisplayingViewCodeMap: TrackedMap<string, boolean> =
+    new TrackedMap();
   @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
+
+  // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
+  // that updates immediately after the user selects the LLM.
+  @tracked _activeLLM: string | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare commandService: CommandService;
   @service private declare cardService: CardService;
@@ -82,6 +89,7 @@ export class RoomResource extends Resource<Args> {
       }
       this._previousRoomId = named.roomId;
       this.loading = this.load.perform(named.roomId);
+      this._activeLLM = undefined;
     }
   }
 
@@ -90,12 +98,12 @@ export class RoomResource extends Resource<Args> {
   }
 
   private resetCache() {
-    this._messageCreateTimesCache = new Map();
     this._messageCache = new TrackedMap();
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
     this._nameEventsCache = new TrackedMap();
     this._skillCardsCache = new TrackedMap();
+    this._isDisplayingViewCodeMap = new TrackedMap();
     this._createEvent = undefined;
   }
 
@@ -132,6 +140,10 @@ export class RoomResource extends Resource<Args> {
 
   private get events() {
     return this.matrixRoom?.events ?? [];
+  }
+
+  private get sortedEvents() {
+    return this.events.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   }
 
   get skillIds(): SkillId[] {
@@ -211,15 +223,39 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
+  get activeLLM() {
+    return this._activeLLM ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+  }
+
+  activateLLM(model: string) {
+    this._activeLLM = model;
+    this.activateLLMTask.perform(model);
+  }
+
+  get isActivatingLLM() {
+    return this.activateLLMTask.isRunning;
+  }
+
+  private activateLLMTask = restartableTask(async (model: string) => {
+    if (!this.matrixRoom) {
+      throw new Error('matrixRoom is required to activate LLM');
+    }
+    await this.matrixService.sendActiveLLMEvent(this.matrixRoom.roomId, model);
+  });
+
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
-    for (let event of this.events) {
+
+    for (let event of this.sortedEvents) {
       switch (event.type) {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
           break;
         case 'm.room.message':
-          await this.loadRoomMessage(roomId, event, index);
+          this.loadRoomMessage({ roomId, event, index });
+          break;
+        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          this.updateMessageCommandResult({ roomId, event, index });
           break;
         case 'm.room.create':
           await this.loadRoomCreateEvent(event);
@@ -249,64 +285,41 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
-  private async loadRoomMessage(
-    roomId: string,
-    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
-    index: number,
-  ) {
-    let effectiveEventId = event.event_id;
-    let update = false;
-    if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
-      // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
-      // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
-      update = true;
-    } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      effectiveEventId = event.content['m.relates_to'].event_id;
-      if (
-        'isStreamingFinished' in event.content &&
-        !event.content.isStreamingFinished
-      ) {
-        // we don't need to process this event if it's not finished streaming,
-        // but we do need to note it's creation time so that we can capture the earliest one
-        let earliestKnownCreateTime =
-          this._messageCreateTimesCache.get(effectiveEventId);
-        if (
-          !earliestKnownCreateTime ||
-          earliestKnownCreateTime > event.origin_server_ts
-        ) {
-          this._messageCreateTimesCache.set(
-            effectiveEventId,
-            event.origin_server_ts,
-          );
-          let alreadyProcessedMessage =
-            this._messageCache.get(effectiveEventId);
-          if (alreadyProcessedMessage) {
-            alreadyProcessedMessage.created = new Date(event.origin_server_ts);
-          }
-        }
-        return;
-      }
-      update = true;
-    }
-    if (this._messageCache.has(effectiveEventId) && !update) {
-      return;
-    }
+  private loadRoomMessage({
+    roomId,
+    event,
+    index,
+  }: {
+    roomId: string;
+    event: MessageEvent | CommandEvent | CardMessageEvent;
+    index: number;
+  }) {
     if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      if (!this._fragmentCache.has(effectiveEventId)) {
-        this._fragmentCache.set(effectiveEventId, event.content);
-      }
-      return;
-    }
-    if (event.content.msgtype === APP_BOXEL_COMMAND_RESULT_MSGTYPE) {
-      //don't display command result in the room as a message
+      this._fragmentCache.set(event.event_id, event.content);
       return;
     }
 
+    this.upsertMessage({ roomId, event, index });
+  }
+
+  private upsertMessage({
+    roomId,
+    event,
+    index,
+  }: {
+    roomId: string;
+    event: MessageEvent | CommandEvent | CardMessageEvent;
+    index: number;
+  }) {
+    let effectiveEventId = this.getEffectiveEventId(event);
+
+    let message = this._messageCache.get(effectiveEventId);
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
     });
     let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+      roomId,
       effectiveEventId,
       author,
       index,
@@ -314,26 +327,61 @@ export class RoomResource extends Resource<Args> {
       events: this.events,
     });
 
-    let messageObject = await messageBuilder.buildMessage();
-    if (messageObject) {
-      // if the message is a replacement for other messages,
-      // use `created` from the oldest one.
-      if (this._messageCache.has(effectiveEventId)) {
-        messageObject.created = new Date(
-          Math.min(
-            ...[
-              +this._messageCache.get(effectiveEventId)!.created!,
-              +messageObject.created!,
-              this._messageCreateTimesCache.get(effectiveEventId) ?? +Infinity,
-            ],
-          ),
-        );
-      }
+    if (!message) {
+      message = messageBuilder.buildMessage();
       this._messageCache.set(
-        messageObject.clientGeneratedId ?? effectiveEventId,
-        messageObject as any,
+        message.clientGeneratedId ?? effectiveEventId,
+        message as any,
       );
     }
+
+    messageBuilder.updateMessage(message);
+  }
+
+  private updateMessageCommandResult({
+    roomId,
+    event,
+    index,
+  }: {
+    roomId: string;
+    event: CommandResultEvent;
+    index: number;
+  }) {
+    let effectiveEventId = this.getEffectiveEventId(event);
+    let commandEvent = this.events.find(
+      (e: any) =>
+        e.type === 'm.room.message' &&
+        e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
+        e.content['m.relates_to'].event_id === effectiveEventId,
+    )! as CommandEvent | undefined;
+    let message = this._messageCache.get(effectiveEventId);
+    if (!message || !commandEvent) {
+      return;
+    }
+
+    let author = this.upsertRoomMember({
+      roomId,
+      userId: event.sender,
+    });
+    let messageBuilder = new MessageBuilder(commandEvent, getOwner(this)!, {
+      roomId,
+      effectiveEventId,
+      author,
+      index,
+      serializedCardFromFragments: this.serializedCardFromFragments,
+      events: this.events,
+      commandResultEvent: event,
+    });
+    messageBuilder.updateMessageCommandResult(message);
+  }
+
+  private getEffectiveEventId(
+    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
+  ) {
+    return event.content['m.relates_to']?.rel_type === 'm.replace' ||
+      event.content['m.relates_to']?.rel_type === 'm.annotation'
+      ? event.content['m.relates_to'].event_id
+      : event.event_id;
   }
 
   private async loadRoomNameEvent(event: RoomNameEvent) {
@@ -386,7 +434,7 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  private serializedCardFromFragments = (eventId: string) => {
+  public serializedCardFromFragments = (eventId: string) => {
     let fragments: CardFragmentContent[] = [];
     let currentFragment: string | undefined = eventId;
     do {
@@ -412,6 +460,17 @@ export class RoomResource extends Resource<Args> {
     ) as LooseSingleCardDocument;
     return cardDoc;
   };
+
+  public isDisplayingCode(message: Message) {
+    return this._isDisplayingViewCodeMap.get(message.eventId) ?? false;
+  }
+
+  public toggleViewCode(message: Message) {
+    this._isDisplayingViewCodeMap.set(
+      message.eventId,
+      !this.isDisplayingCode(message),
+    );
+  }
 }
 
 export function getRoom(

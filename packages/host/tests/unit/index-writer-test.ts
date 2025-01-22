@@ -48,7 +48,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('only invalidates latest version of content', async function (assert) {
+  test('can update an index entry', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -56,7 +56,15 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('can update an index entry', async function (assert) {
+  test('can copy index entries', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('throws when copy source realm is not present on the realm server', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

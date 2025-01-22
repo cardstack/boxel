@@ -4,8 +4,6 @@ import { isTesting } from '@embroider/macros';
 
 import { task, timeout, all } from 'ember-concurrency';
 
-import flatMap from 'lodash/flatMap';
-
 import { IEvent } from 'matrix-js-sdk';
 
 import { TrackedSet } from 'tracked-built-ins';
@@ -13,60 +11,68 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   Command,
-  type LooseSingleCardDocument,
   type PatchData,
-  baseRealm,
   CommandContext,
   CommandContextStamp,
+  ResolvedCodeRef,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import {
-  type CardTypeFilter,
-  type EqFilter,
-  assertQuery,
-} from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CommandResult } from 'https://cardstack.com/base/command-result';
-import type {
-  CommandEvent,
-  CommandResultEvent,
-} from 'https://cardstack.com/base/matrix-event';
 
+import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
 import CardService from './card-service';
 import RealmServerService from './realm-server';
 
+import type LoaderService from './loader-service';
+
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
+
+type GenericCommand = Command<
+  typeof CardDef | undefined,
+  typeof CardDef | undefined
+>;
 
 export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
   @service private declare realm: Realm;
   @service private declare realmServer: RealmServerService;
   currentlyExecutingCommandEventIds = new TrackedSet<string>();
 
   private commands: Map<
     string,
-    { command: Command<any, any, any>; autoExecute: boolean }
+    {
+      command: GenericCommand;
+      autoExecute: boolean;
+    }
   > = new Map();
 
-  public registerCommand(
-    command: Command<any, any, any>,
-    autoExecute: boolean,
-  ) {
+  public registerCommand(command: GenericCommand, autoExecute: boolean) {
     let name = `${command.name}_${shortenUuid(uuidv4())}`;
     this.commands.set(name, { command, autoExecute });
     return name;
   }
 
   public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+    let eventId = event.event_id;
+    if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
+      eventId = event.content?.['m.relates_to']!.event_id;
+    }
+    if (!eventId) {
+      throw new Error(
+        'No event id found for command event, this should not happen',
+      );
+    }
     // examine the tool_call and see if it's a command that we know how to run
     let toolCall = event?.content?.data?.toolCall;
     if (!toolCall) {
@@ -78,7 +84,7 @@ export default class CommandService extends Service {
     if (!command || !autoExecute) {
       return;
     }
-    this.currentlyExecutingCommandEventIds.add(event.event_id!);
+    this.currentlyExecutingCommandEventIds.add(eventId);
     try {
       // Get the input type and validate/construct the payload
       let InputType = await command.getInputType();
@@ -94,21 +100,14 @@ export default class CommandService extends Service {
       } else {
         typedInput = undefined;
       }
-      let res = await command.execute(typedInput);
-      await this.matrixService.sendReactionEvent(
+      let resultCard = await command.execute(typedInput as any);
+      await this.matrixService.sendCommandResultEvent(
         event.room_id!,
-        event.event_id!,
-        'applied',
+        eventId,
+        resultCard,
       );
-      if (res) {
-        await this.matrixService.sendCommandResultMessage(
-          event.room_id!,
-          event.event_id!,
-          res,
-        );
-      }
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(event.event_id!);
+      this.currentlyExecutingCommandEventIds.delete(eventId);
     }
   }
 
@@ -122,9 +121,9 @@ export default class CommandService extends Service {
   }
 
   //TODO: Convert to non-EC async method after fixing CS-6987
-  run = task(async (command: MessageCommand, roomId: string) => {
+  run = task(async (command: MessageCommand) => {
     let { payload, eventId } = command;
-    let res: any;
+    let resultCard: CardDef | undefined;
     try {
       this.matrixService.failedCommandState.delete(eventId);
       this.currentlyExecutingCommandEventIds.add(eventId);
@@ -146,8 +145,8 @@ export default class CommandService extends Service {
         } else {
           typedInput = undefined;
         }
-        [res] = await all([
-          await commandToRun.execute(typedInput),
+        [resultCard] = await all([
+          await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
         ]);
       } else if (command.name === 'patchCard') {
@@ -156,70 +155,36 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        res = await this.operatorModeStateService.patchCard.perform(
+        await this.operatorModeStateService.patchCard.perform(
           payload?.attributes?.cardId,
           {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,
           },
         );
-      } else if (command.name === 'searchCard') {
+      } else if (command.name === 'searchCardsByTypeAndTitle') {
         if (!hasSearchData(payload)) {
           throw new Error(
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        let query = { filter: payload.attributes.filter };
-        let realmUrls = this.realmServer.availableRealmURLs;
-        let instances: CardDef[] = flatMap(
-          await Promise.all(
-            realmUrls.map(
-              async (realm) =>
-                await this.cardService.search(query, new URL(realm)),
-            ),
-          ),
-        );
-        res = await Promise.all(
-          instances.map((c) => this.cardService.serializeCard(c)),
-        );
-      } else if (command.name === 'generateAppModule') {
-        let realmURL = this.operatorModeStateService.realmURL;
-
-        if (!realmURL) {
-          throw new Error(
-            `Cannot generate app module without a writable realm`,
-          );
-        }
-
-        let timestamp = Date.now();
-        let fileName =
-          (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
-          `untitled-app-${timestamp}`;
-        let moduleId = `${realmURL}AppModules/${fileName}-${timestamp}`;
-        let content = (payload.moduleCode as string) ?? '';
-        res = await this.cardService.saveSource(
-          new URL(`${moduleId}.gts`),
-          content,
-        );
-        if (!payload.attached_card_id) {
-          throw new Error(
-            `Could not update 'moduleURL' with a link to the generated module.`,
-          );
-        }
-        await this.operatorModeStateService.patchCard.perform(
-          String(payload.attached_card_id),
-          { attributes: { moduleURL: moduleId } },
-        );
+        let command = new SearchCardsByTypeAndTitleCommand(this.commandContext);
+        resultCard = await command.execute({
+          title: payload.attributes.title,
+          cardType: payload.attributes.cardType,
+          type: payload.attributes.type,
+        });
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
           `Unrecognized command: ${command.name}. This command may have been associated with a previous browser session.`,
         );
       }
-      await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
-      if (res) {
-        await this.matrixService.sendCommandResultMessage(roomId, eventId, res);
-      }
+      await this.matrixService.sendCommandResultEvent(
+        command.message.roomId,
+        eventId,
+        resultCard,
+      );
     } catch (e) {
       let error =
         typeof e === 'string'
@@ -227,58 +192,18 @@ export default class CommandService extends Service {
           : e instanceof Error
           ? e
           : new Error('Command failed.');
+      console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(eventId, error);
     } finally {
       this.currentlyExecutingCommandEventIds.delete(eventId);
     }
   });
-
-  async createCommandResult(args: Record<string, any>) {
-    return await this.matrixService.createCard<typeof CommandResult>(
-      {
-        name: 'CommandResult',
-        module: `${baseRealm.url}command-result`,
-      },
-      args,
-    );
-  }
-
-  deserializeResults(event: CommandResultEvent) {
-    let serializedResults: LooseSingleCardDocument[] =
-      typeof event?.content?.result === 'string'
-        ? JSON.parse(event.content.result)
-        : event.content.result;
-    return Array.isArray(serializedResults) ? serializedResults : [];
-  }
-
-  async createCommandResultArgs(
-    commandEvent: CommandEvent,
-    commandResultEvent: CommandResultEvent,
-  ) {
-    let toolCall = commandEvent.content.data.toolCall;
-    if (toolCall.name === 'searchCard') {
-      let results = this.deserializeResults(commandResultEvent);
-      return {
-        toolCallName: toolCall.name,
-        toolCallId: toolCall.id,
-        toolCallArgs: toolCall.arguments,
-        cardIds: results.map((r) => r.data.id),
-      };
-    } else if (toolCall.name === 'patchCard') {
-      return {
-        toolCallName: toolCall.name,
-        toolCallId: toolCall.id,
-        toolCallArgs: toolCall.arguments,
-      };
-    }
-    return;
-  }
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
 type SearchPayload = {
-  attributes: { cardId: string; filter: CardTypeFilter | EqFilter };
+  attributes: { cardType?: string; title?: string; type?: ResolvedCodeRef };
 };
 
 function hasPatchData(payload: any): payload is PatchPayload {
@@ -290,6 +215,9 @@ function hasPatchData(payload: any): payload is PatchPayload {
 }
 
 function hasSearchData(payload: any): payload is SearchPayload {
-  assertQuery({ filter: payload.attributes.filter });
-  return payload;
+  return (
+    isResolvedCodeRef(payload.attributes?.type) ||
+    payload.attributes?.title ||
+    payload.attributes?.cardType
+  );
 }

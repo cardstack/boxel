@@ -12,10 +12,12 @@ import {
   SupportedMimeType,
   fileContentToText,
   unixTime,
+  logger,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
   type ResponseWithNodeStream,
+  type RealmInfo,
 } from '.';
 import { MatrixClient } from './matrix-client';
 
@@ -72,9 +74,20 @@ export interface IncrementalResult {
   stats: Stats;
 }
 
+export type FromScratchArgs = WorkerArgs;
+
 export interface FromScratchResult extends JSONTypes.Object {
   ignoreData: Record<string, string>;
   stats: Stats;
+}
+
+export interface CopyArgs extends WorkerArgs {
+  sourceRealmURL: string;
+}
+
+export interface CopyResult {
+  totalNonErrorIndexEntries: number;
+  invalidations: string[];
 }
 
 export type IndexRunner = (optsId: number) => Promise<void>;
@@ -110,6 +123,7 @@ export class RunnerOptionsManager {
 }
 
 export class Worker {
+  #log = logger('worker');
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #indexWriter: IndexWriter;
@@ -160,17 +174,13 @@ export class Worker {
     await Promise.all([
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
+      this.#queue.register(`copy-index`, this.copy),
     ]);
     await this.#queue.start();
   }
 
-  private async prepareAndRunJob<T>(
-    args: WorkerArgs,
-    run: () => Promise<T>,
-  ): Promise<T> {
-    let deferred = new Deferred<T>();
+  private async makeAuthedFetch(args: WorkerArgs) {
     let matrixClient: MatrixClient;
-
     if (this.#matrixClientCache.has(args.realmUsername)) {
       matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
 
@@ -202,6 +212,15 @@ export class Worker {
       },
       authorizationMiddleware(new RealmAuthDataSource(matrixClient, getFetch)),
     ]);
+    return _fetch;
+  }
+
+  private async prepareAndRunJob<T>(
+    args: WorkerArgs,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    let deferred = new Deferred<T>();
+    let _fetch = await this.makeAuthedFetch(args);
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch,
       reader: getReader(_fetch, new URL(args.realmURL)),
@@ -221,7 +240,7 @@ export class Worker {
           // was raised to this level the fastboot instance is probably no
           // longer usable.
           reportError(e);
-          console.error(
+          this.#log.error(
             `Error raised during indexing has likely stopped the indexer`,
             e,
           );
@@ -239,13 +258,48 @@ export class Worker {
     return result;
   }
 
-  private fromScratch = async (args: WorkerArgs) => {
+  private copy = async (args: CopyArgs) => {
+    this.#log.debug(`starting copy indexing for job: ${JSON.stringify(args)}`);
+    let authedFetch = await this.makeAuthedFetch(args);
+    let realmInfoResponse = await authedFetch(`${args.realmURL}_info`, {
+      headers: { Accept: SupportedMimeType.RealmInfo },
+    });
+    let realmInfo: RealmInfo = (await realmInfoResponse.json())?.data
+      ?.attributes;
+
+    let batch = await this.#indexWriter.createBatch(new URL(args.realmURL));
+    await batch.copyFrom(new URL(args.sourceRealmURL), realmInfo);
+    let result = await batch.done();
+    let invalidations = batch.invalidations;
+    this.#log.debug(
+      `completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
+        result,
+        null,
+        2,
+      )}`,
+    );
+    let { totalIndexEntries: totalNonErrorIndexEntries } = result;
+    return {
+      invalidations,
+      totalNonErrorIndexEntries,
+    };
+  };
+
+  private fromScratch = async (args: FromScratchArgs) => {
+    this.#log.debug(
+      `starting from-scratch indexing for job: ${JSON.stringify(args)}`,
+    );
     return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
       let { ignoreData, stats } = await this.#fromScratch(
         new URL(args.realmURL),
+      );
+      this.#log.debug(
+        `completed from-scratch indexing for realm ${
+          args.realmURL
+        }:\n${JSON.stringify(stats, null, 2)}`,
       );
       return {
         ignoreData: { ...ignoreData },
@@ -255,6 +309,9 @@ export class Worker {
   };
 
   private incremental = async (args: IncrementalArgs) => {
+    this.#log.debug(
+      `starting incremental indexing for job: ${JSON.stringify(args)}`,
+    );
     return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
@@ -264,6 +321,13 @@ export class Worker {
         new URL(args.realmURL),
         args.operation,
         { ...args.ignoreData },
+      );
+      this.#log.debug(
+        `completed incremental indexing for  ${args.url}:\n${JSON.stringify(
+          { ...stats, invalidations },
+          null,
+          2,
+        )}`,
       );
       return {
         ignoreData: { ...ignoreData },

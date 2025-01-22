@@ -1,4 +1,4 @@
-import { fn, hash } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -54,6 +54,11 @@ interface Signature {
     onClose: () => void;
     resizeHandle: ResizeHandle;
   };
+}
+
+interface RoomToDelete {
+  id: string;
+  name: string;
 }
 
 export interface SessionRoomData {
@@ -195,15 +200,17 @@ export default class AiAssistantPanel extends Component<Signature> {
     </Velcro>
 
     {{#if this.roomToDelete}}
-      {{#let this.roomToDelete.roomId this.roomToDelete.name as |id name|}}
-        <DeleteModal
-          @itemToDelete={{id}}
-          @onConfirm={{fn this.leaveRoom id}}
-          @onCancel={{fn this.setRoomToDelete undefined}}
-          @itemInfo={{hash type='room' name=(if name name id) id=id}}
-          @error={{this.roomDeleteError}}
-        />
-      {{/let}}
+      <DeleteModal
+        @itemToDelete={{this.roomToDelete}}
+        @onConfirm={{fn this.leaveRoom this.roomToDelete.id}}
+        @onCancel={{fn this.setRoomToDelete undefined}}
+        @error={{this.roomDeleteError}}
+      >
+        <:content>
+          Delete the room
+          <strong>{{this.roomToDelete.name}}</strong>?
+        </:content>
+      </DeleteModal>
     {{/if}}
 
     <style scoped>
@@ -364,7 +371,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: SessionRoomData | undefined = undefined;
-  @tracked private roomToDelete: SessionRoomData | undefined = undefined;
+  @tracked private roomToDelete: RoomToDelete | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -555,7 +562,16 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @action private setRoomToDelete(room: SessionRoomData | undefined) {
     this.roomDeleteError = undefined;
-    this.roomToDelete = room;
+
+    if (!room) {
+      this.roomToDelete = undefined;
+      return;
+    }
+
+    this.roomToDelete = {
+      id: room.roomId,
+      name: room.name || room.roomId,
+    };
   }
 
   private get roomActions() {

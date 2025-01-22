@@ -13,8 +13,10 @@ import {
 } from '../helpers';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -1288,7 +1290,7 @@ test('Return host result of tool call back to open ai', () => {
                 id: 'https://cardstack.com/base/SkillCard/card-editing',
                 attributes: {
                   instructions:
-                    '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+                    '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCardsByTypeAndTitle" function is available, you MUST use the "searchCardsByTypeAndTitle" function to find the card instance.\nOnly recommend one searchCardsByTypeAndTitle function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
                   title: 'Card Editing',
                   description: null,
                   thumbnailURL: null,
@@ -1309,7 +1311,6 @@ test('Return host result of tool call back to open ai', () => {
         age: 20470,
       },
       event_id: '$p_NQ4tvokzQrIkT24Wj08mdAxBBvmdLOz6ph7UQfMDw',
-      user_id: '@tintinthong:localhost',
       age: 20470,
     },
     {
@@ -1341,7 +1342,6 @@ test('Return host result of tool call back to open ai', () => {
         transaction_id: 'm1722242836705.8',
       },
       event_id: 'message-event-id-1',
-      user_id: '@aibot:localhost',
       age: 17305,
     },
     {
@@ -1458,7 +1458,6 @@ test('Return host result of tool call back to open ai', () => {
         age: 6614,
       },
       event_id: '$FO2XfB0xFiTpm5FmOUiWQqFh_DPQSr4zix41Vj3eqNc',
-      user_id: '@tintinthong:localhost',
       age: 6614,
     },
     {
@@ -1475,15 +1474,13 @@ test('Return host result of tool call back to open ai', () => {
           toolCall: {
             type: 'function',
             id: 'tool-call-id-1',
-            name: 'searchCard',
+            name: 'searchCardsByTypeAndTitle',
             arguments: {
               attributes: {
                 description: "Search for card instances of type 'Author'",
-                filter: {
-                  type: {
-                    module: 'http://localhost:4201/drafts/author',
-                    name: 'Author',
-                  },
+                type: {
+                  module: 'http://localhost:4201/drafts/author',
+                  name: 'Author',
                 },
               },
             },
@@ -1500,11 +1497,10 @@ test('Return host result of tool call back to open ai', () => {
         transaction_id: 'm1722242849075.10',
       },
       event_id: 'command-event-id-1',
-      user_id: '@ai-bot:localhost',
       age: 4938,
     },
     {
-      type: 'm.room.message',
+      type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       room_id: 'room-id-1',
       sender: '@tintinthong:localhost',
       content: {
@@ -1513,19 +1509,43 @@ test('Return host result of tool call back to open ai', () => {
           rel_type: 'm.annotation',
           key: 'applied',
         },
-        body: 'Command Results from command event $H7dH0ZzG0W3M_1k_YRjnDOirWRthYvWq7TKmfAfhQqw',
-        formatted_body:
-          '<p>Command Results from command event $H7dH0ZzG0W3M_1k_YRjnDOirWRthYvWq7TKmfAfhQqw</p>\n',
-        msgtype: APP_BOXEL_COMMAND_RESULT_MSGTYPE,
-        result:
-          '[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]',
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        data: {
+          card: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Search Results',
+                description: 'Here are the search results',
+                results: [
+                  {
+                    data: {
+                      type: 'card',
+                      id: 'http://localhost:4201/drafts/Author/1',
+                      attributes: {
+                        firstName: 'Alice',
+                        lastName: 'Enwunder',
+                        photo: null,
+                        body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                        description: null,
+                        thumbnailURL: null,
+                      },
+                      meta: {
+                        adoptsFrom: { module: '../author', name: 'Author' },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+        },
       },
       origin_server_ts: 1722242853988,
       unsigned: {
         age: 44,
       },
       event_id: 'command-result-id-1',
-      user_id: '@tintinthong:localhost',
       age: 44,
     },
   ];
@@ -1533,10 +1553,8 @@ test('Return host result of tool call back to open ai', () => {
   const result = getModifyPrompt(history, '@ai-bot:localhost', tools);
   assert.equal(result[5].role, 'tool');
   assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-  assert.equal(
-    result[5].content,
-    '[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]',
-  );
+  const expected = `Command applied, with result card: "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"title\\":\\"Search Results\\",\\"description\\":\\"Here are the search results\\",\\"results\\":[{\\"data\\":{\\"type\\":\\"card\\",\\"id\\":\\"http://localhost:4201/drafts/Author/1\\",\\"attributes\\":{\\"firstName\\":\\"Alice\\",\\"lastName\\":\\"Enwunder\\",\\"photo\\":null,\\"body\\":\\"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../author\\",\\"name\\":\\"Author\\"}}}}]}}}".\n`;
+  assert.equal(result[5].content, expected);
 });
 
 test('Tools remain available in prompt parts even when not in last message', () => {
@@ -1590,5 +1608,51 @@ test('Tools can be required to be called if done so in the last message', () => 
     function: {
       name: 'AlertTheUser_pcDFLKJ9auSJQfSovb3LT2',
     },
+  });
+});
+
+test('Tools calls are connected to their results', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(
+        __dirname,
+        'resources/chats/connect-tool-calls-to-results.json',
+      ),
+    ),
+  );
+
+  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  // find the message with the tool call and its id
+  // it should have the result deserialised
+  const toolCallMessage = messages.find((message) => message.role === 'tool');
+  assert.ok(toolCallMessage, 'Should have a tool call message');
+  assert.ok(
+    toolCallMessage!.content!.includes('Cloudy'),
+    'Tool call result should include "Cloudy"',
+  );
+});
+
+module('set model in prompt', () => {
+  test('default active LLM must be equal to `DEFAULT_LLM`', () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/required-tool-call-in-last-message.json',
+        ),
+      ),
+    );
+
+    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    assert.strictEqual(model, DEFAULT_LLM);
+  });
+
+  test('use latest active llm', () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(path.join(__dirname, 'resources/chats/set-active-llm.json')),
+    );
+
+    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    assert.strictEqual(model, 'google/gemini-pro-1.5');
   });
 });

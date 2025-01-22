@@ -32,17 +32,18 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
-import { StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
+import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import type {
-  CardContext,
-  CardDef,
-  Format,
+import {
+  type CardContext,
+  type CardDef,
+  type Format,
 } from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
@@ -142,6 +143,11 @@ interface Signature {
   };
 }
 
+interface CardToDelete {
+  id: string;
+  title: string;
+}
+
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -150,7 +156,7 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare realm: Realm;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
-  @tracked private itemToDelete: CardDef | undefined = undefined;
+  @tracked private cardToDelete: CardToDelete | undefined = undefined;
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -277,31 +283,50 @@ export default class InteractSubmode extends Component<Signature> {
         await here.args.saveCard(card);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
-        let loadedCard: CardDef;
+        if (here.cardToDelete) {
+          return here.delete.perform(here.cardToDelete.id);
+        }
 
-        if (typeof card === 'string') {
-          let _loadedCard = await here.cardService.getCard(card);
-          if (!_loadedCard) {
-            throw new Error(`Could not load card ${card}`);
-          }
-          loadedCard = _loadedCard;
+        let cardToDelete: CardToDelete | undefined;
+
+        if (typeof card === 'object' && 'id' in card) {
+          let loadedCard = card as CardDef;
+          cardToDelete = {
+            id: loadedCard.id,
+            title: loadedCard.title,
+          };
         } else {
-          loadedCard = card as CardDef;
+          let cardUrl = card instanceof URL ? card : new URL(card as string);
+          try {
+            let loadedCard = await here.cardService.getCard(cardUrl);
+            cardToDelete = {
+              id: loadedCard.id,
+              title: loadedCard.title,
+            };
+          } catch (error: any) {
+            // If we get a 500 Internal Server Error, it is probable that the card is in error state.
+            // In this case a cardTitle should be present - we use this to display the card title in the delete modal.
+            if (error.status === 500) {
+              let cardTitle = JSON.parse(error.responseText)?.errors?.[0]?.meta
+                ?.cardTitle;
+
+              if (!cardTitle) {
+                throw new Error(
+                  `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
+                );
+              }
+
+              cardToDelete = {
+                id: cardUrl.href,
+                title: cardTitle,
+              };
+            } else {
+              throw error;
+            }
+          }
         }
 
-        const stackItem = here.allStackItems.find(
-          (item) => item.card === loadedCard,
-        );
-        // if is workspace index card, do not allow deletion
-        if (stackItem && isIndexCard(stackItem)) {
-          throw new Error('Cannot delete workspace index card');
-        }
-
-        if (!here.itemToDelete) {
-          here.itemToDelete = loadedCard;
-          return;
-        }
-        here.delete.perform(loadedCard);
+        here.cardToDelete = cardToDelete;
       },
       doWithStableScroll: async (
         card: CardDef,
@@ -373,12 +398,12 @@ export default class InteractSubmode extends Component<Signature> {
   });
 
   @action private onCancelDelete() {
-    this.itemToDelete = undefined;
+    this.cardToDelete = undefined;
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (card: CardDef) => {
-    if (!card?.id) {
+  private delete = dropTask(async (cardId: string) => {
+    if (!cardId) {
       // the card isn't actually saved yet, so do nothing
       return;
     }
@@ -390,18 +415,18 @@ export default class InteractSubmode extends Component<Signature> {
         if (!selections) {
           continue;
         }
-        let removedCard = [...selections].find((c) => c.id === card.id);
+        let removedCard = [...selections].find((c) => c.id === cardId);
         if (removedCard) {
           selections.delete(removedCard);
         }
       }
     }
     await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(card);
+      await this.operatorModeStateService.deleteCard(cardId);
       await timeout(500); // task running message can be displayed long enough for the user to read it
     });
 
-    this.itemToDelete = undefined;
+    this.cardToDelete = undefined;
   });
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
@@ -420,28 +445,19 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private _copyCard = dropTask(
-    async (card: CardDef, stackIndex: number, done: Deferred<CardDef>) => {
+    async (
+      sourceCard: CardDef,
+      stackIndex: number,
+      done: Deferred<CardDef>,
+    ) => {
       let newCard: CardDef | undefined;
       try {
-        // use existing card in stack to determine realm url,
-        // otherwise use user's first writable realm
-        let topCard =
-          this.operatorModeStateService.topMostStackItems()[stackIndex]?.card;
-        let realmURL: URL | undefined;
-        if (topCard) {
-          let url = await this.cardService.getRealmURL(topCard);
-          // open card might be from a realm in which we don't have write permissions
-          if (url && this.realm.canWrite(url.href)) {
-            realmURL = url;
-          }
-        }
-        if (!realmURL) {
-          if (!this.realm.defaultWritableRealm) {
-            throw new Error('Could not find a writable realm');
-          }
-          realmURL = new URL(this.realm.defaultWritableRealm.path);
-        }
-        newCard = await this.cardService.copyCard(card, realmURL);
+        let { commandContext } = this.commandService;
+        const result = await new CopyCardCommand(commandContext).execute({
+          sourceCard,
+          targetStackIndex: stackIndex,
+        });
+        newCard = result.newCard;
       } catch (e) {
         done.reject(e);
       } finally {
@@ -475,7 +491,12 @@ export default class InteractSubmode extends Component<Signature> {
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCard: CardDef | undefined;
         for (let [index, card] of sources.entries()) {
-          let newCard = await this.cardService.copyCard(card, realmURL);
+          let { newCard } = await new CopyCardCommand(
+            this.commandService.commandContext,
+          ).execute({
+            sourceCard: card,
+            targetRealmUrl: realmURL.href,
+          });
           if (index === 0) {
             scrollToCard = newCard; // we scroll to the first card lexically by title
           }
@@ -758,13 +779,21 @@ export default class InteractSubmode extends Component<Signature> {
             </:content>
           </Tooltip>
         {{/if}}
-        {{#if this.itemToDelete}}
+        {{#if this.cardToDelete}}
           <DeleteModal
-            @itemToDelete={{this.itemToDelete}}
-            @onConfirm={{get (this.publicAPI this 0) 'delete'}}
+            @itemToDelete={{this.cardToDelete}}
+            @onConfirm={{fn
+              (get (this.publicAPI this 0) 'delete')
+              this.cardToDelete.id
+            }}
             @onCancel={{this.onCancelDelete}}
             @isDeleteRunning={{this.delete.isRunning}}
-          />
+          >
+            <:content>
+              Delete the card
+              <strong>{{this.cardToDelete.title}}</strong>?
+            </:content>
+          </DeleteModal>
         {{/if}}
       </div>
     </SubmodeLayout>

@@ -14,7 +14,7 @@ import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import { BoxelButton, Pill } from '@cardstack/boxel-ui/components';
+import { Pill, BoxelButton } from '@cardstack/boxel-ui/components';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
@@ -37,20 +37,25 @@ import FilePen from '@cardstack/boxel-icons/file-pen';
 import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Award from '@cardstack/boxel-icons/award';
 import AwardOff from '@cardstack/boxel-icons/award-off';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { Document } from './document';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
 import { Query } from '@cardstack/runtime-common/query';
 import { Company } from './company';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+import { on } from '@ember/modifier';
 
 interface DealSizeSummary {
   summary: string;
   percentDiff: number;
   positive: boolean;
 }
+
+const taskSource = {
+  module: new URL('./task', import.meta.url).href,
+  name: 'CRMTask',
+};
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
@@ -92,6 +97,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return [this.realmURL?.href];
   }
 
+  get dealId() {
+    return this.args.model.id;
+  }
+
   get dealQuery(): Query {
     return {
       filter: {
@@ -103,9 +112,80 @@ class IsolatedTemplate extends Component<typeof Deal> {
     };
   }
 
+  get activeTasksQuery(): Query {
+    let everyArr = [];
+    if (this.dealId) {
+      everyArr.push({
+        eq: {
+          'deal.id': this.dealId,
+        },
+      });
+    }
+    return {
+      filter: {
+        on: taskSource,
+        every: everyArr,
+      },
+    };
+  }
+
   query = getCards(this.dealQuery, this.realmHrefs, {
     isLive: true,
   });
+
+  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  private _createNewTask = restartableTask(async () => {
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          name: null,
+          details: null,
+          status: {
+            index: 1,
+            label: 'In Progress',
+          },
+          priority: {
+            index: null,
+            label: null,
+          },
+          description: null,
+          thumbnailURL: null,
+        },
+        relationships: {
+          assignee: {
+            links: {
+              self: null,
+            },
+          },
+          deal: {
+            links: {
+              self: this.dealId ?? null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: taskSource,
+        },
+      },
+    };
+
+    await this.args.context?.actions?.createCard?.(
+      taskSource,
+      new URL(taskSource.module),
+      {
+        realmURL: this.realmURL,
+        doc,
+      },
+    );
+  });
+
+  createNewTask = () => {
+    this._createNewTask.perform();
+  };
 
   @action dealSizeSummary(deals: CardDef[]): DealSizeSummary | null {
     //currently only assumes everything works in USD
@@ -132,15 +212,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
       };
     }
     return null;
-  }
-
-  @action
-  viewDocument(id: string | undefined) {
-    if (id && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(new URL(id));
-    } else {
-      console.warn('Card opening functionality is not available here.');
-    }
   }
 
   <template>
@@ -296,18 +367,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     <Info class='info-icon' />
                   </:icon>
                 </EntityDisplayWithIcon>
-
-                {{#if @model.document}}
-                  <BoxelButton
-                    @as='button'
-                    @size='extra-small'
-                    @kind='secondary-light'
-                    class='view-document-btn'
-                    {{on 'click' (fn this.viewDocument @model.document.id)}}
-                  >
-                    View Attachment
-                  </BoxelButton>
-                {{/if}}
               </div>
               <div class='description content-container'>
                 {{#if @model.notes}}
@@ -334,16 +393,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <World class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                {{#if this.hasCompanyInfo}}
-                  <@fields.headquartersAddress @format='atom' />
-                  <@fields.website @format='atom' />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Company Info
-                  </div>
-                {{/if}}
-              </div>
+              {{#if this.hasCompanyInfo}}
+                <@fields.headquartersAddress @format='atom' />
+                <@fields.website @format='atom' />
+              {{else}}
+                <div class='default-value'>
+                  Missing Company Info
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -355,34 +412,58 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Users class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                {{#if this.hasStakeholders}}
-                  {{#if @model.primaryStakeholder}}
-                    <ContactRow
-                      @userID={{@model.primaryStakeholder.id}}
-                      @name={{@model.primaryStakeholder.name}}
-                      @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
-                      @tagLabel='primary'
-                    />
-                  {{/if}}
-                  {{#each @model.stakeholders as |stakeholder|}}
-                    <ContactRow
-                      @userID={{stakeholder.id}}
-                      @name={{stakeholder.name}}
-                      @thumbnailURL={{stakeholder.thumbnailURL}}
-                      @tagLabel={{stakeholder.position}}
-                    />
-                  {{/each}}
-                {{else}}
-                  <div class='default-value'>
-                    No Stakeholders
-                  </div>
+              {{#if this.hasStakeholders}}
+                {{#if @model.primaryStakeholder}}
+                  <ContactRow
+                    @userID={{@model.primaryStakeholder.id}}
+                    @name={{@model.primaryStakeholder.name}}
+                    @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
+                    @tagLabel='primary'
+                  />
                 {{/if}}
-
-              </div>
+                {{#each @model.stakeholders as |stakeholder|}}
+                  <ContactRow
+                    @userID={{stakeholder.id}}
+                    @name={{stakeholder.name}}
+                    @thumbnailURL={{stakeholder.thumbnailURL}}
+                    @tagLabel={{stakeholder.position}}
+                  />
+                {{/each}}
+              {{else}}
+                <div class='default-value'>
+                  No Stakeholders
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
+          <SummaryCard>
+            <:title>
+              <label>Active Tasks</label>
+            </:title>
+            <:icon>
+              <BoxelButton
+                @kind='primary'
+                @size='extra-small'
+                @disabled={{this.activeTasks.isLoading}}
+                @loading={{this._createNewTask.isRunning}}
+                {{on 'click' this.createNewTask}}
+              >
+                New Task
+              </BoxelButton>
+            </:icon>
+            <:content>
+              {{#if this.activeTasks.isLoading}}
+                Loading...
+              {{else if this.activeTasks.instances}}
+                {{this.activeTasks.instances.length}}
+              {{else}}
+                <div class='default-value'>
+                  No Active Tasks
+                </div>
+              {{/if}}
+            </:content>
+          </SummaryCard>
         </SummaryGridContainer>
       </:summary>
     </DealPageLayout>
@@ -501,12 +582,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-sm);
         font-weight: 600;
       }
-      .view-document-btn {
-        font-weight: 600;
-        padding: 2px 5px;
-        min-width: 0px;
-        min-height: 0px;
-      }
       @container (max-width: 447px) {
         .progress-container {
           flex-direction: column-reverse;
@@ -598,10 +673,23 @@ class FittedTemplate extends Component<typeof Deal> {
         </div>
       </header>
 
+      <div class='account-info account-info-grid-view'>
+        <@fields.company
+          @format='atom'
+          @displayContainer={{false}}
+          class='info-atom'
+        />
+        <@fields.primaryContact
+          @format='atom'
+          @displayContainer={{false}}
+          class='info-atom'
+        />
+      </div>
+
       <div class='deal-content'>
         <div class='deal-details'>
           <div class='deal-field'>
-            <label>Current Value:</label>
+            <label>Current Value</label>
             <@fields.computedValue class='highlight-value' @format='atom' />
           </div>
 
@@ -686,14 +774,17 @@ class FittedTemplate extends Component<typeof Deal> {
         margin-left: auto;
       }
       .account-name {
-        font-size: var(--boxel-font-size-med);
-        font-weight: 600;
+        grid-area: account-name;
+        font: 600 var(--boxel-font-sm);
       }
       .account-info {
         display: flex;
         align-items: start;
         gap: var(--boxel-sp-xs);
         overflow: hidden;
+      }
+      .account-info-grid-view {
+        display: none;
       }
       .account-name,
       .account-info:deep(.entity-name) {
@@ -732,6 +823,9 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: event-details;
         background-color: var(--boxel-300);
       }
+      .deal-header:deep(.account-header-logo) {
+        grid-area: account-header-logo;
+      }
       /* Catch all because deal is too dense*/
       @container fitted-card (height < 180px) {
         .fitted-deal-card {
@@ -739,28 +833,100 @@ class FittedTemplate extends Component<typeof Deal> {
           grid-template-rows: auto;
           padding: var(--boxel-sp-sm);
         }
+        .crm-account-header {
+          --account-header-logo-size: 40px;
+        }
         .deal-content {
           display: none;
         }
-
         .deal-header {
           grid-area: deal-header;
           display: grid;
           grid-template-areas: 'crm-account-header';
-          grid-template-columns: 1fr;
+          grid-template-columns: 100%;
           align-items: start;
           gap: var(--boxel-sp-lg);
         }
         .deal-status {
           display: none;
         }
-
-        .deal-header:deep(.account-header-logo) {
-          width: 40px;
-          height: 40px;
-        }
         .account-name {
           font-size: var(--boxel-font-size-sm);
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 2.0) {
+        .fitted-deal-card {
+          display: grid;
+          width: 100%;
+          height: 100%;
+          grid-template-areas:
+            'deal-header'
+            'grid-account-info'
+            'deal-content';
+          grid-template-rows: max-content max-content auto;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+        .crm-account-header {
+          --account-header-logo-size: 40px;
+        }
+        .account-name {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .account-info {
+          display: none;
+        }
+        .info-atom {
+          --entity-display-icon-size: var(--boxel-icon-sm);
+          --entity-display-title-font-size: var(--boxel-font-size-xs);
+        }
+        .account-info-grid-view {
+          display: flex;
+          flex-direction: column;
+        }
+        .deal-header {
+          grid-template-columns: auto;
+          gap: 0;
+        }
+        .deal-status {
+          display: none;
+        }
+        .deal-content {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+        .deal-details {
+          display: grid;
+          grid-template-rows: auto auto;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+        .deal-field {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs);
+        }
+        /* Make the first two fields appear in row 1 */
+        .deal-field:nth-child(1),
+        .deal-field:nth-child(2) {
+          grid-row: 1;
+        }
+        /* Make the health score field take full width in row 2 */
+        .deal-field:nth-child(3) {
+          grid-row: 2;
+          grid-column: 1 / -1;
+        }
+        .highlight-value {
+          font: 600 var(--boxel-font-xs);
+        }
+        .progress-bar {
+          width: 100%;
         }
       }
     </style>
@@ -946,17 +1112,17 @@ export class Deal extends CardDef {
   });
   @field healthScore = contains(PercentageField);
   @field notes = contains(MarkdownField);
-  @field document = linksTo(() => Document);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
   @field valueBreakdown = containsMany(ValueLineItem);
   @field isActive = contains(BooleanField, {
     computeVia: function (this: Deal) {
       return (
-        this.status.label === 'Closed Won' ||
-        this.status.label === 'Closed Lost'
+        this.status.label !== 'Closed Won' &&
+        this.status.label !== 'Closed Lost'
       );
     },
+    isUsed: true,
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {
@@ -982,6 +1148,12 @@ export class Deal extends CardDef {
       return this.account?.company;
     },
   });
+  @field title = contains(StringField, {
+    computeVia: function (this: Deal) {
+      return this.name;
+    },
+  });
+
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
 }

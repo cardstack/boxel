@@ -5,8 +5,7 @@
       "longName": "Cultural Scenes",
       "shortName": "Culture",
       "slug": "cultural-scenes",
-      "backgroundColor": "#c3fc33",
-      "textColor": null,
+      "pillColor": "#FA7F01",
       "description": "Capturing the vibrant art, food, and music of cities.",
       "title": "Cultural Scenes",
       "thumbnailURL": null

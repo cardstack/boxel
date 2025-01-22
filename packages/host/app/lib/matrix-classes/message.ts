@@ -1,10 +1,11 @@
+import { guidFor } from '@ember/object/internals';
+import { tracked } from '@glimmer/tracking';
+
 import { EventStatus } from 'matrix-js-sdk';
 
 import { getCard } from '@cardstack/runtime-common';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-
-import type { CommandResult } from 'https://cardstack.com/base/command-result';
 
 import { RoomMember } from './member';
 import MessageCommand from './message-command';
@@ -22,6 +23,7 @@ type AttachedCardResource = {
 type RoomMessageInterface = RoomMessageRequired & RoomMessageOptional;
 
 interface RoomMessageRequired {
+  roomId: string;
   author: RoomMember;
   created: Date;
   updated: Date;
@@ -39,27 +41,30 @@ interface RoomMessageOptional {
   errorMessage?: string;
   clientGeneratedId?: string | null;
   command?: MessageCommand | null;
-  commandResult?: CommandResult | null;
 }
 
 export class Message implements RoomMessageInterface {
+  @tracked formattedMessage: string;
+  @tracked message: string;
+  @tracked command?: MessageCommand | null;
+  @tracked isStreamingFinished?: boolean;
+
   attachedCardIds?: string[] | null;
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
-  isStreamingFinished?: boolean;
   errorMessage?: string;
   clientGeneratedId?: string;
-  command?: MessageCommand | null;
-  commandResult?: CommandResult | null;
 
   author: RoomMember;
-  formattedMessage: string;
   status: EventStatus | null;
-  created: Date;
+  @tracked created: Date;
   updated: Date;
   eventId: string;
-  message: string;
+  roomId: string;
+
+  //This property is used for testing purpose
+  instanceId: string;
 
   constructor(init: RoomMessageInterface) {
     Object.assign(this, init);
@@ -70,6 +75,8 @@ export class Message implements RoomMessageInterface {
     this.created = init.created;
     this.updated = init.updated;
     this.status = init.status;
+    this.roomId = init.roomId;
+    this.instanceId = guidFor(this);
   }
   get isRetryable() {
     return (

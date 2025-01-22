@@ -1,7 +1,7 @@
 import { isCardDef } from './code-ref';
 import { Deferred } from './deferred';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import {
   AttributesSchema,
   CardSchema,
@@ -14,21 +14,23 @@ export interface CommandContext {
 }
 
 export class CommandInvocation<
-  CardInputType extends CardDef | undefined,
-  CardResultType extends CardDef | undefined,
+  CardInputType extends CardDefConstructor | undefined,
+  CardResultType extends CardDefConstructor | undefined = undefined,
 > {
-  result?: CardResultType;
+  result?: CardInstance<CardResultType>;
   error: Error | undefined;
   status: 'pending' | 'success' | 'error' = 'pending';
-  private deferred: Deferred<CardResultType> = new Deferred<CardResultType>();
+  private deferred: Deferred<CardInstance<CardResultType>> = new Deferred<
+    CardInstance<CardResultType>
+  >();
 
-  constructor(public readonly input: CardInputType) {}
+  constructor(public readonly input: CardInstance<CardInputType>) {}
 
-  get promise(): Promise<CardResultType> {
+  get promise(): Promise<CardInstance<CardResultType>> {
     return this.deferred.promise;
   }
 
-  fulfill(result: CardResultType): void {
+  fulfill(result: CardInstance<CardResultType>): void {
     this.status = 'success';
     this.deferred.fulfill(result);
   }
@@ -39,51 +41,54 @@ export class CommandInvocation<
   }
 }
 
+type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
+
+type CardInstance<T extends CardDefConstructor | undefined> =
+  T extends CardDefConstructor ? InstanceType<T> : undefined;
+
 export abstract class Command<
-  CardInputType extends CardDef | undefined,
-  CardResultType extends CardDef | undefined,
-  CommandConfiguration extends any | undefined = undefined,
+  CardInputType extends CardDefConstructor | undefined,
+  CardResultType extends CardDefConstructor | undefined = undefined,
 > {
-  // Is this actually type checking ?
-  abstract getInputType(): Promise<
-    { new (args?: Partial<CardInputType>): CardInputType } | undefined
-  >; // TODO: can we do better than any here?
+  abstract getInputType(): Promise<CardInputType>;
 
   invocations: CommandInvocation<CardInputType, CardResultType>[] = [];
 
-  nextCompletionDeferred: Deferred<CardResultType> =
-    new Deferred<CardResultType>();
+  nextCompletionDeferred: Deferred<CardInstance<CardResultType>> = new Deferred<
+    CardInstance<CardResultType>
+  >();
 
   name: string = this.constructor.name;
   description = '';
 
-  constructor(
-    protected readonly commandContext: CommandContext,
-    protected readonly configuration?: CommandConfiguration | undefined, // we'd like this to be required *if* CommandConfiguration is defined, and allow the user to skip it when CommandConfiguration is undefined
-  ) {}
+  constructor(protected readonly commandContext: CommandContext) {}
 
+  async execute(): Promise<CardInstance<CardResultType>>;
   async execute(
-    input: CardInputType extends CardDef | undefined
-      ? CardInputType | Partial<Omit<CardInputType, keyof CardDef>>
+    input: CardInputType extends CardDefConstructor
+      ? Partial<FieldsOf<CardInstance<CardInputType>>>
       : never,
-  ): Promise<CardResultType> {
+  ): Promise<CardInstance<CardResultType>>;
+  async execute(
+    input?: CardInputType extends CardDefConstructor
+      ? Partial<FieldsOf<CardInstance<CardInputType>>>
+      : never,
+  ): Promise<CardInstance<CardResultType>> {
     // internal bookkeeping
     // todo: support for this.runTask being defined
     // runTask would be an ember task, run would just be a normal function
 
-    let inputCard: CardInputType;
+    let inputCard: CardInstance<CardInputType>;
     if (input === undefined) {
-      inputCard = undefined as CardInputType;
+      inputCard = undefined as CardInstance<CardInputType>;
     } else if (isCardDef(input.constructor)) {
-      inputCard = input as CardInputType;
+      inputCard = input as unknown as CardInstance<CardInputType>;
     } else {
       let InputType = await this.getInputType();
       if (!InputType) {
         throw new Error('Input provided but no input type found');
       } else {
-        inputCard = new InputType(
-          input as Partial<CardInputType>,
-        ) as CardInputType;
+        inputCard = new InputType(input) as CardInstance<CardInputType>;
       }
     }
     let invocation = new CommandInvocation<CardInputType, CardResultType>(
@@ -101,16 +106,20 @@ export abstract class Command<
       invocation.reject(error);
       throw error;
     } finally {
-      this.nextCompletionDeferred = new Deferred<CardResultType>();
+      this.nextCompletionDeferred = new Deferred<
+        CardInstance<CardResultType>
+      >();
       this.nextCompletionDeferred.promise.catch(() => {
         // ensure this is not considered an unhandled rejection by QUnit
       });
     }
   }
 
-  protected abstract run(input: CardInputType): Promise<CardResultType>;
+  protected abstract run(
+    input: CardInstance<CardInputType>,
+  ): Promise<CardInstance<CardResultType>>;
 
-  waitForNextCompletion(): Promise<CardResultType> {
+  waitForNextCompletion(): Promise<CardInstance<CardResultType>> {
     return this.nextCompletionDeferred.promise;
   }
 
@@ -119,10 +128,18 @@ export abstract class Command<
     mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
   ): Promise<CardSchema> {
     let InputType = await this.getInputType();
-    return generateJsonSchemaForCardType(
-      InputType as unknown as typeof CardDef, // TODO: can we do better type-wise?
-      cardApi,
-      mappings,
-    );
+    if (!InputType) {
+      return {
+        attributes: {
+          type: 'object',
+          properties: {},
+        },
+        relationships: {
+          type: 'object',
+          properties: {},
+        },
+      };
+    }
+    return generateJsonSchemaForCardType(InputType, cardApi, mappings);
   }
 }
