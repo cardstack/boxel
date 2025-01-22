@@ -223,8 +223,9 @@ export class Batch {
       return valueExpressions;
     });
     if (!columns) {
-      this.#log.info(`nothing to copy from ${sourceRealmURL.href}`);
-      return;
+      throw new Error(
+        `nothing to copy from ${sourceRealmURL.href} - this realm is not present on the realm server`,
+      );
     }
 
     await this.#query([

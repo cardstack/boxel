@@ -20,6 +20,13 @@ import { IndexQueryEngine } from '../index-query-engine';
 import { coerceTypes } from '../index-structure';
 
 const testRealmURL2 = `http://test-realm/test2/`;
+const testRealmInfo: RealmInfo = {
+  name: 'Test Realm',
+  backgroundURL: null,
+  iconURL: null,
+  showAsCatalog: null,
+  visibility: 'public',
+};
 
 const tests = Object.freeze({
   'can perform invalidations for a instance entry': async (
@@ -429,14 +436,6 @@ const tests = Object.freeze({
     let destTypes = [{ module: `./person`, name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL2)),
     );
-    const testRealmInfo: RealmInfo = {
-      name: 'Test Realm',
-      backgroundURL: null,
-      iconURL: null,
-      showAsCatalog: null,
-      visibility: 'public',
-    };
-
     let modified = Date.now();
     let resource: CardResource = {
       id: `${testRealmURL}1`,
@@ -614,6 +613,30 @@ const tests = Object.freeze({
       },
       'the copied module is correct',
     );
+  },
+
+  'throws when copy source realm is not present on the realm server': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    assert.expect(1);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL2, current_version: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL2));
+    try {
+      await batch.copyFrom(new URL(testRealmURL), testRealmInfo);
+      throw new Error('Expected error to be thrown');
+    } catch (e: any) {
+      assert.strictEqual(
+        e.message,
+        `nothing to copy from ${testRealmURL} - this realm is not present on the realm server`,
+        'the correct exception was thrown',
+      );
+    }
   },
 
   'error entry includes last known good state when available': async (
