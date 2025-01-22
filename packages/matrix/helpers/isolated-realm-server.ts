@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
@@ -43,6 +43,8 @@ export async function startServer() {
 
       `--fromUrl='http://localhost:4205/test/'`,
       `--toUrl='http://localhost:4205/test/'`,
+      `--fromUrl='http://localhost:4205/seed/'`,
+      `--toUrl='http://localhost:4205/seed/'`,
       `--fromUrl='https://cardstack.com/base/'`,
       `--toUrl='http://localhost:4201/base/'`,
     ],
@@ -215,11 +217,5 @@ export class IsolatedRealmServer {
     await workerManagerStop;
     this.workerManagerStopped = undefined;
     this.workerManagerProcess.send('kill');
-
-    // realm and worker manager seems to not not always be dying in CI, the ports are
-    // sometimes unavailable (perhaps HTTP server shutdown leaky
-    // async?)
-    // execSync(`kill -9 ${this.workerManagerProcess.pid}`);
-    // execSync(`kill -9 ${this.realmServerProcess.pid}`);
   }
 }
