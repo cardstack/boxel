@@ -116,7 +116,7 @@ export class CatalogEntry extends CardDef {
     private loadCardIcon = restartableTask(async () => {
       if (this.args.model.ref && this.args.model.id) {
         let card = await loadCard(this.args.model.ref, {
-          loader: (import.meta as any).loader,
+          loader: myLoader(),
           relativeTo: new URL(this.args.model.id),
         });
         this.icon = card.icon;
@@ -398,4 +398,15 @@ function getIcon(specType: string) {
     default:
       return;
   }
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }
