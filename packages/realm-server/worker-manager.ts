@@ -146,7 +146,9 @@ const shutdown = (onShutdown?: () => void) => {
       process.exit(1);
     }
     log.info(`worker manager HTTP on port ${port} has stopped.`);
-    onShutdown?.();
+    if (onShutdown) {
+      onShutdown();
+    }
     process.exit(0);
   });
 };
