@@ -1,4 +1,4 @@
-import { isDestroyed } from '@ember/destroyable';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -236,6 +236,9 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    registerDestructor(this, () => {
+      this.scrollState().messageVisibilityObserver.disconnect();
+    });
   }
 
   private scrollState() {
@@ -251,9 +254,6 @@ export default class Room extends Component<Signature> {
         messageElemements: new WeakMap(),
         messageScrollers: new Map(),
         messageVisibilityObserver: new IntersectionObserver((entries) => {
-          if (isDestroyed(this)) {
-            return;
-          }
           entries.forEach((entry) => {
             let index = this.messageElements.get(entry.target as HTMLElement);
             if (index != null) {
