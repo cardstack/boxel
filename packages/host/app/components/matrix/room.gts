@@ -1,3 +1,4 @@
+import { isDestroyed } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -59,7 +60,6 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
-import { isDestroyed } from '@ember/destroyable';
 
 interface Signature {
   Args: {
@@ -251,10 +251,10 @@ export default class Room extends Component<Signature> {
         messageElemements: new WeakMap(),
         messageScrollers: new Map(),
         messageVisibilityObserver: new IntersectionObserver((entries) => {
+          if (isDestroyed(this)) {
+            return;
+          }
           entries.forEach((entry) => {
-            if (isDestroyed(this)) {
-              return;
-            }
             let index = this.messageElements.get(entry.target as HTMLElement);
             if (index != null) {
               if (
