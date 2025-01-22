@@ -16,7 +16,7 @@ The capabilites of the realm are:
 
 The entry point that serves these requests `handle` function in `realm.ts` file. Depending on the `Accept` header (the recognized ones are `application/vnd.card+json`, `application/vnd.card+source`, `application/vnd.api+json`, `text/event-stream`, `text/html`) and the HTTP verb (`GET`, `PATCH`, `POST`, `DELETE` ), it will perform one of the actions listed in the above list. The routing that depends on the MIME type and HTTP method is defined in `router.ts`. There's a special case of requesting the realm root (`/`) with `GET` and `application/vnd.card+json`. This looks for a card instance at `index.json` to return.
 
-The different types of requests, together with its params, are documented in `realm-server-test.ts`.
+The different types of requests, together with its params, are documented in `realm-endpoints-test.ts`.
 
 ## Transpiling code
 

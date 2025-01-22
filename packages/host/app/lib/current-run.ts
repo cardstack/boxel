@@ -122,50 +122,26 @@ export class CurrentRun {
     this.#render = render;
   }
 
-  static async fromScratch(
-    current: CurrentRun,
-    invalidateEntireRealm?: boolean,
-  ): Promise<IndexResults> {
+  static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from scratch indexing`);
     perfLog.debug(
       `starting from scratch indexing for realm ${current.realmURL.href}`,
     );
-
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
     let invalidations: URL[] = [];
-    if (invalidateEntireRealm) {
-      perfLog.debug(
-        `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
-      );
-      let mtimesStart = Date.now();
-      let filesystemMtimes = await current.#reader.mtimes();
-      perfLog.debug(
-        `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
-      );
-      invalidations = Object.keys(filesystemMtimes)
-        .filter(
-          (url) =>
-            // Only allow json and executable files to be invalidated so that we
-            // don't end up with invalidated files that weren't meant to be indexed
-            // (images, etc)
-            url.endsWith('.json') || hasExecutableExtension(url),
-        )
-        .map((url) => new URL(url));
-    } else {
-      let mtimesStart = Date.now();
-      let mtimes = await current.batch.getModifiedTimes();
-      perfLog.debug(
-        `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
-      );
-      let invalidateStart = Date.now();
-      invalidations = (
-        await current.discoverInvalidations(current.realmURL, mtimes)
-      ).map((href) => new URL(href));
-      perfLog.debug(
-        `completed invalidations in ${Date.now() - invalidateStart} ms`,
-      );
-    }
+    let mtimesStart = Date.now();
+    let mtimes = await current.batch.getModifiedTimes();
+    perfLog.debug(
+      `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+    );
+    let invalidateStart = Date.now();
+    invalidations = (
+      await current.discoverInvalidations(current.realmURL, mtimes)
+    ).map((href) => new URL(href));
+    perfLog.debug(
+      `completed invalidations in ${Date.now() - invalidateStart} ms`,
+    );
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
@@ -284,21 +260,27 @@ export class CurrentRun {
   ): Promise<string[]> {
     log.debug(`discovering invalidations in dir ${url.href}`);
     perfLog.debug(`discovering invalidations in dir ${url.href}`);
-    let ignoreStart = Date.now();
-    let ignorePatterns = await this.#reader.readFile(
-      new URL('.gitignore', url),
-    );
-    perfLog.debug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
-    if (ignorePatterns && ignorePatterns.content) {
-      this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
-      this.#ignoreData[url.href] = ignorePatterns.content;
-    }
-
     let mtimesStart = Date.now();
     let filesystemMtimes = await this.#reader.mtimes();
     perfLog.debug(
       `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
     );
+
+    let ignoreFile = new URL('.gitignore', url).href;
+    // it costs about 10 sec to try to get the ignore file when it doesn't
+    // exist, so don't get it if it's not there.
+    if (filesystemMtimes[ignoreFile]) {
+      let ignoreStart = Date.now();
+      let ignorePatterns = await this.#reader.readFile(new URL(ignoreFile));
+      perfLog.debug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
+      if (ignorePatterns && ignorePatterns.content) {
+        this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
+        this.#ignoreData[url.href] = ignorePatterns.content;
+      }
+    } else {
+      perfLog.debug(`skip getting the ignore file--there is nothing to ignore`);
+    }
+
     let invalidationList: string[] = [];
     let skipList: string[] = [];
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
@@ -408,9 +390,8 @@ export class CurrentRun {
   }
 
   private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
-    let module: Record<string, unknown>;
     try {
-      module = await this.loaderService.loader.import(url.href);
+      await this.loaderService.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
@@ -431,11 +412,6 @@ export class CurrentRun {
       return;
     }
 
-    if (module) {
-      for (let exportName of Object.keys(module)) {
-        module[exportName]; // we do this so that we can allow code ref identifies to be wired up in the loader
-      }
-    }
     if (ref.isShimmed) {
       log.debug(`skipping indexing of shimmed module ${url.href}`);
       return;

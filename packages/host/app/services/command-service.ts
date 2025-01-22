@@ -4,8 +4,6 @@ import { isTesting } from '@embroider/macros';
 
 import { task, timeout, all } from 'ember-concurrency';
 
-import flatMap from 'lodash/flatMap';
-
 import { IEvent } from 'matrix-js-sdk';
 
 import { TrackedSet } from 'tracked-built-ins';
@@ -16,13 +14,9 @@ import {
   type PatchData,
   CommandContext,
   CommandContextStamp,
-  baseRealm,
+  ResolvedCodeRef,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import {
-  type CardTypeFilter,
-  type EqFilter,
-  assertQuery,
-} from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -30,8 +24,7 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
+import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
@@ -41,6 +34,11 @@ import RealmServerService from './realm-server';
 import type LoaderService from './loader-service';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
+
+type GenericCommand = Command<
+  typeof CardDef | undefined,
+  typeof CardDef | undefined
+>;
 
 export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -53,19 +51,28 @@ export default class CommandService extends Service {
 
   private commands: Map<
     string,
-    { command: Command<any, any, any>; autoExecute: boolean }
+    {
+      command: GenericCommand;
+      autoExecute: boolean;
+    }
   > = new Map();
 
-  public registerCommand(
-    command: Command<any, any, any>,
-    autoExecute: boolean,
-  ) {
+  public registerCommand(command: GenericCommand, autoExecute: boolean) {
     let name = `${command.name}_${shortenUuid(uuidv4())}`;
     this.commands.set(name, { command, autoExecute });
     return name;
   }
 
   public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+    let eventId = event.event_id;
+    if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
+      eventId = event.content?.['m.relates_to']!.event_id;
+    }
+    if (!eventId) {
+      throw new Error(
+        'No event id found for command event, this should not happen',
+      );
+    }
     // examine the tool_call and see if it's a command that we know how to run
     let toolCall = event?.content?.data?.toolCall;
     if (!toolCall) {
@@ -77,7 +84,7 @@ export default class CommandService extends Service {
     if (!command || !autoExecute) {
       return;
     }
-    this.currentlyExecutingCommandEventIds.add(event.event_id!);
+    this.currentlyExecutingCommandEventIds.add(eventId);
     try {
       // Get the input type and validate/construct the payload
       let InputType = await command.getInputType();
@@ -93,14 +100,14 @@ export default class CommandService extends Service {
       } else {
         typedInput = undefined;
       }
-      let resultCard = await command.execute(typedInput);
+      let resultCard = await command.execute(typedInput as any);
       await this.matrixService.sendCommandResultEvent(
         event.room_id!,
-        event.event_id!,
+        eventId,
         resultCard,
       );
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(event.event_id!);
+      this.currentlyExecutingCommandEventIds.delete(eventId);
     }
   }
 
@@ -139,7 +146,7 @@ export default class CommandService extends Service {
           typedInput = undefined;
         }
         [resultCard] = await all([
-          await commandToRun.execute(typedInput),
+          await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
         ]);
       } else if (command.name === 'patchCard') {
@@ -155,63 +162,18 @@ export default class CommandService extends Service {
             relationships: payload?.attributes?.patch?.relationships,
           },
         );
-      } else if (command.name === 'searchCard') {
+      } else if (command.name === 'searchCardsByTypeAndTitle') {
         if (!hasSearchData(payload)) {
           throw new Error(
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        let query = { filter: payload.attributes.filter };
-        let realmUrls = this.realmServer.availableRealmURLs;
-        let instances: CardDef[] = flatMap(
-          await Promise.all(
-            realmUrls.map(
-              async (realm) =>
-                await this.cardService.search(query, new URL(realm)),
-            ),
-          ),
-        );
-        let commandModule = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
-        let { SearchCardsResult } = commandModule;
-        resultCard = new SearchCardsResult({
-          cardIds: instances.map((c) => c.id),
-          description: `Query: ${JSON.stringify(query.filter, null, 2)}`,
+        let command = new SearchCardsByTypeAndTitleCommand(this.commandContext);
+        resultCard = await command.execute({
+          title: payload.attributes.title,
+          cardType: payload.attributes.cardType,
+          type: payload.attributes.type,
         });
-      } else if (command.name === 'generateAppModule') {
-        let realmURL = this.operatorModeStateService.realmURL;
-
-        if (!realmURL) {
-          throw new Error(
-            `Cannot generate app module without a writable realm`,
-          );
-        }
-
-        let timestamp = Date.now();
-        let fileName =
-          (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
-          `untitled-app-${timestamp}`;
-        let moduleId = `${realmURL}AppModules/${fileName}-${timestamp}`;
-        let content = (payload.moduleCode as string) ?? '';
-        let commandModule = await this.loaderService.loader.import<
-          typeof BaseCommandModule
-        >(`${baseRealm.url}command`);
-        let { LegacyGenerateAppModuleResult } = commandModule;
-        await this.cardService.saveSource(new URL(`${moduleId}.gts`), content);
-        resultCard = new LegacyGenerateAppModuleResult({
-          moduleId: `${moduleId}.gts`,
-          source: content,
-        });
-        if (!payload.attached_card_id) {
-          throw new Error(
-            `Could not update 'moduleURL' with a link to the generated module.`,
-          );
-        }
-        await this.operatorModeStateService.patchCard.perform(
-          String(payload.attached_card_id),
-          { attributes: { moduleURL: moduleId } },
-        );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
@@ -230,6 +192,7 @@ export default class CommandService extends Service {
           : e instanceof Error
           ? e
           : new Error('Command failed.');
+      console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(eventId, error);
     } finally {
@@ -240,7 +203,7 @@ export default class CommandService extends Service {
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
 type SearchPayload = {
-  attributes: { cardId: string; filter: CardTypeFilter | EqFilter };
+  attributes: { cardType?: string; title?: string; type?: ResolvedCodeRef };
 };
 
 function hasPatchData(payload: any): payload is PatchPayload {
@@ -252,6 +215,9 @@ function hasPatchData(payload: any): payload is PatchPayload {
 }
 
 function hasSearchData(payload: any): payload is SearchPayload {
-  assertQuery({ filter: payload.attributes.filter });
-  return payload;
+  return (
+    isResolvedCodeRef(payload.attributes?.type) ||
+    payload.attributes?.title ||
+    payload.attributes?.cardType
+  );
 }

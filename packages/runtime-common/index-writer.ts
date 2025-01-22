@@ -3,6 +3,7 @@ import flatten from 'lodash/flatten';
 import flattenDeep from 'lodash/flattenDeep';
 import {
   type CardResource,
+  type RealmInfo,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
@@ -21,6 +22,7 @@ import {
   query,
   upsert,
   dbExpression,
+  upsertMultipleRows,
 } from './expression';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -99,6 +101,7 @@ export class Batch {
   #invalidations = new Set<string>();
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
+  #log = logger('index-writer');
   private declare realmVersion: number;
 
   constructor(
@@ -139,6 +142,100 @@ export class Batch {
       });
     }
     return result;
+  }
+
+  async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
+    let columns: string[][] | undefined;
+    let sources = (await this.#query([
+      `SELECT * FROM boxel_index WHERE`,
+      // intentionally copying over error docs--perhaps these can be resolved in
+      // the new realm?
+      ...every([
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [`realm_url =`, param(sourceRealmURL.href)],
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let now = String(Date.now());
+    let values = sources.map((entry) => {
+      let destURL = this.copiedRealmURL(
+        sourceRealmURL,
+        new URL(entry.url),
+      ).href;
+      this.#invalidations.add(destURL);
+      if (entry.type === 'instance' && entry.source) {
+        let json: { data: CardResource<string> } | undefined;
+        try {
+          json = JSON.parse(entry.source);
+        } catch (e: any) {
+          this.#log.info(
+            `Cannot parse instance source for ${entry.url}: ${e.message}`,
+          );
+        }
+        if (json) {
+          json.data.id = destURL.replace(/\.json$/, '');
+          entry.source = JSON.stringify(json);
+        }
+      }
+
+      entry.url = destURL;
+      entry.realm_url = this.realmURL.href;
+      entry.realm_version = this.realmVersion;
+      entry.file_alias = this.copiedRealmURL(
+        sourceRealmURL,
+        new URL(entry.file_alias),
+      ).href;
+      entry.types = entry.types
+        ? entry.types.map(
+            (type) => this.copiedRealmURL(sourceRealmURL, new URL(type)).href,
+          )
+        : entry.types;
+      entry.deps = entry.deps
+        ? entry.deps.map(
+            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
+          )
+        : entry.deps;
+      entry.pristine_doc = entry.pristine_doc
+        ? {
+            ...entry.pristine_doc,
+            id: this.copiedRealmURL(
+              sourceRealmURL,
+              new URL(entry.pristine_doc.id),
+            ).href,
+          }
+        : entry.pristine_doc;
+      if (entry.type === 'instance' && entry.pristine_doc) {
+        entry.pristine_doc.meta = {
+          ...entry.pristine_doc.meta,
+          realmURL: this.realmURL.href,
+          realmInfo: destRealmInfo,
+        };
+      }
+      entry.fitted_html = entry.fitted_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
+        : entry.fitted_html;
+      entry.embedded_html = entry.embedded_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
+        : entry.embedded_html;
+      entry.indexed_at = now;
+
+      let { valueExpressions, nameExpressions } = asExpressions(entry);
+      columns = nameExpressions;
+      return valueExpressions;
+    });
+    if (!columns) {
+      throw new Error(
+        `nothing to copy from ${sourceRealmURL.href} - this realm is not present on the realm server`,
+      );
+    }
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        values,
+      ),
+    ]);
   }
 
   async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
@@ -413,6 +510,8 @@ export class Batch {
 
   async invalidate(url: URL): Promise<string[]> {
     await this.ready;
+    let start = Date.now();
+    this.#perfLog.debug(`starting invalidation of ${url.href}`);
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
     let invalidations = [
@@ -446,17 +545,24 @@ export class Batch {
       ].map((v) => [param(v)]),
     );
 
-    let names = flattenDeep(columns);
+    let insertStart = Date.now();
     await this.#query([
-      'INSERT INTO boxel_index_working',
-      ...addExplicitParens(separatedByCommas(columns)),
-      'VALUES',
-      ...separatedByCommas(
-        rows.map((value) => addExplicitParens(separatedByCommas(value))),
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        rows,
       ),
-      'ON CONFLICT ON CONSTRAINT boxel_index_working_pkey DO UPDATE SET',
-      ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
-    ] as Expression);
+    ]);
+    this.#perfLog.debug(
+      `inserted invalidated rows for  ${url.href} in ${
+        Date.now() - insertStart
+      } ms`,
+    );
+
+    this.#perfLog.debug(
+      `completed invalidation of ${url.href} in ${Date.now() - start} ms`,
+    );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
     return invalidations;
@@ -492,7 +598,7 @@ export class Batch {
           [
             dbExpression({
               sqlite: `deps_array_element =`,
-              pg: `COALESCE(i.deps, '[]'::jsonb) @>`,
+              pg: `i.deps @>`,
             }),
             param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
           ],
@@ -503,7 +609,6 @@ export class Batch {
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
         ]),
-        'ORDER BY i.url COLLATE "POSIX"',
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: 'instance' | 'module' | 'error';
@@ -514,7 +619,7 @@ export class Batch {
     this.#perfLog.debug(
       `time to determine items that reference ${resolvedPath} ${
         Date.now() - start
-      } ms`,
+      } ms (page count=${pageNumber})`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,
@@ -549,5 +654,26 @@ export class Batch {
       ),
     ];
     return [...new Set(results)];
+  }
+
+  private copiedRealmURL(fromRealm: URL, file: URL): URL {
+    let source = new RealmPaths(fromRealm);
+    let dest = new RealmPaths(this.realmURL);
+    if (!source.inRealm(file)) {
+      return file;
+    }
+    let local = source.local(file);
+    return dest.fileURL(local);
+  }
+
+  private objectWithCopiedRealmKeys(
+    fromRealm: URL,
+    obj: Record<string, any>,
+  ): Record<string, any> {
+    let result: Record<string, any> = {};
+    for (let [key, value] of Object.entries(obj)) {
+      result[this.copiedRealmURL(fromRealm, new URL(key)).href] = value;
+    }
+    return result;
   }
 }

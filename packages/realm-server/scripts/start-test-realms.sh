@@ -23,15 +23,16 @@ NODE_ENV=test \
   --realmsRootPath='./realms/localhost_4202' \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   --migrateDB \
+  $1 \
   \
   --path='./tests/cards' \
   --username='node-test_realm' \
-  --fromUrl='/node-test/' \
-  --toUrl='/node-test/' \
+  --fromUrl='http://localhost:4202/node-test/' \
+  --toUrl='http://localhost:4202/node-test/' \
   \
   --path='../host/tests/cards' \
   --username='test_realm' \
-  --fromUrl='/test/' \
-  --toUrl='/test/' \
+  --fromUrl='http://localhost:4202/test/' \
+  --toUrl='http://localhost:4202/test/' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/'

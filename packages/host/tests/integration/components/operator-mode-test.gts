@@ -328,6 +328,7 @@ module('Integration | operator-mode', function (hooks) {
 
     class PublishingPacket extends CardDef {
       static displayName = 'Publishing Packet';
+      static headerColor = '#6638ff'; // rgb(102, 56, 255);
       @field blogPost = linksTo(BlogPost);
       @field socialBlurb = contains(TextAreaField);
     }
@@ -350,6 +351,11 @@ module('Integration | operator-mode', function (hooks) {
     let author1 = new Author({
       firstName: 'Alien',
       lastName: 'Bob',
+    });
+    let blogPost = new BlogPost({
+      title: 'Outer Space Journey',
+      body: 'Hello world',
+      authorBio: author1,
     });
 
     //Generate 11 person card to test recent card menu in card sheet
@@ -497,13 +503,13 @@ module('Integration | operator-mode', function (hooks) {
             firstName: 'Mark',
             lastName: 'Jackson',
           }),
-          'BlogPost/1.json': new BlogPost({
-            title: 'Outer Space Journey',
-            body: 'Hello world',
-            authorBio: author1,
-          }),
+          'BlogPost/1.json': blogPost,
           'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
           'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
+          'PublishingPacket/story.json': new PublishingPacket({
+            title: 'Space Story',
+            blogPost,
+          }),
           '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
           ...Object.fromEntries(personCards),
         },
@@ -591,80 +597,117 @@ module('Integration | operator-mode', function (hooks) {
     );
   });
 
-  test('it renders a card with an error that has a last known good state', async function (assert) {
-    await testRealm.write(
-      'FriendWithCSS/friend-a.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            name: 'Friend A',
-          },
-          relationships: {
-            friend: {
-              links: {
-                self: './does-not-exist',
+  module(
+    'card with an error that has a last known good state',
+    function (hooks) {
+      hooks.beforeEach(async function () {
+        await testRealm.write(
+          'FriendWithCSS/friend-a.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Friend A',
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './does-not-exist',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../friend-with-css.gts',
+                  name: 'FriendWithCSS',
+                },
               },
             },
+          } as LooseSingleCardDocument),
+        );
+      });
+
+      test('it renders a card with an error that has a last known good state', async function (assert) {
+        await setCardInOperatorModeState(
+          `${testRealmURL}FriendWithCSS/friend-a`,
+        );
+        await renderComponent(
+          class TestDriver extends GlimmerComponent {
+            <template>
+              <OperatorMode @onClose={{noop}} />
+              <CardPrerender />
+            </template>
           },
-          meta: {
-            adoptsFrom: {
-              module: '../friend-with-css.gts',
-              name: 'FriendWithCSS',
-            },
+        );
+
+        assert
+          .dom('[data-test-boxel-card-header-title]')
+          .includesText('Link Not Found', 'card error title is displayed');
+        assert
+          .dom('[data-test-card-error]')
+          .includesText(
+            'Hassan has a friend Jade',
+            'the last known good HTML is rendered',
+          );
+
+        // use percy snapshot to ensure the CSS has been applied--a red color
+        await percySnapshot(assert);
+
+        await click('[data-test-error-detail-toggle] button');
+        assert
+          .dom('[data-test-error-detail]')
+          .containsText(
+            `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+          );
+        assert
+          .dom('[data-test-error-stack]')
+          .containsText('at CurrentRun.visitFile');
+        assert.strictEqual(
+          operatorModeStateService.state?.submode,
+          'interact',
+          'in interact mode',
+        );
+        await click('[data-test-view-in-code-mode-button]');
+        assert.strictEqual(
+          operatorModeStateService.state?.submode,
+          'code',
+          'in code mode',
+        );
+        assert.strictEqual(
+          operatorModeStateService.state?.codePath?.href,
+          `${testRealmURL}FriendWithCSS/friend-a.json`,
+          'codePath is correct',
+        );
+      });
+
+      test('it has the ability to delete the card that has an error', async function (assert) {
+        await setCardInOperatorModeState(
+          `${testRealmURL}FriendWithCSS/friend-a`,
+        );
+        await renderComponent(
+          class TestDriver extends GlimmerComponent {
+            <template>
+              <OperatorMode @onClose={{noop}} />
+              <CardPrerender />
+            </template>
           },
-        },
-      } as LooseSingleCardDocument),
-    );
-    await setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
+        );
 
-    assert
-      .dom('[data-test-boxel-card-header-title]')
-      .includesText('Link Not Found', 'card error title is displayed');
-    assert
-      .dom('[data-test-card-error]')
-      .includesText(
-        'Hassan has a friend Jade',
-        'the last known good HTML is rendered',
-      );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Delete Card"]');
+        assert
+          .dom('[data-test-delete-modal-container]')
+          .includesText('Delete the card Hassan?');
+        await click('[data-test-confirm-delete-button]');
 
-    // use percy snapshot to ensure the CSS has been applied--a red color
-    await percySnapshot(assert);
-
-    await click('[data-test-error-detail-toggle] button');
-    assert
-      .dom('[data-test-error-detail]')
-      .containsText(
-        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-      );
-    assert
-      .dom('[data-test-error-stack]')
-      .containsText('at CurrentRun.visitFile');
-    assert.strictEqual(
-      operatorModeStateService.state?.submode,
-      'interact',
-      'in interact mode',
-    );
-    await click('[data-test-view-in-code-mode-button]');
-    assert.strictEqual(
-      operatorModeStateService.state?.submode,
-      'code',
-      'in code mode',
-    );
-    assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
-      `${testRealmURL}FriendWithCSS/friend-a.json`,
-      'codePath is correct',
-    );
-  });
+        await waitUntil(
+          () => !document.querySelector('[data-test-stack-card]'),
+        );
+        assert.dom('[data-test-stack-card]').doesNotExist();
+        assert.dom('[data-test-workspace-list]').exists();
+      });
+    },
+  );
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
     assert.expect(7);
@@ -2972,7 +3015,7 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -2992,7 +3035,7 @@ module('Integration | operator-mode', function (hooks) {
         await click('[data-test-close-button]');
       },
     });
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -3008,7 +3051,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     });
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 9 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
       .dom(`[data-test-boxel-filter-list-button="All Cards"]`)
@@ -3065,5 +3108,50 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-stack-card-index="0"]`)
       .doesNotHaveClass('opening-animation');
+  });
+
+  test('stack item with custom header color does not lose the color when opening other cards in the stack', async function (assert) {
+    const cardId = `${testRealmURL}PublishingPacket/story`;
+    const customStyle = {
+      backgroundColor: 'rgb(102, 56, 255)',
+      color: 'rgb(255, 255, 255)',
+    };
+    await setCardInOperatorModeState(cardId);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    assert.dom(`[data-test-stack-card="${cardId}"]`).exists();
+    assert
+      .dom(`[data-stack-card="${cardId}"] [data-test-card-header]`)
+      .hasStyle(customStyle);
+
+    await click(`[data-test-card="${testRealmURL}BlogPost/1"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`).exists();
+    assert
+      .dom(
+        `[data-stack-card="${testRealmURL}BlogPost/1"] [data-test-card-header]`,
+      )
+      .hasStyle({
+        backgroundColor: 'rgb(255, 255, 255)',
+        color: 'rgb(0, 0, 0)',
+      });
+    assert
+      .dom(`[data-stack-card="${cardId}"] [data-test-card-header]`)
+      .hasStyle(customStyle);
+
+    await click(
+      `[data-stack-card="${testRealmURL}BlogPost/1"] [data-test-close-button]`,
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`, {
+      count: 0,
+    });
+    assert
+      .dom(`[data-stack-card="${cardId}"] [data-test-card-header]`)
+      .hasStyle(customStyle);
   });
 });

@@ -4,6 +4,8 @@ import {
   Deferred,
   logger,
   fetchUserPermissions,
+  systemInitiatedPriority,
+  userInitiatedPriority,
   type Stats,
   type DBAdapter,
   type QueuePublisher,
@@ -11,6 +13,8 @@ import {
   type FromScratchResult,
   type IncrementalArgs,
   type IncrementalResult,
+  type CopyArgs,
+  type CopyResult,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -81,8 +85,8 @@ export class RealmIndexUpdater {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
 
-  async run(invalidateEntireRealm?: boolean) {
-    await this.fullIndex(invalidateEntireRealm);
+  async run() {
+    await this.fullIndex();
   }
 
   indexing() {
@@ -92,20 +96,20 @@ export class RealmIndexUpdater {
   // TODO consider triggering SSE events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
-  async fullIndex(invalidateEntireRealm?: boolean) {
+  async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
     try {
       let args: FromScratchArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.getRealmUsername(),
-        invalidateEntireRealm: Boolean(invalidateEntireRealm),
       };
-      let job = await this.#queue.publish<FromScratchResult>(
-        `from-scratch-index`,
-        'indexing',
-        4 * 60,
+      let job = await this.#queue.publish<FromScratchResult>({
+        jobType: `from-scratch-index`,
+        concurrencyGroup: `indexing:${this.#realm.url}`,
+        timeout: 4 * 60,
+        priority: systemInitiatedPriority,
         args,
-      );
+      });
       let { ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
@@ -138,18 +142,52 @@ export class RealmIndexUpdater {
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
       };
-      let job = await this.#queue.publish<IncrementalResult>(
-        `incremental-index`,
-        'indexing',
-        4 * 60,
+      let job = await this.#queue.publish<IncrementalResult>({
+        jobType: `incremental-index`,
+        concurrencyGroup: `indexing:${this.#realm.url}`,
+        timeout: 4 * 60,
+        priority: userInitiatedPriority,
         args,
-      );
+      });
       let { invalidations, ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
       this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
       if (opts?.onInvalidation) {
         opts.onInvalidation(
+          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+        );
+      }
+    } catch (e: any) {
+      this.#indexingDeferred.reject(e);
+      throw e;
+    } finally {
+      this.#indexingDeferred.fulfill();
+    }
+  }
+
+  async copy(
+    sourceRealmURL: URL,
+    onInvalidation?: (invalidatedURLs: URL[]) => void,
+  ): Promise<void> {
+    this.#indexingDeferred = new Deferred<void>();
+    try {
+      let args: CopyArgs = {
+        realmURL: this.#realm.url,
+        realmUsername: await this.getRealmUsername(),
+        sourceRealmURL: sourceRealmURL.href,
+      };
+      let job = await this.#queue.publish<CopyResult>({
+        jobType: 'copy-index',
+        concurrencyGroup: `indexing:${this.#realm.url}`,
+        timeout: 4 * 60,
+        priority: userInitiatedPriority,
+        args,
+      });
+      let { invalidations } = await job.done;
+      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+      if (onInvalidation) {
+        onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
@@ -195,6 +233,8 @@ export class RealmIndexUpdater {
     // hard coded test URLs
     if ((globalThis as any).__environment === 'test') {
       switch (this.realmURL.href) {
+        case 'http://localhost:4205/seed/':
+          return 'seed_realm';
         case 'http://127.0.0.1:4441/':
           return 'base_realm';
         case 'http://127.0.0.1:4444/':

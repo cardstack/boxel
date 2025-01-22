@@ -31,9 +31,9 @@ import {
   basicMappings,
   generateJsonSchemaForCardType,
   getSearchTool,
+  getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -71,6 +71,7 @@ import type {
   CommandResultWithOutputContent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { getCard } from '../resources/card-resource';
@@ -625,7 +626,7 @@ export default class MatrixService extends Service {
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
-    let tools = [];
+    let tools: Tool[] = [getSearchTool()];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
@@ -645,7 +646,6 @@ export default class MatrixService extends Service {
         );
         if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-          tools.push(getSearchTool());
         }
       }
     }
@@ -1300,7 +1300,7 @@ export default class MatrixService extends Service {
         Array.isArray(data.attachedCardsEventIds)
       ) {
         for (let attachedCardEventId of data.attachedCardsEventIds) {
-          this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
+          await this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
         }
       }
     } else if (
@@ -1313,7 +1313,7 @@ export default class MatrixService extends Service {
           ? JSON.parse(event.content.data)
           : event.content.data
       ) as CommandResultWithOutputContent['data'];
-      this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
+      await this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
     } else if (
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE

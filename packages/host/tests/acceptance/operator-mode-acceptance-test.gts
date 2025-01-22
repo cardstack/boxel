@@ -5,6 +5,7 @@ import {
   waitFor,
   fillIn,
   waitUntil,
+  triggerEvent,
 } from '@ember/test-helpers';
 
 import { getPageTitle } from 'ember-page-title/test-support';
@@ -42,6 +43,7 @@ import {
   testRealmSecretSeed,
   setupUserSubscription,
   setupRealmServerEndpoints,
+  TestContextWithSSE,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -497,52 +499,95 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.strictEqual(getPageTitle(), 'Mango');
   });
 
-  test('index card shows last known good state for instances that have an error', async function (assert) {
-    await testRealm.write(
-      'Person/fadhlan.json',
-      JSON.stringify({
-        data: {
-          relationships: {
-            pet: {
-              links: {
-                self: './missing-link',
+  module(
+    'card with an error that has a last known good state',
+    function (hooks) {
+      hooks.beforeEach(async function () {
+        await testRealm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              relationships: {
+                pet: {
+                  links: {
+                    self: './missing-link',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
               },
             },
+          } as LooseSingleCardDocument),
+        );
+      });
+
+      test('index card shows last known good state for instances that have an error', async function (assert) {
+        await visit('/');
+        await click('[data-test-workspace="Test Workspace B"]');
+        await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+        assert
+          .dom(
+            `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error]`,
+          )
+          .exists('the instance with an error is displayed');
+        assert
+          .dom(
+            `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error] [data-test-card-title]`,
+          )
+          .containsText(
+            'Fadhlan',
+            'the last known good state of the instance is displayed',
+          );
+
+        await percySnapshot(assert);
+        await click(
+          `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+        );
+
+        assert.dom(`[data-test-card-error]`).exists();
+        assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
+      });
+
+      test<TestContextWithSSE>('can delete a card', async function (assert) {
+        await visit('/');
+        await click('[data-test-workspace="Test Workspace B"]');
+        await click('[data-test-boxel-filter-list-button="All Cards"]');
+
+        await triggerEvent(
+          `[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]`,
+          'mouseenter',
+        );
+        await click(
+          '[data-test-overlay-card="http://test-realm/test/Person/fadhlan"] [data-test-overlay-more-options]',
+        );
+
+        await click('[data-test-boxel-menu-item-text="Delete"]');
+
+        await waitFor(`[data-test-delete-modal-container]`);
+        assert
+          .dom(`[data-test-delete-modal-container]`)
+          .containsText('Delete the card Fadhlan?');
+
+        await this.expectEvents({
+          assert,
+          realm: testRealm,
+          expectedNumberOfEvents: 1,
+          callback: async () => {
+            await click('[data-test-confirm-delete-button]');
           },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      } as LooseSingleCardDocument),
-    );
+        });
 
-    await visit('/');
-    await click('[data-test-workspace="Test Workspace B"]');
-    await click('[data-test-boxel-filter-list-button="All Cards"]');
-
-    assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error]`,
-      )
-      .exists('the instance with an error is displayed');
-    assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"][data-test-instance-error] [data-test-card-title]`,
-      )
-      .containsText(
-        'Fadhlan',
-        'the last known good state of the instance is displayed',
-      );
-
-    await percySnapshot(assert);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-
-    assert.dom(`[data-test-card-error]`).exists();
-    assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
-  });
+        assert
+          .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
+          .doesNotExist('the card is deleted');
+      });
+    },
+  );
 
   test('index card shows default error tile for instances that have an error and no last known good state', async function (assert) {
     await visit('/');

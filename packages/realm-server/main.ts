@@ -11,16 +11,17 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
-import { spawn } from 'child_process';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import flattenDeep from 'lodash/flattenDeep';
 import 'decorator-transforms/globals';
 
 let log = logger('main');
+if (process.env.NODE_ENV === 'test') {
+  (globalThis as any).__environment = 'test';
+}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -67,7 +68,9 @@ let {
   username: usernames,
   useRegistrationSecretFunction,
   seedPath,
+  seedRealmURL,
   migrateDB,
+  workerManagerPort,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -110,6 +113,10 @@ let {
         'the path of the seed realm which is used to seed new realms',
       type: 'string',
     },
+    seedRealmURL: {
+      description: 'The URL of the seed realm',
+      type: 'string',
+    },
     matrixURL: {
       description: 'The matrix homeserver for the realm',
       demandOption: true,
@@ -129,6 +136,11 @@ let {
       description:
         'The flag should be set when running matrix tests where the synapse instance is torn down and restarted multiple times during the life of the realm server.',
       type: 'boolean',
+    },
+    workerManagerPort: {
+      description:
+        'The port the worker manager is running on. used to wait for the workers to be ready',
+      type: 'number',
     },
   })
   .parseSync();
@@ -165,8 +177,8 @@ let virtualNetwork = new VirtualNetwork();
 shimExternals(virtualNetwork);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
-  new URL(String(fromUrl), `http://localhost:${port}`),
-  new URL(String(toUrls[i]), `http://localhost:${port}`),
+  new URL(String(fromUrl)),
+  new URL(String(toUrls[i])),
 ]);
 for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
@@ -185,7 +197,9 @@ let autoMigrate = migrateDB || undefined;
     manager.getOptions.bind(manager),
   );
 
-  await startWorker({ autoMigrate });
+  if (workerManagerPort != null) {
+    await waitForWorkerManager(workerManagerPort);
+  }
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -246,6 +260,7 @@ let autoMigrate = migrateDB || undefined;
     getIndexHTML,
     serverURL: new URL(serverURL),
     seedPath,
+    seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
@@ -324,51 +339,20 @@ let autoMigrate = migrateDB || undefined;
   process.exit(-3);
 });
 
-async function startWorker(opts?: { autoMigrate?: true }) {
-  let worker = spawn(
-    'ts-node',
-    [
-      '--transpileOnly',
-      'worker',
-      `--port=${port}`,
-      `--matrixURL='${matrixURL}'`,
-      `--distURL='${distURL}'`,
-      ...(opts?.autoMigrate ? [`--migrateDB`] : []),
-      ...flattenDeep(
-        urlMappings.map(([from, to]) => [
-          `--fromUrl='${from}'`,
-          `--toUrl='${to}'`,
-        ]),
-      ),
-    ],
-    {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    },
-  );
-
-  if (worker.stdout) {
-    worker.stdout.on('data', (data: Buffer) =>
-      log.info(`worker: ${data.toString()}`),
+async function waitForWorkerManager(port: number) {
+  let isReady = false;
+  let timeout = Date.now() + 30_000;
+  do {
+    let response = await fetch(`http://localhost:${port}/`);
+    if (response.ok) {
+      let json = await response.json();
+      isReady = json.ready;
+    }
+  } while (!isReady && Date.now() < timeout);
+  if (!isReady) {
+    throw new Error(
+      `timed out trying to waiting for worker manager to be ready on port ${port}`,
     );
   }
-  if (worker.stderr) {
-    worker.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
-    );
-  }
-
-  let timeout = await Promise.race([
-    new Promise<void>((r) => {
-      worker.on('message', (message) => {
-        if (message === 'ready') {
-          r();
-        }
-      });
-    }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
-  ]);
-  if (timeout) {
-    console.error(`timed-out waiting for worker to start. Stopping server`);
-    process.exit(-2);
-  }
+  log.info('workers are ready');
 }
