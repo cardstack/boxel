@@ -396,19 +396,17 @@ class IsolatedTemplate extends Component<typeof Account> {
             {{/if}}
           </:name>
           <:content>
-            <div class='description content-container'>
-              {{#if @model.primaryContact}}
-                <@fields.primaryContact
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='primary-contact'
-                />
-                <div class='tag-container'>
-                  <@fields.statusTag @format='atom' />
-                  <@fields.urgencyTag @format='atom' />
-                </div>
-              {{/if}}
-            </div>
+            {{#if @model.primaryContact}}
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+                class='primary-contact'
+              />
+              <div class='tag-container'>
+                <@fields.statusTag @format='atom' />
+                <@fields.urgencyTag @format='atom' />
+              </div>
+            {{/if}}
           </:content>
         </AccountHeader>
       </:header>
@@ -423,16 +421,14 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description content-container'>
-                {{#if this.hasCompanyInfo}}
-                  <@fields.headquartersAddress @format='atom' />
-                  <@fields.website @format='atom' />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Company Info
-                  </div>
-                {{/if}}
-              </div>
+              {{#if this.hasCompanyInfo}}
+                <@fields.headquartersAddress @format='atom' />
+                <@fields.website @format='atom' />
+              {{else}}
+                <div class='default-value'>
+                  Missing Company Info
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -444,28 +440,23 @@ class IsolatedTemplate extends Component<typeof Account> {
               <ContactIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description content-container'>
-                {{#if this.hasContacts}}
-                  <div class='primary-contact-group'>
-                    <@fields.primaryContact
-                      @format='atom'
-                      @displayContainer={{false}}
-                    />
-                    <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-                      Primary
-                    </Pill>
-                  </div>
-
-                  <@fields.contacts
+              {{#if this.hasContacts}}
+                <div class='primary-contact-group'>
+                  <@fields.primaryContact
                     @format='atom'
                     @displayContainer={{false}}
                   />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Contacts
-                  </div>
-                {{/if}}
-              </div>
+                  <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+                    Primary
+                  </Pill>
+                </div>
+
+                <@fields.contacts @format='atom' @displayContainer={{false}} />
+              {{else}}
+                <div class='default-value'>
+                  Missing Contacts
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -641,12 +632,6 @@ class IsolatedTemplate extends Component<typeof Account> {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      .content-container {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
       .tag-container {
         display: flex;
         flex-wrap: wrap;
@@ -778,12 +763,6 @@ class FittedTemplate extends Component<typeof Account> {
       .description {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
-      }
-      .content-container {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
       }
       .tag-container {
         margin-top: auto;

@@ -13,18 +13,24 @@ export default class SummaryCard extends GlimmerComponent<SummaryCardArgs> {
   <template>
     <article class='summary-card' ...attributes>
       <header class='summary-card-header'>
-        <div class='summary-card-title'>
-          {{yield to='title'}}
-        </div>
-        <div class='summary-card-icon'>
-          {{yield to='icon'}}
-        </div>
-      </header>
-      <div class='summary-card-content'>
-        {{#if (has-block 'content')}}
-          {{yield to='content'}}
+        {{#if (has-block 'title')}}
+          <div class='summary-card-title'>
+            {{yield to='title'}}
+          </div>
         {{/if}}
-      </div>
+
+        {{#if (has-block 'icon')}}
+          <div class='summary-card-icon'>
+            {{yield to='icon'}}
+          </div>
+        {{/if}}
+      </header>
+
+      {{#if (has-block 'content')}}
+        <div class='summary-card-content'>
+          {{yield to='content'}}
+        </div>
+      {{/if}}
     </article>
 
     <style scoped>
@@ -63,6 +69,11 @@ export default class SummaryCard extends GlimmerComponent<SummaryCardArgs> {
       }
       .summary-card-icon {
         flex-shrink: 0;
+      }
+      .summary-card-content {
+        display: var(--summary-card-content-display, flex);
+        flex-direction: var(--summary-card-content-direction, column);
+        gap: var(--summary-card-content-gap, var(--boxel-sp-xxs));
       }
     </style>
   </template>
