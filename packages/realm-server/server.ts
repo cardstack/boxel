@@ -270,12 +270,14 @@ export class RealmServer {
     name,
     backgroundURL,
     iconURL,
+    copyFromSeedRealm = true
   }: {
     ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
+    copyFromSeedRealm?: boolean,
   }): Promise<Realm> => {
     if (
       this.realms.find(
@@ -336,15 +338,20 @@ export class RealmServer {
       ...(backgroundURL ? { backgroundURL } : {}),
     });
     if (this.seedPath) {
-      let ignoreList = IGNORE_SEED_FILES.map((file) =>
-        join(this.seedPath!.replace(/\/$/, ''), file),
-      );
-      copySync(this.seedPath, realmPath, {
-        filter: (src, _dest) => {
-          return !ignoreList.includes(src);
-        },
-      });
-      this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
+      if (copyFromSeedRealm) {
+        let ignoreList = IGNORE_SEED_FILES.map((file) =>
+          join(this.seedPath!.replace(/\/$/, ''), file),
+        );
+        
+        copySync(this.seedPath, realmPath, {
+          filter: (src, _dest) => {
+            return !ignoreList.includes(src);
+          },
+        });
+        this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
+      } else {
+        copySync(join(this.seedPath!.replace(/\/$/, ''), 'index.json'), join(realmPath!.replace(/\/$/, ''), 'index.json'));
+      }
     }
 
     let realm = new Realm(
