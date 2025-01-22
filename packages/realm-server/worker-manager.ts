@@ -146,15 +146,13 @@ const shutdown = (onShutdown?: () => void) => {
       process.exit(1);
     }
     log.info(`worker manager HTTP on port ${port} has stopped.`);
-    if (onShutdown) {
-      onShutdown();
-    }
+    onShutdown?.();
     process.exit(0);
   });
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown());
+process.on('SIGTERM', () => shutdown());
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
