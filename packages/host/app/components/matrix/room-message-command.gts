@@ -211,7 +211,6 @@ export default class RoomMessageCommand extends Component<Signature> {
               monacoSDK=@monacoSDK
               language='json'
               readOnly=true
-              darkTheme=true
               editorDisplayOptions=this.editorDisplayOptions
             }}
             data-test-editor

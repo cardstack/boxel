@@ -71,6 +71,11 @@ export default class Monaco extends Modifier<Signature> {
         this.model.setValue(content);
       }
     } else {
+      // The light theme editor is used for the main editor in code mode,
+      // but we also have a dark themed editor for the preview editor in AI panel.
+      // The latter is themed using a CSS filter as opposed to defining a new monaco theme
+      // because monaco does not support multiple themes on the same page (check the comment in
+      // room-message-command.gts for more details)
       monacoSDK.editor.defineTheme('boxel-monaco-light-theme', {
         base: 'vs',
         inherit: true,
