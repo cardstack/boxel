@@ -17,7 +17,7 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
-import { and, cn, not } from '@cardstack/boxel-ui/helpers';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
