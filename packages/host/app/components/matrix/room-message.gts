@@ -120,6 +120,7 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{if @message.command (perform this.run) @retryAction}}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{@message.author.name}}
+        data-test-boxel-message-instance-id={{@message.instanceId}}
         ...attributes
       >
         {{#if @message.command}}

@@ -3,21 +3,21 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 2,
-        "label": "Done",
-        "color": "#66BB6A",
-        "completed": true
+        "index": 1,
+        "label": "In Progress",
+        "color": null,
+        "completed": false
       },
       "dateRange": {
-        "start": "2025-01-22",
-        "end": "2025-02-04"
+        "start": null,
+        "end": null
       },
       "priority": {
         "index": 3,
         "label": "High"
       },
-      "name": "Meet Prospect Customer",
-      "details": null,
+      "name": "Fitness First App Integration Kickoff",
+      "details": "Initial technical meeting for mobile app integration project phase",
       "description": null,
       "thumbnailURL": null
     },
@@ -34,7 +34,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../Representative/e0b16307-04bd-4e48-bdf8-517bb35b8119"
+          "self": null
         }
       },
       "contact": {
@@ -44,12 +44,12 @@
       },
       "account": {
         "links": {
-          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
+          "self": null
         }
       },
       "deal": {
         "links": {
-          "self": null
+          "self": "../Deal/f0d769bd-e347-4203-9a96-89332cfba0e2"
         }
       },
       "tags": {

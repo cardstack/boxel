@@ -37,7 +37,6 @@ import FilePen from '@cardstack/boxel-icons/file-pen';
 import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Award from '@cardstack/boxel-icons/award';
 import AwardOff from '@cardstack/boxel-icons/award-off';
-import { Document } from './document';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
@@ -394,16 +393,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <World class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                {{#if this.hasCompanyInfo}}
-                  <@fields.headquartersAddress @format='atom' />
-                  <@fields.website @format='atom' />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Company Info
-                  </div>
-                {{/if}}
-              </div>
+              {{#if this.hasCompanyInfo}}
+                <@fields.headquartersAddress @format='atom' />
+                <@fields.website @format='atom' />
+              {{else}}
+                <div class='default-value'>
+                  Missing Company Info
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -415,31 +412,28 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Users class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                {{#if this.hasStakeholders}}
-                  {{#if @model.primaryStakeholder}}
-                    <ContactRow
-                      @userID={{@model.primaryStakeholder.id}}
-                      @name={{@model.primaryStakeholder.name}}
-                      @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
-                      @tagLabel='primary'
-                    />
-                  {{/if}}
-                  {{#each @model.stakeholders as |stakeholder|}}
-                    <ContactRow
-                      @userID={{stakeholder.id}}
-                      @name={{stakeholder.name}}
-                      @thumbnailURL={{stakeholder.thumbnailURL}}
-                      @tagLabel={{stakeholder.position}}
-                    />
-                  {{/each}}
-                {{else}}
-                  <div class='default-value'>
-                    No Stakeholders
-                  </div>
+              {{#if this.hasStakeholders}}
+                {{#if @model.primaryStakeholder}}
+                  <ContactRow
+                    @userID={{@model.primaryStakeholder.id}}
+                    @name={{@model.primaryStakeholder.name}}
+                    @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
+                    @tagLabel='primary'
+                  />
                 {{/if}}
-
-              </div>
+                {{#each @model.stakeholders as |stakeholder|}}
+                  <ContactRow
+                    @userID={{stakeholder.id}}
+                    @name={{stakeholder.name}}
+                    @thumbnailURL={{stakeholder.thumbnailURL}}
+                    @tagLabel={{stakeholder.position}}
+                  />
+                {{/each}}
+              {{else}}
+                <div class='default-value'>
+                  No Stakeholders
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -449,7 +443,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:title>
             <:icon>
               <BoxelButton
-                class='sidebar-create-button content-header-row-1'
                 @kind='primary'
                 @size='extra-small'
                 @disabled={{this.activeTasks.isLoading}}
@@ -460,20 +453,17 @@ class IsolatedTemplate extends Component<typeof Deal> {
               </BoxelButton>
             </:icon>
             <:content>
-              <div>
-                {{#if this.activeTasks.isLoading}}
-                  Loading...
-                {{else if this.activeTasks.instances}}
-                  {{this.activeTasks.instances.length}}
-                {{else}}
-                  <div class='default-value'>
-                    No Active Tasks
-                  </div>
-                {{/if}}
-              </div>
+              {{#if this.activeTasks.isLoading}}
+                Loading...
+              {{else if this.activeTasks.instances}}
+                {{this.activeTasks.instances.length}}
+              {{else}}
+                <div class='default-value'>
+                  No Active Tasks
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
-
         </SummaryGridContainer>
       </:summary>
     </DealPageLayout>
@@ -591,12 +581,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         align-items: center;
         gap: var(--boxel-sp-sm);
         font-weight: 600;
-      }
-      .view-document-btn {
-        font-weight: 600;
-        padding: 2px 5px;
-        min-width: 0px;
-        min-height: 0px;
       }
       @container (max-width: 447px) {
         .progress-container {
@@ -1128,7 +1112,6 @@ export class Deal extends CardDef {
   });
   @field healthScore = contains(PercentageField);
   @field notes = contains(MarkdownField);
-  @field document = linksTo(() => Document);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
   @field valueBreakdown = containsMany(ValueLineItem);

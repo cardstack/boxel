@@ -1,3 +1,4 @@
+import { guidFor } from '@ember/object/internals';
 import { tracked } from '@glimmer/tracking';
 
 import { EventStatus } from 'matrix-js-sdk';
@@ -45,22 +46,25 @@ interface RoomMessageOptional {
 export class Message implements RoomMessageInterface {
   @tracked formattedMessage: string;
   @tracked message: string;
+  @tracked command?: MessageCommand | null;
+  @tracked isStreamingFinished?: boolean;
 
   attachedCardIds?: string[] | null;
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
-  isStreamingFinished?: boolean;
   errorMessage?: string;
   clientGeneratedId?: string;
-  command?: MessageCommand | null;
 
   author: RoomMember;
   status: EventStatus | null;
-  created: Date;
+  @tracked created: Date;
   updated: Date;
   eventId: string;
   roomId: string;
+
+  //This property is used for testing purpose
+  instanceId: string;
 
   constructor(init: RoomMessageInterface) {
     Object.assign(this, init);
@@ -72,6 +76,7 @@ export class Message implements RoomMessageInterface {
     this.updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
+    this.instanceId = guidFor(this);
   }
   get isRetryable() {
     return (

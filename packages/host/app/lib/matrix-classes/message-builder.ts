@@ -4,7 +4,10 @@ import { getOwner, setOwner } from '@ember/owner';
 
 import { inject as service } from '@ember/service';
 
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  LooseSingleCardDocument,
+  sanitizeHtml,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_COMMAND_MSGTYPE,
@@ -45,6 +48,7 @@ export default class MessageBuilder {
       index: number;
       serializedCardFromFragments: (eventId: string) => LooseSingleCardDocument;
       events: DiscreteMatrixEvent[];
+      commandResultEvent?: CommandResultEvent;
     },
   ) {
     setOwner(this, owner);
@@ -110,11 +114,13 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
-  get formattedMessageForCommand() {
-    return `<p data-test-command-message class="command-message">${this.event.content.formatted_body}</p>`;
+  private get formattedMessageForCommand() {
+    return `<p data-test-command-message class="command-message">${sanitizeHtml(
+      this.event.content.formatted_body,
+    )}</p>`;
   }
 
-  async buildMessage(): Promise<Message> {
+  buildMessage(): Message {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
@@ -128,40 +134,88 @@ export default class MessageBuilder {
       event.content.data.toolCall
     ) {
       message.formattedMessage = this.formattedMessageForCommand;
-      message.command = await this.buildMessageCommand(message);
+      message.command = this.buildMessageCommand(message);
       message.isStreamingFinished = true;
     }
     return message;
   }
 
-  private async buildMessageCommand(message: Message) {
-    let event = this.event as CommandEvent;
-    let command = event.content.data.toolCall;
-    let commandResultEvent = this.builderContext.events.find((e: any) => {
-      let r = e.content['m.relates_to'];
-      return (
-        e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        r.rel_type === 'm.annotation' &&
-        (r.event_id === event.content.data.eventId ||
-          r.event_id === event.event_id ||
-          r.event_id === this.builderContext.effectiveEventId)
-      );
-    }) as CommandResultEvent | undefined;
-    let status = (commandResultEvent?.content?.['m.relates_to']?.key ||
-      'ready') as CommandStatus;
-    let commandResultCardEventId =
-      commandResultEvent?.content?.msgtype ===
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-        ? commandResultEvent.content.data.cardEventId
+  updateMessage(message: Message) {
+    if (this.event.content['m.relates_to']?.rel_type !== 'm.replace') {
+      return;
+    }
+
+    if (message.created.getTime() > this.event.origin_server_ts) {
+      message.created = new Date(this.event.origin_server_ts);
+      return;
+    }
+
+    message.message = this.event.content.body;
+    message.formattedMessage = this.event.content.formatted_body;
+    message.isStreamingFinished =
+      'isStreamingFinished' in this.event.content
+        ? this.event.content.isStreamingFinished
         : undefined;
+    message.updated = new Date();
+
+    if (this.event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
+      if (!message.command) {
+        message.command = this.buildMessageCommand(message);
+      }
+
+      message.isStreamingFinished = true;
+      message.formattedMessage = this.formattedMessageForCommand;
+
+      let command = this.event.content.data.toolCall;
+      message.command.name = command.name;
+      message.command.payload = command.arguments;
+    }
+  }
+
+  updateMessageCommandResult(message: Message) {
+    if (!message.command) {
+      message.command = this.buildMessageCommand(message);
+    }
+
+    if (this.builderContext.commandResultEvent) {
+      let event = this.builderContext.commandResultEvent;
+      message.command.commandStatus = event.content['m.relates_to']
+        .key as CommandStatus;
+      message.command.commandResultCardEventId =
+        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+          ? event.content.data.cardEventId
+          : undefined;
+    }
+  }
+
+  private buildMessageCommand(message: Message) {
+    let event = this.event as CommandEvent;
+    let commandResultEvent =
+      this.builderContext.commandResultEvent ??
+      (this.builderContext.events.find((e: any) => {
+        let r = e.content['m.relates_to'];
+        return (
+          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          r.rel_type === 'm.annotation' &&
+          (r.event_id === event!.content.data.eventId ||
+            r.event_id === event!.event_id ||
+            r.event_id === this.builderContext.effectiveEventId)
+        );
+      }) as CommandResultEvent | undefined);
+
+    let command = event.content.data.toolCall;
     let messageCommand = new MessageCommand(
       message,
       command.id,
       command.name,
       command.arguments,
       this.builderContext.effectiveEventId,
-      status,
-      commandResultCardEventId,
+      (commandResultEvent?.content['m.relates_to']?.key ||
+        'ready') as CommandStatus,
+      commandResultEvent?.content.msgtype ===
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ? commandResultEvent.content.data.cardEventId
+        : undefined,
       getOwner(this)!,
     );
     return messageCommand;
