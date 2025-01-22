@@ -49,7 +49,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 
   test.afterEach(async () => {
-    await realmServer?.stop();
+    await realmServer.stop();
     await synapseStop(synapse.synapseId);
     await smtpStop();
   });
