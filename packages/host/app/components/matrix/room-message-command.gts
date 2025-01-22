@@ -240,6 +240,9 @@ export default class RoomMessageCommand extends Component<Signature> {
         </CardContainer>
       {{/if}}
     </div>
+
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because it doesn't like the multi-line comment about the filter below }}
     <style scoped>
       .is-pending .view-code-button,
       .is-error .view-code-button {
