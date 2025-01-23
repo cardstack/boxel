@@ -62,7 +62,7 @@ export class CatalogEntry extends CardDef {
     },
   });
   @field linkedExamples = linksToMany(CardDef);
-  @field containedExamples = containsMany(FieldDef);
+  @field containedExamples = containsMany(FieldDef, { isUsed: true });
   @field title = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       if (this.name) {
