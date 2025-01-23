@@ -140,11 +140,7 @@ export default class AddWorkspace extends Component<Signature> {
                 @helperText='The endpoint is the unique identifier for your workspace. Use letters, numbers, and hyphens only.'
               />
             </FieldContainer>
-            <FieldContainer
-              @label='Initialize workspace with'
-              @tag='label'
-              class='field'
-            >
+            <FieldContainer @label='Copy from Seed' @tag='label' class='field'>
               <label class='copy-from-seed-label'>
                 <BoxelInput
                   data-test-copy-from-seed-field
@@ -154,7 +150,8 @@ export default class AddWorkspace extends Component<Signature> {
                   @value={{this.copyFromSeedRealm}}
                   @onChange={{this.toggleCopyFromSeedRealm}}
                 />
-                <span>Cards and Fields from Seed Workspace</span>
+                <span>Populate new workspace with sample cards (uncheck for a
+                  blank workspace).</span>
               </label>
             </FieldContainer>
           {{/if}}
@@ -256,8 +253,8 @@ export default class AddWorkspace extends Component<Signature> {
       }
       .copy-from-seed-label {
         display: flex;
-        align-items: center;
         gap: calc(var(--boxel-sp-sm) + 1px);
+        padding-top: var(--boxel-sp-sm);
       }
       .copy-from-seed-label span {
         color: var(--boxel-label-color);
@@ -267,6 +264,7 @@ export default class AddWorkspace extends Component<Signature> {
       .copy-from-seed-label :deep(.input-container) {
         grid-template-columns: 1fr;
         width: auto;
+        height: 100%;
       }
       .copy-from-seed-checkbox {
         --boxel-input-height: 17px;

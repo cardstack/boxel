@@ -337,26 +337,29 @@ export class RealmServer {
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
     });
-    if (this.seedPath) {
-      if (copyFromSeedRealm) {
-        let ignoreList = IGNORE_SEED_FILES.map((file) =>
-          join(this.seedPath!.replace(/\/$/, ''), file),
-        );
+    if (this.seedPath && copyFromSeedRealm) {
+      let ignoreList = IGNORE_SEED_FILES.map((file) =>
+        join(this.seedPath!.replace(/\/$/, ''), file),
+      );
 
-        copySync(this.seedPath, realmPath, {
-          filter: (src, _dest) => {
-            return !ignoreList.includes(src);
+      copySync(this.seedPath, realmPath, {
+        filter: (src, _dest) => {
+          return !ignoreList.includes(src);
+        },
+      });
+      this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
+    } else {
+      writeJSONSync(join(realmPath, 'index.json'), {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
           },
-        });
-        this.log.debug(
-          `seed files for new realm ${url} copied to ${realmPath}`,
-        );
-      } else {
-        copySync(
-          join(this.seedPath!.replace(/\/$/, ''), 'index.json'),
-          join(realmPath!.replace(/\/$/, ''), 'index.json'),
-        );
-      }
+        },
+      });
     }
 
     let realm = new Realm(
