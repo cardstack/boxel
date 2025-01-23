@@ -81,6 +81,8 @@ import {
   Utils,
 } from './matrix-backend-authentication';
 
+export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
+
 export interface RealmSession {
   canRead: boolean;
   canWrite: boolean;
@@ -109,6 +111,7 @@ export interface FileRef {
 export interface TokenClaims {
   user: string;
   realm: string;
+  sessionRoom: string;
   permissions: RealmPermissions['user'];
 }
 
@@ -163,8 +166,7 @@ export interface RealmAdapter {
 
 interface Options {
   disableModuleCaching?: true;
-  invalidateEntireRealm?: true;
-  userInitiatedRealmCreation?: true;
+  copiedFromRealm?: URL;
 }
 
 interface UpdateItem {
@@ -203,7 +205,8 @@ interface FileRemovedEventData {
 export type IndexEventData =
   | IncrementalIndexInitiation
   | IncrementalIndexEventData
-  | FullIndexEventData;
+  | FullIndexEventData
+  | CopiedIndexEventData;
 
 interface IndexEvent {
   type: 'index';
@@ -220,6 +223,11 @@ interface IncrementalIndexEventData {
 interface FullIndexEventData {
   type: 'full';
   realmURL: string;
+}
+interface CopiedIndexEventData {
+  type: 'copy';
+  sourceRealmURL: string;
+  destRealmURL: string;
 }
 
 interface IncrementalIndexInitiation {
@@ -254,8 +262,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #invalidateEntireRealm = false;
-  #userInitiatedRealmCreation = false;
+  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -309,11 +316,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    this.#invalidateEntireRealm = Boolean(opts?.invalidateEntireRealm);
-    this.#userInitiatedRealmCreation = Boolean(
-      opts?.userInitiatedRealmCreation,
-    );
-
+    this.#copiedFromRealm = opts?.copiedFromRealm;
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -328,6 +331,9 @@ export class Realm {
         new RealmAuthDataSource(this.#matrixClient, () => virtualNetwork.fetch),
       ),
     ]);
+
+    // TODO: remove after running in all environments; CS-7875
+    this.backfillRetentionPolicies();
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
@@ -446,6 +452,23 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // TODO: remove after running in all environments; CS-7875
+  private async backfillRetentionPolicies() {
+    try {
+      await this.#matrixClient.waitForLogin();
+
+      let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
+      for (let roomId of roomIds) {
+        await this.#matrixClient.setRoomRetentionPolicy(
+          roomId,
+          REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
+        );
+      }
+    } catch (e) {
+      console.error('backfillRetentionPolicies: error', e);
+    }
   }
 
   async indexing() {
@@ -598,19 +621,28 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    let promise = this.#realmIndexUpdater.run({
-      invalidateEntireRealm: this.#invalidateEntireRealm,
-      userInitiatedRequest: this.#userInitiatedRealmCreation,
-    });
-    if (isNewIndex) {
-      // we only await the full indexing at boot if this is a brand new index
-      await promise;
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+      this.sendServerEvent({
+        type: 'index',
+        data: {
+          type: 'copy',
+          sourceRealmURL: this.#copiedFromRealm.href,
+          destRealmURL: this.url,
+        },
+      });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      let promise = this.#realmIndexUpdater.run();
+      if (isNewIndex) {
+        // we only await the full indexing at boot if this is a brand new index
+        await promise;
+      }
+      this.sendServerEvent({
+        type: 'index',
+        data: { type: 'full', realmURL: this.url },
+      });
     }
-    this.sendServerEvent({
-      type: 'index',
-      data: { type: 'full', realmURL: this.url },
-    });
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
@@ -654,7 +686,7 @@ export class Realm {
             requestContext,
           });
         },
-        createJWT: async (user: string) => {
+        createJWT: async (user: string, sessionRoom: string) => {
           let permissions = requestContext.permissions;
 
           let userPermissions = await new RealmPermissionChecker(
@@ -666,6 +698,7 @@ export class Realm {
             {
               user,
               realm: this.url,
+              sessionRoom,
               permissions: userPermissions,
             },
             '7d',
@@ -1415,6 +1448,7 @@ export class Realm {
             realm: this.url,
             meta: {
               lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
+              cardTitle: maybeError.error.cardTitle,
               scopedCssUrls: maybeError.error.scopedCssUrls,
               stack: maybeError.error.errorDetail.stack,
             },

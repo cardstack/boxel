@@ -185,14 +185,18 @@ export class ServerState {
       IEvent,
       'event_id' | 'origin_server_ts' | 'unsigned' | 'status' | 'sender'
     >,
-    overrides?: { state_key?: string; origin_server_ts?: number },
+    overrides?: {
+      event_id?: string;
+      state_key?: string;
+      origin_server_ts?: number;
+    },
   ) {
     // duplicate the event fully
     let room = event.room_id && this.#rooms.get(event.room_id);
     if (!room) {
       throw new Error(`room ${event.room_id} does not exist`);
     }
-    let eventId = this.eventId();
+    let eventId = overrides?.event_id ?? this.eventId();
     let matrixEvent: IEvent = {
       ...event,
       // Don’t want to list out all the types from MatrixEvent union type

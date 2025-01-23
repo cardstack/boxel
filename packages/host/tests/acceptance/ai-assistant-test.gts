@@ -311,10 +311,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
 
-    assert.dom('[data-test-llm-name]').hasText(DEFAULT_LLM);
-    await click('[data-test-llm-name]');
-    await click('[data-test-llm-name="google/gemini-pro-1.5"]');
-    assert.dom('[data-test-llm-name]').hasText('google/gemini-pro-1.5');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(DEFAULT_LLM.split('/')[1]);
+    await click('[data-test-llm-select-selected]');
+
+    assert.dom('[data-test-llm-select-item]').exists({ count: 4 });
+    assert
+      .dom('[data-test-llm-select-item="google/gemini-pro-1.5"]')
+      .hasText('google/gemini-pro-1.5');
+    await click('[data-test-llm-select-item="google/gemini-pro-1.5"]');
+    assert.dom('[data-test-llm-select-selected]').hasText('gemini-pro-1.5');
 
     let roomState = getRoomState('mock_room_1', APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');

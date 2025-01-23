@@ -4,12 +4,14 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import IconTrash from '../../icons/icon-trash.gts';
 import ColorPicker from '../color-picker/index.gts';
+import IconButton from '../icon-button/index.gts';
 
 interface Signature {
   Args: {
-    color: string;
-    onChange: (color: string) => void;
+    color: string | null;
+    onChange: (color: string | null) => void;
   };
   Element: HTMLDivElement;
 }
@@ -40,16 +42,31 @@ export default class ColorPalette extends Component<Signature> {
 
   <template>
     <div class='color-palette-container' ...attributes>
-      <div class='color-palette'>
-        {{#each this.colors as |color|}}
-          <button
-            type='button'
-            class='swatch {{if (eq color @color) "selected"}}'
-            style={{htmlSafe (concat '--swatch-color: ' color)}}
-            {{on 'click' (fn @onChange color)}}
-            title={{color}}
-          />
-        {{/each}}
+      <div class='palette-group'>
+        <div class='color-palette'>
+          {{#each this.colors as |color|}}
+            <button
+              type='button'
+              class='swatch {{if (eq color @color) "selected"}}'
+              style={{htmlSafe (concat '--swatch-color: ' color)}}
+              {{on 'click' (fn @onChange color)}}
+              title={{color}}
+            />
+          {{/each}}
+        </div>
+        {{#if @color}}
+          <div>
+            <code class='selected-color'>{{@color}}</code>
+            <IconButton
+              @icon={{IconTrash}}
+              @width='16px'
+              @height='16px'
+              class='remove'
+              {{on 'click' (fn @onChange null)}}
+              aria-label='Unset color'
+            />
+          </div>
+        {{/if}}
       </div>
 
       <label class='color-picker-container'>
@@ -65,10 +82,23 @@ export default class ColorPalette extends Component<Signature> {
       }
 
       .color-palette-container {
+        --boxel-icon-button-width: var(--boxel-icon-sm);
+        --boxel-icon-button-height: var(--boxel-icon-sm);
         display: flex;
         gap: var(--boxel-sp);
         align-items: flex-start;
         flex-direction: column;
+      }
+
+      .palette-group {
+        display: flex;
+        gap: var(--boxel-sp) var(--boxel-sp-lg);
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .selected-color {
+        text-transform: uppercase;
       }
 
       .color-picker-container {
@@ -100,7 +130,7 @@ export default class ColorPalette extends Component<Signature> {
       .swatch {
         width: var(--swatch-size);
         height: var(--swatch-size);
-        border: 1px solid transparent;
+        border: 2px solid transparent;
         border-radius: 50%;
         padding: 2px;
         cursor: pointer;
@@ -142,6 +172,16 @@ export default class ColorPalette extends Component<Signature> {
       .color-input::-webkit-color-swatch {
         border: 1px solid transparent;
         border-radius: 50%;
+      }
+
+      .remove {
+        vertical-align: text-bottom;
+        margin-left: var(--boxel-sp-xxxs);
+      }
+      .remove:focus,
+      .remove:hover {
+        --icon-color: var(--boxel-red);
+        outline: 0;
       }
     </style>
   </template>
