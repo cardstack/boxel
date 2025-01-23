@@ -380,11 +380,9 @@ export class RealmServer {
         },
       },
       {
-        ...(this.seedRealmURL
+        ...(this.seedRealmURL && copyFromSeedRealm
           ? {
-              copiedFromRealm: copyFromSeedRealm
-                ? this.seedRealmURL
-                : undefined,
+              copiedFromRealm: this.seedRealmURL
             }
           : {}),
       },
