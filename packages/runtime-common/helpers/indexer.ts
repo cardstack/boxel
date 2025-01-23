@@ -81,7 +81,7 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
 // we can relax the resource here since we will be asserting an ID when we
 // setup the index
 type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
-  pristine_doc: LooseCardResource;
+  pristine_doc: LooseCardResource | null;
 };
 
 export type TestIndexRow =

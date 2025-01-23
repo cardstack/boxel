@@ -3040,6 +3040,7 @@ module(basename(__filename), function () {
       let publisher: QueuePublisher;
       let runner: QueueRunner;
       let testRealmDir: string;
+      let seedRealm: Realm | undefined;
 
       hooks.beforeEach(async function () {
         shimExternals(virtualNetwork);
@@ -3057,17 +3058,20 @@ module(basename(__filename), function () {
         if (testRealm2) {
           virtualNetwork.unmount(testRealm2.handle);
         }
-        ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
-          await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_2'),
-            realmURL: testRealm2URL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          }));
+        ({
+          seedRealm,
+          testRealm: testRealm2,
+          testRealmHttpServer: testRealmHttpServer2,
+        } = await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_2'),
+          realmURL: testRealm2URL,
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+        }));
       }
 
       setupDB(hooks, {
@@ -3081,6 +3085,9 @@ module(basename(__filename), function () {
           await startRealmServer(dbAdapter, publisher, runner);
         },
         afterEach: async () => {
+          if (seedRealm) {
+            virtualNetwork.unmount(seedRealm.handle);
+          }
           await closeServer(testRealmHttpServer2);
         },
       });
@@ -3399,6 +3406,7 @@ module(basename(__filename), function () {
       });
     });
   });
+
   module('Realm server with realm mounted at the origin', function (hooks) {
     let testRealmServer: Server;
 

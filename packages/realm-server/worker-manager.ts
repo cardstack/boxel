@@ -151,8 +151,8 @@ const shutdown = (onShutdown?: () => void) => {
   });
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown());
+process.on('SIGTERM', () => shutdown());
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
