@@ -1,5 +1,3 @@
-import './hello.png';
-
 import { array, concat, hash } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
@@ -101,7 +99,6 @@ export default class ButtonComponent extends Component<Signature> {
         /* Button */
         .boxel-button {
           display: inline-flex;
-          background: url(./hello.png) no-repeat center;
           justify-content: center;
           height: min-content;
           align-items: center;
