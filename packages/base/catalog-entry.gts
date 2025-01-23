@@ -15,7 +15,7 @@ import CodeRef from './code-ref';
 import MarkdownField from './markdown';
 import { restartableTask } from 'ember-concurrency';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { loadCard } from '@cardstack/runtime-common';
+import { loadCard, Loader } from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import GlimmerComponent from '@glimmer/component';
