@@ -505,6 +505,7 @@ export class CurrentRun {
           identityContext,
         },
       );
+      await api.flushLogs();
       isolatedHtml = unwrap(
         sanitizeHTML(
           await this.#renderCard({

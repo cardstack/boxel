@@ -418,6 +418,100 @@ module(basename(__filename), function () {
           }
         });
 
+        test('POST /_create-realm without copying seed realm', async function (assert) {
+          // we randomize the realm and owner names so that we can isolate matrix
+          // test state--there is no "delete user" matrix API
+          let endpoint = `test-realm-${uuidv4()}`;
+          let owner = 'mango';
+          let ownerUserId = '@mango:boxel.ai';
+          let response = await request2
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                secretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    ...testRealmInfo,
+                    endpoint,
+                    backgroundURL: 'http://example.com/background.jpg',
+                    iconURL: 'http://example.com/icon.jpg',
+                    copyFromSeedRealm: false,
+                  },
+                },
+              }),
+            );
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              data: {
+                type: 'realm',
+                id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
+                attributes: {
+                  ...testRealmInfo,
+                  endpoint,
+                  backgroundURL: 'http://example.com/background.jpg',
+                  iconURL: 'http://example.com/icon.jpg',
+                  copyFromSeedRealm: false,
+                },
+              },
+            },
+            'realm creation JSON is correct',
+          );
+
+          let realmPath = join(dir.name, 'realm_server_2', owner, endpoint);
+          let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
+          assert.deepEqual(
+            realmJSON,
+            {
+              name: 'Test Realm',
+              backgroundURL: 'http://example.com/background.jpg',
+              iconURL: 'http://example.com/icon.jpg',
+            },
+            '.realm.json is correct',
+          );
+          assert.ok(
+            existsSync(join(realmPath, 'index.json')),
+            'seed file index.json exists',
+          );
+          assert.notOk(
+            existsSync(
+              join(
+                realmPath,
+                'HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json',
+              ),
+            ),
+            'seed file HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json exists',
+          );
+          assert.notOk(
+            existsSync(join(realmPath, 'package.json')),
+            'ignored seed file package.json does not exist',
+          );
+          assert.notOk(
+            existsSync(join(realmPath, 'node_modules')),
+            'ignored seed file node_modules/ does not exist',
+          );
+          assert.notOk(
+            existsSync(join(realmPath, '.gitignore')),
+            'ignored seed file .gitignore does not exist',
+          );
+          assert.notOk(
+            existsSync(join(realmPath, 'tsconfig.json')),
+            'ignored seed file tsconfig.json does not exist',
+          );
+        });
+
         test('dynamically created realms are not publicly readable or writable', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
