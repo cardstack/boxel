@@ -60,6 +60,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
+import { Submodes } from '../submode-switcher';
 
 interface Signature {
   Args: {
@@ -239,6 +240,24 @@ export default class Room extends Component<Signature> {
     registerDestructor(this, () => {
       this.scrollState().messageVisibilityObserver.disconnect();
     });
+
+    this.setRoomLLM();
+  }
+
+  private async setRoomLLM() {
+    let isCodeMode =
+      this.operatorModeStateService.state.submode === Submodes.Code;
+
+    if (isCodeMode) {
+      await this.roomResource.loading;
+      let llmModel = 'anthropic/claude-3.5-sonnet';
+      let foundModel = DEFAULT_LLM_LIST.includes(llmModel);
+      if (!foundModel) {
+        throw new Error(`Cannot find LLM model: ${llmModel}`);
+      }
+      await this.roomResource.loading;
+      this.roomResource.activateLLM(llmModel);
+    }
   }
 
   private scrollState() {
