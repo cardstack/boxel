@@ -772,7 +772,6 @@ export default class CodeSubmode extends Component<Signature> {
     {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
-      @hideAiAssistant={{true}}
       as |search|
     >
       <div
