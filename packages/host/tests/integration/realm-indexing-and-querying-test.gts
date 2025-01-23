@@ -654,6 +654,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             module: `./person`,
             name: 'Person',
           },
+          thumbnailURL: null,
           demo: {},
         },
         meta: {
@@ -683,6 +684,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testRealmURL}person`,
         realmName: 'Unnamed Workspace',
         ref: `${testRealmURL}person/Person`,
+        thumbnailURL: null,
         title: 'Person Card',
       });
     } else {
@@ -1780,7 +1782,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
   });
 
-  test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
+  test(`search doc includes 'contains' and used 'linksTo' fields, including contained computed fields`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -1832,9 +1834,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         email: 'hassan@cardstack.com',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
+        description: 'Person',
+        fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
       },
-      `search doc does not include fullName field`,
+      `search doc includes fullName field`,
     );
   });
 
@@ -1906,7 +1910,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       {
         _cardType: 'Post',
         author: {
+          description: 'Person',
           fullName: ' ',
+          title: ' ',
         },
         id: `${testRealmURL}Post/1`,
         title: '50 Ways to Leave Your Laptop',
@@ -2031,8 +2037,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       _cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
       demo: {
+        description: null,
         hosts: null,
+        posts: null,
         sponsors: null,
+        thumbnailURL: null,
         title: null,
         venue: null,
       },
@@ -2041,6 +2050,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       moduleHref: 'http://localhost:4202/test/booking',
       realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
+      thumbnailURL: null,
       title: 'Booking',
     });
     // we should be able to perform a structured clone of the search doc (this
@@ -2414,6 +2424,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           isField: false,
           moduleHref: `${testModuleRealm}pet-person`,
           realmName: 'Unnamed Workspace',
+          thumbnailURL: null,
         },
         relationships: {
           'demo.friend': { links: { self: null } },
@@ -2518,6 +2529,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         ref: `${testModuleRealm}pet-person/PetPerson`,
         demo: {
           firstName: 'Hassan',
+          description: 'A person with pets',
           pets: [
             {
               id: `${testRealmURL}Pet/mango`,
@@ -2536,11 +2548,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               thumbnailURL: null,
             },
           ],
+          thumbnailURL: null,
+          title: 'Hassan Pet Person',
           friend: null,
         },
         isField: false,
         moduleHref: `${testModuleRealm}pet-person`,
         realmName: 'Unnamed Workspace',
+        thumbnailURL: null,
       });
     } else {
       assert.ok(
@@ -3402,6 +3417,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
+                  title: 'Van Gogh',
                   friends: [
                     {
                       id: hassanID,
