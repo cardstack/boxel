@@ -17,8 +17,6 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
   typeof CRMTaskPlanner
 > {
   @tracked cardsQuery: { instances: CardDef[]; isLoading?: boolean };
-  private lastTaskFilter: any;
-  private lastSearchFilter: any;
 
   constructor(owner: Owner, args: any) {
     const config: TaskPlannerConfig = {
@@ -126,28 +124,11 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
     };
     super(owner, args, config);
 
+    this.args.setupTaskPlanner(this);
     // Initialize query once
     this.cardsQuery = getCards(this.getTaskQuery, this.realmHrefs, {
       isLive: true,
     });
-
-    // Store initial filter states
-    this.lastTaskFilter = this.args.taskFilter;
-    this.lastSearchFilter = this.args.searchFilter;
-  }
-
-  get cardInstances() {
-    // Check if filters have changed
-    if (
-      this.lastTaskFilter !== this.args.taskFilter ||
-      this.lastSearchFilter !== this.args.searchFilter
-    ) {
-      this.lastTaskFilter = this.args.taskFilter;
-      this.lastSearchFilter = this.args.searchFilter;
-      // Only reload when filters actually change
-      this.loadCards.perform();
-    }
-    return this.cardsQuery?.instances ?? [];
   }
 
   private loadCards = restartableTask(async () => {
@@ -163,14 +144,6 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
 
   override get emptyStateMessage() {
     return 'Link a CRM App to continue';
-  }
-
-  get reactiveTaskFilter() {
-    return this.args.taskFilter || [];
-  }
-
-  get reactiveSearchFilter() {
-    return this.args.searchFilter || [];
   }
 
   override get getTaskQuery(): Query {
@@ -215,6 +188,10 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
             },
           },
         };
+  }
+
+  get cardInstances() {
+    return this.cardsQuery?.instances ?? [];
   }
 
   assigneeQuery = getCards(

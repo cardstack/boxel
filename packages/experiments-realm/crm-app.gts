@@ -14,6 +14,7 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
 import { format, startOfWeek } from 'date-fns';
+import { debounce } from 'lodash';
 
 const dateFormat = `yyyy-MM-dd`;
 
@@ -134,10 +135,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     ['Account', ACCOUNT_FILTERS],
     ['Task', TASK_FILTERS],
   ]);
+  private taskPlannerAPI: CRMTaskPlannerIsolated;
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
     this.loadDealCards.perform();
+    if (this.activeTabId === 'Task') {
+      this.taskPlannerAPI.loadCards.perform();
+    }
   }
   //tabs
   @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
@@ -203,6 +208,16 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.deals = result.instances as Deal[];
     return result;
   });
+
+  private setupTaskPlanner = (taskPlanner: CRMTaskPlannerIsolated) => {
+    this.taskPlannerAPI = taskPlanner;
+  };
+
+  private debouncedLoadTaskCards = debounce(() => {
+    if (this.activeTabId === 'Task') {
+      this.taskPlannerAPI.loadCards.perform();
+    }
+  }, 300);
 
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
@@ -383,6 +398,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @action
   private setSearchKey(searchKey: string) {
     this.searchKey = searchKey;
+    this.debouncedLoadTaskCards();
   }
 
   @action private onChangeView(id: ViewOption) {
@@ -491,6 +507,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @fieldName={{@fieldName}}
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
+            @setupTaskPlanner={{this.setupTaskPlanner}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}
