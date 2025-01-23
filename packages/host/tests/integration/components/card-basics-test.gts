@@ -1421,9 +1421,7 @@ module('Integration | card-basics', function (hooks) {
       person.firstName = '';
       person.lastName = '';
       await renderCard(loader, person, 'atom');
-      assert
-        .dom('[data-test-compound-field-component]')
-        .hasText('Untitled Person');
+      assert.dom('[data-test-compound-field-component]').hasNoText();
     });
 
     test('render user-provided atom view template', async function (assert) {
@@ -1499,6 +1497,47 @@ module('Integration | card-basics', function (hooks) {
         [],
         'empty containsMany field is initialized to an empty array',
       );
+    });
+
+    test('can render empty linksTo and linksToMany fields in default atom format', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.firstName;
+          },
+        });
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h3 data-test-person><@fields.firstName /></h3>
+            <div data-test-pet>
+              Pet:
+              <@fields.pet @format='atom' />
+            </div>
+            <div data-test-pets>
+              Pets:
+              <@fields.pets @format='atom' />
+            </div>
+          </template>
+        };
+      }
+      let hassan = new Person({ firstName: 'Hassan' });
+      await renderCard(loader, hassan, 'isolated');
+
+      assert.dom('[data-test-person]').hasText('Hassan');
+      assert.dom('[data-test-pet]').hasText('Pet:');
+      assert.dom('[data-test-pet] span').hasClass('empty-field');
+      assert.dom('[data-test-pets]').hasText('Pets:');
+      assert
+        .dom(
+          '[data-test-pets] > [data-test-plural-view="linksToMany"][data-test-plural-view-format="atom"]',
+        )
+        .hasClass('empty');
     });
 
     test('render a containsMany composite field', async function (this: RenderingTestContext, assert) {
