@@ -380,7 +380,13 @@ export class RealmServer {
         },
       },
       {
-        ...(this.seedRealmURL ? { copiedFromRealm: copyFromSeedRealm ? this.seedRealmURL : undefined } : {}),
+        ...(this.seedRealmURL
+          ? {
+              copiedFromRealm: copyFromSeedRealm
+                ? this.seedRealmURL
+                : undefined,
+            }
+          : {}),
       },
     );
     this.realms.push(realm);
