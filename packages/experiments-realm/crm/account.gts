@@ -726,6 +726,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
     return [this.realmURL?.href];
   }
 
+  get accountId() {
+    return this.args.model.id;
+  }
+
   // Query All Active Deal that linked to current Account
   get dealQuery(): Query {
     return {
@@ -742,9 +746,42 @@ class EmbeddedTemplate extends Component<typeof Account> {
     };
   }
 
+  get activeTasksQuery(): Query {
+    let everyArr = [];
+    if (this.accountId) {
+      everyArr.push({
+        eq: {
+          'account.id': this.accountId,
+        },
+      });
+    }
+    return {
+      filter: {
+        on: taskSource,
+        every: everyArr,
+      },
+    };
+  }
+
   deals = getCards(this.dealQuery, this.realmHrefs, {
     isLive: true,
   });
+
+  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  get activeTasksCount() {
+    const tasks = this.activeTasks;
+    if (!tasks || tasks.isLoading) {
+      return 0;
+    }
+    return tasks.instances?.length ?? 0;
+  }
+
+  get hasActiveTasks() {
+    return this.activeTasksCount > 0;
+  }
 
   get activeDealsCount() {
     const deals = this.deals;
@@ -961,7 +998,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
               <label>NEXT STEPS</label>
               <div class='next-steps-display'>
                 {{! TODO: Add activity tasks after lucas pr go in }}
-                <EntityIconDisplay @title='Schedule next review'>
+                <EntityIconDisplay @title='--'>
                   <:icon>
                     <CalendarTime />
                   </:icon>
@@ -971,10 +1008,25 @@ class EmbeddedTemplate extends Component<typeof Account> {
 
             <article>
               <label>PRIORITY TASKS</label>
-              <div class='priority-tasks-display'>
-                {{! TODO: Add priority tasks after Richard pr go in }}
-                --
-              </div>
+              {{#if this.activeTasks.isLoading}}
+                <div class='loading-skeleton'>Loading...</div>
+              {{else}}
+                <div class='task-container'>
+                  {{#if this.hasActiveTasks}}
+                    {{#each this.activeTasks.instances as |task|}}
+                      {{#let (getComponent task) as |Component|}}
+                        <Component
+                          @format='embedded'
+                          @displayContainer={{false}}
+                          class='task-card-embedded'
+                        />
+                      {{/let}}
+                    {{/each}}
+                  {{else}}
+                    <p class='description'>No Upcoming Tasks</p>
+                  {{/if}}
+                </div>
+              {{/if}}
             </article>
           </div>
         </section>
@@ -1043,7 +1095,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
       .summary-articles {
         display: flex;
         flex-direction: column;
-        flex-wrap: wrap;
         gap: var(--boxel-sp-xl);
       }
       article > * + * {
@@ -1093,6 +1144,27 @@ class EmbeddedTemplate extends Component<typeof Account> {
         --pill-font: 400 var(--boxel-font-xs);
         --pill-border: none;
         flex-shrink: 0;
+      }
+      .task-container {
+        height: 100px;
+        overflow-y: auto;
+      }
+      .task-card-embedded {
+        height: fit-content;
+        background: transparent;
+      }
+      .task-card-embedded :where(.task-card) {
+        --task-card-padding: var(--boxel-sp) 0;
+        border-top: 1px solid var(--boxel-200);
+      }
+      .loading-skeleton {
+        height: 60px;
+        width: 100%;
+        background: var(--boxel-light-300);
+        border-radius: var(--boxel-border-radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       @container account-page-layout-embedded (max-width: 447px) {
