@@ -651,10 +651,8 @@ class IsolatedTemplate extends Component<typeof Account> {
       .activity-button-desktop {
         display: inline-flex;
       }
-      .activities-summary-card,
-      .tasks-summary-card {
+      .activities-summary-card {
         --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
-        --summary-card-gap: var(--boxel-sp-lg);
         container-type: inline-size;
         container-name: activities-summary-card;
       }
