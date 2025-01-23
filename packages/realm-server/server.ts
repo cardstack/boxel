@@ -382,7 +382,7 @@ export class RealmServer {
       {
         ...(this.seedRealmURL && copyFromSeedRealm
           ? {
-              copiedFromRealm: this.seedRealmURL
+              copiedFromRealm: this.seedRealmURL,
             }
           : {}),
       },
