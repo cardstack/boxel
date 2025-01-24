@@ -58,6 +58,45 @@ test.describe('Create Realm via Dashboard', () => {
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
+    
+    const filterListElements = page.locator('[data-test-boxel-filter-list-button]');
+    const count = await filterListElements.count();
+    expect(count).toBeGreaterThan(1);
+
+    await page.locator(`[data-test-workspace-chooser-toggle]`).click();
+    await expect(
+      page.locator(
+        `[data-test-workspace="1New Workspace"] [data-test-realm-icon-url]`,
+      ),
+      'the "N" icon URL is shown',
+    ).toHaveAttribute(
+      'style',
+      'background-image: url("https://boxel-images.boxel.ai/icons/Letter-n.png");',
+    );
+  });
+
+  test('it can create a new realm without copying from seed realm', async ({
+    page,
+  }) => {
+    let serverIndexUrl = new URL(appURL).origin;
+    await clearLocalStorage(page, serverIndexUrl);
+
+    await setupUserSubscribed('@user1:localhost', realmServer);
+
+    await login(page, 'user1', 'pass', {
+      url: serverIndexUrl,
+      skipOpeningAssistant: true,
+    });
+
+    await createRealm(page, 'new-workspace', '1New Workspace', false);
+    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
+    await expect(
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
+    ).toBeVisible();
+    await expect(
+      page.locator(`[data-test-boxel-filter-list-button]`),
+    ).toHaveCount(1);
 
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(

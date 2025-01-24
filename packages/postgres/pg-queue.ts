@@ -93,7 +93,7 @@ class WorkLoop {
       return;
     }
     let timerPromise = new Promise((resolve) => {
-      this.timeout = setTimeout(resolve, this.pollInterval);
+      this.timeout = setTimeout(resolve, this.pollInterval).unref();
     });
     log.debug(`[workloop %s] entering promise race`, this.label);
     await Promise.race([this.waker.promise, timerPromise]);
@@ -354,7 +354,7 @@ export class PgQueueRunner implements QueueRunner {
               new Promise<'timeout'>((r) =>
                 setTimeout(() => {
                   r('timeout');
-                }, this.#maxTimeoutSec * 1000),
+                }, this.#maxTimeoutSec * 1000).unref(),
               ),
             ]);
             if (result === 'timeout') {

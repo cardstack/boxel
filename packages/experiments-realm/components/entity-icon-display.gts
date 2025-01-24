@@ -78,6 +78,7 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
           --entity-display-title-font-size,
           var(--boxel-font-size-sm)
         );
+        --title-color: var(--entity-display-title-color, var(--boxel-dark));
         --title-font-weight: var(--entity-display-title-font-weight, 600);
         --content-font-size: var(
           --entity-display-content-font-size,
@@ -117,6 +118,7 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
       }
       .entity-title {
         word-break: break-word;
+        color: var(--title-color);
         font-size: var(--title-font-size);
         font-weight: var(--title-font-weight);
       }

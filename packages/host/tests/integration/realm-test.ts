@@ -223,12 +223,14 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/owner`,
           attributes: {
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -339,11 +341,13 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `http://localhost:4202/test/hassan`,
           attributes: {
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
           },
           meta: {
@@ -592,12 +596,14 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/owner`,
           attributes: {
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -951,8 +957,10 @@ module('Integration | realm', function (hooks) {
           endTime: '2023-02-19T02:00:00.000Z',
           hosts: [
             {
+              description: 'Person',
               firstName: 'Hassan',
               lastName: null,
+              fullName: 'Hassan ',
               title: 'Hassan ',
               email: null,
               posts: null,
@@ -1157,11 +1165,13 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/friend`,
           links: { self: `${testRealmURL}dir/friend` },
           attributes: {
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
           },
           meta: {
@@ -2011,7 +2021,9 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
@@ -2980,7 +2992,9 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
@@ -3047,12 +3061,14 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `http://localhost:4202/test/hassan`,
           attributes: {
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {

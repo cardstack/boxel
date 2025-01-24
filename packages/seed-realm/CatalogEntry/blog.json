@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Blog App",
       "description": "Catalog entry for Blog App card",
-      "isField": false,
+      "specType": "card",
       "ref": {
         "module": "../blog-app",
         "name": "BlogApp"

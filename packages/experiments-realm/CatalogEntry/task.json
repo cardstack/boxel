@@ -8,7 +8,7 @@
         "name": "Task",
         "module": "../task"
       },
-      "isField": false
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

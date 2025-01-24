@@ -89,10 +89,14 @@ export async function createRealm(
   page: Page,
   endpoint: string,
   name = endpoint,
+  copyFromSeed = true,
 ) {
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
+  if (!copyFromSeed) {
+    await page.locator('[data-test-copy-from-seed-field]').click();
+  }
   await page.locator('[data-test-create-workspace-submit]').click();
   await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
   await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(

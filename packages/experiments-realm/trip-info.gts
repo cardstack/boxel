@@ -11,6 +11,7 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui/components';
 import { Country } from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
+import NumberField from '../base/number';
 
 class TravelGoal extends FieldDef {
   static displayName = 'Travel Goal';
@@ -22,6 +23,36 @@ class TravelGoal extends FieldDef {
       <CardContainer class='container'>
         <FieldContainer @label='Goal Title'>
           <@fields.goalTitle />
+        </FieldContainer>
+        <FieldContainer @label='Country'>
+          <@fields.country />
+        </FieldContainer>
+        <FieldContainer @label='Alternate Trips'>
+          <@fields.alternateTrips />
+        </FieldContainer>
+      </CardContainer>
+      <style scoped>
+        .container {
+          padding: 20px;
+          background-color: whitesmoke;
+        }
+        .container > * + * {
+          margin-top: 20px;
+        }
+      </style>
+    </template>
+  };
+}
+
+export class TravelGoalWithProgress extends TravelGoal {
+  static displayName = 'Travel Goal With Progress';
+  @field progress = contains(NumberField);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <CardContainer class='container'>
+        <FieldContainer @label='Goal Title (Progress)'>
+          <@fields.goalTitle />
+          (<@fields.progress />%)
         </FieldContainer>
         <FieldContainer @label='Country'>
           <@fields.country />
@@ -111,6 +142,10 @@ export class TripInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
 
 
   */

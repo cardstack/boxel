@@ -256,7 +256,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       [`${fileName}.json`]: new CatalogEntry({
         title,
         description: `Catalog entry for ${title}`,
-        isField: false,
+        specType: 'card',
         ref,
       }),
     });
@@ -280,18 +280,18 @@ module('Acceptance | interact submode tests', function (hooks) {
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
         'person-entry.json': new CatalogEntry({
-          title: 'Person Card',
+          name: 'Person Card',
           description: 'Catalog entry for Person Card',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
           },
         }),
         'pet-entry.json': new CatalogEntry({
-          title: 'Pet Card',
+          name: 'Pet Card',
           description: 'Catalog entry for Pet Card',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
@@ -299,9 +299,9 @@ module('Acceptance | interact submode tests', function (hooks) {
         }),
         ...catalogEntries,
         'puppy-entry.json': new CatalogEntry({
-          title: 'Puppy Card',
+          name: 'Puppy Card',
           description: 'Catalog entry for Puppy Card',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Puppy',
@@ -454,7 +454,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
-        .containsText('Test Workspace B');
+        .containsText('http://test-realm/test/person');
 
       // Close the card, find it in recent cards, and reopen it
       await click(

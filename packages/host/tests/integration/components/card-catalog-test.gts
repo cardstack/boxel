@@ -116,63 +116,63 @@ module('Integration | card-catalog', function (hooks) {
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
         'CatalogEntry/publishing-packet.json': new CatalogEntry({
-          title: 'Publishing Packet',
+          name: 'Publishing Packet',
           description: 'Catalog entry for PublishingPacket',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `../publishing-packet`,
             name: 'PublishingPacket',
           },
         }),
         'CatalogEntry/author.json': new CatalogEntry({
-          title: 'Author',
+          name: 'Author',
           description: 'Catalog entry for Author',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
           },
         }),
         'CatalogEntry/person.json': new CatalogEntry({
-          title: 'Person',
+          name: 'Person',
           description: 'Catalog entry for Person',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
           },
         }),
         'CatalogEntry/pet.json': new CatalogEntry({
-          title: 'Pet',
+          name: 'Pet',
           description: 'Catalog entry for Pet',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
           },
         }),
         'CatalogEntry/tree.json': new CatalogEntry({
-          title: 'Tree',
+          name: 'Tree',
           description: 'Catalog entry for Tree',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
             name: 'Tree',
           },
         }),
         'CatalogEntry/blog-post.json': new CatalogEntry({
-          title: 'BlogPost',
+          name: 'BlogPost',
           description: 'Catalog entry for BlogPost',
-          isField: false,
+          specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
             name: 'BlogPost',
           },
         }),
         'CatalogEntry/address.json': new CatalogEntry({
-          title: 'Address',
+          name: 'Address',
           description: 'Catalog entry for Address field',
-          isField: true,
+          specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
             name: 'Address',

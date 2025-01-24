@@ -728,14 +728,15 @@ export class Realm {
         if (!request.headers.get('X-Boxel-Building-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
-            new Promise((resolve) =>
-              setTimeout(() => {
-                resolve(
-                  new Error(
-                    `Timeout waiting for realm ${this.url} to become ready`,
-                  ),
-                );
-              }, 60 * 1000),
+            new Promise(
+              (resolve) =>
+                setTimeout(() => {
+                  resolve(
+                    new Error(
+                      `Timeout waiting for realm ${this.url} to become ready`,
+                    ),
+                  );
+                }, 60 * 1000).unref?.(),
             ),
           ]);
           if (timeout) {
