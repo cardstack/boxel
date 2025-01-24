@@ -89,7 +89,7 @@ async function fetchGenerationCost(generationId: string) {
     })
   ).json();
 
-  if (response.error && response.error.includes('not found')) {
+  if (response.error && response.error.message.includes('not found')) {
     return null;
   }
 
