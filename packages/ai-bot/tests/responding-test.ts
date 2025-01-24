@@ -139,7 +139,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      thinking,
+      thinkingMessage,
       'Just the thinking message sent',
     );
 
@@ -220,7 +220,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      thinking,
+      thinkingMessage,
       'Thinking message should be sent first',
     );
     assert.deepEqual(
@@ -299,7 +299,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      thinking,
+      thinkingMessage,
       'Thinking message should be sent first',
     );
     assert.deepEqual(
