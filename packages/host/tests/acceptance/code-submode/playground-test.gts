@@ -1,5 +1,7 @@
 import { waitFor } from '@ember/test-helpers';
+
 import { module, test } from 'qunit';
+
 import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
