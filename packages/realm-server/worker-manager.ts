@@ -253,7 +253,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
         }
       });
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
+    new Promise<true>((r) => setTimeout(() => r(true), 30_000).unref()),
   ]);
   if (timeout) {
     console.error(

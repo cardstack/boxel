@@ -274,12 +274,14 @@ export class RealmServer {
     name,
     backgroundURL,
     iconURL,
+    copyFromSeedRealm = true,
   }: {
     ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
+    copyFromSeedRealm?: boolean;
   }): Promise<Realm> => {
     if (
       this.realms.find(
@@ -339,16 +341,29 @@ export class RealmServer {
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
     });
-    if (this.seedPath) {
+    if (this.seedPath && copyFromSeedRealm) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
       );
+
       copySync(this.seedPath, realmPath, {
         filter: (src, _dest) => {
           return !ignoreList.includes(src);
         },
       });
       this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
+    } else {
+      writeJSONSync(join(realmPath, 'index.json'), {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
+          },
+        },
+      });
     }
 
     let realm = new Realm(
@@ -365,7 +380,11 @@ export class RealmServer {
         },
       },
       {
-        ...(this.seedRealmURL ? { copiedFromRealm: this.seedRealmURL } : {}),
+        ...(this.seedRealmURL && copyFromSeedRealm
+          ? {
+              copiedFromRealm: this.seedRealmURL,
+            }
+          : {}),
       },
     );
     this.realms.push(realm);

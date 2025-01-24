@@ -40,6 +40,7 @@ export default class AddWorkspace extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @tracked private isModalOpen = false;
   @tracked private endpoint = '';
+  @tracked private copyFromSeedRealm = true;
   @tracked private displayName = '';
   @tracked private hasUserEditedEndpoint = false;
   @tracked private error: string | null = null;
@@ -54,6 +55,9 @@ export default class AddWorkspace extends Component<Signature> {
       this.endpoint = cleanseString(value);
     }
   };
+  private toggleCopyFromSeedRealm = () => {
+    this.copyFromSeedRealm = !this.copyFromSeedRealm;
+  };
   private closeModal = () => {
     this.isModalOpen = false;
   };
@@ -65,6 +69,7 @@ export default class AddWorkspace extends Component<Signature> {
         name: this.displayName,
         iconURL: iconURLFor(this.displayName),
         backgroundURL: getRandomBackgroundURL(),
+        copyFromSeedRealm: this.copyFromSeedRealm,
       });
       this.closeModal();
     } catch (e: any) {
@@ -134,6 +139,20 @@ export default class AddWorkspace extends Component<Signature> {
                 @onInput={{this.setEndpoint}}
                 @helperText='The endpoint is the unique identifier for your workspace. Use letters, numbers, and hyphens only.'
               />
+            </FieldContainer>
+            <FieldContainer @label='Copy from Seed' @tag='label' class='field'>
+              <label class='copy-from-seed-label'>
+                <BoxelInput
+                  data-test-copy-from-seed-field
+                  class='copy-from-seed-checkbox'
+                  placeholder='Workspace Endpoint'
+                  @type='checkbox'
+                  @value={{this.copyFromSeedRealm}}
+                  @onChange={{this.toggleCopyFromSeedRealm}}
+                />
+                <span>Populate new workspace with sample cards (uncheck for a
+                  blank workspace).</span>
+              </label>
             </FieldContainer>
           {{/if}}
         {{/if}}
@@ -231,6 +250,28 @@ export default class AddWorkspace extends Component<Signature> {
       }
       .spinner {
         --boxel-loading-indicator-size: 2.5rem;
+      }
+      .copy-from-seed-label {
+        display: flex;
+        gap: calc(var(--boxel-sp-sm) + 1px);
+        padding-top: var(--boxel-sp-sm);
+      }
+      .copy-from-seed-label span {
+        color: var(--boxel-label-color);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .copy-from-seed-label :deep(.input-container) {
+        grid-template-columns: 1fr;
+        width: auto;
+        height: 100%;
+      }
+      .copy-from-seed-checkbox {
+        --boxel-input-height: 17px;
+        grid-area: pre-icon;
+        justify-self: start;
+        margin: 0;
+        width: auto;
       }
     </style>
   </template>

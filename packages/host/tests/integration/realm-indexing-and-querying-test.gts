@@ -690,6 +690,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
+        thumbnailURL: null,
         title: 'Person Card',
         linkedExamples: null,
         containedExamples: null,
@@ -1788,7 +1789,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
   });
 
-  test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
+  test(`search doc includes 'contains' and used 'linksTo' fields, including contained computed fields`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -1840,9 +1841,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         email: 'hassan@cardstack.com',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
+        description: 'Person',
+        fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
       },
-      `search doc does not include fullName field`,
+      `search doc includes fullName field`,
     );
   });
 
@@ -1914,7 +1917,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       {
         _cardType: 'Post',
         author: {
+          description: 'Person',
           fullName: ' ',
+          title: ' ',
         },
         id: `${testRealmURL}Post/1`,
         title: '50 Ways to Leave Your Laptop',
@@ -2028,6 +2033,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       linkedExamples: null,
       containedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
+      thumbnailURL: null,
       title: 'Booking',
     });
     // we should be able to perform a structured clone of the search doc (this
@@ -2387,6 +2393,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           moduleHref: `${testModuleRealm}pet-person`,
           name: null,
           containedExamples: [],
+          realmName: 'Unnamed Workspace',
         },
         relationships: {
           linkedExamples: {
@@ -2432,6 +2439,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
+        isField: false,
+        realmName: 'Unnamed Workspace',
+        thumbnailURL: null,
       });
     } else {
       assert.ok(
@@ -3293,6 +3303,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
+                  title: 'Van Gogh',
                   friends: [
                     {
                       id: hassanID,
