@@ -45,6 +45,7 @@ import { Company } from './company';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
+import { DealEvent } from './deal-event';
 
 interface DealSizeSummary {
   summary: string;
@@ -1138,6 +1139,7 @@ export class Deal extends CardDef {
     },
   });
   @field healthScore = contains(PercentageField);
+  @field event = linksTo(() => DealEvent);
   @field notes = contains(MarkdownField);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
