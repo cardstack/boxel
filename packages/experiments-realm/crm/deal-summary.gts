@@ -1,4 +1,6 @@
 import Component from '@glimmer/component';
+import { getCards } from '@cardstack/runtime-common';
+import type { Query } from '@cardstack/runtime-common';
 
 import type { Deal } from './deal';
 import SummaryCard from '../components/summary-card';
@@ -11,7 +13,8 @@ import ChartCovariateIcon from '@cardstack/boxel-icons/chart-covariate';
 
 interface Signature {
   Args: {
-    deals: Deal[];
+    query: Query;
+    realmHrefs: string[];
   };
 }
 
@@ -20,12 +23,20 @@ function formatCurrencyValue(value: number, currencySymbol: string) {
 }
 
 export class DealSummary extends Component<Signature> {
+  dealCardsQuery = getCards(this.args.query, this.args.realmHrefs, {
+    isLive: true,
+  });
+
   get deals() {
-    return this.args.deals;
+    return (this.dealCardsQuery.instances || []) as Deal[];
   }
 
   get dealSummaries() {
-    if (!this.deals || this.deals.length === 0) {
+    if (
+      !this.deals ||
+      this.deals.length === 0 ||
+      this.dealCardsQuery.isLoading
+    ) {
       return undefined;
     }
 
@@ -39,12 +50,14 @@ export class DealSummary extends Component<Signature> {
     let predictedRevenue = 0;
 
     for (let deal of this.deals) {
+      console.log(deal.status);
       totalDealValue += deal.computedValue?.amount ?? 0;
       predictedRevenue += deal.predictedRevenue?.amount ?? 0;
     }
 
     const averageDealSize = totalDealValue / totalDealCount || 0;
 
+    console.log(this.args.query);
     return {
       totalDealValue: formatCurrencyValue(totalDealValue, currencySymbol),
       totalDealCount,
@@ -54,76 +67,84 @@ export class DealSummary extends Component<Signature> {
   }
 
   <template>
-    <SummaryGridContainer>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Total Deal Value</h3>
-        </:title>
-        <:icon>
-          <TrendingUpIcon class='header-icon' />
-        </:icon>
-        <:content>
-          <div class='value'>
-            {{#if this.dealSummaries}}
-              {{this.dealSummaries.totalDealValue}}
-            {{else}}
-              -
-            {{/if}}
-          </div>
-        </:content>
-      </SummaryCard>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Average Deal Size</h3>
-        </:title>
-        <:icon>
-          <CalculatorIcon class='header-icon' />
-        </:icon>
-        <:content>
-          <div class='value'>
-            {{#if this.dealSummaries}}
-              {{this.dealSummaries.averageDealSize}}
-            {{else}}
-              -
-            {{/if}}
-          </div>
-        </:content>
-      </SummaryCard>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Deal Count</h3>
-        </:title>
-        <:icon>
-          <NumbersIcon class='header-icon' />
-        </:icon>
-        <:content>
-          <div class='value'>
-            {{#if this.dealSummaries}}
-              {{this.dealSummaries.totalDealCount}}
-            {{else}}
-              -
-            {{/if}}
-          </div>
-        </:content>
-      </SummaryCard>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Predicted Revenue</h3>
-        </:title>
-        <:icon>
-          <ChartCovariateIcon class='header-icon' />
-        </:icon>
-        <:content>
-          <div class='value'>
-            {{#if this.dealSummaries}}
-              {{this.dealSummaries.predictedRevenue}}
-            {{else}}
-              -
-            {{/if}}
-          </div>
-        </:content>
-      </SummaryCard>
-    </SummaryGridContainer>
+    {{#each this.deals as |deal|}}
+      {{deal.status.label}}
+      {{deal.predictedRevenue.amount}}
+    {{/each}}
+    {{#if this.dealCardsQuery.isLoading}}
+      <div class='loading'>Loading...</div>
+    {{else}}
+      <SummaryGridContainer>
+        <SummaryCard>
+          <:title>
+            <h3 class='summary-title'>Total Deal Value</h3>
+          </:title>
+          <:icon>
+            <TrendingUpIcon class='header-icon' />
+          </:icon>
+          <:content>
+            <div class='value'>
+              {{#if this.dealSummaries}}
+                {{this.dealSummaries.totalDealValue}}
+              {{else}}
+                -
+              {{/if}}
+            </div>
+          </:content>
+        </SummaryCard>
+        <SummaryCard>
+          <:title>
+            <h3 class='summary-title'>Average Deal Size</h3>
+          </:title>
+          <:icon>
+            <CalculatorIcon class='header-icon' />
+          </:icon>
+          <:content>
+            <div class='value'>
+              {{#if this.dealSummaries}}
+                {{this.dealSummaries.averageDealSize}}
+              {{else}}
+                -
+              {{/if}}
+            </div>
+          </:content>
+        </SummaryCard>
+        <SummaryCard>
+          <:title>
+            <h3 class='summary-title'>Deal Count</h3>
+          </:title>
+          <:icon>
+            <NumbersIcon class='header-icon' />
+          </:icon>
+          <:content>
+            <div class='value'>
+              {{#if this.dealSummaries}}
+                {{this.dealSummaries.totalDealCount}}
+              {{else}}
+                -
+              {{/if}}
+            </div>
+          </:content>
+        </SummaryCard>
+        <SummaryCard>
+          <:title>
+            <h3 class='summary-title'>Predicted Revenue</h3>
+          </:title>
+          <:icon>
+            <ChartCovariateIcon class='header-icon' />
+          </:icon>
+          <:content>
+            <div class='value'>
+              {{#if this.dealSummaries}}
+                {{this.dealSummaries.predictedRevenue}}
+              {{else}}
+                -
+              {{/if}}
+            </div>
+          </:content>
+        </SummaryCard>
+      </SummaryGridContainer>
+    {{/if}}
     <style scoped>
       h1,
       h2,

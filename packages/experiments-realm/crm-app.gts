@@ -20,7 +20,7 @@ const dateFormat = `yyyy-MM-dd`;
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
-import { not, eq } from '@cardstack/boxel-ui/helpers';
+import { not, eq, and } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   TabbedHeader,
@@ -292,22 +292,23 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //query for tabs and filters
   get query() {
-    const { loadAllFilters, activeFilter, activeTabId } = this;
+    const { loadAllFilters, activeTabId } = this;
 
-    if (!loadAllFilters.isIdle || !activeFilter?.query) return;
+    if (!loadAllFilters.isIdle || !this.activeFilter?.query) return;
 
     const defaultFilter = {
-      type: activeFilter.cardRef,
+      type: this.activeFilter.cardRef,
     };
 
     // filter field value by CRM Account
     const accountFilter =
-      activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
+      activeTabId === 'Account' &&
+      this.activeFilter.displayName !== 'All Accounts'
         ? [
             {
-              on: activeFilter.cardRef,
+              on: this.activeFilter.cardRef,
               eq: {
-                'urgencyTag.label': activeFilter.displayName,
+                'urgencyTag.label': this.activeFilter.displayName,
               },
             },
           ]
@@ -315,12 +316,12 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
     // filter field value by CRM Deal
     const dealFilter =
-      activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
+      activeTabId === 'Deal' && this.activeFilter.displayName !== 'All Deals'
         ? [
             {
-              on: activeFilter.cardRef,
+              on: this.activeFilter.cardRef,
               eq: {
-                'status.label': activeFilter.displayName,
+                'status.label': this.activeFilter.displayName,
               },
             },
           ]
@@ -328,7 +329,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
     return {
       filter: {
-        on: activeFilter.cardRef,
+        on: this.activeFilter.cardRef,
         every: [
           defaultFilter,
           ...accountFilter,
@@ -469,9 +470,14 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           </BoxelButton>
         {{/if}}
         {{#if (eq this.activeTabId 'Deal')}}
-          <div class='content-header-deal-summary'>
-            <DealSummary @deals={{this.deals}} />
-          </div>
+          {{#if this.query}}
+            <div class='content-header-deal-summary'>
+              <DealSummary
+                @query={{this.query}}
+                @realmHrefs={{this.realmHrefs}}
+              />
+            </div>
+          {{/if}}
         {{/if}}
         <div class='search-bar content-header-row-2'>
           <SearchInput
