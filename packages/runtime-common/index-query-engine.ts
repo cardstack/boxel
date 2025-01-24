@@ -30,6 +30,7 @@ import {
   tableValuedFunctionsPlaceholder,
   query,
   isDbExpression,
+  Param,
 } from './expression';
 import {
   type Query,
@@ -120,6 +121,7 @@ export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
   htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  renderType?: ResolvedCodeRef;
   includeErrors?: true;
   cardUrls?: string[];
 }
@@ -131,6 +133,7 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string | null;
+  usedRenderType: string;
   isError?: true;
 }
 
@@ -461,33 +464,15 @@ export class IndexQueryEngine {
       );
     }
 
-    let ref: ResolvedCodeRef;
-    let filterOnValue = filter && 'type' in filter ? filter.type : filter?.on;
-    if (filterOnValue) {
-      ref = filterOnValue as ResolvedCodeRef;
-    } else {
-      ref = baseCardRef;
-    }
-
-    let htmlColumnExpression;
-    switch (opts.htmlFormat) {
-      case 'embedded':
-        htmlColumnExpression = [
-          'embedded_html ->> ',
-          param(internalKeyFor(ref, undefined)),
-        ];
-        break;
-      case 'fitted':
-        htmlColumnExpression = [
-          'fitted_html ->> ',
-          param(internalKeyFor(ref, undefined)),
-        ];
-        break;
-      case 'atom':
-      default:
-        htmlColumnExpression = ['atom_html'];
-        break;
-    }
+    let htmlColumnExpression = this.buildHtmlColumnExpression({
+      htmlFormat: opts.htmlFormat,
+      renderType: opts.renderType,
+    });
+    let usedRenderTypeColumnExpression =
+      this.buildUsedRenderTypeColumnExpression({
+        htmlFormat: opts.htmlFormat,
+        renderType: opts.renderType,
+      });
 
     let { results, meta } = (await this._search(
       realmURL,
@@ -495,13 +480,19 @@ export class IndexQueryEngine {
       loader,
       opts,
       [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(file_alias) as file_alias, ',
         ...htmlColumnExpression,
-        ') as html, ANY_VALUE(deps) as deps',
+        ' as html,',
+        ...usedRenderTypeColumnExpression,
+        ' as used_render_type,',
+        'ANY_VALUE(deps) as deps',
       ],
     )) as {
       meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & { html: string | null })[];
+      results: (Partial<BoxelIndexTable> & {
+        html: string | null;
+        used_render_type: string;
+      })[];
     };
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
@@ -521,11 +512,74 @@ export class IndexQueryEngine {
       return {
         url: card.url!,
         html: card.html,
+        usedRenderType: card.used_render_type,
         ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });
 
     return { prerenderedCards, scopedCssUrls: [...scopedCssUrls], meta };
+  }
+
+  private buildHtmlColumnExpression({
+    htmlFormat,
+    renderType,
+  }: {
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    renderType?: ResolvedCodeRef;
+  }): (string | Param)[] {
+    let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
+    if (!htmlFormat || htmlFormat === 'atom') {
+      return [fieldName];
+    }
+
+    let htmlColumnExpression = [];
+    htmlColumnExpression.push('COALESCE(');
+    if (renderType) {
+      htmlColumnExpression.push(`${fieldName} ->> `);
+      htmlColumnExpression.push(param(internalKeyFor(renderType, undefined)));
+      htmlColumnExpression.push(',');
+    }
+
+    htmlColumnExpression.push(`(
+      CASE 
+      WHEN ANY_VALUE(${fieldName}) IS NOT NULL 
+        AND jsonb_typeof(ANY_VALUE(${fieldName})) = 'object'
+      THEN (
+        SELECT value 
+        FROM jsonb_each_text(ANY_VALUE(${fieldName})) 
+        WHERE key = (
+          SELECT replace(ANY_VALUE(types[1]::text), '"', '')
+        )) 
+      ELSE NULL 
+      END), 
+    NULL)`);
+
+    return htmlColumnExpression;
+  }
+
+  private buildUsedRenderTypeColumnExpression({
+    htmlFormat,
+    renderType,
+  }: {
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    renderType?: ResolvedCodeRef;
+  }): (string | Param)[] {
+    let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
+
+    let usedRenderTypeColumnExpression = [];
+    if (htmlFormat && htmlFormat !== 'atom' && renderType) {
+      usedRenderTypeColumnExpression.push(`CASE`);
+      usedRenderTypeColumnExpression.push(`WHEN ${fieldName} ->> `);
+      usedRenderTypeColumnExpression.push(
+        param(internalKeyFor(renderType, undefined)),
+      );
+      usedRenderTypeColumnExpression.push(`IS NOT NULL THEN ${renderType}`);
+      usedRenderTypeColumnExpression.push(`ELSE ANY_VALUE(types[1]) END`);
+    } else {
+      usedRenderTypeColumnExpression.push('ANY_VALUE(types[1])');
+    }
+
+    return usedRenderTypeColumnExpression;
   }
 
   async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
