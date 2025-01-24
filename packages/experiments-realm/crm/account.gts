@@ -652,6 +652,7 @@ class IsolatedTemplate extends Component<typeof Account> {
       .tasks-summary-card {
         --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
         --summary-card-gap: var(--boxel-sp-lg);
+        --summary-card-content-gap: 0;
         container-type: inline-size;
         container-name: activities-summary-card;
       }
