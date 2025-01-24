@@ -648,10 +648,12 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: 'Person Card',
           description: 'Catalog entry for Person card',
           moduleHref: `${testRealmURL}person`,
-          thumbnailURL: null,
           name: null,
           readMe: null,
           specType: 'card',
+          isCard: true,
+          isField: false,
+          thumbnailURL: null,
           ref: {
             module: `./person`,
             name: 'Person',
@@ -690,10 +692,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
-        thumbnailURL: null,
         title: 'Person Card',
         linkedExamples: null,
         containedExamples: null,
+        isCard: true,
+        isField: false,
       });
     } else {
       assert.ok(
@@ -2033,8 +2036,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       linkedExamples: null,
       containedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
-      thumbnailURL: null,
       title: 'Booking',
+      isCard: true,
+      isField: false,
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -2393,7 +2397,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           moduleHref: `${testModuleRealm}pet-person`,
           name: null,
           containedExamples: [],
-          realmName: 'Unnamed Workspace',
+          isCard: true,
+          isField: false,
         },
         relationships: {
           linkedExamples: {
@@ -2439,9 +2444,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
+        isCard: true,
         isField: false,
-        realmName: 'Unnamed Workspace',
-        thumbnailURL: null,
       });
     } else {
       assert.ok(
