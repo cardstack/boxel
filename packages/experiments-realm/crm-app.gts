@@ -32,6 +32,7 @@ import {
   Query,
   CardError,
   SupportedMimeType,
+  Filter,
   getCards,
 } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
@@ -135,13 +136,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     ['Account', ACCOUNT_FILTERS],
     ['Task', TASK_FILTERS],
   ]);
-  private taskPlannerAPI: CRMTaskPlannerIsolated;
+  private taskPlannerAPI: CRMTaskPlannerIsolated | undefined;
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
     this.loadDealCards.perform();
     if (this.activeTabId === 'Task') {
-      this.taskPlannerAPI.loadCards.perform();
+      this.taskPlannerAPI?.loadCards.perform();
     }
   }
   //tabs
@@ -215,7 +216,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   private debouncedLoadTaskCards = debounce(() => {
     if (this.activeTabId === 'Task') {
-      this.taskPlannerAPI.loadCards.perform();
+      this.taskPlannerAPI?.loadCards.perform();
     }
   }, 300);
 
@@ -340,7 +341,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     } as Query;
   }
 
-  get searchFilter() {
+  get searchFilter(): Filter[] {
     return this.searchKey
       ? [
           {
@@ -355,8 +356,8 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       : [];
   }
 
-  get taskFilter() {
-    let taskFilter: Query['filter'][] = [];
+  get taskFilter(): Filter[] {
+    let taskFilter: Filter[] = [];
     if (
       this.activeTabId === 'Task' &&
       this.activeFilter.displayName !== 'All Tasks'

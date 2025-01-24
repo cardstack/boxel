@@ -1,4 +1,4 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef, SignatureFor } from 'https://cardstack.com/base/card-api';
 import type Owner from '@ember/owner';
 import { CRMTaskStatusField } from './task';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
@@ -8,17 +8,26 @@ import {
   TaskCard,
 } from '../components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
+import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
+
+interface CRMTaskPlannerSignature extends SignatureFor<typeof CRMTaskPlanner> {
+  Args: SignatureFor<typeof CRMTaskPlanner>['Args'] & {
+    setupTaskPlanner?: (planner: CRMTaskPlannerIsolated) => void;
+    taskFilter?: Filter[];
+    searchFilter?: Filter[];
+  };
+}
 
 export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
   typeof CRMTaskPlanner
 > {
   @tracked cardsQuery: { instances: CardDef[]; isLoading?: boolean };
+  declare args: CRMTaskPlannerSignature['Args'];
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: CRMTaskPlannerSignature['Args']) {
     const config: TaskPlannerConfig = {
       status: {
         values: CRMTaskStatusField.values,
@@ -124,14 +133,14 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
     };
     super(owner, args, config);
 
-    this.args.setupTaskPlanner(this);
+    this.args.setupTaskPlanner?.(this);
     // Initialize query once
     this.cardsQuery = getCards(this.getTaskQuery, this.realmHrefs, {
       isLive: true,
     });
   }
 
-  private loadCards = restartableTask(async () => {
+  loadCards = restartableTask(async () => {
     this.cardsQuery = getCards(this.getTaskQuery, this.realmHrefs, {
       isLive: true,
     });
@@ -147,7 +156,7 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
   }
 
   override get getTaskQuery(): Query {
-    let everyArr = [];
+    let everyArr: Filter[] = [];
     if (!this.realmURL) {
       throw new Error('No realm url');
     }
@@ -159,8 +168,8 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
       everyArr.push({ eq: { 'crmApp.id': this.parentId } });
     }
 
-    const taskFilter = this.args.taskFilter || [];
-    const searchFilter = this.args.searchFilter || [];
+    const taskFilter = this.args?.taskFilter || [];
+    const searchFilter = this.args?.searchFilter || [];
 
     if (taskFilter.length > 0) {
       everyArr.push(...taskFilter);
