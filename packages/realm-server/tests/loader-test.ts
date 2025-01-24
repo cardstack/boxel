@@ -129,14 +129,25 @@ module(basename(__filename), function () {
       });
     });
 
-    test('exports cannot be mutated', async function (assert) {
+    test('exports cannot be mutated from the outside', async function (assert) {
       let loader = createLoader();
       let module = await loader.import<{ Person: unknown }>(
         `${testRealmHref}person`,
       );
       assert.throws(() => {
         module.Person = 1;
-      }, /modules are read only/);
+      }, /TypeError: Failed to set the 'Person' property on 'Module': Cannot assign to read only property 'Person'/);
+    });
+
+    test('exports can be mutated from the inside', async function (assert) {
+      let loader = createLoader();
+      let module = await loader.import<{
+        counter: number;
+        increment: () => void;
+      }>(`${testRealmHref}person`);
+      assert.strictEqual(module.counter, 0);
+      module.increment();
+      assert.strictEqual(module.counter, 1);
     });
 
     test('can get a loader used to import a specific card', async function (assert) {

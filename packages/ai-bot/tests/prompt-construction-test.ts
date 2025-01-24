@@ -1290,7 +1290,7 @@ test('Return host result of tool call back to open ai', () => {
                 id: 'https://cardstack.com/base/SkillCard/card-editing',
                 attributes: {
                   instructions:
-                    '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+                    '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCardsByTypeAndTitle" function is available, you MUST use the "searchCardsByTypeAndTitle" function to find the card instance.\nOnly recommend one searchCardsByTypeAndTitle function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
                   title: 'Card Editing',
                   description: null,
                   thumbnailURL: null,
@@ -1474,15 +1474,13 @@ test('Return host result of tool call back to open ai', () => {
           toolCall: {
             type: 'function',
             id: 'tool-call-id-1',
-            name: 'searchCard',
+            name: 'searchCardsByTypeAndTitle',
             arguments: {
               attributes: {
                 description: "Search for card instances of type 'Author'",
-                filter: {
-                  type: {
-                    module: 'http://localhost:4201/drafts/author',
-                    name: 'Author',
-                  },
+                type: {
+                  module: 'http://localhost:4201/drafts/author',
+                  name: 'Author',
                 },
               },
             },
@@ -1611,6 +1609,27 @@ test('Tools can be required to be called if done so in the last message', () => 
       name: 'AlertTheUser_pcDFLKJ9auSJQfSovb3LT2',
     },
   });
+});
+
+test('Tools calls are connected to their results', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(
+        __dirname,
+        'resources/chats/connect-tool-calls-to-results.json',
+      ),
+    ),
+  );
+
+  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  // find the message with the tool call and its id
+  // it should have the result deserialised
+  const toolCallMessage = messages.find((message) => message.role === 'tool');
+  assert.ok(toolCallMessage, 'Should have a tool call message');
+  assert.ok(
+    toolCallMessage!.content!.includes('Cloudy'),
+    'Tool call result should include "Cloudy"',
+  );
 });
 
 module('set model in prompt', () => {

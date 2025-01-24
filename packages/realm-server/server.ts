@@ -67,6 +67,7 @@ export class RealmServer {
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private seedPath: string | undefined;
+  private seedRealmURL: URL | undefined;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
   private getRegistrationSecret:
@@ -87,6 +88,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     seedPath,
+    seedRealmURL,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -99,6 +101,7 @@ export class RealmServer {
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
+    seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
   }) {
@@ -116,6 +119,7 @@ export class RealmServer {
     this.secretSeed = secretSeed;
     this.realmsRootPath = realmsRootPath;
     this.seedPath = seedPath;
+    this.seedRealmURL = seedRealmURL;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.assetsURL = assetsURL;
@@ -270,12 +274,14 @@ export class RealmServer {
     name,
     backgroundURL,
     iconURL,
+    copyFromSeedRealm = true,
   }: {
     ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
+    copyFromSeedRealm?: boolean;
   }): Promise<Realm> => {
     if (
       this.realms.find(
@@ -335,16 +341,29 @@ export class RealmServer {
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
     });
-    if (this.seedPath) {
+    if (this.seedPath && copyFromSeedRealm) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
       );
+
       copySync(this.seedPath, realmPath, {
         filter: (src, _dest) => {
           return !ignoreList.includes(src);
         },
       });
       this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
+    } else {
+      writeJSONSync(join(realmPath, 'index.json'), {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
+          },
+        },
+      });
     }
 
     let realm = new Realm(
@@ -360,7 +379,13 @@ export class RealmServer {
           username,
         },
       },
-      { invalidateEntireRealm: true },
+      {
+        ...(this.seedRealmURL && copyFromSeedRealm
+          ? {
+              copiedFromRealm: this.seedRealmURL,
+            }
+          : {}),
+      },
     );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);

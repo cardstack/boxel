@@ -3,60 +3,55 @@
     "type": "card",
     "attributes": {
       "shippingAddress": {
-        "addressLine1": null,
-        "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
+        "addressLine1": "220 Startup Avenue",
+        "addressLine2": "WeWork Floor 3",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98104",
         "country": {
-          "name": null,
-          "code": null
+          "name": "United States",
+          "code": "US"
         },
         "poBoxNumber": null
       },
       "billingAddress": {
-        "addressLine1": null,
-        "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
+        "addressLine1": "220 Startup Avenue",
+        "addressLine2": "WeWork Floor 3",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98104",
         "country": {
-          "name": null,
-          "code": null
+          "name": "United States",
+          "code": "US"
         },
         "poBoxNumber": null
       },
       "urgencyTag": {
-        "index": 1,
-        "label": "Renewal Due Soon",
+        "index": 4,
+        "label": "Follow-Up Required",
         "color": null,
         "colorScheme": {
-          "foregroundColor": "#F57C00",
-          "backgroundColor": "#FFF3E0"
+          "foregroundColor": "#1976D2",
+          "backgroundColor": "#E3F2FD"
         }
       },
-      "description": null,
+      "description": "Potential startup client interested in digital marketing services",
       "thumbnailURL": null
     },
     "relationships": {
       "company": {
         "links": {
-          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
+          "self": "../Company/eb6a7c2d-6c94-4e42-aa01-c5823fb5af9a"
         }
       },
       "primaryContact": {
         "links": {
-          "self": "../Contact/a01fc5c9-d70d-4b9c-aae4-384cf2b79b25"
+          "self": "../Lead/4e70a791-dd4e-4b39-99a1-bb8070392437"
         }
       },
-      "contacts.0": {
+      "contacts": {
         "links": {
-          "self": "../Customer/0e5aec99-798b-4417-9426-a338432e0ee5"
-        }
-      },
-      "contacts.1": {
-        "links": {
-          "self": "../Lead/9d7b2f20-c7da-4ddc-8e77-b75d88c97b48"
+          "self": null
         }
       }
     },

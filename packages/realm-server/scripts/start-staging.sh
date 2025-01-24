@@ -4,7 +4,6 @@ pnpm setup:experiments-in-deployment
 pnpm setup:seed-in-deployment
 pnpm setup:catalog-in-deployment
 NODE_NO_WARNINGS=1 \
-  LOG_LEVELS='perf=debug' \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
@@ -14,6 +13,7 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
   --seedPath='/persistent/seed' \
+  --seedRealmURL='https://realms-staging.stack.cards/seed/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

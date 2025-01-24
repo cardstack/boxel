@@ -2,8 +2,9 @@ import {
   CardDef,
   linksTo,
   contains,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import {
   field,
@@ -34,6 +35,18 @@ import ClockX from '@cardstack/boxel-icons/clock-x';
 import ClockUp from '@cardstack/boxel-icons/clock-up';
 import Contract from '@cardstack/boxel-icons/contract';
 import { Pill } from '@cardstack/boxel-ui/components';
+import { Query } from '@cardstack/runtime-common/query';
+import { getCards } from '@cardstack/runtime-common';
+import { Deal } from './deal';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+import { on } from '@ember/modifier';
+import { not } from '@cardstack/boxel-ui/helpers';
+
+const taskSource = {
+  module: new URL('./task', import.meta.url).href,
+  name: 'CRMTask',
+};
 
 export const urgencyTagValues = [
   {
@@ -127,6 +140,250 @@ class IsolatedTemplate extends Component<typeof Account> {
     );
   }
 
+  get realmURL(): URL {
+    return this.args.model[realmURL]!;
+  }
+
+  get realmHrefs() {
+    return [this.realmURL?.href];
+  }
+
+  get accountId() {
+    return this.args.model.id;
+  }
+
+  // Query All Active Deal that linked to current Account
+  get dealQuery(): Query {
+    return {
+      filter: {
+        on: {
+          module: new URL('./deal', import.meta.url).href,
+          name: 'Deal',
+        },
+        every: [
+          { eq: { 'account.id': this.args.model.id ?? '' } },
+          { eq: { isActive: true } },
+        ],
+      },
+    };
+  }
+
+  get activeTasksQuery(): Query {
+    let everyArr = [];
+    if (this.accountId) {
+      everyArr.push({
+        eq: {
+          'account.id': this.accountId,
+        },
+      });
+    }
+    return {
+      filter: {
+        on: taskSource,
+        every: everyArr,
+      },
+    };
+  }
+
+  deals = getCards(this.dealQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  private _createNewTask = restartableTask(async () => {
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          name: null,
+          details: null,
+          status: {
+            index: 1,
+            label: 'In Progress',
+          },
+          priority: {
+            index: null,
+            label: null,
+          },
+          description: null,
+          thumbnailURL: null,
+        },
+        relationships: {
+          assignee: {
+            links: {
+              self: null,
+            },
+          },
+          account: {
+            links: {
+              self: this.accountId ?? null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: taskSource,
+        },
+      },
+    };
+
+    await this.args.context?.actions?.createCard?.(
+      taskSource,
+      new URL(taskSource.module),
+      {
+        realmURL: this.realmURL,
+        doc,
+      },
+    );
+  });
+
+  createNewTask = () => {
+    this._createNewTask.perform();
+  };
+
+  get activeTasksCount() {
+    const tasks = this.activeTasks;
+    if (!tasks || tasks.isLoading) {
+      return 0;
+    }
+    return tasks.instances?.length ?? 0;
+  }
+
+  get hasActiveTasks() {
+    return this.activeTasksCount > 0;
+  }
+
+  get activeDealsCount() {
+    const deals = this.deals;
+    if (!deals || deals.isLoading) {
+      return 0;
+    }
+    return deals.instances?.length ?? 0;
+  }
+
+  get totalDealsValue() {
+    const deals = this.deals;
+    if (!deals || deals.isLoading) {
+      return 'No deals';
+    }
+
+    if (!deals.instances?.length) {
+      return 'No active deals';
+    }
+
+    const dealsInstances = deals.instances as Deal[];
+
+    const total = dealsInstances.reduce((sum, deal) => {
+      const value = deal?.computedValue?.amount ?? 0;
+      return sum + value;
+    }, 0);
+
+    const firstDeal = dealsInstances[0] as Deal;
+    const currencySymbol = firstDeal.computedValue?.currency?.symbol;
+
+    if (!total) {
+      return 'No deal value';
+    }
+
+    // Format total with 1 decimal place
+    const formattedTotal = (total / 1000).toFixed(1);
+    return currencySymbol
+      ? `${currencySymbol}${formattedTotal}k total value`
+      : `${formattedTotal}k total value`;
+  }
+
+  // Query All lifetime Value from Closed Won Deal
+  get lifetimeValueQuery(): Query {
+    return {
+      filter: {
+        on: {
+          module: new URL('./deal', import.meta.url).href,
+          name: 'Deal',
+        },
+        every: [
+          { eq: { 'account.id': this.args.model.id ?? '' } },
+          { eq: { 'status.label': 'Closed Won' } },
+        ],
+      },
+    };
+  }
+
+  lifetimeValueDeals = getCards(this.lifetimeValueQuery, this.realmHrefs, {
+    isLive: true,
+  });
+
+  get lifetimeMetrics() {
+    if (!this.lifetimeValueDeals) {
+      return { total: 0, currentYear: 0, lastYear: 0, growth: 0 };
+    }
+
+    if (
+      this.lifetimeValueDeals.isLoading ||
+      !this.lifetimeValueDeals.instances
+    ) {
+      return { total: 0, currentYear: 0, lastYear: 0, growth: 0 };
+    }
+
+    const currentYear = new Date().getFullYear();
+    const lifetimeValueDealsInstances = this.lifetimeValueDeals
+      .instances as Deal[];
+
+    // Calculate the Total Value of All Time
+    const total = lifetimeValueDealsInstances.reduce(
+      (sum, deal) => sum + (deal.computedValue?.amount ?? 0),
+      0,
+    );
+
+    // Calculate the Value of This Year
+    const currentYearValue = lifetimeValueDealsInstances
+      .filter((deal) => new Date(deal.closeDate).getFullYear() === currentYear)
+      .reduce((sum, deal) => sum + (deal.computedValue?.amount ?? 0), 0);
+
+    // Calculate the Value of Last Year
+    const lastYearValue = lifetimeValueDealsInstances
+      .filter(
+        (deal) => new Date(deal.closeDate).getFullYear() === currentYear - 1,
+      )
+      .reduce((sum, deal) => sum + (deal.computedValue?.amount ?? 0), 0);
+
+    // Calculate growth rate
+    const growth = lastYearValue
+      ? ((currentYearValue - lastYearValue) / lastYearValue) * 100
+      : 0;
+
+    return {
+      total,
+      currentYear: currentYearValue,
+      lastYear: lastYearValue,
+      growth,
+    };
+  }
+
+  get formattedLifetimeTotal() {
+    const total = this.lifetimeMetrics.total;
+    if (total === 0) {
+      return '$0';
+    }
+    const formattedTotal = (total / 1000).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+    });
+    return `$${formattedTotal}k`;
+  }
+
+  get formattedCurrentYearValue() {
+    const currentYearValue = this.lifetimeMetrics.currentYear;
+    const formattedValue =
+      currentYearValue === 0
+        ? '+$0'
+        : `+$${(currentYearValue / 1000).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+          })}k`;
+    const currentYear = new Date().getFullYear();
+    return `${formattedValue} in ${currentYear}`;
+  }
+
   <template>
     <AccountPageLayout>
       <:header>
@@ -139,19 +396,17 @@ class IsolatedTemplate extends Component<typeof Account> {
             {{/if}}
           </:name>
           <:content>
-            <div class='description content-container'>
-              {{#if @model.primaryContact}}
-                <@fields.primaryContact
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='primary-contact'
-                />
-                <div class='tag-container'>
-                  <@fields.statusTag @format='atom' />
-                  <@fields.urgencyTag @format='atom' />
-                </div>
-              {{/if}}
-            </div>
+            {{#if @model.primaryContact}}
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+                class='primary-contact'
+              />
+              <div class='tag-container'>
+                <@fields.statusTag @format='atom' />
+                <@fields.urgencyTag @format='atom' />
+              </div>
+            {{/if}}
           </:content>
         </AccountHeader>
       </:header>
@@ -166,16 +421,14 @@ class IsolatedTemplate extends Component<typeof Account> {
               <BuildingIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description content-container'>
-                {{#if this.hasCompanyInfo}}
-                  <@fields.headquartersAddress @format='atom' />
-                  <@fields.website @format='atom' />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Company Info
-                  </div>
-                {{/if}}
-              </div>
+              {{#if this.hasCompanyInfo}}
+                <@fields.headquartersAddress @format='atom' />
+                <@fields.website @format='atom' />
+              {{else}}
+                <div class='default-value'>
+                  Missing Company Info
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -187,28 +440,23 @@ class IsolatedTemplate extends Component<typeof Account> {
               <ContactIcon class='header-icon' />
             </:icon>
             <:content>
-              <div class='description content-container'>
-                {{#if this.hasContacts}}
-                  <div class='primary-contact-group'>
-                    <@fields.primaryContact
-                      @format='atom'
-                      @displayContainer={{false}}
-                    />
-                    <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
-                      Primary
-                    </Pill>
-                  </div>
-
-                  <@fields.contacts
+              {{#if this.hasContacts}}
+                <div class='primary-contact-group'>
+                  <@fields.primaryContact
                     @format='atom'
                     @displayContainer={{false}}
                   />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Contacts
-                  </div>
-                {{/if}}
-              </div>
+                  <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
+                    Primary
+                  </Pill>
+                </div>
+
+                <@fields.contacts @format='atom' @displayContainer={{false}} />
+              {{else}}
+                <div class='default-value'>
+                  Missing Contacts
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -220,8 +468,18 @@ class IsolatedTemplate extends Component<typeof Account> {
               <ChartBarPopular class='header-icon' />
             </:icon>
             <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
+              {{#if this.lifetimeValueDeals.isLoading}}
+                <h3 class='summary-highlight'>Loading...</h3>
+                <p class='description'>Loading...</p>
+              {{else}}
+                <h3 class='summary-highlight'>
+                  {{this.formattedLifetimeTotal}}
+                </h3>
+                <p class='description'>
+                  {{this.formattedCurrentYearValue}}
+                </p>
+
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -233,8 +491,13 @@ class IsolatedTemplate extends Component<typeof Account> {
               <TrendingUp class='header-icon' />
             </:icon>
             <:content>
-              <h3 class='summary-highlight'>Desc</h3>
-              <p class='description'>Desc</p>
+              {{#if this.deals.isLoading}}
+                <h3 class='summary-highlight'>Loading...</h3>
+                <p class='description'>Loading...</p>
+              {{else}}
+                <h3 class='summary-highlight'>{{this.activeDealsCount}}</h3>
+                <p class='description'>{{this.totalDealsValue}}</p>
+              {{/if}}
             </:content>
           </SummaryCard>
         </SummaryGridContainer>
@@ -269,6 +532,57 @@ class IsolatedTemplate extends Component<typeof Account> {
           </:content>
         </SummaryCard>
       </:activities>
+
+      <:tasks>
+        <SummaryCard class='tasks-summary-card'>
+          <:title>
+            <h2 class='activity-title'>Upcoming Tasks</h2>
+          </:title>
+          <:icon>
+            <BoxelButton
+              @kind='primary'
+              class='activity-button-mobile'
+              data-test-settings-button
+              @disabled={{this.activeTasks.isLoading}}
+              @loading={{this._createNewTask.isRunning}}
+              {{on 'click' this.createNewTask}}
+            >
+              {{#if (not this._createNewTask.isRunning)}}
+                <PlusIcon />
+              {{/if}}
+            </BoxelButton>
+            <BoxelButton
+              @kind='primary'
+              @size='base'
+              class='activity-button-desktop'
+              @disabled={{this.activeTasks.isLoading}}
+              @loading={{this._createNewTask.isRunning}}
+              data-test-settings-button
+              {{on 'click' this.createNewTask}}
+            >
+              {{#if (not this._createNewTask.isRunning)}}
+                <PlusIcon />
+              {{/if}}
+              New Task
+            </BoxelButton>
+          </:icon>
+          <:content>
+            {{#if this.activeTasks.isLoading}}
+              <div class='loading-skeleton'>Loading...</div>
+            {{else}}
+              {{#if this.hasActiveTasks}}
+                {{#each this.activeTasks.instances as |task|}}
+                  {{#let (getComponent task) as |Component|}}
+                    <Component @format='embedded' @displayContainer={{false}} />
+                  {{/let}}
+                {{/each}}
+              {{else}}
+                <p class='description'>No Upcoming Tasks</p>
+              {{/if}}
+            {{/if}}
+          </:content>
+        </SummaryCard>
+      </:tasks>
     </AccountPageLayout>
 
     <style scoped>
@@ -318,12 +632,6 @@ class IsolatedTemplate extends Component<typeof Account> {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      .content-container {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
       .tag-container {
         display: flex;
         flex-wrap: wrap;
@@ -340,10 +648,16 @@ class IsolatedTemplate extends Component<typeof Account> {
       .activity-button-desktop {
         display: inline-flex;
       }
-      .activities-summary-card {
+      .activities-summary-card,
+      .tasks-summary-card {
         --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
+        --summary-card-gap: var(--boxel-sp-lg);
         container-type: inline-size;
         container-name: activities-summary-card;
+      }
+      .tasks-summary-card :where(.task-card) {
+        --task-card-padding: var(--boxel-sp) 0;
+        border-top: 1px solid var(--boxel-200);
       }
       .activity-title {
         font: 600 var(--boxel-font-med);
@@ -368,6 +682,15 @@ class IsolatedTemplate extends Component<typeof Account> {
         --profile-avatar-icon-size: 20px;
         --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
+      }
+      .loading-skeleton {
+        height: 60px;
+        width: 100%;
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       @container activities-summary-card (max-width: 447px) {
@@ -440,12 +763,6 @@ class FittedTemplate extends Component<typeof Account> {
       .description {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
-      }
-      .content-container {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
       }
       .tag-container {
         margin-top: auto;
@@ -596,6 +913,7 @@ interface AccountPageLayoutArgs {
     header: [];
     summary: [];
     activities: [];
+    tasks: [];
   };
   Element: HTMLElement;
 }
@@ -606,6 +924,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
       {{yield to='header'}}
       {{yield to='summary'}}
       {{yield to='activities'}}
+      {{yield to='tasks'}}
     </div>
 
     <style scoped>
@@ -619,4 +938,8 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
       }
     </style>
   </template>
+}
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }
