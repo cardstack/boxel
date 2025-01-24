@@ -63,53 +63,62 @@ class AtomTemplate extends Component<typeof DealEvent> {
   <template>
     <div class='event-summary'>
       {{#if @model.eventDate}}
-        <EntityDisplayWithIcon>
+        <EntityDisplayWithIcon @title='Event Date'>
           <:icon>
-            <Info width='16px' height='16px' class='event-info-icon' />
+            <Info />
           </:icon>
-          <:title><label>Event Date</label></:title>
           <:content>
-            <span class='event-item-value'><@fields.eventDate /></span>
+            <@fields.eventDate />
           </:content>
         </EntityDisplayWithIcon>
       {{/if}}
 
       {{#if @model.attendees}}
-        <EntityDisplayWithIcon>
-          <:title><label>Attendees</label></:title>
+        <EntityDisplayWithIcon @title='Attendees'>
           <:content>
-            <span class='event-item-value'><@fields.attendees /></span>
+            <@fields.attendees />
           </:content>
         </EntityDisplayWithIcon>
       {{/if}}
 
       {{#if @model.location}}
-        <EntityDisplayWithIcon>
-          <:title><label>Venue</label></:title>
+        <EntityDisplayWithIcon @title='Venue'>
           <:content>
-            <span class='event-item-value'><@fields.location /></span>
+            <@fields.location />
           </:content>
         </EntityDisplayWithIcon>
       {{/if}}
     </div>
     <style scoped>
       .event-summary {
-        display: inline-flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xl);
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
-      }
-      label {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        color: #777;
-      }
-      .event-item-value {
-        font-size: var(--boxel-font-size);
-        font-weight: 600;
-        color: var(--boxel-dark);
+        --entity-display-icon-size: var(--event-summary-icon-size, 16px);
+        --entity-display-title-font-size: var(--boxel-font-size-xs);
+        --entity-display-title-font-weight: 500;
+        --entity-display-title-color: var(--event-summary-title-color, #777);
+        --entity-display-content-font-size: var(
+          --event-summary-content-font-size,
+          var(--boxel-font-size)
+        );
+        --entity-display-content-font-weight: var(
+          --event-item-value-font-weight,
+          600
+        );
+        --entity-display-content-color: var(
+          --event-summary-content-color,
+          var(--boxel-dark)
+        );
+        display: var(--event-summary-display, inline-flex);
+        flex-wrap: var(--event-summary-flex-wrap, wrap);
+        gap: var(--event-summary-gap, var(--boxel-sp-xl));
+        padding: var(--event-summary-padding, var(--boxel-sp));
+        background-color: var(
+          --event-summary-background-color,
+          var(--boxel-200)
+        );
+        border-radius: var(
+          --event-summary-border-radius,
+          var(--boxel-form-control-border-radius)
+        );
       }
     </style>
   </template>
