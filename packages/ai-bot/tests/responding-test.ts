@@ -3,6 +3,7 @@ import { Responder } from '../lib/send-response';
 import { IContent } from 'matrix-js-sdk';
 import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
+import { thinkingMessage } from '../constants';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -82,7 +83,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      'Thinking...',
+      thinkingMessage,
       'Message body should match',
     );
   });
@@ -103,7 +104,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      'Thinking...',
+      thinkingMessage,
       'Just the thinking message sent',
     );
 
@@ -138,7 +139,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      'Thinking...',
+      thinking,
       'Just the thinking message sent',
     );
 
@@ -219,7 +220,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      'Thinking...',
+      thinking,
       'Thinking message should be sent first',
     );
     assert.deepEqual(
@@ -298,7 +299,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[0].content.body,
-      'Thinking...',
+      thinking,
       'Thinking message should be sent first',
     );
     assert.deepEqual(
