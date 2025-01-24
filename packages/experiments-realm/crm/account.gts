@@ -656,6 +656,9 @@ class IsolatedTemplate extends Component<typeof Account> {
         container-type: inline-size;
         container-name: activities-summary-card;
       }
+      .tasks-summary-card {
+        --summary-card-content-gap: 0;
+      }
       .tasks-summary-card :where(.task-card) {
         --task-card-padding: var(--boxel-sp) 0;
         border-top: 1px solid var(--boxel-200);

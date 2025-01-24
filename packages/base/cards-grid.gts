@@ -384,13 +384,19 @@ class Isolated extends Component<typeof CardsGrid> {
           on: catalogEntryRef,
           eq: { ref: activeFilterRef },
         },
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
       };
     }
     let card = await chooseCard<CatalogEntry>(
       {
         filter: {
           on: catalogEntryRef,
-          every: [{ eq: { isField: false } }],
+          every: [{ eq: { specType: 'card' } }],
         },
       },
       { preselectedCardTypeQuery },

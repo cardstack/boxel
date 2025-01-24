@@ -617,7 +617,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person card',
-              isField: false,
+              specType: 'card',
               ref: {
                 module: './person',
                 name: 'Person',
@@ -648,13 +648,24 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: 'Person Card',
           description: 'Catalog entry for Person card',
           moduleHref: `${testRealmURL}person`,
-          realmName: 'Unnamed Workspace',
+          name: null,
+          readMe: null,
+          specType: 'card',
+          isCard: true,
           isField: false,
+          thumbnailURL: null,
           ref: {
             module: `./person`,
             name: 'Person',
           },
-          demo: {},
+          containedExamples: [],
+        },
+        relationships: {
+          linkedExamples: {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -676,14 +687,16 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       );
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Catalog Entry',
-        demo: {},
         description: 'Catalog entry for Person card',
         id: `${testRealmURL}person-catalog-entry`,
-        isField: false,
+        specType: 'card',
         moduleHref: `${testRealmURL}person`,
-        realmName: 'Unnamed Workspace',
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
+        linkedExamples: null,
+        containedExamples: null,
+        isCard: true,
+        isField: false,
       });
     } else {
       assert.ok(
@@ -1589,7 +1602,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     );
     if (vendor?.type === 'doc') {
-      console.log(vendor.doc);
       assert.deepEqual(vendor.doc, {
         data: {
           id: `${testRealmURL}Vendor/vendor1`,
@@ -1780,7 +1792,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
   });
 
-  test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
+  test(`search doc includes 'contains' and used 'linksTo' fields, including contained computed fields`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -1832,9 +1844,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         email: 'hassan@cardstack.com',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
+        description: 'Person',
+        fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
       },
-      `search doc does not include fullName field`,
+      `search doc includes fullName field`,
     );
   });
 
@@ -1906,7 +1920,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       {
         _cardType: 'Post',
         author: {
+          description: 'Person',
           fullName: ' ',
+          title: ' ',
         },
         id: `${testRealmURL}Post/1`,
         title: '50 Ways to Leave Your Laptop',
@@ -1991,29 +2007,13 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'Booking',
               description: 'Catalog entry for Booking',
-              isField: false,
+              specType: 'card',
               ref: {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
               },
-              demo: {
-                title: null,
-                venue: null,
-                startTime: null,
-                endTime: null,
-                hosts: [],
-                sponsors: [],
-              },
             },
             meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: '../booking',
-                    name: 'Booking',
-                  },
-                },
-              },
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
                 name: 'CatalogEntry',
@@ -2030,18 +2030,15 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     assert.deepEqual(entry?.searchDoc, {
       _cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
-      demo: {
-        hosts: null,
-        sponsors: null,
-        title: null,
-        venue: null,
-      },
       description: 'Catalog entry for Booking',
-      isField: false,
+      specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
-      realmName: 'Unnamed Workspace',
+      linkedExamples: null,
+      containedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
+      isCard: true,
+      isField: false,
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -2347,30 +2344,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             attributes: {
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
-              isField: false,
+              specType: 'card',
               ref: {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
-              demo: { firstName: 'Hassan' },
             },
-            relationships: {
-              'demo.pets.0': {
-                links: { self: `${testRealmURL}Pet/mango` },
-              },
-              'demo.pets.1': {
-                links: { self: `${testRealmURL}Pet/vanGogh` },
-              },
-            },
+            relationships: {},
             meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: `${testModuleRealm}pet-person`,
-                    name: 'PetPersonField',
-                  },
-                },
-              },
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
                 name: 'CatalogEntry',
@@ -2406,38 +2387,30 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         attributes: {
           title: 'PetPerson',
           description: 'Catalog entry for PetPerson',
+          readMe: null,
+          thumbnailURL: null,
           ref: {
             module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
           },
-          demo: { firstName: 'Hassan' },
-          isField: false,
+          specType: 'card',
           moduleHref: `${testModuleRealm}pet-person`,
-          realmName: 'Unnamed Workspace',
+          name: null,
+          containedExamples: [],
+          isCard: true,
+          isField: false,
         },
         relationships: {
-          'demo.friend': { links: { self: null } },
-          'demo.pets.0': {
-            links: { self: `${testRealmURL}Pet/mango` },
-            data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
-          },
-          'demo.pets.1': {
-            links: { self: `${testRealmURL}Pet/vanGogh` },
-            data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
+          linkedExamples: {
+            links: {
+              self: null,
+            },
           },
         },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/catalog-entry',
             name: 'CatalogEntry',
-          },
-          fields: {
-            demo: {
-              adoptsFrom: {
-                module: `${testModuleRealm}pet-person`,
-                name: 'PetPersonField',
-              },
-            },
           },
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}pet-person-catalog-entry.json`,
@@ -2449,55 +2422,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           ),
         },
       });
-
-      assert.deepEqual(catalogEntry.doc.included, [
-        {
-          id: `${testRealmURL}Pet/mango`,
-          type: 'card',
-          links: { self: `${testRealmURL}Pet/mango` },
-          attributes: {
-            description: null,
-            firstName: 'Mango',
-            title: 'Mango',
-            thumbnailURL: null,
-          },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}Pet/mango.json`,
-            ),
-            realmInfo: testRealmInfo,
-            realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}pet-person-catalog-entry.json`,
-            ),
-          },
-        },
-        {
-          id: `${testRealmURL}Pet/vanGogh`,
-          type: 'card',
-          links: { self: `${testRealmURL}Pet/vanGogh` },
-          attributes: {
-            description: null,
-            firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            thumbnailURL: null,
-          },
-          relationships: { owner: { links: { self: null } } },
-          meta: {
-            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}Pet/vanGogh.json`,
-            ),
-            realmInfo: testRealmInfo,
-            realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}pet-person-catalog-entry.json`,
-            ),
-          },
-        },
-      ]);
     } else {
       assert.ok(
         false,
@@ -2515,32 +2439,13 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         id: `${testRealmURL}pet-person-catalog-entry`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
-        ref: `${testModuleRealm}pet-person/PetPerson`,
-        demo: {
-          firstName: 'Hassan',
-          pets: [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              description: null,
-              firstName: 'Mango',
-              owner: null,
-              title: 'Mango',
-              thumbnailURL: null,
-            },
-            {
-              id: `${testRealmURL}Pet/vanGogh`,
-              description: null,
-              firstName: 'Van Gogh',
-              owner: null,
-              title: 'Van Gogh',
-              thumbnailURL: null,
-            },
-          ],
-          friend: null,
-        },
-        isField: false,
+        linkedExamples: null,
+        containedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
-        realmName: 'Unnamed Workspace',
+        ref: `${testModuleRealm}pet-person/PetPerson`,
+        specType: 'card',
+        isCard: true,
+        isField: false,
       });
     } else {
       assert.ok(
@@ -3402,6 +3307,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
+                  title: 'Van Gogh',
                   friends: [
                     {
                       id: hassanID,
@@ -3909,7 +3815,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
-            isField: false,
+            specType: 'card',
             ref: {
               module: `${testModuleRealm}post`,
               name: 'Post',
@@ -3929,7 +3835,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
-            isField: false,
+            specType: 'card',
             ref: {
               module: `${testModuleRealm}article`,
               name: 'Article',

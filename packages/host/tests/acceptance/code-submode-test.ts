@@ -562,10 +562,46 @@ module('Acceptance | code submode tests', function (_hooks) {
               attributes: {
                 title: 'Person',
                 description: 'Catalog entry',
-                isField: false,
+                specType: 'card',
                 ref: {
                   module: `./person`,
                   name: 'Person',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}catalog-entry`,
+                  name: 'CatalogEntry',
+                },
+              },
+            },
+          },
+          'pet-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                specType: 'card',
+                ref: {
+                  module: `./pet`,
+                  name: 'Pet',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}catalog-entry`,
+                  name: 'CatalogEntry',
+                },
+              },
+            },
+          },
+          'pet-entry-2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                specType: 'card',
+                ref: {
+                  module: `./pet`,
+                  name: 'Pet',
                 },
               },
               meta: {

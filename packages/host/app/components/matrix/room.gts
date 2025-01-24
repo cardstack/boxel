@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -235,6 +236,9 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    registerDestructor(this, () => {
+      this.scrollState().messageVisibilityObserver.disconnect();
+    });
   }
 
   private scrollState() {
