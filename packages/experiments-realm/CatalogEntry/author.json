@@ -8,7 +8,7 @@
         "name": "Author",
         "module": "../author"
       },
-      "isField": false
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

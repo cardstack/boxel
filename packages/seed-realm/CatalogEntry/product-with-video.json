@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Product with Video",
       "description": "Catalog entry for Product with Video card",
-      "isField": false,
+      "specType": "card",
       "ref": {
         "module": "../product-with-video",
         "name": "ProductWithVideo"
