@@ -506,6 +506,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             @fields={{@fields}}
             @set={{@set}}
             @fieldName={{@fieldName}}
+            {{! @glint-ignore  Arguments are extended in CRMTaskPlannerIsolated but still not recognized }}
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
             @setupTaskPlanner={{this.setupTaskPlanner}}
