@@ -81,7 +81,7 @@ module('Acceptance | basic tests', function (hooks) {
         'index.gts': { Index },
         'person.gts': { Person },
         'person-entry.json': new CatalogEntry({
-          title: 'Person',
+          name: 'Person',
           description: 'Catalog entry',
           isField: false,
           ref: {

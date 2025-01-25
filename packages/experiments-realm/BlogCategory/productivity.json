@@ -5,12 +5,7 @@
       "longName": "Productivity",
       "shortName": "Productivity",
       "slug": "productivity",
-      "backgroundColor": {
-        "color": "#9D00FF"
-      },
-      "textColor": {
-        "color": "#ffffff"
-      },
+      "pillColor": "#9D00FF",
       "description": "Tips and tricks for better organization and effectiveness at work",
       "title": "Productivity",
       "thumbnailURL": null

@@ -210,7 +210,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',

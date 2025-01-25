@@ -4,11 +4,11 @@
     "attributes": {
       "title": "Blog",
       "description": "Catalog entry for Blog App card",
-      "isField": false,
       "ref": {
         "module": "../blog-app",
         "name": "BlogApp"
-      }
+      },
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

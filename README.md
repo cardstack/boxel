@@ -84,8 +84,8 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
 | :4210 | Development Worker Manager (spins up 1 worker by default)     | ✅                  | 🚫                   |
 | :4211 | Test Worker Manager (spins up 1 worker by default)            | ✅                  | 🚫                   |
-| :4212 | Test Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅ | 🚫                   |
-| :4213 | Test Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅ | 🚫                   |
+| :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅      | 🚫                   |
+| :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅ | 🚫    |
 | :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
@@ -223,7 +223,7 @@ There is a ember-freestyle component explorer available to assist with developme
 
 1. `cd packages/boxel-ui/test-app`
 2. `pnpm start`
-3. Visit http://localhost:4210/ in your browser
+3. Visit http://localhost:4220/ in your browser
 
 ## Boxel Motion Demo App
 
@@ -290,7 +290,7 @@ To run the `packages/realm-server/` workspace tests start:
 ### Boxel UI
 
 1. `cd packages/boxel-ui/test-app`
-2. `pnpm test` (or `pnpm start` and visit http://localhost:4210/tests to run tests in the browser)
+2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
 
 ### Boxel Motion
 

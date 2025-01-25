@@ -5,12 +5,7 @@
       "longName": "Street Life",
       "shortName": "Streets",
       "slug": "street-life",
-      "backgroundColor": {
-        "hexValue": "#39B1FF"
-      },
-      "textColor": {
-        "hexValue": "#ffffff"
-      },
+      "pillColor": "#39B1FF",
       "description": "Discovering the stories of streets and public spaces.",
       "title": "Street Life",
       "thumbnailURL": null
