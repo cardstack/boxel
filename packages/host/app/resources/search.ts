@@ -202,32 +202,27 @@ export class Search extends Resource<Args> {
   }
 }
 
-export function getSearchResults(
+export interface SearchQuery {
+  instances: CardDef[];
+  isLoading: boolean;
+  loaded: Promise<void>;
+}
+
+export function getSearch(
   parent: object,
-  query: Query,
-  realms?: string[],
+  getQuery: () => Query,
+  getRealms: () => string[],
   opts?: {
     isLive?: true;
-    // it is probably desirable that dynamic context action `doWithStableScroll()`
-    // is used here. For example:
-    //
-    //   async (ready: Promise<void> | undefined) => {
-    //     if (this.args.context?.actions) {
-    //       this.args.context.actions.doWithStableScroll(
-    //         this.args.model as CardDef,
-    //         async () => { await ready; }
-    //       );
-    //     }
-    //   }
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   },
 ) {
   return Search.from(parent, () => ({
     named: {
-      query,
-      realms: realms ?? undefined,
+      query: getQuery(),
+      realms: getRealms(),
       isLive: opts?.isLive,
       doWhileRefreshing: opts?.doWhileRefreshing,
     },
-  })) as Search;
+  })) as SearchQuery;
 }

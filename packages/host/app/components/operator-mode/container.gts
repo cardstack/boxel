@@ -14,7 +14,7 @@ import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { or, not, and } from '@cardstack/boxel-ui/helpers';
 
-import type { Loader, Query } from '@cardstack/runtime-common';
+import { type Loader, type Query } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
@@ -22,10 +22,7 @@ import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import {
-  getSearchResults,
-  type Search,
-} from '@cardstack/host/resources/search';
+import { getSearch, type SearchQuery } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
@@ -71,14 +68,14 @@ export default class OperatorModeContainer extends Component<Signature> {
   // public API
   @action
   getCards(
-    query: Query,
-    realms?: string[],
-    opts?: {
+    getQuery: () => Query,
+    getRealms: () => string[],
+    opts: {
       isLive?: true;
       doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
     },
-  ): Search {
-    return getSearchResults(this, query, realms, opts);
+  ): SearchQuery {
+    return getSearch(this, getQuery, getRealms, opts);
   }
 
   // public API
