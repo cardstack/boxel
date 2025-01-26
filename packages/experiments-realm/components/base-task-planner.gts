@@ -206,16 +206,22 @@ export class BaseTaskPlannerIsolated<
     };
 
     // Initialize cards and assignee query
-    this.cards = getCards(this.getTaskQuery, this.realmHrefs, {
-      isLive: true,
-    });
-    this.assigneeQuery = getCards(
+    this.cards = getCards(
+      () => this.getTaskQuery,
+      () => this.realmHrefs,
       {
-        filter: {
-          type: this.config.filters.assignee.codeRef,
-        },
+        isLive: true,
       },
-      this.realmHrefs,
+    );
+    this.assigneeQuery = getCards(
+      () => {
+        return {
+          filter: {
+            type: this.config.filters.assignee.codeRef,
+          },
+        };
+      },
+      () => this.realmHrefs,
       { isLive: true },
     );
   }

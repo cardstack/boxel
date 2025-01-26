@@ -184,9 +184,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       return;
     }
 
-    const result = getCards(this.query, this.realmHrefs, {
-      isLive: true,
-    });
+    const result = getCards(
+      () => this.query,
+      () => this.realmHrefs,
+      {
+        isLive: true,
+      },
+    );
 
     await result.loaded;
     this.deals = result.instances as Deal[];

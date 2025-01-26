@@ -186,13 +186,21 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
   }
 
-  deals = getCards(this.dealQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  deals = getCards(
+    () => this.dealQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
-  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  activeTasks = getCards(
+    () => this.activeTasksQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   private _createNewTask = restartableTask(async () => {
     let doc: LooseSingleCardDocument = {
@@ -313,9 +321,13 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
   }
 
-  lifetimeValueDeals = getCards(this.lifetimeValueQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  lifetimeValueDeals = getCards(
+    () => this.lifetimeValueQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   get lifetimeMetrics() {
     if (!this.lifetimeValueDeals) {
@@ -764,13 +776,21 @@ class EmbeddedTemplate extends Component<typeof Account> {
     };
   }
 
-  deals = getCards(this.dealQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  deals = getCards(
+    () => this.dealQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
-  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  activeTasks = getCards(
+    () => this.activeTasksQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   get activeTasksCount() {
     const tasks = this.activeTasks;
@@ -840,9 +860,13 @@ class EmbeddedTemplate extends Component<typeof Account> {
     };
   }
 
-  lifetimeValueDeals = getCards(this.lifetimeValueQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  lifetimeValueDeals = getCards(
+    () => this.lifetimeValueQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   get lifetimeMetrics() {
     if (!this.lifetimeValueDeals) {
