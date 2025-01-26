@@ -222,8 +222,8 @@ export async function chooseCard<T extends BaseDef>(
 
 export interface CardSearch {
   getCards(
-    getQuery: () => Query,
-    getRealms: () => string[],
+    getQuery: () => Query | undefined,
+    getRealms: () => string[] | undefined,
     opts?: {
       isLive?: true;
       doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
@@ -248,8 +248,8 @@ export interface CardCatalogQuery extends Query {
 }
 
 export function getCards(
-  getQuery: () => Query,
-  getRealms: () => string[],
+  getQuery: () => Query | undefined,
+  getRealms: () => string[] | undefined,
   opts?: {
     isLive?: true;
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
@@ -361,8 +361,8 @@ export interface Actions {
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
   getCards: (
-    getQuery: () => Query,
-    getRealms: () => string[],
+    getQuery: () => Query | undefined,
+    getRealms: () => string[] | undefined,
     opts?: {
       isLive?: true;
       doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;

@@ -68,8 +68,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   // public API
   @action
   getCards(
-    getQuery: () => Query,
-    getRealms: () => string[],
+    getQuery: () => Query | undefined,
+    getRealms: () => string[] | undefined,
     opts: {
       isLive?: true;
       doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;

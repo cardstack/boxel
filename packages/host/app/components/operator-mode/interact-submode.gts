@@ -353,8 +353,8 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateSubmode(submode);
       },
       getCards: (
-        getQuery: () => Query,
-        getRealms: () => string[],
+        getQuery: () => Query | undefined,
+        getRealms: () => string[] | undefined,
       ): SearchQuery => {
         return getSearch(here, getQuery, getRealms);
       },
