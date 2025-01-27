@@ -29,6 +29,7 @@ import {
   DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
+import { thinkingMessage } from './constants';
 
 let log = logger('ai-bot');
 
@@ -618,4 +619,23 @@ export function eventRequiresResponse(event: MatrixEvent) {
 
   // If it's a different type, or a command result without output, we should not respond
   return false;
+}
+
+// Helps reduce the prompt size (prompt token cost) by removing the thinking message indicators
+export function cleanupPromptParts(promptParts: PromptParts): PromptParts {
+  return {
+    ...promptParts,
+    history: promptParts.history.filter(
+      (item) =>
+        !(
+          item.sender === '@aibot:localhost' &&
+          'body' in item.content &&
+          item.content.body === thinkingMessage
+        ),
+    ),
+    messages: promptParts.messages.filter(
+      (message) =>
+        !(message.role === 'assistant' && message.content === thinkingMessage),
+    ),
+  };
 }
