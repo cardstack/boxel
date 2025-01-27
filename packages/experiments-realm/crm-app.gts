@@ -41,7 +41,7 @@ import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
 
-import type { ComponentLike } from '@glint/template';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   Card as CardIcon,
   Grid3x3 as GridIcon,
@@ -51,8 +51,10 @@ import {
 type ViewOption = 'card' | 'strip' | 'grid';
 
 interface ViewItem {
-  icon: ComponentLike;
-  id: string;
+  icon: TemplateOnlyComponent<{
+    Element: SVGElement;
+  }>;
+  id: ViewOption;
 }
 
 const CONTACT_FILTERS: LayoutFilter[] = [
