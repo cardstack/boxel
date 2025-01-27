@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -10,6 +11,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { LoadingIndicator, BoxelSelect } from '@cardstack/boxel-ui/components';
 
+import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
+
 import { getCards, type Query } from '@cardstack/runtime-common';
 
 import type { CardType } from '@cardstack/host/resources/card-type';
@@ -18,55 +21,74 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Args: {
+    moduleContentsResource: ModuleContentsResource;
     cardType?: CardType;
   };
   Element: HTMLElement;
 }
 
-export default class PlaygroundPanel extends Component<Signature> {
+const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
-    <section class='playground-panel' data-test-playground-panel>
-      {{#if this.isLoading}}
-        <LoadingIndicator class='loading-icon' />
-        Loading...
-      {{else if this.instances.length}}
-        <BoxelSelect
-          class='instance-chooser'
-          @options={{this.instances}}
-          @selected='Instance: {{this.selectedOption}}'
-          @onChange={{this.onSelect}}
-          @placeholder='Please Select'
-          as |item|
-        >
-          <div>{{item.title}}</div>
-        </BoxelSelect>
-      {{/if}}
-    </section>
+    <span class='selected-item'>
+      Instance:
+      {{@title}}
+    </span>
     <style scoped>
-      .playground-panel {
-        background-image: url('./playground-background.png');
-        background-position: left top;
-        background-repeat: repeat;
-        background-size: 22.5px;
-        height: 100%;
-        width: 100%;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
-        overflow: auto;
+      .selected-item {
+        font: 600 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+    </style>
+  </template>;
+
+interface PlaygroundContentSignature {
+  Args: {
+    cardType?: CardType;
+  };
+}
+
+class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
+  <template>
+    {{#if this.isLoading}}
+      <LoadingIndicator class='loading-icon' />
+      Loading...
+    {{else if this.instances.length}}
+      <BoxelSelect
+        class='instance-chooser'
+        @options={{this.instances}}
+        @selected={{this.selectedItem}}
+        @selectedItemComponent={{component
+          SelectedItem
+          title=this.selectedItem.title
+        }}
+        @onChange={{this.onSelect}}
+        @placeholder='Please Select'
+        as |item|
+      >
+        {{item.title}}
+      </BoxelSelect>
+    {{/if}}
+    <style scoped>
+      .instance-chooser {
+        color: var(--boxel-dark);
+      }
+      .loading-icon {
+        display: inline-block;
+        margin-right: var(--boxel-sp-xxxs);
+        vertical-align: middle;
       }
     </style>
   </template>
 
   @service private declare realmServer: RealmServerService;
-  @tracked selectedOption?: CardDef;
-  @tracked options?: {
+  @tracked private selectedItem?: CardDef;
+  @tracked private options?: {
     instances: CardDef[];
     isLoading: boolean;
     loaded: Promise<void>;
   };
 
-  constructor(owner: Owner, args: Signature['Args']) {
+  constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
     this.loadInstances.perform();
   }
@@ -101,7 +123,39 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.options?.instances;
   }
 
-  @action private onSelect(opt: CardDef) {
-    this.selectedOption = opt;
+  @action private onSelect(item: CardDef) {
+    this.selectedItem = item;
   }
 }
+
+const PlaygroundPanel: TemplateOnlyComponent<Signature> = <template>
+  <section class='playground-panel' data-test-playground-panel>
+    {{#if @moduleContentsResource.isLoadingNewModule}}
+      <LoadingIndicator class='loading-icon' />
+      Loading...
+    {{else}}
+      <PlaygroundPanelContent @cardType={{@cardType}} />
+    {{/if}}
+  </section>
+  <style scoped>
+    .playground-panel {
+      background-image: url('./playground-background.png');
+      background-position: left top;
+      background-repeat: repeat;
+      background-size: 22.5px;
+      height: 100%;
+      width: 100%;
+      padding: var(--boxel-sp);
+      background-color: var(--boxel-dark);
+      color: var(--boxel-light);
+      overflow: auto;
+    }
+    .loading-icon {
+      display: inline-block;
+      margin-right: var(--boxel-sp-xxxs);
+      vertical-align: middle;
+    }
+  </style>
+</template>;
+
+export default PlaygroundPanel;

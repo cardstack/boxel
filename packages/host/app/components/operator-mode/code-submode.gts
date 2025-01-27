@@ -1007,6 +1007,7 @@ export default class CodeSubmode extends Component<Signature> {
                           <:title>Playground</:title>
                           <:content>
                             <PlaygroundPanel
+                              @moduleContentsResource={{this.moduleContentsResource}}
                               @cardType={{this.selectedCardOrField.cardType}}
                             />
                           </:content>
