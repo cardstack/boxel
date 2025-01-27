@@ -39,7 +39,7 @@ import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
-import { CRMTaskPlannerIsolated } from './crm/task-planner';
+import { CRMTaskPlanner } from './crm/task-planner';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 
@@ -343,6 +343,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeFilter = this.activeFilter;
   }
 
+  @action viewCard() {
+    if (!this.args.model.id) {
+      throw new Error('No card id');
+    }
+    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+  }
+
   <template>
     <TabbedHeader
       class='crm-app-header'
@@ -433,12 +440,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       </:contentHeader>
       <:grid>
         {{#if (eq this.activeTabId 'Task')}}
-          <CRMTaskPlannerIsolated
+          <CRMTaskPlanner
             @model={{@model}}
             @context={{@context}}
-            @fields={{@fields}}
-            @set={{@set}}
-            @fieldName={{@fieldName}}
+            @realmURL={{this.currentRealm}}
+            @viewCard={{this.viewCard}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}
