@@ -133,8 +133,8 @@ export class DealSummary extends Component<Signature> {
         margin: 0;
       }
       .summary-title {
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
+        font: 600 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xxs);
       }
       .header-icon {
         width: var(--boxel-icon-sm);
@@ -143,7 +143,7 @@ export class DealSummary extends Component<Signature> {
         margin-left: auto;
       }
       .value {
-        font: 600 var(--boxel-font-xl);
+        font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
