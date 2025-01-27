@@ -38,6 +38,8 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
+import ENV from '@cardstack/host/config/environment';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -78,6 +80,8 @@ import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
 
+const isPlaygroundEnabled = ENV.featureFlags?.ENABLE_PLAYGROUND;
+
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
@@ -97,7 +101,11 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem = 'schema-editor' | 'boxel-spec-preview' | null;
+type SelectedAccordionItem =
+  | 'schema-editor'
+  | 'boxel-spec-preview'
+  | 'playground'
+  | null;
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -975,6 +983,19 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                      {{#if isPlaygroundEnabled}}
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.selectAccordionItem 'playground'}}
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          data-test-accordion-item='playground'
+                        >
+                          <:title>Playground</:title>
+                          <:content>
+                          </:content>
+                        </A.Item>
+                      {{/if}}
                       {{#if this.showBoxelSpecPreview}}
                         <BoxelSpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
