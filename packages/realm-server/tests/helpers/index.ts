@@ -61,7 +61,8 @@ export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
   username: 'node-test_realm-server',
 };
-export const secretSeed = `shhh! it's a secret`;
+export const realmServerSecretSeed = "mum's the word";
+export const realmSecretSeed = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
@@ -236,14 +237,14 @@ export async function createRealm({
       indexRunner,
       virtualNetwork,
       matrixURL: matrixConfig.url,
-      secretSeed,
+      secretSeed: realmSecretSeed,
     });
   }
   let realm = new Realm({
     url: realmURL,
     adapter,
     matrix: matrixConfig,
-    secretSeed,
+    secretSeed: realmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue: publisher,
@@ -299,7 +300,7 @@ export async function runBaseRealmServer(
     indexRunner,
     virtualNetwork,
     matrixURL,
-    secretSeed,
+    secretSeed: realmSecretSeed,
   });
   let testBaseRealm = await createRealm({
     dir: basePath,
@@ -316,13 +317,14 @@ export async function runBaseRealmServer(
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
-    seed: secretSeed,
+    seed: realmSecretSeed,
   });
   let testBaseRealmServer = new RealmServer({
     realms: [testBaseRealm],
     virtualNetwork,
     matrixClient,
-    secretSeed,
+    realmServerSecretSeed,
+    realmSecretSeed,
     matrixRegistrationSecret,
     realmsRootPath,
     dbAdapter,
@@ -367,7 +369,7 @@ export async function runTestRealmServer({
     indexRunner,
     virtualNetwork,
     matrixURL,
-    secretSeed,
+    secretSeed: realmSecretSeed,
   });
   await worker.run();
   let testRealm = await createRealm({
@@ -402,13 +404,14 @@ export async function runTestRealmServer({
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
-    seed: secretSeed,
+    seed: realmSecretSeed,
   });
   let testRealmServer = new RealmServer({
     realms,
     virtualNetwork,
     matrixClient,
-    secretSeed,
+    realmServerSecretSeed,
+    realmSecretSeed,
     matrixRegistrationSecret,
     realmsRootPath,
     dbAdapter,

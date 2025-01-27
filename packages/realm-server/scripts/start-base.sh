@@ -13,6 +13,7 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
   PGDATABASE=boxel_base \
+  REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \

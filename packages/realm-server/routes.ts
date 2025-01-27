@@ -15,7 +15,8 @@ import handleQueueStatusRequest from './handlers/handle-queue-status';
 export type CreateRoutesArgs = {
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
-  secretSeed: string;
+  realmServerSecretSeed: string;
+  realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
   createRealm: ({
     ownerUserId,
@@ -45,7 +46,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',
-    jwtMiddleware(args.secretSeed),
+    jwtMiddleware(args.realmSecretSeed),
     handleCreateRealmRequest(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
@@ -53,12 +54,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.get(
     '/_user',
-    jwtMiddleware(args.secretSeed),
+    jwtMiddleware(args.realmSecretSeed),
     handleFetchUserRequest(args),
   );
   router.post(
     '/_user',
-    jwtMiddleware(args.secretSeed),
+    jwtMiddleware(args.realmSecretSeed),
     handleCreateUserRequest(args),
   );
   router.get('/_stripe-links', handleStripeLinksRequest());
