@@ -258,7 +258,7 @@ export default class Room extends Component<Signature> {
       }
       await this.roomResource.loading;
       this.roomResource.activateLLM(llmModel);
-    }
+    } // When in interactive mode, the default LLM is used
   }
 
   private scrollState() {
