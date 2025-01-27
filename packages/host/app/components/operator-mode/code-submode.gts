@@ -1006,7 +1006,9 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title>Playground</:title>
                           <:content>
-                            <PlaygroundPanel />
+                            <PlaygroundPanel
+                              @cardType={{this.selectedCardOrField.cardType}}
+                            />
                           </:content>
                         </A.Item>
                       {{/if}}
