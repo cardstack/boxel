@@ -1,4 +1,4 @@
-import { waitFor } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -43,11 +43,27 @@ module('Integration | code-submode | playground panel', function (hooks) {
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
   import { Author } from './author';
+
+  class Status extends StringField {
+    static displayName = 'Status';
+  }
+
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
     @field publishDate = contains(DatetimeField);
     @field author = linksTo(Author);
     @field body = contains(MarkdownField);
+    @field status = contains(Status, {
+      computeVia: function (this: BlogPost) {
+        if (!this.publishDate) {
+          return 'Draft';
+        }
+        if (Date.now() >= Date.parse(String(this.publishDate))) {
+          return 'Published';
+        }
+        return 'Scheduled';
+      },
+    });
   }
 `;
 
@@ -96,12 +112,23 @@ module('Integration | code-submode | playground panel', function (hooks) {
     });
   });
 
-  test('can render playground panel', async function (assert) {
+  test('can render playground panel when a card def is selected', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
     });
-    await waitFor('[data-test-accordion-item="playground"]');
-    assert.dom('[data-test-accordion-item="playground"]').exists();
+    await waitFor('[data-test-accordion-item="schema-editor"]');
+    assert
+      .dom(
+        '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Status"]',
+      )
+      .exists();
+    assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
+
+    await click(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
+    );
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-playground-panel]').exists();
   });
 });

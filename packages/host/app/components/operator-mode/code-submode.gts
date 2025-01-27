@@ -26,6 +26,7 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
@@ -57,7 +58,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
@@ -73,6 +74,7 @@ import CodeEditor from './code-editor';
 import BoxelSpecPreview from './code-submode/boxel-spec-preview';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import PlaygroundPanel from './code-submode/playground-panel';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
@@ -494,6 +496,17 @@ export default class CodeSubmode extends Component<Signature> {
       return this.selectedDeclaration;
     }
     return undefined;
+  }
+
+  private get displayPlayground() {
+    if (!isPlaygroundEnabled) {
+      return false;
+    }
+    let declaration = this.selectedDeclaration;
+    if (!declaration || !('cardOrField' in declaration)) {
+      return false;
+    }
+    return isCardDef(declaration.cardOrField);
   }
 
   get showBoxelSpecPreview() {
@@ -983,7 +996,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if isPlaygroundEnabled}}
+                      {{#if this.displayPlayground}}
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
@@ -993,6 +1006,7 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title>Playground</:title>
                           <:content>
+                            <PlaygroundPanel />
                           </:content>
                         </A.Item>
                       {{/if}}
