@@ -80,20 +80,20 @@
     "relationships": {
       "account": {
         "links": {
-          "self": "../Account/bf437dc3-1f96-45e5-a057-3487c6a5c2f7"
+          "self": null
         }
       },
-      "document": {
+      "event": {
         "links": {
-          "self": "../Document/2b0f357f-89da-4b34-a0b9-866956389d79"
+          "self": "../DealEvent/60cf6fcf-10ec-4d04-b6a8-e409679ccc0a"
         }
       },
       "primaryStakeholder": {
         "links": {
-          "self": null
+          "self": "../Lead/9d7b2f20-c7da-4ddc-8e77-b75d88c97b48"
         }
       },
-      "stakeholders.0": {
+      "stakeholders": {
         "links": {
           "self": "../Lead/4e70a791-dd4e-4b39-99a1-bb8070392437"
         }

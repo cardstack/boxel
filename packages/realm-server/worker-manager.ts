@@ -151,8 +151,8 @@ const shutdown = (onShutdown?: () => void) => {
   });
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown());
+process.on('SIGTERM', () => shutdown());
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
@@ -253,7 +253,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
         }
       });
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
+    new Promise<true>((r) => setTimeout(() => r(true), 30_000).unref()),
   ]);
   if (timeout) {
     console.error(

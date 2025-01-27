@@ -19,6 +19,9 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import 'decorator-transforms/globals';
 
 let log = logger('main');
+if (process.env.NODE_ENV === 'test') {
+  (globalThis as any).__environment = 'test';
+}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -65,6 +68,7 @@ let {
   username: usernames,
   useRegistrationSecretFunction,
   seedPath,
+  seedRealmURL,
   migrateDB,
   workerManagerPort,
 } = yargs(process.argv.slice(2))
@@ -107,6 +111,10 @@ let {
     seedPath: {
       description:
         'the path of the seed realm which is used to seed new realms',
+      type: 'string',
+    },
+    seedRealmURL: {
+      description: 'The URL of the seed realm',
       type: 'string',
     },
     matrixURL: {
@@ -252,6 +260,7 @@ let autoMigrate = migrateDB || undefined;
     getIndexHTML,
     serverURL: new URL(serverURL),
     seedPath,
+    seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret

@@ -203,7 +203,7 @@ function generateJsonSchemaForContainsFields(
   };
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
-    usedFieldsOnly: false,
+    usedLinksToFieldsOnly: false,
   });
 
   for (let [fieldName, field] of Object.entries(fields)) {
@@ -301,7 +301,7 @@ function generateRelationshipFieldsInfo(
   fieldName?: string,
 ) {
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
-    usedFieldsOnly: false,
+    usedLinksToFieldsOnly: false,
   });
   for (let [fName, fValue] of Object.entries(fields)) {
     let flatFieldName = fieldName ? `${fieldName}.${fName}` : fName;

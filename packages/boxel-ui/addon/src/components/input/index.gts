@@ -7,7 +7,7 @@ import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
-import { and, eq, not } from '../../helpers/truth-helpers.ts';
+import { and, bool, eq, not } from '../../helpers/truth-helpers.ts';
 import FailureBordered from '../../icons/failure-bordered.gts';
 import IconSearch from '../../icons/icon-search.gts';
 import LoadingIndicator from '../../icons/loading-indicator.gts';
@@ -62,6 +62,7 @@ export interface Signature {
     id?: string;
     max?: string | number;
     onBlur?: (ev: Event) => void;
+    onChange?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
     onKeyPress?: (ev: KeyboardEvent) => void;
@@ -155,6 +156,7 @@ export default class BoxelInput extends Component<Signature> {
           id={{this.id}}
           type={{this.type}}
           value={{@value}}
+          checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
           placeholder={{@placeholder}}
           max={{@max}}
           required={{@required}}
@@ -177,6 +179,7 @@ export default class BoxelInput extends Component<Signature> {
           {{on 'blur' (optional @onBlur)}}
           {{on 'keypress' (optional @onKeyPress)}}
           {{on 'focus' (optional @onFocus)}}
+          {{on 'change' (optional @onChange)}}
           ...attributes
         />
         {{#if this.isSearch}}

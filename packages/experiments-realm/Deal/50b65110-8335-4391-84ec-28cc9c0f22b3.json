@@ -74,11 +74,6 @@
           "self": "../Account/c78762d3-9ab5-4f62-9370-d0b6a0261b08"
         }
       },
-      "document": {
-        "links": {
-          "self": null
-        }
-      },
       "primaryStakeholder": {
         "links": {
           "self": "../Lead/1dbcc3e8-fe3c-4c4a-ba66-ff7d637a7358"

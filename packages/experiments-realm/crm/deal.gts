@@ -9,7 +9,7 @@ import {
   FieldDef,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
@@ -45,6 +45,7 @@ import { Company } from './company';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
+import { DealEvent } from './deal-event';
 
 interface DealSizeSummary {
   summary: string;
@@ -136,6 +137,18 @@ class IsolatedTemplate extends Component<typeof Deal> {
   activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
     isLive: true,
   });
+
+  get activeTasksCount() {
+    const tasks = this.activeTasks;
+    if (!tasks || tasks.isLoading) {
+      return 0;
+    }
+    return tasks.instances?.length ?? 0;
+  }
+
+  get hasActiveTasks() {
+    return this.activeTasksCount > 0;
+  }
 
   private _createNewTask = restartableTask(async () => {
     let doc: LooseSingleCardDocument = {
@@ -384,7 +397,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       </:dashboard>
 
       <:summary>
-        <SummaryGridContainer>
+        <SummaryGridContainer class='task-summary-grid'>
           <SummaryCard>
             <:title>
               <label>Company Info</label>
@@ -437,12 +450,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
+          <SummaryCard class='tasks-summary-card'>
             <:title>
               <label>Active Tasks</label>
             </:title>
             <:icon>
               <BoxelButton
+                class='sidebar-create-button'
                 @kind='primary'
                 @size='extra-small'
                 @disabled={{this.activeTasks.isLoading}}
@@ -454,13 +468,20 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:icon>
             <:content>
               {{#if this.activeTasks.isLoading}}
-                Loading...
-              {{else if this.activeTasks.instances}}
-                {{this.activeTasks.instances.length}}
+                <div class='loading-skeleton'>Loading...</div>
               {{else}}
-                <div class='default-value'>
-                  No Active Tasks
-                </div>
+                {{#if this.hasActiveTasks}}
+                  {{#each this.activeTasks.instances as |task|}}
+                    {{#let (getComponent task) as |Component|}}
+                      <Component
+                        @format='embedded'
+                        @displayContainer={{false}}
+                      />
+                    {{/let}}
+                  {{/each}}
+                {{else}}
+                  <p class='description'>No Active Tasks</p>
+                {{/if}}
               {{/if}}
             </:content>
           </SummaryCard>
@@ -479,9 +500,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
       hr {
         border: 1px solid var(--boxel-200);
         margin: 1.3rem 0;
-      }
-      label {
-        font-weight: 500;
       }
       .mt-5 {
         margin-top: 1rem;
@@ -568,6 +586,16 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-left: auto;
         margin-right: 1rem;
         margin-top: 0.5rem;
+      }
+      /* Task Summary Grid & Card */
+      .task-summary-grid {
+        --summary-card-min-height: 180px;
+      }
+      .tasks-summary-card :where(.task-card) {
+        --task-card-padding: var(--boxel-sp-xxxs) 0;
+      }
+      .sidebar-create-button {
+        font-weight: 600;
       }
       /* footer */
       .next-steps {
@@ -1111,6 +1139,7 @@ export class Deal extends CardDef {
     },
   });
   @field healthScore = contains(PercentageField);
+  @field event = linksTo(() => DealEvent);
   @field notes = contains(MarkdownField);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
@@ -1186,4 +1215,8 @@ class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
       }
     </style>
   </template>
+}
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }
