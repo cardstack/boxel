@@ -1,21 +1,92 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import type Owner from '@ember/owner';
+import { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 import { CRMTaskStatusField } from './task';
-import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
-import {
-  BaseTaskPlannerIsolated,
-  TaskPlannerConfig,
-  TaskCard,
-} from '../components/base-task-planner';
+import GlimmerComponent from '@glimmer/component';
+import { TaskPlanner, TaskCard } from '../components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
+import { DndItem } from '@cardstack/boxel-ui/components';
+import { AppCard } from '../app-card';
 
-export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
-  typeof CRMTaskPlanner
-> {
-  constructor(owner: Owner, args: any) {
-    const config: TaskPlannerConfig = {
+interface CRMTaskPlannerArgs {
+  Args: {
+    model: Partial<AppCard>;
+    context: CardContext | undefined;
+    realmURL: URL | undefined;
+    viewCard: () => void;
+  };
+  Element: HTMLElement;
+}
+
+export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
+  get parentId() {
+    return this.args.model?.id;
+  }
+
+  get emptyStateMessage() {
+    return 'Link a CRM App to continue';
+  }
+
+  get getTaskQuery(): Query {
+    let everyArr = [];
+    if (!this.args.realmURL) {
+      throw new Error('No realm url');
+    }
+
+    if (!this.parentId) {
+      console.log('No CRM App');
+      everyArr.push({ eq: { 'crmApp.id': null } });
+    } else {
+      everyArr.push({ eq: { 'crmApp.id': this.parentId } });
+    }
+
+    return everyArr.length > 0
+      ? {
+          filter: {
+            on: {
+              module: this.config.taskSource.module,
+              name: this.config.taskSource.name,
+            },
+            every: everyArr,
+          },
+        }
+      : {
+          filter: {
+            type: {
+              module: this.config.taskSource.module,
+              name: this.config.taskSource.name,
+            },
+          },
+        };
+  }
+
+  get realmHref() {
+    return this.args.realmURL?.href;
+  }
+
+  get realmHrefs() {
+    if (!this.args.realmURL) {
+      return [];
+    }
+    return [this.args.realmURL.href];
+  }
+
+  assigneeQuery = getCards(
+    {
+      filter: {
+        type: this.config.filters.assignee.codeRef,
+      },
+    },
+    this.realmHrefs,
+    { isLive: true },
+  );
+
+  get assigneeCards() {
+    return this.assigneeQuery?.instances ?? [];
+  }
+
+  get config() {
+    return {
       status: {
         values: CRMTaskStatusField.values,
       },
@@ -24,7 +95,7 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
           return card.status?.label === key;
         },
         onCreateTask: async (statusLabel: string) => {
-          if (this.realmURL === undefined) {
+          if (this.args.realmURL === undefined) {
             return;
           }
 
@@ -71,15 +142,22 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
             this.config.taskSource,
             new URL(this.config.taskSource.module),
             {
-              realmURL: this.realmURL,
+              realmURL: this.args.realmURL,
               doc,
             },
           );
         },
-        onMoveCard: async ({ draggedCard, targetColumn }) => {
+        onMoveCard: async ({
+          draggedCard,
+          targetColumn,
+        }: {
+          draggedCard: DndItem;
+          targetColumn: DndItem;
+        }) => {
           let cardInNewCol = targetColumn.cards.find(
             (c: CardDef) => c.id === draggedCard.id,
           );
+          // TODO: status label does not apply to all cards
           if (
             cardInNewCol &&
             cardInNewCol.status.label !== targetColumn.title
@@ -118,71 +196,16 @@ export class CRMTaskPlannerIsolated extends BaseTaskPlannerIsolated<
         },
       },
     };
-    super(owner, args, config);
   }
 
-  get parentId() {
-    return this.args.model?.id;
-  }
-
-  override get emptyStateMessage() {
-    return 'Link a CRM App to continue';
-  }
-
-  override get getTaskQuery(): Query {
-    let everyArr = [];
-    if (!this.realmURL) {
-      throw new Error('No realm url');
-    }
-
-    if (!this.parentId) {
-      console.log('No CRM App');
-      everyArr.push({ eq: { 'crmApp.id': null } });
-    } else {
-      everyArr.push({ eq: { 'crmApp.id': this.parentId } });
-    }
-
-    return everyArr.length > 0
-      ? {
-          filter: {
-            on: {
-              module: this.config.taskSource.module,
-              name: this.config.taskSource.name,
-            },
-            every: everyArr,
-          },
-        }
-      : {
-          filter: {
-            type: {
-              module: this.config.taskSource.module,
-              name: this.config.taskSource.name,
-            },
-          },
-        };
-  }
-
-  assigneeQuery = getCards(
-    {
-      filter: {
-        type: this.config.filters.assignee.codeRef,
-      },
-    },
-    this.realmHrefs,
-    { isLive: true },
-  );
-
-  get assigneeCards() {
-    return this.assigneeQuery?.instances ?? [];
-  }
+  <template>
+    <TaskPlanner
+      @config={{this.config}}
+      @realmURL={{@realmURL}}
+      @parentId={{this.parentId}}
+      @context={{@context}}
+      @emptyStateMessage={{this.emptyStateMessage}}
+      @viewCard={{@viewCard}}
+    />
+  </template>
 }
-
-export class CRMTaskPlanner extends CardDef {
-  static displayName = 'Task Planner';
-  static icon = LayoutKanbanIcon;
-  static headerColor = '#ff7f7b';
-  static prefersWideFormat = true;
-  static isolated = CRMTaskPlannerIsolated;
-}
-
-export default CRMTaskPlanner;
