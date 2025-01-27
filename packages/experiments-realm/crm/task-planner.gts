@@ -209,5 +209,3 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
     />
   </template>
 }
-
-// getComponent = (card: CardDef) => card.constructor.getComponent(card);
