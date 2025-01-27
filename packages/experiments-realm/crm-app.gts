@@ -41,7 +41,19 @@ import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlannerIsolated } from './crm/task-planner';
 
+import type { ComponentLike } from '@glint/template';
+import {
+  Card as CardIcon,
+  Grid3x3 as GridIcon,
+  Rows4 as StripIcon,
+} from '@cardstack/boxel-ui/icons';
+
 type ViewOption = 'card' | 'strip' | 'grid';
+
+interface ViewItem {
+  icon: ComponentLike;
+  id: string;
+}
 
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
@@ -132,6 +144,29 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
+
+  // Only show strip and grid views for Deal tab for now
+  get dealView(): ViewItem[] {
+    return [
+      { id: 'strip', icon: StripIcon },
+      { id: 'grid', icon: GridIcon },
+    ];
+  }
+
+  get commonViews(): ViewItem[] {
+    return [
+      { id: 'card', icon: CardIcon },
+      { id: 'strip', icon: StripIcon },
+      { id: 'grid', icon: GridIcon },
+    ];
+  }
+
+  get tabViews(): ViewItem[] {
+    const views =
+      this.activeTabId === 'Deal' ? this.dealView : this.commonViews;
+    return views;
+  }
+
   @tracked private searchKey = '';
   @tracked private deals: Deal[] = [];
 
@@ -203,11 +238,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //Tabs
   @action setActiveTab(id: string) {
+    this.selectedView = id === 'Deal' ? 'strip' : 'card';
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
     this.loadDealCards.perform();
   }
+
   get headerColor() {
     return (
       Object.getPrototypeOf(this.args.model).constructor.headerColor ??
@@ -418,6 +455,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             class='view-menu content-header-row-2'
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
+            @items={{this.tabViews}}
           />
         {{/if}}
         {{#if this.activeFilter.sortOptions.length}}
