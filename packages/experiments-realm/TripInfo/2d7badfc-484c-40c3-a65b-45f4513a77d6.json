@@ -5,7 +5,8 @@
       "traveler": {
         "name": "Marcelius Wilde",
         "nextTravelGoal": {
-          "goalTitle": "Summer '25"
+          "goalTitle": "Summer '25",
+          "progress": 0.5
         }
       },
       "description": null,
@@ -57,6 +58,18 @@
       "adoptsFrom": {
         "module": "../trip-info",
         "name": "TripInfo"
+      },
+      "fields": {
+        "traveler": {
+          "fields": {
+            "nextTravelGoal": {
+              "adoptsFrom": {
+                "module": "../trip-info",
+                "name": "TravelGoalWithProgress"
+              }
+            }
+          }
+        }
       }
     }
   }

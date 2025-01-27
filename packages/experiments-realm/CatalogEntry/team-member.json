@@ -8,7 +8,7 @@
         "name": "TeamMember",
         "module": "../sprint-task"
       },
-      "isField": false
+      "specType": "card"
     },
     "meta": {
       "adoptsFrom": {

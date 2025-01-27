@@ -38,6 +38,8 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
+import ENV from '@cardstack/host/config/environment';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -57,6 +59,8 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
 
+import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
+
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
@@ -66,6 +70,7 @@ import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
+import BoxelSpecPreview from './code-submode/boxel-spec-preview';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
@@ -74,6 +79,8 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+
+const isPlaygroundEnabled = ENV.featureFlags?.ENABLE_PLAYGROUND;
 
 interface Signature {
   Args: {
@@ -94,7 +101,11 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem = 'schema-editor' | null;
+type SelectedAccordionItem =
+  | 'schema-editor'
+  | 'boxel-spec-preview'
+  | 'playground'
+  | null;
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -367,7 +378,6 @@ export default class CodeSubmode extends Component<Signature> {
         return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
       }
     }
-
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
       // this will prevent displaying message during a page refresh
@@ -484,6 +494,13 @@ export default class CodeSubmode extends Component<Signature> {
       return this.selectedDeclaration;
     }
     return undefined;
+  }
+
+  get showBoxelSpecPreview() {
+    return (
+      !this.moduleContentsResource.isLoading &&
+      this.selectedDeclaration?.exportName
+    );
   }
 
   private get itemToDeleteAsCard() {
@@ -656,6 +673,7 @@ export default class CodeSubmode extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: BoxelSpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -772,7 +790,6 @@ export default class CodeSubmode extends Component<Signature> {
     {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
-      @hideAiAssistant={{true}}
       as |search|
     >
       <div
@@ -956,6 +973,7 @@ export default class CodeSubmode extends Component<Signature> {
                             this.selectedAccordionItem
                             'schema-editor'
                           }}
+                          data-test-accordion-item='schema-editor'
                         >
                           <:title>
                             <SchemaEditorTitle />
@@ -965,6 +983,50 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                      {{#if isPlaygroundEnabled}}
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.selectAccordionItem 'playground'}}
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          data-test-accordion-item='playground'
+                        >
+                          <:title>Playground</:title>
+                          <:content>
+                          </:content>
+                        </A.Item>
+                      {{/if}}
+                      {{#if this.showBoxelSpecPreview}}
+                        <BoxelSpecPreview
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @createFile={{perform this.createFile}}
+                          @isCreateModalShown={{bool this.isCreateModalOpen}}
+                          as |BoxelSpecPreviewTitle BoxelSpecPreviewContent|
+                        >
+                          <A.Item
+                            class='accordion-item'
+                            @contentClass='accordion-item-content'
+                            @onClick={{fn
+                              this.selectAccordionItem
+                              'boxel-spec-preview'
+                            }}
+                            @isOpen={{eq
+                              this.selectedAccordionItem
+                              'boxel-spec-preview'
+                            }}
+                            data-test-accordion-item='boxel-spec-preview'
+                          >
+                            <:title>
+                              <BoxelSpecPreviewTitle />
+                            </:title>
+                            <:content>
+                              <BoxelSpecPreviewContent
+                                class='accordion-content'
+                              />
+                            </:content>
+                          </A.Item>
+                        </BoxelSpecPreview>
+                      {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}
                     <Accordion as |A|>

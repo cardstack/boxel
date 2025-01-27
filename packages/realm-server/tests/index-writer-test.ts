@@ -55,6 +55,22 @@ module(basename(__filename), function () {
       });
     });
 
+    test('can copy index entries', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('throws when copy source realm is not present on the realm server', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
     test('error entry includes last known good state when available', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,

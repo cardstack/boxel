@@ -381,13 +381,31 @@ export async function runTestRealmServer({
     dbAdapter,
   });
   virtualNetwork.mount(testRealm.handle);
+  let realms = [testRealm];
+  let seedRealmURL: URL | undefined;
+  let seedRealm: Realm | undefined;
+  if (realmURL.pathname && realmURL.pathname !== '/') {
+    seedRealmURL = new URL('/seed/', realmURL);
+    seedRealm = await createRealm({
+      dir: testRealmDir,
+      fileSystem,
+      realmURL: seedRealmURL.href,
+      permissions,
+      virtualNetwork,
+      matrixConfig,
+      publisher,
+      dbAdapter,
+    });
+    virtualNetwork.mount(seedRealm.handle);
+    realms.push(seedRealm);
+  }
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: secretSeed,
   });
   let testRealmServer = new RealmServer({
-    realms: [testRealm],
+    realms,
     virtualNetwork,
     matrixClient,
     secretSeed,
@@ -397,6 +415,7 @@ export async function runTestRealmServer({
     queue: publisher,
     getIndexHTML,
     seedPath,
+    seedRealmURL,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
@@ -405,6 +424,7 @@ export async function runTestRealmServer({
   return {
     testRealmDir,
     testRealm,
+    seedRealm,
     testRealmServer,
     testRealmHttpServer,
   };

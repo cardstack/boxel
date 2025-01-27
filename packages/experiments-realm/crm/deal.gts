@@ -9,7 +9,7 @@ import {
   FieldDef,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
@@ -37,7 +37,6 @@ import FilePen from '@cardstack/boxel-icons/file-pen';
 import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Award from '@cardstack/boxel-icons/award';
 import AwardOff from '@cardstack/boxel-icons/award-off';
-import { Document } from './document';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
@@ -46,6 +45,7 @@ import { Company } from './company';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
+import { DealEvent } from './deal-event';
 
 interface DealSizeSummary {
   summary: string;
@@ -137,6 +137,18 @@ class IsolatedTemplate extends Component<typeof Deal> {
   activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
     isLive: true,
   });
+
+  get activeTasksCount() {
+    const tasks = this.activeTasks;
+    if (!tasks || tasks.isLoading) {
+      return 0;
+    }
+    return tasks.instances?.length ?? 0;
+  }
+
+  get hasActiveTasks() {
+    return this.activeTasksCount > 0;
+  }
 
   private _createNewTask = restartableTask(async () => {
     let doc: LooseSingleCardDocument = {
@@ -385,7 +397,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       </:dashboard>
 
       <:summary>
-        <SummaryGridContainer>
+        <SummaryGridContainer class='task-summary-grid'>
           <SummaryCard>
             <:title>
               <label>Company Info</label>
@@ -394,16 +406,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <World class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                {{#if this.hasCompanyInfo}}
-                  <@fields.headquartersAddress @format='atom' />
-                  <@fields.website @format='atom' />
-                {{else}}
-                  <div class='default-value'>
-                    Missing Company Info
-                  </div>
-                {{/if}}
-              </div>
+              {{#if this.hasCompanyInfo}}
+                <@fields.headquartersAddress @format='atom' />
+                <@fields.website @format='atom' />
+              {{else}}
+                <div class='default-value'>
+                  Missing Company Info
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
@@ -415,41 +425,38 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Users class='header-icon' />
             </:icon>
             <:content>
-              <div class='description'>
-                {{#if this.hasStakeholders}}
-                  {{#if @model.primaryStakeholder}}
-                    <ContactRow
-                      @userID={{@model.primaryStakeholder.id}}
-                      @name={{@model.primaryStakeholder.name}}
-                      @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
-                      @tagLabel='primary'
-                    />
-                  {{/if}}
-                  {{#each @model.stakeholders as |stakeholder|}}
-                    <ContactRow
-                      @userID={{stakeholder.id}}
-                      @name={{stakeholder.name}}
-                      @thumbnailURL={{stakeholder.thumbnailURL}}
-                      @tagLabel={{stakeholder.position}}
-                    />
-                  {{/each}}
-                {{else}}
-                  <div class='default-value'>
-                    No Stakeholders
-                  </div>
+              {{#if this.hasStakeholders}}
+                {{#if @model.primaryStakeholder}}
+                  <ContactRow
+                    @userID={{@model.primaryStakeholder.id}}
+                    @name={{@model.primaryStakeholder.name}}
+                    @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
+                    @tagLabel='primary'
+                  />
                 {{/if}}
-
-              </div>
+                {{#each @model.stakeholders as |stakeholder|}}
+                  <ContactRow
+                    @userID={{stakeholder.id}}
+                    @name={{stakeholder.name}}
+                    @thumbnailURL={{stakeholder.thumbnailURL}}
+                    @tagLabel={{stakeholder.position}}
+                  />
+                {{/each}}
+              {{else}}
+                <div class='default-value'>
+                  No Stakeholders
+                </div>
+              {{/if}}
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
+          <SummaryCard class='tasks-summary-card'>
             <:title>
               <label>Active Tasks</label>
             </:title>
             <:icon>
               <BoxelButton
-                class='sidebar-create-button content-header-row-1'
+                class='sidebar-create-button'
                 @kind='primary'
                 @size='extra-small'
                 @disabled={{this.activeTasks.isLoading}}
@@ -460,20 +467,24 @@ class IsolatedTemplate extends Component<typeof Deal> {
               </BoxelButton>
             </:icon>
             <:content>
-              <div>
-                {{#if this.activeTasks.isLoading}}
-                  Loading...
-                {{else if this.activeTasks.instances}}
-                  {{this.activeTasks.instances.length}}
+              {{#if this.activeTasks.isLoading}}
+                <div class='loading-skeleton'>Loading...</div>
+              {{else}}
+                {{#if this.hasActiveTasks}}
+                  {{#each this.activeTasks.instances as |task|}}
+                    {{#let (getComponent task) as |Component|}}
+                      <Component
+                        @format='embedded'
+                        @displayContainer={{false}}
+                      />
+                    {{/let}}
+                  {{/each}}
                 {{else}}
-                  <div class='default-value'>
-                    No Active Tasks
-                  </div>
+                  <p class='description'>No Active Tasks</p>
                 {{/if}}
-              </div>
+              {{/if}}
             </:content>
           </SummaryCard>
-
         </SummaryGridContainer>
       </:summary>
     </DealPageLayout>
@@ -489,9 +500,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
       hr {
         border: 1px solid var(--boxel-200);
         margin: 1.3rem 0;
-      }
-      label {
-        font-weight: 500;
       }
       .mt-5 {
         margin-top: 1rem;
@@ -579,6 +587,16 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-right: 1rem;
         margin-top: 0.5rem;
       }
+      /* Task Summary Grid & Card */
+      .task-summary-grid {
+        --summary-card-min-height: 180px;
+      }
+      .tasks-summary-card :where(.task-card) {
+        --task-card-padding: var(--boxel-sp-xxxs) 0;
+      }
+      .sidebar-create-button {
+        font-weight: 600;
+      }
       /* footer */
       .next-steps {
         display: flex;
@@ -591,12 +609,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         align-items: center;
         gap: var(--boxel-sp-sm);
         font-weight: 600;
-      }
-      .view-document-btn {
-        font-weight: 600;
-        padding: 2px 5px;
-        min-width: 0px;
-        min-height: 0px;
       }
       @container (max-width: 447px) {
         .progress-container {
@@ -1127,8 +1139,8 @@ export class Deal extends CardDef {
     },
   });
   @field healthScore = contains(PercentageField);
+  @field event = linksTo(() => DealEvent);
   @field notes = contains(MarkdownField);
-  @field document = linksTo(() => Document);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
   @field valueBreakdown = containsMany(ValueLineItem);
@@ -1203,4 +1215,8 @@ class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
       }
     </style>
   </template>
+}
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }

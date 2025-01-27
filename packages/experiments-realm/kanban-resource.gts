@@ -7,6 +7,8 @@ import { Resource } from 'ember-resources';
 interface Args {
   named: {
     cards: CardDef[];
+    // Custom getter that is describe to access a way to access the data of the card
+    // that is equal to the column
     hasColumnKey: <T extends CardDef>(card: T, key: string) => boolean;
     columnKeys: string[];
   };

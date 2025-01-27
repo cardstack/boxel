@@ -44,6 +44,8 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
+
 import { cleanseString } from '../../lib/utils';
 
 import ModalContainer from '../modal-container';
@@ -59,12 +61,15 @@ export type NewFileType =
   | 'duplicate-instance'
   | 'card-instance'
   | 'card-definition'
-  | 'field-definition';
+  | 'field-definition'
+  | 'boxel-spec-instance';
+
 export const newFileTypes: NewFileType[] = [
   'duplicate-instance',
+  'card-instance',
   'card-definition',
   'field-definition',
-  'card-instance',
+  'boxel-spec-instance',
 ];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
@@ -117,11 +122,7 @@ export default class CreateFileModal extends Component<Signature> {
                 </FieldContainer>
                 {{#unless (eq this.fileType.id 'duplicate-instance')}}
                   <FieldContainer
-                    @label={{if
-                      (eq this.maybeFileType.id 'card-instance')
-                      'Adopted From'
-                      'Inherits From'
-                    }}
+                    @label={{this.refLabel}}
                     class='field'
                     data-test-inherits-from-field
                   >
@@ -236,6 +237,17 @@ export default class CreateFileModal extends Component<Signature> {
                     >
                       Duplicate
                     </Button>
+                  {{else if (eq this.fileType.id 'boxel-spec-instance')}}
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @loading={{this.createBoxelSpecInstance.isRunning}}
+                      {{on 'click' (perform this.createBoxelSpecInstance)}}
+                      {{onKeyMod 'Enter'}}
+                      data-test-create-boxel-spec-instance
+                    >
+                      Create
+                    </Button>
                   {{else if
                     (or
                       (eq this.fileType.id 'card-definition')
@@ -345,6 +357,7 @@ export default class CreateFileModal extends Component<Signature> {
         definitionClass?: {
           displayName: string;
           ref: ResolvedCodeRef;
+          specType?: BoxelSpecType;
         };
         sourceInstance?: CardDef;
       }
@@ -355,6 +368,14 @@ export default class CreateFileModal extends Component<Signature> {
     this.args.onCreate(this);
   }
 
+  get refLabel() {
+    return this.maybeFileType?.id === 'card-instance'
+      ? 'Adopted From'
+      : this.maybeFileType?.id === 'boxel-spec-instance'
+      ? 'Code Ref'
+      : 'Inherits From';
+  }
+
   // public API for callers to use this component
   async createNewFile(
     fileType: FileType,
@@ -362,6 +383,7 @@ export default class CreateFileModal extends Component<Signature> {
     definitionClass?: {
       displayName: string;
       ref: ResolvedCodeRef;
+      specType?: BoxelSpecType;
     },
     sourceInstance?: CardDef,
   ) {
@@ -384,6 +406,7 @@ export default class CreateFileModal extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: BoxelSpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -550,7 +573,7 @@ export default class CreateFileModal extends Component<Signature> {
       filter: {
         on: catalogEntryRef,
         // REMEMBER ME
-        every: [{ eq: { isField } }],
+        every: [{ eq: { specType: isField ? 'field' : 'card' } }],
       },
     });
   });
@@ -745,6 +768,58 @@ export class ${className} extends ${exportName} {
       data: {
         meta: {
           adoptsFrom: ref,
+          realmURL: this.selectedRealmURL.href,
+        },
+      },
+    };
+
+    try {
+      let card = await this.cardService.createFromSerialized(doc.data, doc);
+
+      if (!card) {
+        throw new Error(
+          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+        );
+      }
+      await this.cardService.saveModel(card);
+      this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
+    } catch (e: any) {
+      console.log('Error saving', e);
+      this.saveError = `Error creating card instance: ${e.message}`;
+    }
+  });
+
+  private createBoxelSpecInstance = restartableTask(async () => {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot createCardInstance when there is no this.currentRequest`,
+      );
+    }
+    if (!this.definitionClass || !this.selectedRealmURL) {
+      throw new Error(
+        `bug: cannot create card instance without adoptsFrom ref and selected realm URL`,
+      );
+    }
+
+    let { ref, specType } = this.definitionClass;
+
+    let relativeTo = new URL(catalogEntryRef.module);
+    let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+    if ('name' in maybeRef && 'module' in maybeRef) {
+      ref = maybeRef;
+    }
+    if (!ref) {
+      throw new Error(`bug: cannot create boxel spec instance without a ref`);
+    }
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          specType,
+          ref,
+        },
+        meta: {
+          adoptsFrom: catalogEntryRef,
           realmURL: this.selectedRealmURL.href,
         },
       },
