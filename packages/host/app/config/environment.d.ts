@@ -28,5 +28,7 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {};
+  featureFlags?: {
+    ENABLE_PLAYGROUND: boolean;
+  };
 };
