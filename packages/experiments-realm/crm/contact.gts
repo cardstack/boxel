@@ -695,7 +695,7 @@ export class StatusTagField extends FieldDef {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      {{! Intentionally do not allow edit template bcos we are using a pattern where the subclass determines the value}}
+      {{! Intentionally do not allow edit template bcos we are using a pattern where the subclass definition determines the value of the field}}
       {{#if @model.label}}
         <StatusPill
           @label={{@model.label}}
