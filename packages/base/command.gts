@@ -70,6 +70,11 @@ export class CreateAIAssistantRoomResult extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class SetActiveLLMInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field model = contains(StringField);
+}
+
 export class AddSkillsToRoomInput extends CardDef {
   @field roomId = contains(StringField);
   @field skills = linksToMany(SkillCard);
