@@ -14,6 +14,7 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
   @action
   async createRoom() {
     let commandContext = this.args.context?.commandContext;
+    if (!commandContext) return;
 
     let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
       commandContext,
@@ -37,6 +38,8 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     if (!this.currentRoomId) return;
 
     let commandContext = this.args.context?.commandContext;
+    if (!commandContext) return;
+
     let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
 
     await setActiveLLMCommand.execute({
@@ -46,7 +49,7 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
   }
 
   @action
-  updatemodelId(event: InputEvent) {
+  updatemodelId(event: Event) {
     this.modelId = (event.target as HTMLInputElement).value;
   }
 
@@ -54,12 +57,13 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     <div class='llm-setter'>
       <div class='content'>
         <div class='input-section'>
-          <label>LLM Model Name</label>
+          <label for='llm-model-name-input'>LLM Model Name</label>
           <input
             type='text'
             value={{this.modelId}}
             {{on 'input' this.updatemodelId}}
             class='model-input'
+            id='llm-model-name-input'
           />
         </div>
 
