@@ -29,7 +29,6 @@ import {
   DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
-import { thinkingMessage } from './constants';
 
 let log = logger('ai-bot');
 
