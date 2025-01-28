@@ -1,8 +1,9 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
 import {
+  percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
@@ -12,7 +13,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
-module('Integration | code-submode | playground panel', function (hooks) {
+module('Acceptance | code-submode | playground panel', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -38,11 +39,15 @@ module('Integration | code-submode | playground panel', function (hooks) {
   }
 `;
   const blogPostCard = `
-  import { contains, field, linksTo, CardDef } from "https://cardstack.com/base/card-api";
+  import { contains, field, linksTo, linksToMany, CardDef } from "https://cardstack.com/base/card-api";
   import DatetimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
   import { Author } from './author';
+
+  export class Category extends CardDef {
+    static displayName = 'Category';
+  }
 
   class Status extends StringField {
     static displayName = 'Status';
@@ -52,6 +57,7 @@ module('Integration | code-submode | playground panel', function (hooks) {
     static displayName = 'Blog Post';
     @field publishDate = contains(DatetimeField);
     @field author = linksTo(Author);
+    @field categories = linksToMany(Category);
     @field body = contains(MarkdownField);
     @field status = contains(Status, {
       computeVia: function (this: BlogPost) {
@@ -108,6 +114,67 @@ module('Integration | code-submode | playground panel', function (hooks) {
             },
           },
         },
+        'BlogPost/mad-hatter.json': {
+          data: {
+            attributes: { title: 'Mad As a Hatter' },
+            relationships: {
+              author: {
+                links: {
+                  self: `${testRealmURL}Author/jane-doe`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}blog-post`,
+                name: 'BlogPost',
+              },
+            },
+          },
+        },
+        'BlogPost/urban-living.json': {
+          data: {
+            attributes: {
+              title:
+                'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
+            },
+            relationships: {
+              author: {
+                links: {
+                  self: `${testRealmURL}Author/jane-doe`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}blog-post`,
+                name: 'BlogPost',
+              },
+            },
+          },
+        },
+        'Category/city-design.json': {
+          data: {
+            attributes: { title: 'City Design' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}blog-post`,
+                name: 'Category',
+              },
+            },
+          },
+        },
+        'Category/future-tech.json': {
+          data: {
+            attributes: { title: 'Future Tech' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}blog-post`,
+                name: 'Category',
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -117,18 +184,85 @@ module('Integration | code-submode | playground panel', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
     });
-    await waitFor('[data-test-accordion-item="schema-editor"]');
     assert
       .dom(
-        '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Status"]',
+        '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Category"]',
       )
       .exists();
-    assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
+    assert.dom('[data-test-accordion-item="playground"]').exists();
+
+    // TODO: extend playground to field defs and test that it only works for field and card defs
+    await click(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="Status"]',
+    );
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('playground panel currently only exists for card defs');
 
     await click(
       '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
     );
     await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-playground-panel]').exists();
+  });
+
+  test('can select from available instances using the instance chooser', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 2 });
+
+    await click('[data-option-index="1"]');
+    assert.dom('[data-test-selected-item]').hasText('Future Tech');
+
+    await percySnapshot(assert);
+  });
+
+  test('can update the instance chooser when selected card def changes (same file)', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 2 });
+    assert.dom('[data-option-index="0"]').hasText('City Design');
+    await click('[data-option-index="0"]');
+    assert.dom('[data-test-selected-item]').hasText('City Design');
+
+    await click(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
+    );
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 3 });
+    assert.dom('[data-option-index="0"]').hasText('Mad As a Hatter');
+    await click('[data-option-index="0"]');
+    assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
+  });
+
+  test('can update the instance chooser when a different file is opened', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 2 });
+    assert.dom('[data-option-index="0"]').hasText('City Design');
+    await click('[data-option-index="0"]');
+    assert.dom('[data-test-selected-item]').hasText('City Design');
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="author.gts"]');
+    await click('[data-test-instance-chooser]');
+    assert.dom('li.ember-power-select-option').exists({ count: 1 });
+    assert.dom('[data-option-index="0"]').hasText('Jane Doe');
+    await click('[data-option-index="0"]');
+    assert.dom('[data-test-selected-item]').hasText('Jane Doe');
   });
 });
