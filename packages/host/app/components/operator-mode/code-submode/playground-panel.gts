@@ -4,17 +4,16 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { LoadingIndicator, BoxelSelect } from '@cardstack/boxel-ui/components';
-
-import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
 import { getCards, type ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
+import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 const getItemTitle = (item: CardDef, displayName?: string) => {
   if (!item) {
@@ -99,7 +98,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @cached
   private get instances() {
     if (this.options?.isLoading) {
-      return;
+      return undefined;
     }
     return this.options.instances;
   }
