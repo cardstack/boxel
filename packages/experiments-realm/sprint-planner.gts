@@ -75,12 +75,14 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
   }
 
   assigneeQuery = getCards(
-    {
-      filter: {
-        type: this.config.filters.assignee.codeRef,
-      },
+    () => {
+      return {
+        filter: {
+          type: this.config.filters.assignee.codeRef,
+        },
+      };
     },
-    this.realmHrefs,
+    () => this.realmHrefs,
     { isLive: true },
   );
 
