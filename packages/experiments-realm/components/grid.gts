@@ -59,7 +59,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       .cards {
         --default-grid-view-min-width: 224px;
         --default-grid-view-max-width: 1fr;
-        --default-grid-view-height: max-content;
+        --default-grid-view-height: 360px;
         --default-strip-view-min-width: 49%;
         --default-strip-view-max-width: 1fr;
         --default-strip-view-height: 180px;
@@ -99,9 +99,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         );
       }
 
-      .grid-view-container {
-        aspect-ratio: 5/6;
-      }
       .card {
         container-name: fitted-card;
         container-type: size;
