@@ -59,7 +59,8 @@ export class RealmServer {
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
-  private secretSeed: string;
+  private realmServerSecretSeed: string;
+  private realmSecretSeed: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
@@ -79,7 +80,8 @@ export class RealmServer {
     realms,
     virtualNetwork,
     matrixClient,
-    secretSeed,
+    realmServerSecretSeed,
+    realmSecretSeed,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -94,7 +96,8 @@ export class RealmServer {
     realms: Realm[];
     virtualNetwork: VirtualNetwork;
     matrixClient: MatrixClient;
-    secretSeed: string;
+    realmServerSecretSeed: string;
+    realmSecretSeed: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -116,7 +119,8 @@ export class RealmServer {
     this.serverURL = serverURL;
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
-    this.secretSeed = secretSeed;
+    this.realmSecretSeed = realmSecretSeed;
+    this.realmServerSecretSeed = realmServerSecretSeed;
     this.realmsRootPath = realmsRootPath;
     this.seedPath = seedPath;
     this.seedRealmURL = seedRealmURL;
@@ -164,7 +168,8 @@ export class RealmServer {
         createRoutes({
           dbAdapter: this.dbAdapter,
           matrixClient: this.matrixClient,
-          secretSeed: this.secretSeed,
+          realmServerSecretSeed: this.realmServerSecretSeed,
+          realmSecretSeed: this.realmSecretSeed,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,
@@ -326,7 +331,7 @@ export class RealmServer {
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
       username,
-      password: await passwordFromSeed(username, this.secretSeed),
+      password: await passwordFromSeed(username, this.realmSecretSeed),
       registrationSecret: await this.getMatrixRegistrationSecret(),
     });
     this.log.debug(`created realm bot user '${userId}' for new realm ${url}`);
@@ -370,7 +375,7 @@ export class RealmServer {
       {
         url,
         adapter,
-        secretSeed: this.secretSeed,
+        secretSeed: this.realmSecretSeed,
         virtualNetwork: this.virtualNetwork,
         dbAdapter: this.dbAdapter,
         queue: this.queue,
@@ -430,7 +435,7 @@ export class RealmServer {
           let realm = new Realm({
             url,
             adapter,
-            secretSeed: this.secretSeed,
+            secretSeed: this.realmSecretSeed,
             virtualNetwork: this.virtualNetwork,
             dbAdapter: this.dbAdapter,
             queue: this.queue,

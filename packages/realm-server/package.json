@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "devDependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
     "@cardstack/billing": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
