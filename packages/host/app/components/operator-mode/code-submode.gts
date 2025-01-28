@@ -498,7 +498,7 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get displayPlayground() {
+  private get shouldDisplayPlayground() {
     if (!isPlaygroundEnabled) {
       return false;
     }
@@ -996,7 +996,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.displayPlayground}}
+                      {{#if this.shouldDisplayPlayground}}
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
