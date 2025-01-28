@@ -341,9 +341,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-
     await click('[data-test-open-ai-assistant]');
-
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
 });
