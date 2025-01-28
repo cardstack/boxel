@@ -26,7 +26,7 @@ import {
   runTestRealmServer,
   setupDB,
   realmServerTestMatrix,
-  secretSeed,
+  realmSecretSeed,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
@@ -35,6 +35,7 @@ import {
   insertUser,
   insertPlan,
   fetchSubscriptionsByUserId,
+  insertJob,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '../lib/externals';
@@ -53,6 +54,7 @@ import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { monitoringAuthToken } from '../utils/monitoring';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -216,7 +218,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: ownerUserId, sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -432,7 +434,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: ownerUserId, sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -524,7 +526,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: ownerUserId, sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -599,7 +601,7 @@ module(basename(__filename), function () {
                 'Authorization',
                 `Bearer ${createRealmServerJWT(
                   { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
-                  secretSeed,
+                  realmSecretSeed,
                 )}`,
               )
               .send(
@@ -743,7 +745,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send('make a new realm please!');
@@ -764,7 +766,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -789,7 +791,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -820,7 +822,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -850,7 +852,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -885,7 +887,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: ownerUserId, sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send(
@@ -909,7 +911,7 @@ module(basename(__filename), function () {
                 'Authorization',
                 `Bearer ${createRealmServerJWT(
                   { user: ownerUserId, sessionRoom: 'session-room-test' },
-                  secretSeed,
+                  realmSecretSeed,
                 )}`,
               )
               .send(
@@ -943,7 +945,7 @@ module(basename(__filename), function () {
                 'Authorization',
                 `Bearer ${createRealmServerJWT(
                   { user: ownerUserId, sessionRoom: 'session-room-test' },
-                  secretSeed,
+                  realmSecretSeed,
                 )}`,
               )
               .send(
@@ -973,7 +975,7 @@ module(basename(__filename), function () {
                 'Authorization',
                 `Bearer ${createRealmServerJWT(
                   { user: ownerUserId, sessionRoom: 'session-room-test' },
-                  secretSeed,
+                  realmSecretSeed,
                 )}`,
               )
               .send(
@@ -1011,7 +1013,7 @@ module(basename(__filename), function () {
               'Authorization',
               `Bearer ${createRealmServerJWT(
                 { user: ownerUserId, sessionRoom: 'session-room-test' },
-                secretSeed,
+                realmSecretSeed,
               )}`,
             )
             .send({
@@ -1132,7 +1134,7 @@ module(basename(__filename), function () {
           matrixClient = new MatrixClient({
             matrixURL: realmServerTestMatrix.url,
             username: 'test_realm',
-            seed: secretSeed,
+            seed: realmSecretSeed,
           });
           await matrixClient.login();
           let userId = matrixClient.getUserId();
@@ -1672,6 +1674,51 @@ module(basename(__filename), function () {
           waitForBillingNotification(assert, assert.async());
         });
       });
+
+      module('_queue-status', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          '*': ['read', 'write'],
+        });
+
+        hooks.beforeEach(async function () {
+          shimExternals(virtualNetwork);
+        });
+
+        test('returns 200 with JSON-API doc', async function (assert) {
+          await insertJob(dbAdapter, {
+            job_type: 'test-job',
+          });
+          await insertJob(dbAdapter, {
+            job_type: 'test-job',
+            status: 'resolved',
+            finished_at: new Date().toISOString(),
+          });
+          let response = await request.get('/_queue-status');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          response = await request
+            .get('/_queue-status')
+            .set('Authorization', `Bearer no-good`);
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          const REALM_SERVER_SECRET_SEED = "mum's the word";
+          response = await request
+            .get('/_queue-status')
+            .set(
+              'Authorization',
+              `Bearer ${monitoringAuthToken(REALM_SERVER_SECRET_SEED)}`,
+            );
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(json, {
+            data: {
+              type: 'queue-status',
+              id: 'queue-status',
+              attributes: {
+                pending: 1,
+              },
+            },
+          });
+        });
+      });
     },
   );
   module('Realm server authentication', function (hooks) {
@@ -1724,7 +1771,7 @@ module(basename(__filename), function () {
         // it's a little awkward that we are hijacking a realm user to pretend to
         // act like a normal user, but that's what's happening here
         username: 'test_realm',
-        seed: secretSeed,
+        seed: realmSecretSeed,
       });
       await matrixClient.login();
       let userId = matrixClient.getUserId();
@@ -1756,7 +1803,7 @@ module(basename(__filename), function () {
         .set('Content-Type', 'application/json');
       assert.strictEqual(response.status, 201, 'HTTP 201 status');
       let token = response.headers['authorization'];
-      let decoded = jwt.verify(token, secretSeed) as RealmServerTokenClaim;
+      let decoded = jwt.verify(token, realmSecretSeed) as RealmServerTokenClaim;
       assert.strictEqual(decoded.user, userId);
       assert.notStrictEqual(
         decoded.sessionRoom,

@@ -1750,6 +1750,9 @@ importers:
 
   packages/realm-server:
     devDependencies:
+      '@aws-crypto/sha256-js':
+        specifier: ^5.2.0
+        version: 5.2.0
       '@cardstack/billing':
         specifier: workspace:*
         version: link:../billing

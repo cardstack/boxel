@@ -39,9 +39,23 @@ import { urgencyTagValues } from './crm/account';
 import { dealStatusValues } from './crm/deal';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
-import { CRMTaskPlannerIsolated } from './crm/task-planner';
+import { CRMTaskPlanner } from './crm/task-planner';
+
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import {
+  Card as CardIcon,
+  Grid3x3 as GridIcon,
+  Rows4 as StripIcon,
+} from '@cardstack/boxel-ui/icons';
 
 type ViewOption = 'card' | 'strip' | 'grid';
+
+interface ViewItem {
+  icon: TemplateOnlyComponent<{
+    Element: SVGElement;
+  }>;
+  id: ViewOption;
+}
 
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
@@ -126,14 +140,35 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
-    this.loadDealCards.perform();
   }
   //tabs
   @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
   @tracked tabs = this.args.model.tabs;
   @tracked private selectedView: ViewOption = 'card';
+
+  // Only show strip and grid views for Deal tab for now
+  get dealView(): ViewItem[] {
+    return [
+      { id: 'strip', icon: StripIcon },
+      { id: 'grid', icon: GridIcon },
+    ];
+  }
+
+  get commonViews(): ViewItem[] {
+    return [
+      { id: 'card', icon: CardIcon },
+      { id: 'strip', icon: StripIcon },
+      { id: 'grid', icon: GridIcon },
+    ];
+  }
+
+  get tabViews(): ViewItem[] {
+    const views =
+      this.activeTabId === 'Deal' ? this.dealView : this.commonViews;
+    return views;
+  }
+
   @tracked private searchKey = '';
-  @tracked private deals: Deal[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -179,19 +214,17 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     }
   });
 
-  private loadDealCards = restartableTask(async () => {
-    if (!this.query || this.activeTabId !== 'Deal') {
-      return;
-    }
+  get deals() {
+    return this.dealSearch.instances as Deal[];
+  }
 
-    const result = getCards(this.query, this.realmHrefs, {
+  dealSearch = getCards(
+    () => this.query,
+    () => this.realmHrefs,
+    {
       isLive: true,
-    });
-
-    await result.loaded;
-    this.deals = result.instances as Deal[];
-    return result;
-  });
+    },
+  );
 
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
@@ -203,11 +236,12 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //Tabs
   @action setActiveTab(id: string) {
+    this.selectedView = id === 'Deal' ? 'strip' : 'card';
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
-    this.loadDealCards.perform();
   }
+
   get headerColor() {
     return (
       Object.getPrototypeOf(this.args.model).constructor.headerColor ??
@@ -343,6 +377,13 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeFilter = this.activeFilter;
   }
 
+  @action viewCard() {
+    if (!this.args.model.id) {
+      throw new Error('No card id');
+    }
+    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+  }
+
   <template>
     <TabbedHeader
       class='crm-app-header'
@@ -418,6 +459,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             class='view-menu content-header-row-2'
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
+            @items={{this.tabViews}}
           />
         {{/if}}
         {{#if this.activeFilter.sortOptions.length}}
@@ -433,12 +475,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       </:contentHeader>
       <:grid>
         {{#if (eq this.activeTabId 'Task')}}
-          <CRMTaskPlannerIsolated
+          <CRMTaskPlanner
             @model={{@model}}
             @context={{@context}}
-            @fields={{@fields}}
-            @set={{@set}}
-            @fieldName={{@fieldName}}
+            @realmURL={{this.currentRealm}}
+            @viewCard={{this.viewCard}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}

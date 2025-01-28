@@ -304,9 +304,13 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  boxelSpecSearch = getCards(this.boxelSpecQuery, this.realms, {
-    isLive: true,
-  });
+  boxelSpecSearch = getCards(
+    () => this.boxelSpecQuery,
+    () => this.realms,
+    {
+      isLive: true,
+    },
+  );
 
   get boxelSpecInstances() {
     return this.boxelSpecSearch.instances as CatalogEntry[];
