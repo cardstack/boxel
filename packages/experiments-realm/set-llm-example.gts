@@ -54,12 +54,13 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     <div class='llm-setter'>
       <div class='content'>
         <div class='input-section'>
-          <label>LLM Model Name</label>
+          <label for='llm-model-name-input'>LLM Model Name</label>
           <input
             type='text'
             value={{this.modelId}}
             {{on 'input' this.updatemodelId}}
             class='model-input'
+            id='llm-model-name-input'
           />
         </div>
 
