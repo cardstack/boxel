@@ -361,6 +361,10 @@ export interface Actions {
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
   getCards: (
+    // The reason (getQuery, getRealms) is a thunk is to ensure that the arguments are reactive wrt to ember resource
+    // This is the expectation of ember-resources ie`.from` method should be instantiated at the root of the component and expect a thunk
+    // The issue is when we wrap `getCards` as an api, we tend to model it as a function that takes arguments (values) thereby enclosing in a scoped context
+    // We acknowledge that this is not the "perfect" api but it is a pragmatic solution for now to resolve the tension between card api usage and ember-resources
     getQuery: () => Query | undefined,
     getRealms: () => string[] | undefined,
     opts?: {
