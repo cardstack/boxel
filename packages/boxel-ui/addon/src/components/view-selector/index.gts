@@ -32,7 +32,10 @@ export default class ViewSelector extends Component<Signature> {
     { id: 'strip', icon: StripIcon },
     { id: 'grid', icon: GridIcon },
   ];
-  viewOptions = this.args.items ?? this.standardViewOptions;
+
+  get viewOptions() {
+    return this.args.items ?? this.standardViewOptions;
+  }
 
   get selectedId() {
     return this.args.selectedId ?? (this.viewOptions[0] as ViewItem).id;
