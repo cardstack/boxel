@@ -140,7 +140,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
-    this.loadDealCards.perform();
   }
   //tabs
   @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
@@ -170,7 +169,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   }
 
   @tracked private searchKey = '';
-  @tracked private deals: Deal[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -216,19 +214,17 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     }
   });
 
-  private loadDealCards = restartableTask(async () => {
-    if (!this.query || this.activeTabId !== 'Deal') {
-      return;
-    }
+  get deals() {
+    return this.dealSearch.instances as Deal[];
+  }
 
-    const result = getCards(this.query, this.realmHrefs, {
+  dealSearch = getCards(
+    () => this.query,
+    () => this.realmHrefs,
+    {
       isLive: true,
-    });
-
-    await result.loaded;
-    this.deals = result.instances as Deal[];
-    return result;
-  });
+    },
+  );
 
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
@@ -244,7 +240,6 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
-    this.loadDealCards.perform();
   }
 
   get headerColor() {

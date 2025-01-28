@@ -43,7 +43,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { getSearchResults, Search } from '../../resources/search';
+import { getSearch, type SearchQuery } from '../../resources/search';
 
 import {
   suggestCardChooserTitle,
@@ -71,7 +71,7 @@ interface Signature {
 }
 
 type Request = {
-  search: Search;
+  search: SearchQuery;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
     offerToCreate?: {
@@ -358,7 +358,7 @@ export default class CardCatalogModal extends Component<Signature> {
         opts?.multiSelect,
       );
       let request = new TrackedObject<Request>({
-        search: getSearchResults(this, query),
+        search: getSearch(this, () => query),
         deferred: new Deferred(),
         opts,
       });

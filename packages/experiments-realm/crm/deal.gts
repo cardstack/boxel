@@ -130,13 +130,21 @@ class IsolatedTemplate extends Component<typeof Deal> {
     };
   }
 
-  query = getCards(this.dealQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  query = getCards(
+    () => this.dealQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
-  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  activeTasks = getCards(
+    () => this.activeTasksQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   get activeTasksCount() {
     const tasks = this.activeTasks;

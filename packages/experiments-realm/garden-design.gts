@@ -215,23 +215,28 @@ class Isolated extends Component<typeof GardenDesign> {
     this.updateGridModel();
     // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
     this.liveQuery = getCards(
-      {
-        filter: {
-          eq: {
-            _cardType: 'Garden Item',
-          },
-        },
-        sort: [
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
+      () => {
+        return {
+          filter: {
+            eq: {
+              _cardType: 'Garden Item',
             },
-            by: 'title',
           },
-        ],
+          sort: [
+            {
+              on: {
+                module: `${baseRealm.url}card-api`,
+                name: 'CardDef',
+              },
+              by: 'title',
+            },
+          ],
+        };
       },
-      this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
+      () =>
+        this.args.model[realmURL]
+          ? [this.args.model[realmURL].href]
+          : undefined,
     );
   }
 
