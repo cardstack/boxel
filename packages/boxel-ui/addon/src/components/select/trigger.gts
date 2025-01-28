@@ -63,7 +63,9 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
         gap: var(--boxel-sp-xxs);
       }
       .boxel-trigger-placeholder {
-        color: var(--boxel-400);
+        color: var(--boxel-450);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
       }
     </style>
     <style scoped>
@@ -99,6 +101,7 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       .icon {
         width: 10px;
         height: 10px;
+        flex-shrink: 0;
       }
       .is-open {
         transform: rotate(180deg);
