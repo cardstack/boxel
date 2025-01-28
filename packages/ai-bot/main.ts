@@ -15,7 +15,6 @@ import {
   getPromptParts,
   extractCardFragmentsFromEvents,
   eventRequiresResponse,
-  cleanupPromptParts,
 } from './helpers';
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -204,9 +203,7 @@ Common issues are:
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
         try {
-          promptParts = cleanupPromptParts(
-            getPromptParts(eventList, aiBotUserId),
-          );
+          promptParts = getPromptParts(eventList, aiBotUserId);
         } catch (e) {
           log.error(e);
           responder.finalize(

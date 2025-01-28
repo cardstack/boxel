@@ -58,6 +58,7 @@ export class Responder {
       this.roomId,
       thinkingMessage,
       undefined,
+      { isStreamingFinished: false },
     );
     this.initialMessageId = initialMessage.event_id;
   }
