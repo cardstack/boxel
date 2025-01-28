@@ -9,6 +9,7 @@ import {
   contains,
   linksTo,
   containsMany,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import AvatarGroup from '../components/avatar-group';
 import { Company } from './company';
@@ -18,7 +19,6 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
-import { LooseGooseyField } from '../loosey-goosey';
 import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
 export class SocialLinkField extends ContactLinkField {
@@ -674,13 +674,28 @@ class AtomTemplate extends Component<typeof Contact> {
   </template>
 }
 
-export class StatusTagField extends LooseGooseyField {
+export class StatusTagField extends FieldDef {
   static icon = ContactIcon;
+  @field label = contains(StringField);
   @field lightColor = contains(StringField);
   @field darkColor = contains(StringField);
 
   static atom = class Atom extends Component<typeof this> {
     <template>
+      {{#if @model.label}}
+        <StatusPill
+          @label={{@model.label}}
+          @icon={{@model.constructor.icon}}
+          @iconDarkColor={{@model.darkColor}}
+          @iconLightColor={{@model.lightColor}}
+        />
+      {{/if}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      {{! Intentionally do not allow edit template bcos we are using a pattern where the subclass definition determines the value of the field}}
       {{#if @model.label}}
         <StatusPill
           @label={{@model.label}}
