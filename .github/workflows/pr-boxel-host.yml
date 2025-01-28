@@ -56,7 +56,6 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          OWN_REALM_URL: https://realms-staging.stack.cards/experiments/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
           MATRIX_URL: https://matrix-staging.stack.cards
           MATRIX_SERVER_NAME: stack.cards
@@ -87,7 +86,6 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          OWN_REALM_URL: https://app.boxel.ai/experiments/
           RESOLVED_BASE_REALM_URL: https://app.boxel.ai/base/
           MATRIX_URL: https://matrix.boxel.ai
           MATRIX_SERVER_NAME: boxel.ai
