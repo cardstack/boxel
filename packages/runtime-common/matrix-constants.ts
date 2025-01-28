@@ -20,4 +20,6 @@ export const DEFAULT_LLM_LIST = [
   'google/gemini-pro-1.5',
   'openai/gpt-4o',
   'openai/gpt-4o-mini',
+  'deepseek/deepseek-r1',
+  'deepseek/deepseek-r1-distill-llama-70b',
 ];
