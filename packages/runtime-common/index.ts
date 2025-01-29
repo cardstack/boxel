@@ -59,7 +59,7 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { CardTypeFilter, EveryFilter, Query } from './query';
+import { CardTypeFilter, Query, EveryFilter, EqFilter } from './query';
 import { Loader } from './loader';
 export * from './commands';
 export * from './constants';
@@ -244,7 +244,7 @@ export interface CardSearch {
 }
 
 export interface CardCatalogQuery extends Query {
-  filter?: CardTypeFilter | EveryFilter;
+  filter?: CardTypeFilter | EveryFilter | EqFilter;
 }
 
 export function getCards(
