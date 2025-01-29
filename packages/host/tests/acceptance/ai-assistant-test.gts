@@ -1,4 +1,4 @@
-import { click, fillIn } from '@ember/test-helpers';
+import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -327,7 +327,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');
   });
 
-  test('defaults to anthropic/claude-3.5-sonnet when in code mode', async function (assert) {
+  test('defaults to anthropic/claude-3.5-sonnet in code mode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -342,6 +342,13 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
+
+    createAndJoinRoom('@testuser:staging', 'room-test-2');
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor("[data-test-enter-room='mock_room_2']");
+    await click('[data-test-enter-room="mock_room_2"]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
 });
