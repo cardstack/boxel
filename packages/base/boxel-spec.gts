@@ -37,7 +37,7 @@ export class SpecType extends StringField {
 }
 
 export class BoxelSpec extends CardDef {
-  static displayName = 'Catalog Entry';
+  static displayName = 'Boxel Spec';
   static icon = BoxModel;
   @field name = contains(StringField);
   @field readMe = contains(MarkdownField);
