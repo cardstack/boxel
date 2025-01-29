@@ -56,8 +56,6 @@ import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
-import { Submodes } from '../submode-switcher';
-
 import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
