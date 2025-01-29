@@ -25,6 +25,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
+import PreparingRoomMessageCommand from './preparing-room-message-command';
 import RoomMessageCommand from './room-message-command';
 
 interface Signature {
@@ -137,6 +138,8 @@ export default class RoomMessage extends Component<Signature> {
             @failedCommandState={{this.failedCommandState}}
             @isError={{bool this.errorMessage}}
           />
+        {{else if @message.isPreparingCommand}}
+          <PreparingRoomMessageCommand />
         {{/if}}
       </AiAssistantMessage>
     {{/if}}

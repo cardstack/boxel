@@ -129,13 +129,15 @@ export default class MessageBuilder {
       message.attachedCardIds = this.attachedCardIds;
     } else if (event.content.msgtype === 'm.text') {
       message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
-    } else if (
-      event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-      event.content.data.toolCall
-    ) {
+    } else if (event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
       message.formattedMessage = this.formattedMessageForCommand;
-      message.command = this.buildMessageCommand(message);
-      message.isStreamingFinished = true;
+      const command = this.buildMessageCommand(message);
+      if (command) {
+        message.command = command;
+      } else {
+        message.isPreparingCommand = true;
+      }
+      message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
     }
     return message;
   }
@@ -159,16 +161,18 @@ export default class MessageBuilder {
     message.updated = new Date();
 
     if (this.event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
-      if (!message.command) {
-        message.command = this.buildMessageCommand(message);
-      }
-
-      message.isStreamingFinished = true;
       message.formattedMessage = this.formattedMessageForCommand;
 
-      let command = this.event.content.data.toolCall;
-      message.command.name = command.name;
-      message.command.payload = command.arguments;
+      const latestCommand = this.buildMessageCommand(message);
+      if (!message.command && latestCommand) {
+        message.command = latestCommand;
+        message.isPreparingCommand = false;
+      } else if (latestCommand && message.command) {
+        message.command.name = latestCommand.name;
+        message.command.payload = latestCommand.payload;
+      } else {
+        message.isPreparingCommand = true;
+      }
     }
   }
 
@@ -177,7 +181,7 @@ export default class MessageBuilder {
       message.command = this.buildMessageCommand(message);
     }
 
-    if (this.builderContext.commandResultEvent) {
+    if (this.builderContext.commandResultEvent && message.command) {
       let event = this.builderContext.commandResultEvent;
       message.command.commandStatus = event.content['m.relates_to']
         .key as CommandStatus;
@@ -197,27 +201,29 @@ export default class MessageBuilder {
         return (
           e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
           r.rel_type === 'm.annotation' &&
-          (r.event_id === event!.content.data.eventId ||
-            r.event_id === event!.event_id ||
+          (r.event_id === event!.event_id ||
             r.event_id === this.builderContext.effectiveEventId)
         );
       }) as CommandResultEvent | undefined);
 
-    let command = event.content.data.toolCall;
-    let messageCommand = new MessageCommand(
-      message,
-      command.id,
-      command.name,
-      command.arguments,
-      this.builderContext.effectiveEventId,
-      (commandResultEvent?.content['m.relates_to']?.key ||
-        'ready') as CommandStatus,
-      commandResultEvent?.content.msgtype ===
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-        ? commandResultEvent.content.data.cardEventId
-        : undefined,
-      getOwner(this)!,
-    );
-    return messageCommand;
+    if (event.content.isStreamingFinished !== false && event.content.data) {
+      let command = event.content.data.toolCall;
+      let messageCommand = new MessageCommand(
+        message,
+        command.id,
+        command.name,
+        command.arguments,
+        this.builderContext.effectiveEventId,
+        (commandResultEvent?.content['m.relates_to']?.key ||
+          'ready') as CommandStatus,
+        commandResultEvent?.content.msgtype ===
+        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+          ? commandResultEvent.content.data.cardEventId
+          : undefined,
+        getOwner(this)!,
+      );
+      return messageCommand;
+    }
+    return null;
   }
 }

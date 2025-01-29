@@ -88,16 +88,13 @@ export async function sendMessage(
 // TODO we might want to think about how to handle patches that are larger than
 // 65KB (the maximum matrix event size), such that we split them into fragments
 // like we split cards into fragments
-export async function sendOption(
+export async function sendCommandMessage(
   client: MatrixClient,
   roomId: string,
   functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ) {
-  let messageObject = toMatrixMessageCommandContent(
-    functionCall,
-    eventToUpdate,
-  );
+  let messageObject = toMatrixMessageCommandContent(functionCall);
 
   if (messageObject !== undefined) {
     return await sendEvent(
@@ -140,7 +137,6 @@ export async function sendError(
 
 export const toMatrixMessageCommandContent = (
   functionCall: FunctionToolCall,
-  eventToUpdate: string | undefined,
 ): IContent | undefined => {
   let { arguments: payload } = functionCall;
   const body = payload['description'] || 'Issuing command';
@@ -149,8 +145,8 @@ export const toMatrixMessageCommandContent = (
     msgtype: APP_BOXEL_COMMAND_MSGTYPE,
     formatted_body: body,
     format: 'org.matrix.custom.html',
+    isStreamingFinished: true,
     data: {
-      eventId: eventToUpdate,
       toolCall: functionCall,
     },
   };

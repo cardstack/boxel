@@ -47,6 +47,7 @@ export class Message implements RoomMessageInterface {
   @tracked formattedMessage: string;
   @tracked message: string;
   @tracked command?: MessageCommand | null;
+  @tracked isPreparingCommand?: boolean;
   @tracked isStreamingFinished?: boolean;
 
   attachedCardIds?: string[] | null;

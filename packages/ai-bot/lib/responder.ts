@@ -1,6 +1,11 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendError, sendMessage, sendOption } from './matrix';
+import {
+  MatrixClient,
+  sendError,
+  sendMessage,
+  sendCommandMessage,
+} from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -9,6 +14,8 @@ import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import { thinkingMessage } from '../constants';
+import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import type OpenAI from 'openai';
 
 let log = logger('ai-bot');
 
@@ -19,6 +26,8 @@ export class Responder {
   initialMessageReplaced = false;
   client: MatrixClient;
   roomId: string;
+  includesFunctionToolCall = false;
+  latestContent?: string;
   messagePromises: Promise<ISendEventResponse | void>[] = [];
   debouncedMessageSender: (
     content: string,
@@ -35,14 +44,22 @@ export class Responder {
         eventToUpdate: string | undefined,
         isStreamingFinished = false,
       ) => {
+        this.latestContent = content;
+        let dataOverrides: Record<string, string | boolean> = {
+          isStreamingFinished: isStreamingFinished,
+        };
+        if (this.includesFunctionToolCall) {
+          dataOverrides = {
+            ...dataOverrides,
+            msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+          };
+        }
         const messagePromise = sendMessage(
           this.client,
           this.roomId,
           content,
           eventToUpdate,
-          {
-            isStreamingFinished: isStreamingFinished,
-          },
+          dataOverrides,
         );
         this.messagePromises.push(messagePromise);
         await messagePromise;
@@ -63,9 +80,17 @@ export class Responder {
     this.initialMessageId = initialMessage.event_id;
   }
 
-  async onChunk(chunk: {
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  }) {
+  async onChunk(chunk: OpenAI.Chat.Completions.ChatCompletionChunk) {
+    log.debug('onChunk: ', JSON.stringify(chunk, null, 2));
+    if (chunk.choices[0].delta?.tool_calls?.[0]?.function) {
+      if (!this.includesFunctionToolCall) {
+        this.includesFunctionToolCall = true;
+        await this.debouncedMessageSender(
+          this.latestContent || '',
+          this.initialMessageId,
+        );
+      }
+    }
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
     if (chunk.usage) {
@@ -76,6 +101,7 @@ export class Responder {
   }
 
   async onContent(snapshot: string) {
+    log.debug('onContent: ', snapshot);
     await this.debouncedMessageSender(
       cleanContent(snapshot),
       this.initialMessageId,
@@ -87,6 +113,7 @@ export class Responder {
     role: string;
     tool_calls?: ChatCompletionMessageToolCall[];
   }) {
+    log.debug('onMessage: ', msg);
     if (msg.role === 'assistant') {
       await this.handleFunctionToolCalls(msg);
     }
@@ -111,14 +138,14 @@ export class Responder {
     for (const toolCall of msg.tool_calls || []) {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
-        let optionPromise = sendOption(
+        let commandMessagePromise = sendCommandMessage(
           this.client,
           this.roomId,
           this.deserializeToolCall(toolCall),
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.initialMessageId,
         );
-        this.messagePromises.push(optionPromise);
-        await optionPromise;
+        this.messagePromises.push(commandMessagePromise);
+        await commandMessagePromise;
         this.initialMessageReplaced = true;
       } catch (error) {
         Sentry.captureException(error);
@@ -127,7 +154,7 @@ export class Responder {
           this.client,
           this.roomId,
           error,
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.initialMessageId,
         );
         this.messagePromises.push(errorPromise);
         await errorPromise;
@@ -136,6 +163,7 @@ export class Responder {
   }
 
   async onError(error: OpenAIError | string) {
+    log.debug('onError: ', error);
     Sentry.captureException(error);
     return await sendError(
       this.client,
@@ -146,6 +174,7 @@ export class Responder {
   }
 
   async finalize(finalContent: string | void | null | undefined) {
+    log.debug('finalize: ', finalContent);
     if (finalContent) {
       finalContent = cleanContent(finalContent);
       await this.debouncedMessageSender(
