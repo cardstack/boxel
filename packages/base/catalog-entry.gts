@@ -53,7 +53,11 @@ export class CatalogEntry extends CardDef {
 
   @field isCard = contains(BooleanField, {
     computeVia: function (this: CatalogEntry) {
-      return this.specType === 'card';
+      return (
+        this.specType === 'card' ||
+        this.specType === 'app' ||
+        this.specType === 'skill'
+      );
     },
   });
   @field moduleHref = contains(StringField, {

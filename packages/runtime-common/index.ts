@@ -59,7 +59,7 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { CardTypeFilter, EveryFilter, Query } from './query';
+import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './commands';
 export * from './constants';
