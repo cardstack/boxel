@@ -37,7 +37,7 @@ class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
     });
   }
 
-  @action onSelect(type: any): void {
+  @action onSelect(type: PhoneNumberType): void {
     this.label = type.label;
     this.args.model.label = this.selected?.label;
     this.args.model.index = this.selected?.index;

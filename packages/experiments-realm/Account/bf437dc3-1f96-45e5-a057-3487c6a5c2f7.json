@@ -29,7 +29,6 @@
       "urgencyTag": {
         "index": 4,
         "label": "Follow-Up Required",
-        "color": null,
         "foregroundColor": "#1976D2",
         "backgroundColor": "#E3F2FD"
       },

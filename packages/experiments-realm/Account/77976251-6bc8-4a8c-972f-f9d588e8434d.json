@@ -29,7 +29,6 @@
       "urgencyTag": {
         "index": 3,
         "label": "Expiring Soon",
-        "color": null,
         "foregroundColor": "#FBC02D",
         "backgroundColor": "#FFF9C4"
       },

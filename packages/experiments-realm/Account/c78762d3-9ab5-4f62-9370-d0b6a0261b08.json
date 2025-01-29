@@ -29,7 +29,6 @@
       "urgencyTag": {
         "index": 5,
         "label": "Pending Contract",
-        "color": null,
         "foregroundColor": "#512DA8",
         "backgroundColor": "#EDE7F6"
       },

@@ -5,6 +5,7 @@ import {
   StringField,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -20,10 +21,9 @@ import ClockX from '@cardstack/boxel-icons/clock-x';
 import ClockUp from '@cardstack/boxel-icons/clock-up';
 import Contract from '@cardstack/boxel-icons/contract';
 import CalendarTime from '@cardstack/boxel-icons/calendar-time';
-
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 
-export const urgencyTagValues = [
+export const URGENCY_TAG_VALUES = [
   {
     index: 0,
     icon: ClockExclamation,
@@ -80,19 +80,19 @@ export const urgencyTagValues = [
 class UrgencyTagEdit extends Component<typeof UrgencyTag> {
   @tracked label: string | undefined = this.args.model.label;
 
-  get statuses(): any[] {
+  get statuses() {
     if (!this.args.model) {
       return [];
     }
     return (this.args.model.constructor as any).values;
   }
   get selectedStatus() {
-    return this.statuses.find((status) => {
+    return this.statuses.find((status: UrgencyTag) => {
       return status.label === this.label;
     });
   }
 
-  @action onSelectStatus(status: any): void {
+  @action onSelectStatus(status: UrgencyTag): void {
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.foregroundColor = this.selectedStatus?.foregroundColor;
@@ -122,7 +122,8 @@ class UrgencyTagEdit extends Component<typeof UrgencyTag> {
 export class UrgencyTag extends FieldDef {
   static icon = CalendarExclamation;
   static displayName = 'CRM Urgency Tag';
-  static values = urgencyTagValues;
+  static values = URGENCY_TAG_VALUES;
+  @field index = contains(NumberField);
   @field label = contains(StringField);
   @field foregroundColor = contains(ColorField);
   @field backgroundColor = contains(ColorField);

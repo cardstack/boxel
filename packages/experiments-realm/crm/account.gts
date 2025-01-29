@@ -13,7 +13,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
-import { Contact, StatusTagField } from './contact';
+import { Contact } from './contact';
+import { StatusTagField } from './contact-status-tag';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/building';
