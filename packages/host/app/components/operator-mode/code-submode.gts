@@ -58,9 +58,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
 import { type BoxelSpecType } from 'https://cardstack.com/base/boxel-spec';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
