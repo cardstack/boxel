@@ -98,7 +98,7 @@ const files: Record<string, any> = {
       meta: {
         adoptsFrom: {
           module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
+          name: 'BoxelSpec',
         },
       },
     },
@@ -115,7 +115,7 @@ const files: Record<string, any> = {
       meta: {
         adoptsFrom: {
           module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
+          name: 'BoxelSpec',
         },
       },
     },
@@ -132,7 +132,7 @@ const files: Record<string, any> = {
       meta: {
         adoptsFrom: {
           module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
+          name: 'BoxelSpec',
         },
       },
     },

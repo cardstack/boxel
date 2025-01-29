@@ -25,7 +25,7 @@ import {
   chooseCard,
   loadCard,
   identifyCard,
-  catalogEntryRef,
+  boxelSpecRef,
   CodeRef,
 } from '@cardstack/runtime-common';
 
@@ -41,7 +41,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
-import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type { BoxelSpec } from 'https://cardstack.com/base/catalog-entry';
 
 import { SelectedTypePill } from './create-file-modal';
 
@@ -172,27 +172,27 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   private chooseCardTask = restartableTask(async () => {
-    let chosenCatalogEntry = await chooseCard<CatalogEntry>({
+    let chosenBoxelSpec = await chooseCard<BoxelSpec>({
       filter: {
-        type: catalogEntryRef,
+        type: boxelSpecRef,
       },
     });
 
-    if (chosenCatalogEntry) {
-      this.fieldCard = await loadCard(chosenCatalogEntry.ref, {
+    if (chosenBoxelSpec) {
+      this.fieldCard = await loadCard(chosenBoxelSpec.ref, {
         loader: this.loaderService.loader,
-        relativeTo: new URL(chosenCatalogEntry.id),
+        relativeTo: new URL(chosenBoxelSpec.id),
       });
 
-      this.isFieldDef = chosenCatalogEntry.isField;
-      this.cardURL = new URL(chosenCatalogEntry.id);
-      this.fieldRef = chosenCatalogEntry.ref;
+      this.isFieldDef = chosenBoxelSpec.isField;
+      this.cardURL = new URL(chosenBoxelSpec.id);
+      this.fieldRef = chosenBoxelSpec.ref;
 
       // This transforms relative module paths, such as "../person", to absolute ones -
       // we need that absolute path to load realm info
       this.fieldModuleURL = new URL(
-        chosenCatalogEntry.ref.module,
-        chosenCatalogEntry.id,
+        chosenBoxelSpec.ref.module,
+        chosenBoxelSpec.id,
       );
     }
   });

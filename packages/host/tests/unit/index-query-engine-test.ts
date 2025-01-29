@@ -99,7 +99,7 @@ module('Unit | query', function (hooks) {
     class Cat extends CardDef {
       @field name = contains(StringField);
     }
-    class SimpleCatalogEntry extends CardDef {
+    class SimpleBoxelSpec extends CardDef {
       @field title = contains(StringField);
       @field ref = contains(CodeRefField);
     }
@@ -112,17 +112,17 @@ module('Unit | query', function (hooks) {
     loader.shimModule(`${testRealmURL}person`, { Person });
     loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
     loader.shimModule(`${testRealmURL}cat`, { Cat });
-    loader.shimModule(`${testRealmURL}catalog-entry`, { SimpleCatalogEntry });
+    loader.shimModule(`${testRealmURL}catalog-entry`, { SimpleBoxelSpec });
     loader.shimModule(`${testRealmURL}event`, { Event });
 
-    let stringFieldEntry = new SimpleCatalogEntry({
+    let stringFieldEntry = new SimpleBoxelSpec({
       title: 'String Field',
       ref: {
         module: `${baseRealm.url}string`,
         name: 'default',
       },
     });
-    let numberFieldEntry = new SimpleCatalogEntry({
+    let numberFieldEntry = new SimpleBoxelSpec({
       title: 'Number Field',
       ref: {
         module: `${baseRealm.url}number`,

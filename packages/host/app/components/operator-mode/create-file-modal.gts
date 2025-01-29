@@ -24,7 +24,7 @@ import {
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
-  catalogEntryRef,
+  boxelSpecRef,
   chooseCard,
   baseRealm,
   RealmPaths,
@@ -42,7 +42,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type { BoxelSpec } from 'https://cardstack.com/base/catalog-entry';
 
 import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
@@ -133,10 +133,10 @@ export default class CreateFileModal extends Component<Signature> {
                           @id={{this.definitionClass.ref.module}}
                         />
                       {{else}}
-                        {{#if this.selectedCatalogEntry}}
+                        {{#if this.selectedBoxelSpec}}
                           <SelectedTypePill
-                            @title={{this.selectedCatalogEntry.title}}
-                            @id={{this.selectedCatalogEntry.id}}
+                            @title={{this.selectedBoxelSpec.title}}
+                            @id={{this.selectedBoxelSpec.id}}
                           />
                         {{/if}}
                         <Button
@@ -146,7 +146,7 @@ export default class CreateFileModal extends Component<Signature> {
                           {{on 'click' (perform this.chooseType)}}
                           data-test-select-card-type
                         >
-                          {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                          {{if this.selectedBoxelSpec 'Change' 'Select'}}
                         </Button>
                       {{/if}}
                     </div>
@@ -343,7 +343,7 @@ export default class CreateFileModal extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare network: NetworkService;
 
-  @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
+  @tracked private selectedBoxelSpec: BoxelSpec | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
@@ -425,7 +425,7 @@ export default class CreateFileModal extends Component<Signature> {
   );
 
   private clearState() {
-    this.selectedCatalogEntry = undefined;
+    this.selectedBoxelSpec = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
     this.displayName = '';
@@ -518,7 +518,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateCardInstanceButtonDisabled() {
     return (
-      (!this.selectedCatalogEntry && !this.definitionClass) ||
+      (!this.selectedBoxelSpec && !this.definitionClass) ||
       !this.selectedRealmURL ||
       this.createCardInstance.isRunning
     );
@@ -530,7 +530,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateDefinitionButtonDisabled() {
     return (
-      (!this.selectedCatalogEntry && !this.definitionClass) ||
+      (!this.selectedBoxelSpec && !this.definitionClass) ||
       !this.selectedRealmURL ||
       !this.fileName ||
       !this.displayName ||
@@ -546,19 +546,19 @@ export default class CreateFileModal extends Component<Signature> {
     let token = waiter.beginAsync();
     try {
       if (!this.definitionClass) {
-        let catalogEntryPath =
+        let boxelSpecEntryPath =
           this.fileType.id === 'field-definition'
             ? 'fields/field'
             : 'types/card';
         let resource = getCard(
           this,
-          () => `${baseRealm.url}${catalogEntryPath}`,
+          () => `${baseRealm.url}${boxelSpecEntryPath}`,
           {
             isLive: () => false,
           },
         );
         await resource.loaded;
-        this.selectedCatalogEntry = resource.card as CatalogEntry;
+        this.selectedBoxelSpec = resource.card as BoxelSpec;
       }
     } finally {
       waiter.endAsync(token);
@@ -569,9 +569,9 @@ export default class CreateFileModal extends Component<Signature> {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
 
-    this.selectedCatalogEntry = await chooseCard({
+    this.selectedBoxelSpec = await chooseCard({
       filter: {
-        on: catalogEntryRef,
+        on: boxelSpecRef,
         // REMEMBER ME
         every: [{ eq: { specType: isField ? 'field' : 'card' } }],
       },
@@ -590,7 +590,7 @@ export default class CreateFileModal extends Component<Signature> {
         `bug: cannot call createDefinition without a selected realm URL`,
       );
     }
-    if (!this.selectedCatalogEntry && !this.definitionClass) {
+    if (!this.selectedBoxelSpec && !this.definitionClass) {
       throw new Error(
         `bug: cannot call createDefinition without a selected catalog entry or definitionClass `,
       );
@@ -628,9 +628,9 @@ export default class CreateFileModal extends Component<Signature> {
 
     let {
       ref: { name: exportName, module },
-    } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
+    } = (this.definitionClass ?? this.selectedBoxelSpec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
+    let absoluteModule = new URL(module, this.selectedBoxelSpec?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -741,7 +741,7 @@ export class ${className} extends ${exportName} {
       );
     }
     if (
-      (!this.selectedCatalogEntry?.ref && !this.definitionClass) ||
+      (!this.selectedBoxelSpec?.ref && !this.definitionClass) ||
       !this.selectedRealmURL
     ) {
       throw new Error(
@@ -750,11 +750,11 @@ export class ${className} extends ${exportName} {
     }
 
     let { ref } = (
-      this.definitionClass ? this.definitionClass : this.selectedCatalogEntry
+      this.definitionClass ? this.definitionClass : this.selectedBoxelSpec
     )!; // we just checked above to make sure one of these exist
 
-    let relativeTo = this.selectedCatalogEntry
-      ? new URL(this.selectedCatalogEntry.id)
+    let relativeTo = this.selectedBoxelSpec
+      ? new URL(this.selectedBoxelSpec.id)
       : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
@@ -803,7 +803,7 @@ export class ${className} extends ${exportName} {
 
     let { ref, specType } = this.definitionClass;
 
-    let relativeTo = new URL(catalogEntryRef.module);
+    let relativeTo = new URL(boxelSpecRef.module);
     let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
     if ('name' in maybeRef && 'module' in maybeRef) {
       ref = maybeRef;
@@ -819,7 +819,7 @@ export class ${className} extends ${exportName} {
           ref,
         },
         meta: {
-          adoptsFrom: catalogEntryRef,
+          adoptsFrom: boxelSpecRef,
           realmURL: this.selectedRealmURL.href,
         },
       },

@@ -219,7 +219,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             meta: {
               adoptsFrom: {
                 module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                name: 'BoxelSpec',
               },
             },
           },

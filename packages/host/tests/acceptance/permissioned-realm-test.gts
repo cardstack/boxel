@@ -34,7 +34,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     let { default: StringField } = await loader.import<
       typeof import('https://cardstack.com/base/string')
     >(`${baseRealm.url}string`);
-    let { CatalogEntry } = await loader.import<
+    let { BoxelSpec } = await loader.import<
       typeof import('https://cardstack.com/base/catalog-entry')
     >(`${baseRealm.url}catalog-entry`);
 
@@ -77,7 +77,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },
-        'person-entry.json': new CatalogEntry({
+        'person-entry.json': new BoxelSpec({
           name: 'Person',
           description: 'Catalog entry',
           specType: 'card',

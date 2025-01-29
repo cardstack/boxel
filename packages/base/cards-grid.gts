@@ -25,7 +25,7 @@ import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
-  catalogEntryRef,
+  boxelSpecRef,
   baseRealm,
   isCardInstance,
   SupportedMimeType,
@@ -36,7 +36,7 @@ import { tracked } from '@glimmer/tracking';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
-import { type CatalogEntry } from './catalog-entry';
+import { type BoxelSpec } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -381,7 +381,7 @@ class Isolated extends Component<typeof CardsGrid> {
     if (activeFilterRef) {
       preselectedCardTypeQuery = {
         filter: {
-          on: catalogEntryRef,
+          on: boxelSpecRef,
           eq: { ref: activeFilterRef },
         },
         sort: [
@@ -392,10 +392,10 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       };
     }
-    let card = await chooseCard<CatalogEntry>(
+    let card = await chooseCard<BoxelSpec>(
       {
         filter: {
-          on: catalogEntryRef,
+          on: boxelSpecRef,
           every: [{ eq: { isCard: true } }],
         },
       },

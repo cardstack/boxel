@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
-import { catalogEntryRef } from '@cardstack/runtime-common';
+import { boxelSpecRef } from '@cardstack/runtime-common';
 
 import RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -44,7 +44,7 @@ export default class CardQueryResults extends Component<Signature> {
               ? { type }
               : {
                   not: {
-                    type: catalogEntryRef,
+                    type: boxelSpecRef,
                   },
                 }),
           },

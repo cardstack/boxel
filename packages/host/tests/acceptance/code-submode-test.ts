@@ -571,7 +571,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               meta: {
                 adoptsFrom: {
                   module: `${baseRealm.url}catalog-entry`,
-                  name: 'CatalogEntry',
+                  name: 'BoxelSpec',
                 },
               },
             },
@@ -589,7 +589,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               meta: {
                 adoptsFrom: {
                   module: `${baseRealm.url}catalog-entry`,
-                  name: 'CatalogEntry',
+                  name: 'BoxelSpec',
                 },
               },
             },
@@ -607,7 +607,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               meta: {
                 adoptsFrom: {
                   module: `${baseRealm.url}catalog-entry`,
-                  name: 'CatalogEntry',
+                  name: 'BoxelSpec',
                 },
               },
             },

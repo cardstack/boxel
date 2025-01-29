@@ -67,11 +67,11 @@ module('Acceptance | interact submode tests', function (hooks) {
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
-    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+    let boxelSpec: typeof import('https://cardstack.com/base/catalog-entry');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    boxelSpec = await loader.import(`${baseRealm.url}catalog-entry`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
     let {
@@ -85,7 +85,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       FieldDef,
     } = cardApi;
     let { default: StringField } = string;
-    let { CatalogEntry } = catalogEntry;
+    let { BoxelSpec } = boxelSpec;
     let { CardsGrid } = cardsGrid;
 
     class Pet extends CardDef {
@@ -248,12 +248,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       static displayName = 'Personnel';
     }
 
-    let generateCatalogEntry = (
+    let generateBoxelSpec = (
       fileName: string,
       title: string,
       ref: { module: string; name: string },
     ) => ({
-      [`${fileName}.json`]: new CatalogEntry({
+      [`${fileName}.json`]: new BoxelSpec({
         title,
         description: `Catalog entry for ${title}`,
         specType: 'card',
@@ -262,7 +262,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
     let catalogEntries = {};
     for (let i = 0; i < 5; i++) {
-      let entry = generateCatalogEntry(`p-${i + 1}`, `Personnel-${i + 1}`, {
+      let entry = generateBoxelSpec(`p-${i + 1}`, `Personnel-${i + 1}`, {
         module: `${testRealmURL}personnel`,
         name: 'Personnel',
       });
@@ -279,7 +279,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
-        'person-entry.json': new CatalogEntry({
+        'person-entry.json': new BoxelSpec({
           name: 'Person Card',
           description: 'Catalog entry for Person Card',
           specType: 'card',
@@ -288,7 +288,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             name: 'Person',
           },
         }),
-        'pet-entry.json': new CatalogEntry({
+        'pet-entry.json': new BoxelSpec({
           name: 'Pet Card',
           description: 'Catalog entry for Pet Card',
           specType: 'card',
@@ -298,7 +298,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         }),
         ...catalogEntries,
-        'puppy-entry.json': new CatalogEntry({
+        'puppy-entry.json': new BoxelSpec({
           name: 'Puppy Card',
           description: 'Catalog entry for Puppy Card',
           specType: 'card',

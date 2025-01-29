@@ -19,7 +19,7 @@ import { basename } from 'path';
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 async function makeTestCards(loader: Loader) {
-  let { Address, Person, FancyPerson, Cat, SimpleCatalogEntry, Event } =
+  let { Address, Person, FancyPerson, Cat, SimpleBoxelSpec, Event } =
     await loader.import<Record<string, typeof CardDef>>(
       'http://localhost:4202/node-test/query-test-cards',
     );
@@ -28,16 +28,16 @@ async function makeTestCards(loader: Loader) {
   loader.shimModule(`${testRealmURL}person`, { Person });
   loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
   loader.shimModule(`${testRealmURL}cat`, { Cat });
-  loader.shimModule(`${testRealmURL}catalog-entry`, { SimpleCatalogEntry });
+  loader.shimModule(`${testRealmURL}catalog-entry`, { SimpleBoxelSpec });
   loader.shimModule(`${testRealmURL}event`, { Event });
-  let stringFieldEntry = new SimpleCatalogEntry({
+  let stringFieldEntry = new SimpleBoxelSpec({
     title: 'String Field',
     ref: {
       module: `${baseRealm.url}string`,
       name: 'default',
     },
   });
-  let numberFieldEntry = new SimpleCatalogEntry({
+  let numberFieldEntry = new SimpleBoxelSpec({
     title: 'Number Field',
     ref: {
       module: `${baseRealm.url}number`,

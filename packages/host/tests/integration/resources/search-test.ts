@@ -238,7 +238,7 @@ module(`Integration | search resource`, function (hooks) {
           meta: {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              name: 'BoxelSpec',
             },
           },
         },
@@ -258,7 +258,7 @@ module(`Integration | search resource`, function (hooks) {
           meta: {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              name: 'BoxelSpec',
             },
           },
         },

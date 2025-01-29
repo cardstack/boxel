@@ -23,7 +23,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
-  catalogEntryRef,
+  boxelSpecRef,
   getCards,
   type Query,
   isCardDef,
@@ -44,7 +44,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
-  CatalogEntry,
+  BoxelSpec,
   type BoxelSpecType,
 } from 'https://cardstack.com/base/catalog-entry';
 
@@ -90,8 +90,8 @@ interface Signature {
 
 interface TitleSignature {
   Args: {
-    boxelSpecInstances: CatalogEntry[];
-    selectedInstance: CatalogEntry | null;
+    boxelSpecInstances: BoxelSpec[];
+    selectedInstance: BoxelSpec | null;
     showCreateBoxelSpecIntent: boolean;
     createBoxelSpec: () => void;
     isCreateModalShown: boolean;
@@ -165,9 +165,9 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
-    boxelSpecInstances: CatalogEntry[];
-    selectedInstance: CatalogEntry | null;
-    selectBoxelSpec: (boxelSpec: CatalogEntry) => void;
+    boxelSpecInstances: BoxelSpec[];
+    selectedInstance: BoxelSpec | null;
+    selectBoxelSpec: (boxelSpec: BoxelSpec) => void;
     showCreateBoxelSpecIntent: boolean;
   };
 }
@@ -179,11 +179,11 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.boxelSpecInstances.length === 1;
   }
 
-  @action realmInfo(card: CatalogEntry) {
+  @action realmInfo(card: BoxelSpec) {
     return this.realm.info(card.id);
   }
 
-  @action getLocalPath(card: CatalogEntry) {
+  @action getLocalPath(card: BoxelSpec) {
     let realmURL = this.realm.realmOfURL(new URL(card.id));
     if (!realmURL) {
       throw new Error('bug: no realm URL');
@@ -265,7 +265,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @tracked selectedInstance?: CatalogEntry = this.boxelSpecInstances[0];
+  @tracked selectedInstance?: BoxelSpec = this.boxelSpecInstances[0];
 
   get realms() {
     return this.realmServer.availableRealmURLs;
@@ -290,7 +290,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   private get boxelSpecQuery(): Query {
     return {
       filter: {
-        on: catalogEntryRef,
+        on: boxelSpecRef,
         eq: {
           ref: this.getSelectedDeclarationAsCodeRef, //ref is primitive
         },
@@ -313,7 +313,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   );
 
   get boxelSpecInstances() {
-    return this.boxelSpecSearch.instances as CatalogEntry[];
+    return this.boxelSpecSearch.instances as BoxelSpec[];
   }
 
   private get showCreateBoxelSpecIntent() {
@@ -397,7 +397,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action selectBoxelSpec(boxelSpec: CatalogEntry): void {
+  @action selectBoxelSpec(boxelSpec: BoxelSpec): void {
     this.selectedInstance = boxelSpec;
   }
 
@@ -424,7 +424,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   </template>
 }
 
-function getComponent(cardOrField: CatalogEntry) {
+function getComponent(cardOrField: BoxelSpec) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
 

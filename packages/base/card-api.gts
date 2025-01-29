@@ -1912,7 +1912,7 @@ export class CardDef extends BaseDef {
       // we need to be careful that we don't trigger the ambient recompute() in our setters
       // when we are instantiating an instance that is placed in the identityMap that has
       // not had it's field values set yet, as computeds will be run that may assume dependent
-      // fields are available when they are not (e.g. CatalogEntry.isPrimitive trying to load
+      // fields are available when they are not (e.g. BoxelSpec.isPrimitive trying to load
       // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
       // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
       // triggering the recompute.

@@ -36,7 +36,7 @@ export class SpecType extends StringField {
   static displayName = 'Spec Type';
 }
 
-export class CatalogEntry extends CardDef {
+export class BoxelSpec extends CardDef {
   static displayName = 'Catalog Entry';
   static icon = BoxModel;
   @field name = contains(StringField);
@@ -46,13 +46,13 @@ export class CatalogEntry extends CardDef {
   @field specType = contains(SpecType);
 
   @field isField = contains(BooleanField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: BoxelSpec) {
       return this.specType === 'field';
     },
   });
 
   @field isCard = contains(BooleanField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: BoxelSpec) {
       return (
         this.specType === 'card' ||
         this.specType === 'app' ||
@@ -61,14 +61,14 @@ export class CatalogEntry extends CardDef {
     },
   });
   @field moduleHref = contains(StringField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: BoxelSpec) {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
   @field title = contains(StringField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: BoxelSpec) {
       if (this.name) {
         return this.name;
       }
@@ -78,14 +78,14 @@ export class CatalogEntry extends CardDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <CatalogEntryContainer class='fitted'>
+      <BoxelSpecContainer class='fitted'>
         <header class='title' data-test-title>
           <@fields.title />
         </header>
         <p class='description' data-test-description>
           <@fields.description />
         </p>
-      </CatalogEntryContainer>
+      </BoxelSpecContainer>
       <style scoped>
         .fitted > * {
           white-space: nowrap;
@@ -337,7 +337,7 @@ interface Signature {
   };
 }
 
-class CatalogEntryContainer extends GlimmerComponent<Signature> {
+class BoxelSpecContainer extends GlimmerComponent<Signature> {
   <template>
     <div class='entry' ...attributes>
       {{yield}}

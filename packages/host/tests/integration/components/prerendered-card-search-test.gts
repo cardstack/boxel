@@ -268,7 +268,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           meta: {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              name: 'BoxelSpec',
             },
           },
         },
@@ -288,7 +288,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           meta: {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              name: 'BoxelSpec',
             },
           },
         },

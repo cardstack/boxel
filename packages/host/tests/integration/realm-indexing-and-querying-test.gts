@@ -626,7 +626,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
+                name: 'BoxelSpec',
               },
             },
           },
@@ -670,7 +670,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/catalog-entry',
-            name: 'CatalogEntry',
+            name: 'BoxelSpec',
           },
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-catalog-entry.json`,
@@ -2002,7 +2002,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'booking.gts': { Booking },
         'person.gts': { Person },
         'post.gts': { Post },
-        'CatalogEntry/booking.json': {
+        'BoxelSpec/booking.json': {
           data: {
             attributes: {
               title: 'Booking',
@@ -2016,7 +2016,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
+                name: 'BoxelSpec',
               },
             },
           },
@@ -2025,11 +2025,11 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
     let entry = await getInstance(
       realm,
-      new URL(`${testRealmURL}CatalogEntry/booking`),
+      new URL(`${testRealmURL}BoxelSpec/booking`),
     );
     assert.deepEqual(entry?.searchDoc, {
       _cardType: 'Catalog Entry',
-      id: `${testRealmURL}CatalogEntry/booking`,
+      id: `${testRealmURL}BoxelSpec/booking`,
       description: 'Catalog entry for Booking',
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
@@ -2354,7 +2354,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
+                name: 'BoxelSpec',
               },
             },
           },
@@ -2374,13 +2374,13 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
 
     let indexer = realm.realmIndexQueryEngine;
-    let catalogEntry = await indexer.cardDocument(
+    let boxelSpec = await indexer.cardDocument(
       new URL(`${testRealmURL}pet-person-catalog-entry`),
       { loadLinks: true },
     );
 
-    if (catalogEntry?.type === 'doc') {
-      assert.deepEqual(catalogEntry.doc.data, {
+    if (boxelSpec?.type === 'doc') {
+      assert.deepEqual(boxelSpec.doc.data, {
         id: `${testRealmURL}pet-person-catalog-entry`,
         type: 'card',
         links: { self: `${testRealmURL}pet-person-catalog-entry` },
@@ -2410,7 +2410,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/catalog-entry',
-            name: 'CatalogEntry',
+            name: 'BoxelSpec',
           },
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}pet-person-catalog-entry.json`,
@@ -2425,7 +2425,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${catalogEntry?.error.errorDetail.message}`,
+        `search entry was an error: ${boxelSpec?.error.errorDetail.message}`,
       );
     }
 
@@ -3824,7 +3824,7 @@ posts/ignore-me.json
           meta: {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              name: 'BoxelSpec',
             },
           },
         },
@@ -3844,7 +3844,7 @@ posts/ignore-me.json
           meta: {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              name: 'BoxelSpec',
             },
           },
         },
@@ -4319,7 +4319,7 @@ posts/ignore-me.json
         filter: {
           on: {
             module: `${baseRealm.url}catalog-entry`,
-            name: 'CatalogEntry',
+            name: 'BoxelSpec',
           },
           eq: {
             ref: {
