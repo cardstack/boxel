@@ -472,7 +472,6 @@ class EditPriority extends Component<typeof TaskPriority> {
 export class TaskPriority extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
-  // loosey goosey pattern
   static values = [
     { index: 0, label: 'Lowest', icon: ChevronsDown },
     { index: 1, label: 'Low', icon: ChevronDown },

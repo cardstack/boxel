@@ -270,7 +270,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Pill
                 class='tag'
                 @tag='li'
-                @pillBackgroundColor={{@model.priority.colorScheme.backgroundColor}}
+                @pillBackgroundColor={{@model.priority.backgroundColor}}
               >
                 {{@model.priority.label}}
               </Pill>
