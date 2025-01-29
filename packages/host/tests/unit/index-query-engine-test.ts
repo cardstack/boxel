@@ -112,7 +112,7 @@ module('Unit | query', function (hooks) {
     loader.shimModule(`${testRealmURL}person`, { Person });
     loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
     loader.shimModule(`${testRealmURL}cat`, { Cat });
-    loader.shimModule(`${testRealmURL}catalog-entry`, { SimpleBoxelSpec });
+    loader.shimModule(`${testRealmURL}boxel-spec`, { SimpleBoxelSpec });
     loader.shimModule(`${testRealmURL}event`, { Event });
 
     let stringFieldEntry = new SimpleBoxelSpec({

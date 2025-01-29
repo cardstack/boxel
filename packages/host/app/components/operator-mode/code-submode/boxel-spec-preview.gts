@@ -46,7 +46,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import {
   BoxelSpec,
   type BoxelSpecType,
-} from 'https://cardstack.com/base/catalog-entry';
+} from 'https://cardstack.com/base/boxel-spec';
 
 import { type FileType } from '../create-file-modal';
 

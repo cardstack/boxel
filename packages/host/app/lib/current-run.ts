@@ -488,7 +488,7 @@ export class CurrentRun {
         ...{ id: instanceURL.href, type: 'card' },
       };
       //Realm info may be used by a card to render field values.
-      //Example: catalog-entry-card
+      //Example: boxel-spec-card
       merge(adjustedResource, {
         meta: {
           lastModified,

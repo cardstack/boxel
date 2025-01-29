@@ -36,7 +36,7 @@ import { tracked } from '@glimmer/tracking';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
-import { type BoxelSpec } from './catalog-entry';
+import { type BoxelSpec } from './boxel-spec';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';

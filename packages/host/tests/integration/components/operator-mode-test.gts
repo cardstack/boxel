@@ -82,13 +82,13 @@ module('Integration | operator-mode', function (hooks) {
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let boxelSpec: typeof import('https://cardstack.com/base/catalog-entry');
+    let boxelSpec: typeof import('https://cardstack.com/base/boxel-spec');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    boxelSpec = await loader.import(`${baseRealm.url}catalog-entry`);
+    boxelSpec = await loader.import(`${baseRealm.url}boxel-spec`);
 
     let {
       field,
@@ -901,7 +901,7 @@ module('Integration | operator-mode', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
+  test('displays cards on cards-grid and includes `boxel-spec` instances', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
@@ -931,10 +931,10 @@ module('Integration | operator-mode', function (hooks) {
       .dom(
         `[data-test-cards-grid-item="${testRealmURL}BoxelSpec/publishing-packet"]`,
       )
-      .exists('publishing-packet catalog-entry is displayed on cards-grid');
+      .exists('publishing-packet boxel-spec is displayed on cards-grid');
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}BoxelSpec/pet-room"]`)
-      .exists('pet-room catalog-entry instance is displayed on cards-grid');
+      .exists('pet-room boxel-spec instance is displayed on cards-grid');
   });
 
   test<TestContextWithSave>('can create a card using the cards-grid', async function (assert) {
@@ -2046,7 +2046,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Pet');
   });
 
-  test(`cancel button closes the catalog-entry card picker`, async function (assert) {
+  test(`cancel button closes the boxel-spec card picker`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {

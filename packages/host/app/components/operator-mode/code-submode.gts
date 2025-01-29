@@ -60,7 +60,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
-import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
+import { type BoxelSpecType } from 'https://cardstack.com/base/boxel-spec';
 
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';

@@ -309,7 +309,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
+                module: 'https://cardstack.com/base/boxel-spec',
                 name: 'BoxelSpec',
               },
             },

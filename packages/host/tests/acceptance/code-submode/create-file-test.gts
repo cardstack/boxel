@@ -83,7 +83,7 @@ const files: Record<string, any> = {
       @field pet = linksTo(Pet);
     }
   `,
-  'Catalog-Entry/error.json': {
+  'Boxel-Spec/error.json': {
     data: {
       type: 'card',
       attributes: {
@@ -97,13 +97,13 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/catalog-entry',
+          module: 'https://cardstack.com/base/boxel-spec',
           name: 'BoxelSpec',
         },
       },
     },
   },
-  'Catalog-Entry/pet.json': {
+  'Boxel-Spec/pet.json': {
     data: {
       type: 'card',
       attributes: {
@@ -114,13 +114,13 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/catalog-entry',
+          module: 'https://cardstack.com/base/boxel-spec',
           name: 'BoxelSpec',
         },
       },
     },
   },
-  'Catalog-Entry/person.json': {
+  'Boxel-Spec/person.json': {
     data: {
       type: 'card',
       attributes: {
@@ -131,7 +131,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/catalog-entry',
+          module: 'https://cardstack.com/base/boxel-spec',
           name: 'BoxelSpec',
         },
       },
@@ -301,8 +301,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       // card type selection
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
       assert.dom(`[data-test-selected-type]`).hasText('Person');
@@ -367,8 +367,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/error"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/error"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/error"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Error"]`);
 
@@ -519,8 +519,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       // card type selection
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -654,8 +654,8 @@ export class TrèsTestCard extends CardDef {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -714,8 +714,8 @@ export class TestCard extends Person {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -740,8 +740,8 @@ export class TestCard extends Person {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -860,8 +860,8 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       // select card type
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/pet"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/pet"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
@@ -921,8 +921,8 @@ export class TestCard extends Pet {
       // select card type
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/pet"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/pet"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
@@ -981,8 +981,8 @@ export class Pet extends PetParent {
       // select card type
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
-      await click(`[data-test-select="${testRealmURL}Catalog-Entry/pet"]`);
+      await waitFor(`[data-test-select="${testRealmURL}Boxel-Spec/pet"]`);
+      await click(`[data-test-select="${testRealmURL}Boxel-Spec/pet"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 

@@ -144,7 +144,7 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },
@@ -162,7 +162,7 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },
@@ -180,7 +180,7 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },
@@ -198,7 +198,7 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },

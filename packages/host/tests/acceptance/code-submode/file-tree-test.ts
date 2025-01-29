@@ -232,7 +232,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },

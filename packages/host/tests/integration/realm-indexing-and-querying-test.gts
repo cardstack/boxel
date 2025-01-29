@@ -612,7 +612,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       loader,
       contents: {
         'person.gts': { Person },
-        'person-catalog-entry.json': {
+        'person-boxel-spec.json': {
           data: {
             attributes: {
               title: 'Person Card',
@@ -625,7 +625,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
+                module: 'https://cardstack.com/base/boxel-spec',
                 name: 'BoxelSpec',
               },
             },
@@ -635,14 +635,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
     let indexer = realm.realmIndexQueryEngine;
     let entry = await indexer.cardDocument(
-      new URL(`${testRealmURL}person-catalog-entry`),
+      new URL(`${testRealmURL}person-boxel-spec`),
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data, {
-        id: `${testRealmURL}person-catalog-entry`,
+        id: `${testRealmURL}person-boxel-spec`,
         type: 'card',
         links: {
-          self: `${testRealmURL}person-catalog-entry`,
+          self: `${testRealmURL}person-boxel-spec`,
         },
         attributes: {
           title: 'Person Card',
@@ -669,26 +669,26 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/catalog-entry',
+            module: 'https://cardstack.com/base/boxel-spec',
             name: 'BoxelSpec',
           },
           lastModified: adapter.lastModifiedMap.get(
-            `${testRealmURL}person-catalog-entry.json`,
+            `${testRealmURL}person-boxel-spec.json`,
           ),
           resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}person-catalog-entry.json`,
+            `${testRealmURL}person-boxel-spec.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
       });
       let instance = await indexer.instance(
-        new URL(`${testRealmURL}person-catalog-entry`),
+        new URL(`${testRealmURL}person-boxel-spec`),
       );
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Catalog Entry',
         description: 'Catalog entry for Person card',
-        id: `${testRealmURL}person-catalog-entry`,
+        id: `${testRealmURL}person-boxel-spec`,
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
@@ -2015,7 +2015,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
+                module: 'https://cardstack.com/base/boxel-spec',
                 name: 'BoxelSpec',
               },
             },
@@ -2339,7 +2339,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
           },
         },
-        'pet-person-catalog-entry.json': {
+        'pet-person-boxel-spec.json': {
           data: {
             attributes: {
               title: 'PetPerson',
@@ -2353,7 +2353,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             relationships: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
+                module: 'https://cardstack.com/base/boxel-spec',
                 name: 'BoxelSpec',
               },
             },
@@ -2375,15 +2375,15 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let indexer = realm.realmIndexQueryEngine;
     let boxelSpec = await indexer.cardDocument(
-      new URL(`${testRealmURL}pet-person-catalog-entry`),
+      new URL(`${testRealmURL}pet-person-boxel-spec`),
       { loadLinks: true },
     );
 
     if (boxelSpec?.type === 'doc') {
       assert.deepEqual(boxelSpec.doc.data, {
-        id: `${testRealmURL}pet-person-catalog-entry`,
+        id: `${testRealmURL}pet-person-boxel-spec`,
         type: 'card',
-        links: { self: `${testRealmURL}pet-person-catalog-entry` },
+        links: { self: `${testRealmURL}pet-person-boxel-spec` },
         attributes: {
           title: 'PetPerson',
           description: 'Catalog entry for PetPerson',
@@ -2409,16 +2409,16 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/catalog-entry',
+            module: 'https://cardstack.com/base/boxel-spec',
             name: 'BoxelSpec',
           },
           lastModified: adapter.lastModifiedMap.get(
-            `${testRealmURL}pet-person-catalog-entry.json`,
+            `${testRealmURL}pet-person-boxel-spec.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
           resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}pet-person-catalog-entry.json`,
+            `${testRealmURL}pet-person-boxel-spec.json`,
           ),
         },
       });
@@ -2431,12 +2431,12 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let entry = await getInstance(
       realm,
-      new URL(`${testRealmURL}pet-person-catalog-entry`),
+      new URL(`${testRealmURL}pet-person-boxel-spec`),
     );
     if (entry) {
       assert.deepEqual(entry.searchDoc, {
         _cardType: 'Catalog Entry',
-        id: `${testRealmURL}pet-person-catalog-entry`,
+        id: `${testRealmURL}pet-person-boxel-spec`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
         linkedExamples: null,
@@ -2450,7 +2450,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}pet-person-catalog-entry in the index`,
+        `could not find ${testRealmURL}pet-person-boxel-spec in the index`,
       );
     }
   });
@@ -3809,7 +3809,7 @@ posts/ignore-me.json
           },
         },
       },
-      'catalog-entry-1.json': {
+      'boxel-spec-1.json': {
         data: {
           type: 'card',
           attributes: {
@@ -3823,13 +3823,13 @@ posts/ignore-me.json
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
+              module: `${baseRealm.url}boxel-spec`,
               name: 'BoxelSpec',
             },
           },
         },
       },
-      'catalog-entry-2.json': {
+      'boxel-spec-2.json': {
         data: {
           type: 'card',
           attributes: {
@@ -3843,7 +3843,7 @@ posts/ignore-me.json
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
+              module: `${baseRealm.url}boxel-spec`,
               name: 'BoxelSpec',
             },
           },
@@ -4318,7 +4318,7 @@ posts/ignore-me.json
       let { data: matching } = await queryEngine.search({
         filter: {
           on: {
-            module: `${baseRealm.url}catalog-entry`,
+            module: `${baseRealm.url}boxel-spec`,
             name: 'BoxelSpec',
           },
           eq: {
@@ -4331,7 +4331,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}catalog-entry-1`],
+        [`${paths.url}boxel-spec-1`],
       );
     });
 
@@ -4788,8 +4788,8 @@ posts/ignore-me.json
           `${paths.url}card-2`, // book
           `${paths.url}booking1`, // booking
           `${paths.url}booking2`, // booking
-          `${paths.url}catalog-entry-1`, // catalog entry
-          `${paths.url}catalog-entry-2`, // catalog entry
+          `${paths.url}boxel-spec-1`, // catalog entry
+          `${paths.url}boxel-spec-2`, // catalog entry
           `${paths.url}mango`, // dog
           `${paths.url}ringo`, // dog
           `${paths.url}vangogh`, // dog

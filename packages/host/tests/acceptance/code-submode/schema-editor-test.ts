@@ -263,7 +263,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },

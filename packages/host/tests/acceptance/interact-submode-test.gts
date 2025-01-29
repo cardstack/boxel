@@ -67,11 +67,11 @@ module('Acceptance | interact submode tests', function (hooks) {
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
-    let boxelSpec: typeof import('https://cardstack.com/base/catalog-entry');
+    let boxelSpec: typeof import('https://cardstack.com/base/boxel-spec');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    boxelSpec = await loader.import(`${baseRealm.url}catalog-entry`);
+    boxelSpec = await loader.import(`${baseRealm.url}boxel-spec`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
     let {

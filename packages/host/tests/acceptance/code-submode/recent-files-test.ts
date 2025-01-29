@@ -218,7 +218,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
+                module: `${baseRealm.url}boxel-spec`,
                 name: 'BoxelSpec',
               },
             },
@@ -496,7 +496,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       'recent-files',
       JSON.stringify([
         ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        ['https://cardstack.com/base/', 'boxel-spec.gts'],
         'a-non-url-to-ignore',
       ]),
     );
@@ -554,7 +554,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .containsText('code-ref.gts');
     assert
       .dom('[data-test-recent-file]:nth-child(3)')
-      .containsText('catalog-entry.gts');
+      .containsText('boxel-spec.gts');
 
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
@@ -562,7 +562,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         ['https://cardstack.com/base/', 'field-component.gts'],
         ['https://cardstack.com/base/', 'date.gts'],
         ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        ['https://cardstack.com/base/', 'boxel-spec.gts'],
       ],
     );
   });
