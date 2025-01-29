@@ -40,6 +40,7 @@ import type CardService from './card-service';
 import type ResetService from './reset';
 
 import type IndexController from '../controllers';
+import MatrixService from './matrix-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -97,6 +98,7 @@ export default class OperatorModeStateService extends Service {
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
   @service private declare network: NetworkService;
+  @service private declare matrixService: MatrixService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -310,6 +312,10 @@ export default class OperatorModeStateService extends Service {
   updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
+
+    if (submode === Submodes.Code) {
+      this.matrixService.setLLMModelForCodeMode();
+    }
   }
 
   updateCodePathWithCodeSelection(

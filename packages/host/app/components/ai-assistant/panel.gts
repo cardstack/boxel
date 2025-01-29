@@ -44,6 +44,8 @@ import assistantIcon from './ai-assist-icon.webp';
 
 import type MatrixService from '../../services/matrix-service';
 import type MonacoService from '../../services/monaco-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { Submodes } from '../submode-switcher';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
@@ -368,6 +370,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare monacoService: MonacoService;
   @service private declare router: RouterService;
   @service private declare commandService: CommandService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: SessionRoomData | undefined = undefined;
@@ -545,6 +548,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   @action
   private enterRoom(roomId: string, hidePastSessionsList = true) {
     this.matrixService.currentRoomId = roomId;
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      this.matrixService.setLLMModelForCodeMode();
+    }
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
