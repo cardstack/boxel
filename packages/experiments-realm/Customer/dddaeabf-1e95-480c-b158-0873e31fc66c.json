@@ -15,12 +15,7 @@
         },
         "type": {
           "index": 0,
-          "label": "Mobile",
-          "color": null,
-          "colorScheme": {
-            "foregroundColor": null,
-            "backgroundColor": null
-          }
+          "label": "Mobile"
         }
       },
       "phoneOffice": {
@@ -30,12 +25,7 @@
         },
         "type": {
           "index": 1,
-          "label": "Office",
-          "color": null,
-          "colorScheme": {
-            "foregroundColor": null,
-            "backgroundColor": null
-          }
+          "label": "Office"
         }
       },
       "socialLinks": [

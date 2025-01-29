@@ -6,20 +6,14 @@
       "status": {
         "index": 3,
         "label": "Closed Won",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#000000",
-          "backgroundColor": "#E8F5E9"
-        }
+        "foregroundColor": "#000000",
+        "backgroundColor": "#E8F5E9"
       },
       "priority": {
         "index": 2,
         "label": "High Priority",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#000000",
-          "backgroundColor": "#FFE0B2"
-        }
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFE0B2"
       },
       "closeDate": "2024-03-15",
       "currentValue": {
