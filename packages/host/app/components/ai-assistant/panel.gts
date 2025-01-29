@@ -24,6 +24,8 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import AddSkillsToRoomCommand from '../../commands/add-skills-to-room';
 import CreateAIAssistantRoomCommand from '../../commands/create-ai-assistant-room';
 import { Message } from '../../lib/matrix-classes/message';
@@ -40,12 +42,12 @@ import RenameSession from '../ai-assistant/rename-session';
 import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
+import { Submodes } from '../submode-switcher';
+
 import assistantIcon from './ai-assist-icon.webp';
 
 import type MatrixService from '../../services/matrix-service';
 import type MonacoService from '../../services/monaco-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { Submodes } from '../submode-switcher';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
