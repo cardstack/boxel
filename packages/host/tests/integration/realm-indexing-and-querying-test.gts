@@ -616,7 +616,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           data: {
             attributes: {
               title: 'Person Card',
-              description: 'Catalog entry for Person card',
+              description: 'Boxel spec for Person card',
               specType: 'card',
               ref: {
                 module: './person',
@@ -646,7 +646,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         },
         attributes: {
           title: 'Person Card',
-          description: 'Catalog entry for Person card',
+          description: 'Boxel spec for Person card',
           moduleHref: `${testRealmURL}person`,
           name: null,
           readMe: null,
@@ -686,8 +686,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         new URL(`${testRealmURL}person-boxel-spec`),
       );
       assert.deepEqual(instance?.searchDoc, {
-        _cardType: 'Catalog Entry',
-        description: 'Catalog entry for Person card',
+        _cardType: 'Boxel Spec',
+        description: 'Boxel spec for Person card',
         id: `${testRealmURL}person-boxel-spec`,
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
@@ -2006,7 +2006,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           data: {
             attributes: {
               title: 'Booking',
-              description: 'Catalog entry for Booking',
+              description: 'Boxel spec for Booking',
               specType: 'card',
               ref: {
                 module: 'http://localhost:4202/test/booking',
@@ -2028,9 +2028,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}BoxelSpec/booking`),
     );
     assert.deepEqual(entry?.searchDoc, {
-      _cardType: 'Catalog Entry',
+      _cardType: 'Boxel Spec',
       id: `${testRealmURL}BoxelSpec/booking`,
-      description: 'Catalog entry for Booking',
+      description: 'Boxel spec for Booking',
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       linkedExamples: null,
@@ -2343,7 +2343,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           data: {
             attributes: {
               title: 'PetPerson',
-              description: 'Catalog entry for PetPerson',
+              description: 'Boxel spec for PetPerson',
               specType: 'card',
               ref: {
                 module: `${testModuleRealm}pet-person`,
@@ -2386,7 +2386,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         links: { self: `${testRealmURL}pet-person-boxel-spec` },
         attributes: {
           title: 'PetPerson',
-          description: 'Catalog entry for PetPerson',
+          description: 'Boxel spec for PetPerson',
           readMe: null,
           thumbnailURL: null,
           ref: {
@@ -2435,10 +2435,10 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
     if (entry) {
       assert.deepEqual(entry.searchDoc, {
-        _cardType: 'Catalog Entry',
+        _cardType: 'Boxel Spec',
         id: `${testRealmURL}pet-person-boxel-spec`,
         title: 'PetPerson',
-        description: 'Catalog entry for PetPerson',
+        description: 'Boxel spec for PetPerson',
         linkedExamples: null,
         containedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
@@ -4788,8 +4788,8 @@ posts/ignore-me.json
           `${paths.url}card-2`, // book
           `${paths.url}booking1`, // booking
           `${paths.url}booking2`, // booking
-          `${paths.url}boxel-spec-1`, // catalog entry
-          `${paths.url}boxel-spec-2`, // catalog entry
+          `${paths.url}boxel-spec-1`, // boxel spec
+          `${paths.url}boxel-spec-2`, // boxel spec
           `${paths.url}mango`, // dog
           `${paths.url}ringo`, // dog
           `${paths.url}vangogh`, // dog

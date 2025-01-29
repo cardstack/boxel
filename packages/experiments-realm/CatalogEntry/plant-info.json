@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Plant Info",
-      "description": "Catalog entry for Plant Info card",
+      "description": "Boxel spec for Plant Info card",
       "specType": "card",
       "ref": {
         "module": "../plant-info",

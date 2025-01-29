@@ -164,8 +164,8 @@ export default class EditFieldModal extends Component<Signature> {
     this.fieldRef = ref;
 
     // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
-    // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef. When spawning the card chooser, the catalog entry will have the isField property set,
-    // which dictates the field type. But at this point where we are editing an existing field, we don't have the catalog entry available, so we need to determine isFieldDef
+    // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef. When spawning the card chooser, the boxel spec will have the isField property set,
+    // which dictates the field type. But at this point where we are editing an existing field, we don't have the boxel spec available, so we need to determine isFieldDef
     // from the field's type
     this.isFieldDef =
       this.determineFieldOrCardFromFieldType(field.type) === 'field';

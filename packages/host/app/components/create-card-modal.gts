@@ -74,7 +74,7 @@ export default class CreateCardModal extends Component {
   private _create = enqueueTask(
     async <T extends CardDef>(
       ref: CodeRef,
-      relativeTo: URL | undefined, // this relativeTo should be the catalog entry ID that the CodeRef comes from
+      relativeTo: URL | undefined, // this relativeTo should be the boxel spec ID that the CodeRef comes from
       opts?: {
         doc?: LooseSingleCardDocument;
         realmURL?: URL;

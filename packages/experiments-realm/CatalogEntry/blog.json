@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Blog",
-      "description": "Catalog entry for Blog App card",
+      "description": "Boxel spec for Blog App card",
       "ref": {
         "module": "../blog-app",
         "name": "BlogApp"

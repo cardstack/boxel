@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "AppCard",
-      "description": "Catalog entry for AppCard",
+      "description": "Boxel spec for AppCard",
       "specType": "app",
       "ref": {
         "module": "../app-card",

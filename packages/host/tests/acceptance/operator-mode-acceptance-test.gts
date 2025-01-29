@@ -300,7 +300,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person Card',
-              description: 'Catalog entry for Person Card',
+              description: 'Boxel spec for Person Card',
               specType: 'card',
               ref: {
                 module: `${testRealmURL}person`,

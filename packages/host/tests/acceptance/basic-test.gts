@@ -82,7 +82,7 @@ module('Acceptance | basic tests', function (hooks) {
         'person.gts': { Person },
         'person-entry.json': new BoxelSpec({
           name: 'Person',
-          description: 'Catalog entry',
+          description: 'Boxel spec',
           isField: false,
           ref: {
             module: `./person`,

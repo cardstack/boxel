@@ -644,7 +644,7 @@ export default class CardCatalogModal extends Component<Signature> {
   private createNewTask = task(
     async (
       ref: CodeRef,
-      relativeTo: URL | undefined /* this should be the catalog entry ID */,
+      relativeTo: URL | undefined /* this should be the boxel spec ID */,
       realmURL: URL | undefined,
     ) => {
       if (!this.state) {

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Sprint Planner",
-      "description": "Catalog entry for Sprint Planner App card",
+      "description": "Boxel spec for Sprint Planner App card",
       "specType": "app",
       "ref": {
         "module": "../sprint-planner",

@@ -592,7 +592,7 @@ export default class CreateFileModal extends Component<Signature> {
     }
     if (!this.selectedBoxelSpec && !this.definitionClass) {
       throw new Error(
-        `bug: cannot call createDefinition without a selected catalog entry or definitionClass `,
+        `bug: cannot call createDefinition without a selected boxel spec or definitionClass `,
       );
     }
     if (!this.fileName) {

@@ -1763,7 +1763,7 @@ module('Integration | card-basics', function (hooks) {
         .hasStyle({ margin: '10px' });
     });
 
-    // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
+    // note that polymorphic "contains" field rendering is inherently tested via the boxel spec tests
     test('renders a card with a polymorphic "containsMany" field', async function (assert) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);

@@ -2,7 +2,7 @@
   "data": {
     "attributes": {
       "title": "Pet",
-      "description": "Catalog entry for Pet card",
+      "description": "Boxel spec for Pet card",
       "ref": {
         "module": "../pet",
         "name": "Pet"

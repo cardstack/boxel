@@ -117,7 +117,7 @@ module('Integration | card-catalog', function (hooks) {
         'index.json': new CardsGrid(),
         'BoxelSpec/publishing-packet.json': new BoxelSpec({
           name: 'Publishing Packet',
-          description: 'Catalog entry for PublishingPacket',
+          description: 'Boxel spec for PublishingPacket',
           specType: 'card',
           ref: {
             module: `../publishing-packet`,
@@ -126,7 +126,7 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'BoxelSpec/author.json': new BoxelSpec({
           name: 'Author',
-          description: 'Catalog entry for Author',
+          description: 'Boxel spec for Author',
           specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
@@ -135,7 +135,7 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'BoxelSpec/person.json': new BoxelSpec({
           name: 'Person',
-          description: 'Catalog entry for Person',
+          description: 'Boxel spec for Person',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
@@ -144,7 +144,7 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'BoxelSpec/pet.json': new BoxelSpec({
           name: 'Pet',
-          description: 'Catalog entry for Pet',
+          description: 'Boxel spec for Pet',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -153,7 +153,7 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'BoxelSpec/tree.json': new BoxelSpec({
           name: 'Tree',
-          description: 'Catalog entry for Tree',
+          description: 'Boxel spec for Tree',
           specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
@@ -162,7 +162,7 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'BoxelSpec/blog-post.json': new BoxelSpec({
           name: 'BlogPost',
-          description: 'Catalog entry for BlogPost',
+          description: 'Boxel spec for BlogPost',
           specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
@@ -171,7 +171,7 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'BoxelSpec/address.json': new BoxelSpec({
           name: 'Address',
-          description: 'Catalog entry for Address field',
+          description: 'Boxel spec for Address field',
           specType: 'field',
           ref: {
             module: `${testRealmURL}address`,

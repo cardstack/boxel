@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Seller",
-      "description": "Catalog entry for Seller card",
+      "description": "Boxel spec for Seller card",
       "ref": {
         "module": "../seller",
         "name": "Seller"

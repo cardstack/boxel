@@ -442,7 +442,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
+              description: 'Boxel spec',
               specType: 'card',
               ref: {
                 module: `./person`,

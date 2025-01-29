@@ -472,7 +472,7 @@ module('Integration | operator-mode', function (hooks) {
           'grid.json': new CardsGrid(),
           'BoxelSpec/publishing-packet.json': new BoxelSpec({
             name: 'Publishing Packet',
-            description: 'Catalog entry for PublishingPacket',
+            description: 'Boxel spec for PublishingPacket',
             specType: 'card',
             ref: {
               module: `${testRealmURL}publishing-packet`,
@@ -481,7 +481,7 @@ module('Integration | operator-mode', function (hooks) {
           }),
           'BoxelSpec/pet-room.json': new BoxelSpec({
             name: 'General Pet Room',
-            description: 'Catalog entry for Pet Room Card',
+            description: 'Boxel spec for Pet Room Card',
             specType: 'card',
             ref: {
               module: `${testRealmURL}pet-room`,
@@ -490,7 +490,7 @@ module('Integration | operator-mode', function (hooks) {
           }),
           'BoxelSpec/pet-card.json': new BoxelSpec({
             name: 'Pet',
-            description: 'Catalog entry for Pet',
+            description: 'Boxel spec for Pet',
             specType: 'card',
             ref: {
               module: `${testRealmURL}pet`,
@@ -960,7 +960,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-create-new-card-button]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Catalog Entry card');
+      .containsText('Choose a Boxel Spec card');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}BoxelSpec/publishing-packet"]`,
     );
@@ -1042,7 +1042,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Catalog Entry card');
+      .containsText('Choose a Boxel Spec card');
     assert
       .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
       .exists({ count: 3 });
@@ -2638,7 +2638,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
-  test<TestContextWithSave>('Choosing a new catalog entry card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
+  test<TestContextWithSave>('Choosing a new boxel spec card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -2659,7 +2659,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-create-new-card-button]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Catalog Entry card');
+      .containsText('Choose a Boxel Spec card');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}BoxelSpec/publishing-packet"]`,
     );

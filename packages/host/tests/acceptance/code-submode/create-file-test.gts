@@ -88,7 +88,7 @@ const files: Record<string, any> = {
       type: 'card',
       attributes: {
         title: 'Error',
-        description: 'Catalog entry for Error',
+        description: 'Boxel spec for Error',
         specType: 'card',
         ref: {
           module: '../error',
@@ -108,7 +108,7 @@ const files: Record<string, any> = {
       type: 'card',
       attributes: {
         title: 'Pet',
-        description: 'Catalog entry for Pet',
+        description: 'Boxel spec for Pet',
         specType: 'card',
         ref: { module: `../pet`, name: 'default' },
       },
@@ -125,7 +125,7 @@ const files: Record<string, any> = {
       type: 'card',
       attributes: {
         title: 'Person',
-        description: 'Catalog entry for Person',
+        description: 'Boxel spec for Person',
         specType: 'card',
         ref: { module: `../person`, name: 'Person' },
       },

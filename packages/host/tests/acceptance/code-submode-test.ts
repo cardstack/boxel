@@ -561,7 +561,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               type: 'card',
               attributes: {
                 title: 'Person',
-                description: 'Catalog entry',
+                description: 'Boxel spec',
                 specType: 'card',
                 ref: {
                   module: `./person`,

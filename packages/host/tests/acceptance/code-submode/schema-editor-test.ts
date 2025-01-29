@@ -254,7 +254,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
+              description: 'Boxel spec',
               specType: 'card',
               ref: {
                 module: `./person`,

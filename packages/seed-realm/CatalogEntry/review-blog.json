@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Review Blog",
-      "description": "Catalog entry for Review Blog card",
+      "description": "Boxel spec for Review Blog card",
       "specType": "card",
       "ref": {
         "module": "../review-blog",

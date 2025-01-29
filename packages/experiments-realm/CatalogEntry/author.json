@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Author",
-      "description": "Catalog entry for Author",
+      "description": "Boxel spec for Author",
       "ref": {
         "name": "Author",
         "module": "../author"

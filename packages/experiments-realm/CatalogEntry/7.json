@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Booking Card",
-      "description": "Catalog entry for Booking Card",
+      "description": "Boxel spec for Booking Card",
       "specType": "card",
       "ref": {
         "module": "../booking",

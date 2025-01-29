@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Team",
-      "description": "Catalog entry for Team",
+      "description": "Boxel spec for Team",
       "ref": {
         "name": "Team",
         "module": "../sprint-task"

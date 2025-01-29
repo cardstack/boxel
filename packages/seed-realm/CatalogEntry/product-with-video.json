@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Product with Video",
-      "description": "Catalog entry for Product with Video card",
+      "description": "Boxel spec for Product with Video card",
       "specType": "card",
       "ref": {
         "module": "../product-with-video",

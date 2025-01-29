@@ -135,7 +135,7 @@ module('boxel spec preview', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
+              description: 'Boxel spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -285,7 +285,7 @@ module('boxel spec preview', function (hooks) {
     assert.dom('[data-test-boxel-spec-selector]').exists();
     await percySnapshot(assert);
     assert.dom('[data-test-title]').containsText('Person');
-    assert.dom('[data-test-description]').containsText('Catalog entry');
+    assert.dom('[data-test-description]').containsText('Boxel spec');
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');

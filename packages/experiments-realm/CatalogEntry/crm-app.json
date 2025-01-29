@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "CrmApp",
-      "description": "Catalog entry for CRM App",
+      "description": "Boxel spec for CRM App",
       "specType": "app",
       "ref": {
         "module": "../crm-app",

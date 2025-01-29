@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Product Requirement Document",
-      "description": "Catalog entry for product requirement documents",
+      "description": "Boxel spec for product requirement documents",
       "specType": "card",
       "ref": {
         "module": "../product-requirement-document",

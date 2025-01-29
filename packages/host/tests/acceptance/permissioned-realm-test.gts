@@ -79,7 +79,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
         'person.gts': { Person },
         'person-entry.json': new BoxelSpec({
           name: 'Person',
-          description: 'Catalog entry',
+          description: 'Boxel spec',
           specType: 'card',
           ref: {
             module: `./person`,

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Friends from ../friends",
-      "description": "Catalog entry for Friends from ../friends",
+      "description": "Boxel spec for Friends from ../friends",
       "specType": "card",
       "ref": {
         "module": "../friends",

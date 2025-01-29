@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Hello World",
-      "description": "Catalog entry for Hello World card",
+      "description": "Boxel spec for Hello World card",
       "specType": "card",
       "ref": {
         "module": "../hello-world",

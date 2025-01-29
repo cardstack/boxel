@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Sprint Task",
-      "description": "Catalog entry for Sprint Task",
+      "description": "Boxel spec for Sprint Task",
       "ref": {
         "name": "SprintTask",
         "module": "../sprint-task"

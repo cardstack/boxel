@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "ContactCard",
-      "description": "Catalog entry for ContactCard",
+      "description": "Boxel spec for ContactCard",
       "specType": "card",
       "ref": {
         "module": "../contact-card",

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Todo",
-      "description": "Catalog entry for Todo",
+      "description": "Boxel spec for Todo",
       "ref": {
         "name": "Todo",
         "module": "../todo"

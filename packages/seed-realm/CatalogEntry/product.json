@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Product",
-      "description": "Catalog entry for Product card",
+      "description": "Boxel spec for Product card",
       "specType": "card",
       "ref": {
         "module": "../product",
