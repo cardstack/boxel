@@ -7,6 +7,7 @@ import {
   linksToMany,
   FieldDef,
   containsMany,
+  getCardMeta,
   type CardorFieldTypeIcon,
 } from './card-api';
 import StringField from './string';
@@ -14,7 +15,12 @@ import BooleanField from './boolean';
 import CodeRef from './code-ref';
 import MarkdownField from './markdown';
 import { restartableTask } from 'ember-concurrency';
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  FieldContainer,
+  LoadingIndicator,
+  Pill,
+  RealmIcon,
+} from '@cardstack/boxel-ui/components';
 import { loadCard, Loader } from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -23,8 +29,7 @@ import BoxModel from '@cardstack/boxel-icons/box-model';
 import BookOpenText from '@cardstack/boxel-icons/book-open-text';
 import LayersSubtract from '@cardstack/boxel-icons/layers-subtract';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
-import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
-import { Pill } from '@cardstack/boxel-ui/components';
+import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
@@ -127,150 +132,186 @@ export class CatalogEntry extends CardDef {
       }
     });
 
+    private get realmInfo() {
+      return getCardMeta(this.args.model as CardDef, 'realmInfo');
+    }
+
     <template>
-      <div class='container'>
-        <div class='header'>
-          <div class='header-icon-container'>
+      <article class='container'>
+        <header class='header'>
+          <div class='box header-icon-container'>
             {{#if this.loadCardIcon.isRunning}}
-              <LoadingIndicator class='box header-icon-svg' />
+              <LoadingIndicator />
+            {{else if this.icon}}
+              <this.icon width='35' height='35' role='presentation' />
             {{else}}
-              {{#if this.icon}}
-                <this.icon class='box header-icon-svg' />
-              {{else}}
-                <this.defaultIcon class='box header-icon-svg' />
-              {{/if}}
+              <this.defaultIcon width='35' height='35' role='presentation' />
             {{/if}}
           </div>
           <div class='header-info-container'>
-            <div class='box'>
-              <h1 data-test-title><@fields.title /></h1>
-              <em data-test-description><@fields.description /></em>
-            </div>
+            <h1 class='title' data-test-title><@fields.title /></h1>
+            <p class='description' data-test-description>
+              <@fields.description />
+            </p>
           </div>
-        </div>
-        <div class='readme section'>
-          <div class='row-header'>
-            <BookOpenText />
-            README
-          </div>
-          {{#if @model.readMe}}
-            <div class='box'>
-              <@fields.readMe />
-            </div>
-          {{/if}}
-        </div>
-        <div class='examples section'>
-          <div class='row-header'>
-            <LayersSubtract />
-            Examples
-          </div>
+        </header>
+        <section class='readme section'>
+          <header class='row-header'>
+            <BookOpenText width='20' height='20' role='presentation' />
+            <h2>Read Me</h2>
+          </header>
+          <@fields.readMe />
+        </section>
+        <section class='examples section'>
+          <header class='row-header'>
+            <LayersSubtract width='20' height='20' role='presentation' />
+            <h2>Examples</h2>
+          </header>
           {{#if (eq @model.specType 'field')}}
             <@fields.containedExamples />
           {{else}}
             <@fields.linkedExamples />
           {{/if}}
-        </div>
-        <div class='module section'>
-          <div class='row-header'>
-            <GitBranch />
-            Module</div>
-          <div class='container-code-ref'>
-            <div class='row-code-ref'>
-              <div class='row-code-ref-label'>URL</div>
-              <div class='row-code-ref-value box' data-test-module-href>
-                {{@model.moduleHref}}
+        </section>
+        <section class='module section'>
+          <header class='row-header'>
+            <GitBranch width='20' height='20' role='presentation' />
+            <h2>Module</h2>
+          </header>
+          <div class='code-ref-container'>
+            <FieldContainer @label='URL' @vertical={{true}}>
+              <div class='code-ref-row'>
+                <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+                <span class='code-ref-value' data-test-module-href>
+                  {{@model.moduleHref}}
+                </span>
               </div>
-            </div>
-            <div class='row-code-ref'>
-              <div class='row-code-ref-label'>Exported Name</div>
-              <div class='row-code-ref-value box'>
-                <div class='exported-row'>
-                  <div class='exported-name' data-test-exported-name>
-                    <DiagonalArrowLeftUp class='exported-arrow' />
-                    {{@model.ref.name}}
-                  </div>
-                  <div class='exported-type' data-test-exported-type>
-                    {{@model.specType}}
-                  </div>
+            </FieldContainer>
+            <FieldContainer @label='Module Name' @vertical={{true}}>
+              <div class='code-ref-row'>
+                <ExportArrow class='exported-arrow' width='10' height='10' />
+                <div class='code-ref-value' data-test-exported-name>
+                  {{@model.ref.name}}
+                </div>
+                <div class='exported-type' data-test-exported-type>
+                  {{@model.specType}}
                 </div>
               </div>
-            </div>
+            </FieldContainer>
           </div>
-        </div>
-      </div>
+        </section>
+      </article>
       <style scoped>
         .container {
-          background-color: var(--boxel-200);
+          --boxel-spec-background-color: #ebeaed;
+          --boxel-spec-code-ref-background-color: #e2e2e2;
+          --boxel-spec-code-ref-text-color: #646464;
+
+          height: 100%;
+          min-height: max-content;
+          padding: var(--boxel-sp);
+          background-color: var(--boxel-spec-background-color);
+        }
+        .section {
+          margin-top: var(--boxel-sp);
+          padding-top: var(--boxel-sp);
+          border-top: 1px solid var(--boxel-400);
+        }
+        h1 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 600;
+          letter-spacing: var(--boxel-lsp-xs);
+          line-height: 1.2;
+        }
+        h2 {
+          margin: 0;
+          font: 600 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        p {
+          margin-top: var(--boxel-sp-4xs);
+          margin-bottom: 0;
+        }
+        .title,
+        .description {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+          text-wrap: pretty;
         }
         .box {
-          border: 2px solid var(--boxel-border-color);
+          border: 1px solid var(--boxel-border-color);
           border-radius: var(--boxel-border-radius-lg);
-          padding: var(--boxel-sp-xs);
           background-color: var(--boxel-light);
         }
         .header {
           display: flex;
           gap: var(--boxel-sp-sm);
         }
-        .section {
-          padding: var(--boxel-sp-sm);
-        }
         .header-icon-container {
-          padding: var(--boxel-sp-sm);
           flex-shrink: 0;
-        }
-        .header-icon-svg {
           height: var(--boxel-icon-xxl);
           width: var(--boxel-icon-xxl);
-          border: 2px solid var(--boxel-border-color);
-          border-radius: var(--boxel-border-radius-lg);
-        }
-        .header-info-container {
-          padding: var(--boxel-sp-sm);
-          flex: 1;
-        }
-        .row-header {
-          display: inline-flex;
+          display: flex;
           align-items: center;
           justify-content: center;
-          gap: var(--boxel-sp-xs);
-          font-weight: 600;
+          background-color: var(--boxel-100);
         }
-        .container-code-ref {
+        .header-info-container {
+          align-self: center;
+        }
+        .row-header {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-lg);
+        }
+        .row-content {
+          margin-top: var(--boxel-sp-sm);
+        }
+
+        /* code ref container styles */
+        .code-ref-container {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-xs);
         }
-        .row-code-ref {
+        .code-ref-row {
           display: flex;
-          flex-direction: column;
+          align-items: center;
           gap: var(--boxel-sp-xs);
+          min-height: var(--boxel-form-control-height);
+          padding: var(--boxel-sp-xs);
+          background-color: var(
+            --boxel-spec-code-ref-background-color,
+            var(--boxel-100)
+          );
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius);
+          color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
         }
-        .row-code-ref-value {
-          background-color: var(--boxel-300);
+        .code-ref-value {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .exported-row {
-          display: flex;
-          justify-content: space-between;
-        }
-        .exported-name {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-        }
         .exported-type {
-          text-transform: uppercase;
-          font: 500 var(--boxel-font-xs);
+          margin-left: auto;
           color: var(--boxel-450);
-          letter-spacing: var(--boxel-lsp-xl);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp);
+          text-transform: uppercase;
         }
         .exported-arrow {
-          width: var(--boxel-icon-xxs);
-          height: var(--boxel-icon-xxs);
-          --icon-color: var(--boxel-teal);
+          min-width: 8px;
+          min-height: 8px;
+        }
+        .realm-icon {
+          width: 18px;
+          height: 18px;
+          border: 1px solid var(--boxel-dark);
         }
       </style>
     </template>

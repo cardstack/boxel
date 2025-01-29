@@ -108,7 +108,7 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
   }
 
   <template>
-    Boxel Specification
+    Boxel Spec
 
     <span class='has-boxel-spec' data-test-has-boxel-spec>
       {{#if @showCreateBoxelSpecIntent}}
@@ -245,10 +245,9 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
         justify-content: center;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
       }
       .boxel-spec-selector {
-        padding-top: var(--boxel-sp-sm);
-        padding-left: var(--boxel-sp-sm);
         min-width: 40%;
         align-self: flex-start;
       }
@@ -443,9 +442,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{#if this.icon}}
       <Pill class='spec-tag-pill' ...attributes>
         <:iconLeft>
-          <div class='spec-tagicon'>
-            {{this.icon}}
-          </div>
+          {{this.icon}}
         </:iconLeft>
         <:default>
           {{@specType}}
@@ -457,6 +454,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
       .spec-tag-pill {
         --pill-font: 500 var(--boxel-font-xs);
         --pill-background-color: var(--boxel-200);
+        word-break: initial;
       }
     </style>
   </template>
