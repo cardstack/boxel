@@ -396,7 +396,7 @@ class Isolated extends Component<typeof CardsGrid> {
       {
         filter: {
           on: catalogEntryRef,
-          eq: { isCard: true },
+          every: [{ eq: { isCard: true } }],
         },
       },
       { preselectedCardTypeQuery },
