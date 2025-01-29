@@ -21,7 +21,6 @@ import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
-import { LooseGooseyField } from '../loosey-goosey';
 import { Account } from './account';
 import { action } from '@ember/object';
 import { PercentageField } from '../percentage';
@@ -32,11 +31,6 @@ import { Contact } from './contact';
 import { ContactRow } from '../components/contact-row';
 import Users from '@cardstack/boxel-icons/users';
 import World from '@cardstack/boxel-icons/world';
-import FilterSearch from '@cardstack/boxel-icons/filter-search';
-import FilePen from '@cardstack/boxel-icons/file-pen';
-import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
-import Award from '@cardstack/boxel-icons/award';
-import AwardOff from '@cardstack/boxel-icons/award-off';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
@@ -46,6 +40,8 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
 import { DealEvent } from './deal-event';
+import { DealStatus } from './deal-status';
+import { DealPriority } from './deal-priority';
 
 interface DealSizeSummary {
   summary: string;
@@ -265,7 +261,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Pill
                 class='tag'
                 @tag='li'
-                @pillBackgroundColor={{@model.status.colorScheme.backgroundColor}}
+                @pillBackgroundColor={{@model.status.backgroundColor}}
               >
                 {{@model.status.label}}
               </Pill>
@@ -274,7 +270,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               <Pill
                 class='tag'
                 @tag='li'
-                @pillBackgroundColor={{@model.priority.colorScheme.backgroundColor}}
+                @pillBackgroundColor={{@model.priority.backgroundColor}}
               >
                 {{@model.priority.label}}
               </Pill>
@@ -994,117 +990,6 @@ class FittedTemplate extends Component<typeof Deal> {
       }
     </style>
   </template>
-}
-
-export const dealStatusValues = [
-  {
-    index: 0,
-    icon: FilterSearch,
-    label: 'Discovery',
-    value: 'discovery',
-    buttonText: 'Create Deal', // TODO: For the createNewButtonText usage in CRM App
-    colorScheme: {
-      foregroundColor: '#D32F2F', // Dark Red
-      backgroundColor: '#FFEBEE', // Light Red
-    },
-  },
-  {
-    index: 1,
-    icon: FilePen,
-    label: 'Proposal',
-    value: 'proposal',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: 'var(--boxel-lilac)',
-    },
-  },
-  {
-    index: 2,
-    icon: ArrowLeftRight,
-    label: 'Negotiation',
-    value: 'negotiation',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: '#FFF3E0', // light orange
-    },
-  },
-  {
-    index: 3,
-    icon: Award,
-    label: 'Closed Won',
-    value: 'closed-won',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: '#E8F5E9', // light green
-    },
-  },
-  {
-    index: 4,
-    icon: AwardOff,
-    label: 'Closed Lost',
-    value: 'closed-lost',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: '#FFEBEE', // light red
-    },
-  },
-];
-
-class DealStatus extends LooseGooseyField {
-  static displayName = 'CRM Deal Status';
-  static values = dealStatusValues;
-
-  static atom = class Atom extends Component<typeof this> {
-    get statusData() {
-      return dealStatusValues.find(
-        (status) => status.label === this.args.model.label,
-      );
-    }
-
-    <template>
-      {{#if @model.label}}
-        <EntityDisplayWithIcon @title={{@model.label}}>
-          <:icon>
-            {{this.statusData.icon}}
-          </:icon>
-        </EntityDisplayWithIcon>
-      {{/if}}
-    </template>
-  };
-}
-
-export class DealPriority extends LooseGooseyField {
-  static displayName = 'CRM Deal Priority';
-  static values = [
-    {
-      index: 0,
-      label: 'Low Priority',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#E3F2FD',
-      },
-    },
-    {
-      index: 1,
-      label: 'Medium Priority',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#FFF0B3',
-      },
-    },
-    {
-      index: 2,
-      label: 'High Priority',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: 'var(--boxel-yellow)',
-      },
-    },
-  ];
 }
 
 export class ValueLineItem extends FieldDef {

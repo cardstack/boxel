@@ -38,8 +38,8 @@ import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
-import { urgencyTagValues } from './crm/account';
-import { dealStatusValues } from './crm/deal';
+import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
+import { DEAL_STATUS_VALUES } from './crm/deal-status';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
@@ -100,11 +100,11 @@ const DEAL_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Deal',
     createNewButtonText: 'Create Deal',
   },
-  ...dealStatusValues.map((status) => ({
+  ...DEAL_STATUS_VALUES.map((status) => ({
     displayName: status.label,
     icon: status.icon,
     cardTypeName: 'CRM Deal',
-    createNewButtonText: status.buttonText,
+    createNewButtonText: 'Create Deal',
   })),
 ];
 // Map with urgencyTagValues array from crm/account.gts
@@ -115,11 +115,11 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
-  ...urgencyTagValues.map((tag) => ({
+  ...URGENCY_TAG_VALUES.map((tag) => ({
     displayName: tag.label,
     icon: tag.icon,
     cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
-    createNewButtonText: tag.buttonText,
+    createNewButtonText: 'Create Account',
   })),
 ];
 const TASK_FILTERS: LayoutFilter[] = [

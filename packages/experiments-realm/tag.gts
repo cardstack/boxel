@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import { Pill } from '@cardstack/boxel-ui/components';
+import { ColorField } from './color';
 
 export class Tag extends CardDef {
   static displayName = 'Tag';
@@ -17,7 +18,7 @@ export class Tag extends CardDef {
       return this.name;
     },
   });
-  @field color = contains(StringField);
+  @field color = contains(ColorField);
 
   static atom = class Atom extends Component<typeof this> {
     <template>

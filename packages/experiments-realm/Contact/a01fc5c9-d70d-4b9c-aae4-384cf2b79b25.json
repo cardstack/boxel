@@ -41,13 +41,7 @@
       "statusTag": {
         "lightColor": "#93C5FD",
         "darkColor": "#3B82F6",
-        "index": null,
-        "label": "Lead",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": null,
-          "backgroundColor": null
-        }
+        "label": "Lead"
       },
       "description": null,
       "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1"
