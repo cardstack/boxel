@@ -41,6 +41,7 @@ import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
 import { DealEvent } from './deal-event';
 import { DealStatus } from './deal-status';
+import { DealPriority } from './deal-priority';
 
 interface DealSizeSummary {
   summary: string;
