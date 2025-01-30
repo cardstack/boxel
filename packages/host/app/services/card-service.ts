@@ -259,6 +259,15 @@ export default class CardService extends Service {
     }
   }
 
+  async getSource(url: URL) {
+    let response = await this.network.authedFetch(url, {
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+    return response.text();
+  }
+
   async saveSource(url: URL, content: string) {
     let response = await this.network.authedFetch(url, {
       method: 'POST',
