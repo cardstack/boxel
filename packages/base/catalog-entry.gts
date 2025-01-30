@@ -138,7 +138,7 @@ export class CatalogEntry extends CardDef {
 
     <template>
       <article class='container'>
-        <header class='header'>
+        <header class='header' aria-labelledby='title'>
           <div class='box header-icon-container'>
             {{#if this.loadCardIcon.isRunning}}
               <LoadingIndicator />
@@ -149,23 +149,23 @@ export class CatalogEntry extends CardDef {
             {{/if}}
           </div>
           <div class='header-info-container'>
-            <h1 class='title' data-test-title><@fields.title /></h1>
+            <h1 class='title' id='title' data-test-title><@fields.title /></h1>
             <p class='description' data-test-description>
               <@fields.description />
             </p>
           </div>
         </header>
         <section class='readme section'>
-          <header class='row-header'>
+          <header class='row-header' aria-labelledby='readme'>
             <BookOpenText width='20' height='20' role='presentation' />
-            <h2>Read Me</h2>
+            <h2 id='readme'>Read Me</h2>
           </header>
           <@fields.readMe />
         </section>
         <section class='examples section'>
-          <header class='row-header'>
+          <header class='row-header' aria-labelledby='examples'>
             <LayersSubtract width='20' height='20' role='presentation' />
-            <h2>Examples</h2>
+            <h2 id='examples'>Examples</h2>
           </header>
           {{#if (eq @model.specType 'field')}}
             <@fields.containedExamples />
@@ -174,9 +174,9 @@ export class CatalogEntry extends CardDef {
           {{/if}}
         </section>
         <section class='module section'>
-          <header class='row-header'>
+          <header class='row-header' aria-labelledby='module'>
             <GitBranch width='20' height='20' role='presentation' />
-            <h2>Module</h2>
+            <h2 id='module'>Module</h2>
           </header>
           <div class='code-ref-container'>
             <FieldContainer @label='URL' @vertical={{true}}>
@@ -260,6 +260,7 @@ export class CatalogEntry extends CardDef {
           background-color: var(--boxel-100);
         }
         .header-info-container {
+          flex: 1;
           align-self: center;
         }
         .row-header {
@@ -322,53 +323,56 @@ export class CatalogEntry extends CardDef {
       return this.args.model.constructor?.icon;
     }
     <template>
-      <div class='header'>
+      <article class='embedded-spec'>
         <div class='header-icon-container'>
-          <this.icon class='box header-icon-svg' />
+          <this.icon width='30' height='30' role='presentation' />
         </div>
         <div class='header-info-container'>
-          <header class='title'><@fields.title /></header>
+          <h3 class='title'><@fields.title /></h3>
           <p class='description'><@fields.description /></p>
         </div>
-        <div class='pill-container'>
-          {{#if @model.specType}}
-            <SpecTag @specType={{@model.specType}} />
-          {{/if}}
-        </div>
-      </div>
+        {{#if @model.specType}}
+          <SpecTag @specType={{@model.specType}} />
+        {{/if}}
+      </article>
       <style scoped>
-        .header {
+        .embedded-spec {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-xs);
         }
         .header-icon-container {
           flex-shrink: 0;
-          padding: var(--boxel-sp-sm);
+          height: var(--boxel-icon-xl);
+          width: var(--boxel-icon-xl);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: var(--boxel-100);
+          border: 1px solid var(--boxel-border-color);
+          border-radius: var(--boxel-border-radius-lg);
+          background-color: var(--boxel-light);
         }
         .header-info-container {
           flex: 1;
         }
-        .pill-container {
-          padding-right: var(--boxel-sp-sm);
-        }
-        .header-icon-svg {
-          width: 50px;
-          height: 50px;
-          border: 2px solid var(--boxel-border-color);
-          border-radius: var(--boxel-border-radius-lg);
-        }
         .title {
+          margin: 0;
           font: 600 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
         }
         .description {
           margin: 0;
           color: var(--boxel-500);
-          font-size: var(--boxel-font-size-xs);
+          font: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
         }
       </style>
     </template>
   };
+
+  static edit = class Edit extends this.isolated {};
 }
 
 interface Signature {
@@ -411,9 +415,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{#if this.icon}}
       <Pill class='spec-tag-pill' ...attributes>
         <:iconLeft>
-          <div>
-            {{this.icon}}
-          </div>
+          {{this.icon}}
         </:iconLeft>
         <:default>
           {{@specType}}
@@ -425,6 +427,8 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
       .spec-tag-pill {
         --pill-font: 500 var(--boxel-font-xs);
         --pill-background-color: var(--boxel-200);
+        word-break: initial;
+        text-transform: uppercase;
       }
     </style>
   </template>
