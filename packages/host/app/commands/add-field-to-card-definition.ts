@@ -38,7 +38,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
       cardBeingModified: input.cardDefinitionToModify,
       fieldName: input.fieldName,
       fieldRef: input.fieldRef,
-      fieldType: input.fieldDefinitionType as FieldType,
+      fieldType: input.fieldType as FieldType,
       fieldDefinitionType: input.fieldDefinitionType as 'field' | 'card',
       incomingRelativeTo: input.incomingRelativeTo
         ? new URL(input.incomingRelativeTo)
@@ -50,6 +50,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
         ? new URL(input.outgoingRealmURL)
         : undefined,
       addFieldAtIndex: input.addFieldAtIndex,
+      sourceCodeForComputedField: input.sourceCodeForComputedField,
     });
 
     let writeTextFileCommand = new WriteTextFileCommand(this.commandContext);

@@ -117,6 +117,7 @@ export class ModuleSyntax {
     outgoingRelativeTo,
     outgoingRealmURL,
     addFieldAtIndex,
+    sourceCodeForComputedField,
   }: {
     cardBeingModified: CodeRef;
     fieldName: string;
@@ -127,6 +128,7 @@ export class ModuleSyntax {
     outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
     addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
+    sourceCodeForComputedField?: string; // if provided, the field will be added as a computed field
   }) {
     let card = this.getCard(cardBeingModified);
     if (card.possibleFields.has(fieldName)) {
@@ -147,6 +149,7 @@ export class ModuleSyntax {
       outgoingRelativeTo,
       outgoingRealmURL,
       moduleURL: this.url,
+      sourceCodeForComputedField,
     });
 
     let src = this.code();
@@ -372,6 +375,7 @@ function makeNewField({
   outgoingRelativeTo,
   outgoingRealmURL,
   moduleURL,
+  sourceCodeForComputedField,
 }: {
   target: NodePath<t.Node>;
   fieldRef: { name: string; module: string };
@@ -383,6 +387,7 @@ function makeNewField({
   outgoingRelativeTo: URL | undefined;
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
+  sourceCodeForComputedField?: string;
 }): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -395,6 +400,7 @@ function makeNewField({
     `${baseRealm.url}card-api`,
     'field',
   );
+  debugger;
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
@@ -433,6 +439,15 @@ function makeNewField({
     fieldRef.name,
     suggestedCardName(fieldRef, fieldDefinitionType),
   );
+
+  if (sourceCodeForComputedField) {
+    debugger;
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name}, {
+              computeVia: function () {
+                return ${sourceCodeForComputedField}
+              },
+            });`;
+  }
 
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
 }

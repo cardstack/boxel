@@ -135,6 +135,7 @@ export class AddFieldToCardDefinitionInput extends CardDef {
   @field outgoingRelativeTo = contains(StringField); // can be undefined when you know url is not going to be relative
   @field outgoingRealmURL = contains(StringField); // should be provided when the other 2 params are provided
   @field addFieldAtIndex = contains(NumberField); // if provided, the field will be added at the specified index in the card's possibleFields map
+  @field sourceCodeForComputedField = contains(StringField); // if provided, the field will be added as a computed field
 }
 
 export {

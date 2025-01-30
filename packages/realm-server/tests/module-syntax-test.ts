@@ -853,6 +853,53 @@ module(basename(__filename), function () {
       );
     });
 
+    test('can add a contains field with a computed value', async function (assert) {
+      let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+      }
+      `;
+
+      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      mod.addField({
+        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        fieldName: 'fullName',
+        fieldType: 'contains',
+        fieldDefinitionType: 'field',
+        fieldRef: {
+          module: 'https://cardstack.com/base/string',
+          name: 'default',
+        },
+        incomingRelativeTo: undefined,
+        outgoingRelativeTo: undefined,
+        outgoingRealmURL: undefined,
+        sourceCodeForComputedField:
+          "[this.firstName, this.lastName].filter(Boolean).join(' ');",
+      });
+
+      assert.codeEqual(
+        mod.code(),
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringField);
+          @field lastName = contains(StringField);
+          @field fullName = contains(StringField, {
+            computeVia: function () {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
+        }
+      `,
+      );
+    });
+
     test('can handle field card declaration collisions when adding field', async function (assert) {
       let src = `
       import { contains, field, CardDef } from "https://cardstack.com/base/card-api";

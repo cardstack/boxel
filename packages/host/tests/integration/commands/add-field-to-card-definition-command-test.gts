@@ -49,10 +49,10 @@ module(
         contents: {
           'person.gts': `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
-            @field firstName = contains(StringCard);
+            @field firstName = contains(StringField);
           }
         `,
         },
@@ -87,14 +87,60 @@ module(
         response,
         `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
-            @field firstName = contains(StringCard);
-            @field lastName = field(StringCard);
+            @field firstName = contains(StringField);
+            @field lastName = field(StringField);
           }
         `,
         'lastName field was added to the card definition',
+      );
+    });
+
+    test('can add a computed field', async function (assert) {
+      let commandService = lookupService<CommandService>('command-service');
+      let cardService = lookupService<CardService>('card-service');
+      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
+        commandService.commandContext,
+      );
+
+      await addFieldToCardDefinitionCommand.execute({
+        cardDefinitionToModify: {
+          module: 'http://test-realm/test/person',
+          name: 'Person',
+        },
+        fieldName: 'rapName',
+        fieldDefinitionType: 'field',
+        fieldType: 'contains',
+        fieldRef: {
+          module: 'https://cardstack.com/base/string',
+          name: 'default',
+        },
+        incomingRelativeTo: undefined,
+        outgoingRelativeTo: undefined,
+        outgoingRealmURL: undefined,
+        sourceCodeForComputedField: '`Lil ${this.firstName}`;',
+      });
+
+      let response = await cardService.getSource(
+        new URL('person.gts', testRealmURL),
+      );
+      assert.strictEqual(
+        response,
+        `
+          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          export class Person extends CardDef {
+            static displayName = 'Person';
+            @field firstName = contains(StringField);
+            @field rapName = contains(StringField, {
+              computeVia: function () {
+                return \`Lil \${this.firstName}\`;
+              },
+            });
+          }
+        `,
       );
     });
   },
