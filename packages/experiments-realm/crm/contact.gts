@@ -1,7 +1,4 @@
 import StringField from 'https://cardstack.com/base/string';
-import { ContactPhoneNumber } from '../phone-number';
-import { EmailField } from '../email';
-import { ContactLinkField } from '../fields/contact-link';
 import {
   Component,
   CardDef,
@@ -10,16 +7,21 @@ import {
   linksTo,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
-import AvatarGroup from '../components/avatar-group';
-import { Company } from './company';
+
 import { Avatar } from '@cardstack/boxel-ui/components';
-import { StatusPill } from '../components/status-pill';
+import AvatarGroup from '../components/avatar-group';
+
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
-import { LooseGooseyField } from '../loosey-goosey';
 import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
+
+import { Company } from './company';
+import { StatusTagField } from './contact-status-tag';
+import { ContactPhoneNumber } from '../phone-number';
+import { EmailField } from '../email';
+import { ContactLinkField } from '../fields/contact-link';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -672,38 +674,6 @@ class AtomTemplate extends Component<typeof Contact> {
       }
     </style>
   </template>
-}
-
-export class StatusTagField extends LooseGooseyField {
-  static icon = ContactIcon;
-  @field lightColor = contains(StringField);
-  @field darkColor = contains(StringField);
-
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{#if @model.label}}
-        <StatusPill
-          @label={{@model.label}}
-          @icon={{@model.constructor.icon}}
-          @iconDarkColor={{@model.darkColor}}
-          @iconLightColor={{@model.lightColor}}
-        />
-      {{/if}}
-    </template>
-  };
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{#if @model.label}}
-        <StatusPill
-          @label={{@model.label}}
-          @icon={{@model.constructor.icon}}
-          @iconDarkColor={{@model.darkColor}}
-          @iconLightColor={{@model.lightColor}}
-        />
-      {{/if}}
-    </template>
-  };
 }
 
 export class Contact extends CardDef {

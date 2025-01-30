@@ -19,7 +19,7 @@ import {
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -304,9 +304,13 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  boxelSpecSearch = getCards(this.boxelSpecQuery, this.realms, {
-    isLive: true,
-  });
+  boxelSpecSearch = getCards(
+    () => this.boxelSpecQuery,
+    () => this.realms,
+    {
+      isLive: true,
+    },
+  );
 
   get boxelSpecInstances() {
     return this.boxelSpecSearch.instances as CatalogEntry[];
@@ -398,11 +402,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
   }
 
   <template>
-    {{#if this.boxelSpecSearch.isLoading}}
-      <div class='loading'>
-        <LoadingIndicator />
-      </div>
-    {{else}}
+    {{#if (not this.boxelSpecSearch.isLoading)}}
       {{yield
         (component
           BoxelSpecPreviewTitle
@@ -421,13 +421,6 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
         )
       }}
     {{/if}}
-    <style scoped>
-      .loading {
-        display: flex;
-        justify-content: center;
-        padding: var(--boxel-sp-xl);
-      }
-    </style>
   </template>
 }
 

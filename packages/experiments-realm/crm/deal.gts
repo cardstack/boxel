@@ -1,3 +1,4 @@
+// TODO: please organize imports
 import {
   CardDef,
   contains,
@@ -15,13 +16,11 @@ import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import { Pill, BoxelButton } from '@cardstack/boxel-ui/components';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
-import { htmlSafe } from '@ember/template';
-import { concat } from '@ember/helper';
-import { LooseGooseyField } from '../loosey-goosey';
 import { Account } from './account';
 import { action } from '@ember/object';
 import { PercentageField } from '../percentage';
@@ -32,11 +31,6 @@ import { Contact } from './contact';
 import { ContactRow } from '../components/contact-row';
 import Users from '@cardstack/boxel-icons/users';
 import World from '@cardstack/boxel-icons/world';
-import FilterSearch from '@cardstack/boxel-icons/filter-search';
-import FilePen from '@cardstack/boxel-icons/file-pen';
-import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
-import Award from '@cardstack/boxel-icons/award';
-import AwardOff from '@cardstack/boxel-icons/award-off';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
@@ -45,6 +39,9 @@ import { Company } from './company';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
+import { DealEvent } from './deal-event';
+import { DealStatus } from './deal-status';
+import { DealPriority } from './deal-priority';
 
 interface DealSizeSummary {
   summary: string;
@@ -129,13 +126,21 @@ class IsolatedTemplate extends Component<typeof Deal> {
     };
   }
 
-  query = getCards(this.dealQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  query = getCards(
+    () => this.dealQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
-  activeTasks = getCards(this.activeTasksQuery, this.realmHrefs, {
-    isLive: true,
-  });
+  activeTasks = getCards(
+    () => this.activeTasksQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   get activeTasksCount() {
     const tasks = this.activeTasks;
@@ -229,16 +234,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
   <template>
     <DealPageLayout>
       <:header>
-        <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
-          <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Deal Name</h1>
-            {{/if}}
-          </:name>
-          <:content>
-            <div class='description content-container'>
+        <div class='header-container'>
+          <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
+            <:name>
+              <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+                {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+              </h1>
+            </:name>
+            <:content>
               <div class='info-container'>
                 <@fields.company
                   @format='atom'
@@ -251,33 +254,29 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   class='info-atom'
                 />
               </div>
-              <div class='tag-container'>
-                {{#if @model.status}}
-                  <Pill
-                    style={{htmlSafe
-                      (concat
-                        'background-color: '
-                        @model.status.colorScheme.backgroundColor
-                        '; border-color: transparent;'
-                      )
-                    }}
-                  >{{@model.status.label}}</Pill>
-                {{/if}}
-                {{#if @model.priority}}
-                  <Pill
-                    style={{htmlSafe
-                      (concat
-                        'background-color: '
-                        @model.priority.colorScheme.backgroundColor
-                        '; border-color: transparent;'
-                      )
-                    }}
-                  >{{@model.priority.label}}</Pill>
-                {{/if}}
-              </div>
-            </div>
-          </:content>
-        </AccountHeader>
+            </:content>
+          </AccountHeader>
+          <ul class='tag-list'>
+            {{#if @model.status}}
+              <Pill
+                class='tag'
+                @tag='li'
+                @pillBackgroundColor={{@model.status.backgroundColor}}
+              >
+                {{@model.status.label}}
+              </Pill>
+            {{/if}}
+            {{#if @model.priority}}
+              <Pill
+                class='tag'
+                @tag='li'
+                @pillBackgroundColor={{@model.priority.backgroundColor}}
+              >
+                {{@model.priority.label}}
+              </Pill>
+            {{/if}}
+          </ul>
+        </div>
       </:header>
 
       <:dashboard>
@@ -288,8 +287,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
           <:icon>
             {{#if @model.healthScore}}
               <div class='progress-container'>
-                <label class='progress-label'>{{@model.healthScore}}% Health
-                  Score</label>
+                <span class='progress-label'>
+                  {{@model.healthScore}}% Health Score
+                </span>
                 <CrmProgressBar
                   @value={{@model.healthScore}}
                   @max={{100}}
@@ -299,9 +299,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
             {{/if}}
           </:icon>
           <:content>
-            <article class='dashboard-cards'>
+            <div class='dashboard-cards'>
               <div class='block'>
-                <label>Current Value:</label>
+                Current Value
                 <@fields.computedValue class='highlight-value' @format='atom' />
                 {{#if this.query.isLoading}}
                   Loading...
@@ -322,10 +322,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     </p>
                   {{/let}}
                 {{/if}}
-
               </div>
               <div class='block'>
-                <label>Predicted Revenue:</label>
+                Predicted Revenue
                 {{! TODO: compound fields have divs that wrap them. Seems a bit inconsistent.}}
                 <div class='highlight-value'>
                   {{#if @model.predictedRevenue.amount}}
@@ -339,10 +338,12 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     </div>
                   {{/if}}
                 </div>
-                <p class='description secondary-value'>Based on similar events</p>
+                <span class='description'>
+                  Based on similar events
+                </span>
               </div>
               <div class='block'>
-                <label>Profit Margin:</label>
+                Profit Margin
                 {{! TODO: compound fields have divs that wrap them. Seems a bit inconsistent.}}
                 <div class='highlight-value'>
                   {{#if @model.profitMargin}}
@@ -353,21 +354,23 @@ class IsolatedTemplate extends Component<typeof Deal> {
                     </div>
                   {{/if}}
                 </div>
-                <p class='description secondary-value'>Estimated</p>
+                <span class='description'>
+                  Estimated
+                </span>
               </div>
-            </article>
+            </div>
 
             <hr />
 
             {{#if this.hasValueBreakdown}}
-              <article class='value-breakdown'>
+              <div class='value-breakdown'>
                 <header>
-                  <label>Value Breakdown</label>
+                  <h4 class='breakdown-title'>Value Breakdown</h4>
                 </header>
                 <div class='breakdown-table'>
                   <@fields.valueBreakdown />
                 </div>
-              </article>
+              </div>
 
               <hr />
             {{/if}}
@@ -380,7 +383,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   </:icon>
                 </EntityDisplayWithIcon>
               </div>
-              <div class='description content-container'>
+              <div class='content-container'>
                 {{#if @model.notes}}
                   <@fields.notes />
                 {{else}}
@@ -390,16 +393,15 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 {{/if}}
               </div>
             </footer>
-
           </:content>
         </SummaryCard>
       </:dashboard>
 
       <:summary>
         <SummaryGridContainer class='task-summary-grid'>
-          <SummaryCard>
+          <SummaryCard class='info-card'>
             <:title>
-              <label>Company Info</label>
+              <h3 class='info-card-title'>Company Info</h3>
             </:title>
             <:icon>
               <World class='header-icon' />
@@ -416,9 +418,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
+          <SummaryCard class='info-card'>
             <:title>
-              <label>Stakeholders</label>
+              <h3 class='info-card-title'>Stakeholders</h3>
             </:title>
             <:icon>
               <Users class='header-icon' />
@@ -449,9 +451,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='tasks-summary-card'>
+          <SummaryCard class='info-card tasks-summary-card'>
             <:title>
-              <label>Active Tasks</label>
+              <h3 class='info-card-title'>Active Tasks</h3>
             </:title>
             <:icon>
               <BoxelButton
@@ -497,18 +499,18 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin: 0;
       }
       hr {
-        border: 1px solid var(--boxel-200);
-        margin: 1.3rem 0;
+        border: 0.5px solid var(--boxel-200);
+        margin: var(--boxel-sp) 0;
       }
-      .mt-5 {
-        margin-top: 1rem;
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-lg);
       }
       .highlight-value {
         font: 600 var(--boxel-font-xl);
-      }
-      .secondary-value {
-        font: 300 var(--boxel-font-sm);
-        color: var(--boxel-400);
+        white-space: nowrap;
       }
       .success-value {
         font: 300 var(--boxel-font-sm);
@@ -524,9 +526,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .block {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-4xs);
       }
       .dashboard {
+        --summary-card-padding: var(--boxel-sp);
         container-type: inline-size;
       }
       .dashboard-cards {
@@ -537,6 +540,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       .account-name {
         font: 600 var(--boxel-font-lg);
+        letter-spacing: var(--boxel-lsp-xxs);
       }
       .user-icon {
         margin-left: auto;
@@ -547,15 +551,30 @@ class IsolatedTemplate extends Component<typeof Deal> {
         flex-shrink: 0;
         margin-left: auto;
       }
-      .tag-container,
+      .tag-list,
       .info-container {
+        margin: 0;
+        padding: 0;
+        list-style-type: none;
         display: flex;
         flex-wrap: wrap;
         align-items: start;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xs);
       }
-      .summary-title {
-        font: 600 var(--boxel-font-sm);
+      .tag {
+        --pill-border: none;
+        --pill-font: 600 var(--boxel-font-xs);
+        --pill-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+      }
+      .info-container {
+        gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+      }
+      .info-field {
+        --entity-display-title-font-weight: 400;
+      }
+      .summary-title,
+      .info-card-title {
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xxs);
         align-self: flex-start;
       }
@@ -563,8 +582,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
         font: 600 var(--boxel-font-lg);
       }
       .description {
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
+        color: var(--boxel-450);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
       }
       .content-container {
         margin: 0;
@@ -575,10 +595,15 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .progress-container {
         display: flex;
         align-items: start;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xs);
       }
       .progress-label {
-        color: var(--boxel-500);
+        font: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .breakdown-title {
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
       }
       .breakdown-table {
         width: 90%;
@@ -588,7 +613,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       /* Task Summary Grid & Card */
       .task-summary-grid {
-        --summary-card-min-height: 180px;
+        --summary-card-min-height: 170px;
       }
       .tasks-summary-card :where(.task-card) {
         --task-card-padding: var(--boxel-sp-xxxs) 0;
@@ -627,6 +652,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
         height: var(--boxel-icon-sm);
         flex-shrink: 0;
         margin-left: auto;
+      }
+      .info-card {
+        --summary-card-gap: var(--boxel-sp-xl);
+        --summary-card-padding: var(--boxel-sp);
+        --entity-display-title-font-weight: 400;
+      }
+      .new-item-button {
+        font-weight: 600;
       }
     </style>
   </template>
@@ -716,12 +749,12 @@ class FittedTemplate extends Component<typeof Deal> {
       <div class='deal-content'>
         <div class='deal-details'>
           <div class='deal-field'>
-            <label>Current Value</label>
+            <span class='label'>Current Value</span>
             <@fields.computedValue class='highlight-value' @format='atom' />
           </div>
 
           <div class='deal-field'>
-            <label>Close Date</label>
+            <span class='label'>Close Date</span>
             <div class='highlight-value'>
               <@fields.closeDate @format='atom' />
             </div>
@@ -729,7 +762,7 @@ class FittedTemplate extends Component<typeof Deal> {
 
           {{#if @model.healthScore}}
             <div class='deal-field'>
-              <label>Health Score</label>
+              <span class='label'>Health Score</span>
               <div class='progress-container'>
                 <CrmProgressBar
                   @value={{@model.healthScore}}
@@ -748,7 +781,6 @@ class FittedTemplate extends Component<typeof Deal> {
           {{! just serve the placeholder for grid system ,pending event card - https://linear.app/cardstack/issue/CS-7691/add-event-card }}
         </div>
       </div>
-
     </article>
 
     <style scoped>
@@ -756,10 +788,10 @@ class FittedTemplate extends Component<typeof Deal> {
       p {
         margin: 0;
       }
-      label {
-        color: var(--boxel-500);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
+      .label {
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
       }
       .default-value {
         color: var(--boxel-400);
@@ -960,117 +992,6 @@ class FittedTemplate extends Component<typeof Deal> {
   </template>
 }
 
-export const dealStatusValues = [
-  {
-    index: 0,
-    icon: FilterSearch,
-    label: 'Discovery',
-    value: 'discovery',
-    buttonText: 'Create Deal', // TODO: For the createNewButtonText usage in CRM App
-    colorScheme: {
-      foregroundColor: '#D32F2F', // Dark Red
-      backgroundColor: '#FFEBEE', // Light Red
-    },
-  },
-  {
-    index: 1,
-    icon: FilePen,
-    label: 'Proposal',
-    value: 'proposal',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: 'var(--boxel-lilac)',
-    },
-  },
-  {
-    index: 2,
-    icon: ArrowLeftRight,
-    label: 'Negotiation',
-    value: 'negotiation',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: '#FFF3E0', // light orange
-    },
-  },
-  {
-    index: 3,
-    icon: Award,
-    label: 'Closed Won',
-    value: 'closed-won',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: '#E8F5E9', // light green
-    },
-  },
-  {
-    index: 4,
-    icon: AwardOff,
-    label: 'Closed Lost',
-    value: 'closed-lost',
-    buttonText: 'Create Deal',
-    colorScheme: {
-      foregroundColor: '#000000',
-      backgroundColor: '#FFEBEE', // light red
-    },
-  },
-];
-
-class DealStatus extends LooseGooseyField {
-  static displayName = 'CRM Deal Status';
-  static values = dealStatusValues;
-
-  static atom = class Atom extends Component<typeof this> {
-    get statusData() {
-      return dealStatusValues.find(
-        (status) => status.label === this.args.model.label,
-      );
-    }
-
-    <template>
-      {{#if @model.label}}
-        <EntityDisplayWithIcon @title={{@model.label}}>
-          <:icon>
-            {{this.statusData.icon}}
-          </:icon>
-        </EntityDisplayWithIcon>
-      {{/if}}
-    </template>
-  };
-}
-
-export class DealPriority extends LooseGooseyField {
-  static displayName = 'CRM Deal Priority';
-  static values = [
-    {
-      index: 0,
-      label: 'Low Priority',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#E3F2FD',
-      },
-    },
-    {
-      index: 1,
-      label: 'Medium Priority',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: '#FFF0B3',
-      },
-    },
-    {
-      index: 2,
-      label: 'High Priority',
-      colorScheme: {
-        foregroundColor: '#000000',
-        backgroundColor: 'var(--boxel-yellow)',
-      },
-    },
-  ];
-}
-
 export class ValueLineItem extends FieldDef {
   static displayName = 'CRM Value Line Item';
   @field name = contains(StringField);
@@ -1109,6 +1030,7 @@ export class ValueLineItem extends FieldDef {
 
 export class Deal extends CardDef {
   static displayName = 'CRM Deal';
+  static headerColor = '#f8f7fa';
   @field name = contains(StringField);
   @field account = linksTo(() => Account);
   @field status = contains(DealStatus);
@@ -1138,6 +1060,7 @@ export class Deal extends CardDef {
     },
   });
   @field healthScore = contains(PercentageField);
+  @field event = linksTo(() => DealEvent);
   @field notes = contains(MarkdownField);
   @field primaryStakeholder = linksTo(() => Contact);
   @field stakeholders = linksToMany(() => Contact);
@@ -1208,8 +1131,9 @@ class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         width: 100%;
-        padding: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
         box-sizing: border-box;
+        background-color: var(--boxel-100);
       }
     </style>
   </template>

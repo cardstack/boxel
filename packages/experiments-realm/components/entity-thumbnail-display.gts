@@ -16,6 +16,7 @@ interface EntityDisplayWithThumbnailArgs {
   Element: HTMLElement;
 }
 
+// TODO: refactor EntityDisplayWithIcon and EntityDisplayWithThumbnail
 export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityDisplayWithThumbnailArgs> {
   get shouldAlignCenter() {
     return this.args.center;
@@ -80,6 +81,7 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
           --entity-display-title-font-size,
           var(--boxel-font-size-sm)
         );
+        --title-color: var(--entity-display-title-color, var(--boxel-dark));
         --title-font-weight: var(--entity-display-title-font-weight, 600);
         --content-font-size: var(
           --entity-display-content-font-size,
@@ -90,7 +92,7 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
           var(--boxel-font-weight-normal)
         );
         --content-color: var(--entity-display-content-color, var(--boxel-400));
-        --content-gap: var(--entity-display-content-gap, var(--boxel-sp-xxxs));
+        --content-gap: var(--entity-display-content-gap, var(--boxel-sp-xxs));
         display: flex;
         align-items: flex-start;
         gap: var(--content-gap);
@@ -120,6 +122,7 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
       }
       .entity-title {
         word-break: break-word;
+        color: var(--title-color);
         font-size: var(--title-font-size);
         font-weight: var(--title-font-weight);
       }

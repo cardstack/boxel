@@ -6,20 +6,14 @@
       "status": {
         "index": 2,
         "label": "Negotiation",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#000000",
-          "backgroundColor": "#FFF3E0"
-        }
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFF3E0"
       },
       "priority": {
         "index": 2,
         "label": "High Priority",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#000000",
-          "backgroundColor": "#FFE0B2"
-        }
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFE0B2"
       },
       "closeDate": "2024-05-30",
       "currentValue": {
@@ -72,11 +66,6 @@
       "account": {
         "links": {
           "self": "../Account/c78762d3-9ab5-4f62-9370-d0b6a0261b08"
-        }
-      },
-      "document": {
-        "links": {
-          "self": null
         }
       },
       "primaryStakeholder": {

@@ -23,6 +23,14 @@ if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
 
+const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
+if (!REALM_SERVER_SECRET_SEED) {
+  console.error(
+    `The REALM_SERVER_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
   console.error(
@@ -253,7 +261,8 @@ let autoMigrate = migrateDB || undefined;
     virtualNetwork,
     matrixClient,
     realmsRootPath,
-    secretSeed: REALM_SECRET_SEED,
+    realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
+    realmSecretSeed: REALM_SECRET_SEED,
     dbAdapter,
     queue,
     assetsURL: dist,

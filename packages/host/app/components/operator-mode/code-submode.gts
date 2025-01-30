@@ -26,6 +26,7 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
@@ -37,6 +38,8 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+
+import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -55,7 +58,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
 
@@ -71,12 +74,15 @@ import CodeEditor from './code-editor';
 import BoxelSpecPreview from './code-submode/boxel-spec-preview';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import PlaygroundPanel from './code-submode/playground-panel';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+
+const isPlaygroundEnabled = ENV.featureFlags?.ENABLE_PLAYGROUND;
 
 interface Signature {
   Args: {
@@ -97,7 +103,11 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem = 'schema-editor' | 'boxel-spec-preview' | null;
+type SelectedAccordionItem =
+  | 'schema-editor'
+  | 'boxel-spec-preview'
+  | 'playground'
+  | null;
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -486,6 +496,17 @@ export default class CodeSubmode extends Component<Signature> {
       return this.selectedDeclaration;
     }
     return undefined;
+  }
+
+  private get shouldDisplayPlayground() {
+    if (!isPlaygroundEnabled) {
+      return false;
+    }
+    let declaration = this.selectedDeclaration;
+    if (!declaration || !('cardOrField' in declaration)) {
+      return false;
+    }
+    return isCardDef(declaration.cardOrField);
   }
 
   get showBoxelSpecPreview() {
@@ -975,6 +996,23 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                      {{#if this.shouldDisplayPlayground}}
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.selectAccordionItem 'playground'}}
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          data-test-accordion-item='playground'
+                        >
+                          <:title>Playground</:title>
+                          <:content>
+                            <PlaygroundPanel
+                              @moduleContentsResource={{this.moduleContentsResource}}
+                              @cardType={{this.selectedCardOrField.cardType}}
+                            />
+                          </:content>
+                        </A.Item>
+                      {{/if}}
                       {{#if this.showBoxelSpecPreview}}
                         <BoxelSpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}

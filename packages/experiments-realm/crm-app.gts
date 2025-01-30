@@ -14,7 +14,11 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
 
-import { Component, realmURL } from 'https://cardstack.com/base/card-api';
+import {
+  Component,
+  realmURL,
+  CardDef,
+} from 'https://cardstack.com/base/card-api';
 
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import {
@@ -23,7 +27,6 @@ import {
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
-import { AppCard, Tab } from './app-card';
 import {
   Query,
   CardError,
@@ -35,13 +38,27 @@ import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
-import { urgencyTagValues } from './crm/account';
-import { dealStatusValues } from './crm/deal';
+import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
+import { DEAL_STATUS_VALUES } from './crm/deal-status';
 import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
-import { CRMTaskPlannerIsolated } from './crm/task-planner';
+import { CRMTaskPlanner } from './crm/task-planner';
+
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import {
+  Card as CardIcon,
+  Grid3x3 as GridIcon,
+  Rows4 as StripIcon,
+} from '@cardstack/boxel-ui/icons';
 
 type ViewOption = 'card' | 'strip' | 'grid';
+
+interface ViewItem {
+  icon: TemplateOnlyComponent<{
+    Element: SVGElement;
+  }>;
+  id: ViewOption;
+}
 
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
@@ -83,11 +100,11 @@ const DEAL_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Deal',
     createNewButtonText: 'Create Deal',
   },
-  ...dealStatusValues.map((status) => ({
+  ...DEAL_STATUS_VALUES.map((status) => ({
     displayName: status.label,
     icon: status.icon,
     cardTypeName: 'CRM Deal',
-    createNewButtonText: status.buttonText,
+    createNewButtonText: 'Create Deal',
   })),
 ];
 // Map with urgencyTagValues array from crm/account.gts
@@ -98,11 +115,11 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Account',
     createNewButtonText: 'Create Account',
   },
-  ...urgencyTagValues.map((tag) => ({
+  ...URGENCY_TAG_VALUES.map((tag) => ({
     displayName: tag.label,
     icon: tag.icon,
     cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
-    createNewButtonText: tag.buttonText,
+    createNewButtonText: 'Create Account',
   })),
 ];
 const TASK_FILTERS: LayoutFilter[] = [
@@ -114,8 +131,27 @@ const TASK_FILTERS: LayoutFilter[] = [
   },
 ];
 
+const TABS = [
+  {
+    tabId: 'Contact',
+    displayName: 'Contacts',
+  },
+  {
+    tabId: 'Deal',
+    displayName: 'Deals',
+  },
+  {
+    tabId: 'Account',
+    displayName: 'Accounts',
+  },
+  {
+    tabId: 'Task',
+    displayName: 'Tasks',
+  },
+];
+
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
-class CrmAppTemplate extends Component<typeof AppCard> {
+class CrmAppTemplate extends Component<typeof CrmApp> {
   //filters
   filterMap: TrackedMap<string, LayoutFilter[]> = new TrackedMap([
     ['Contact', CONTACT_FILTERS],
@@ -126,14 +162,34 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
-    this.loadDealCards.perform();
   }
   //tabs
-  @tracked activeTabId: string | undefined = this.args.model.tabs?.[0]?.tabId;
-  @tracked tabs = this.args.model.tabs;
+  @tracked activeTabId: string | undefined = TABS[0].tabId;
   @tracked private selectedView: ViewOption = 'card';
+
+  // Only show strip and grid views for Deal tab for now
+  get dealView(): ViewItem[] {
+    return [
+      { id: 'strip', icon: StripIcon },
+      { id: 'grid', icon: GridIcon },
+    ];
+  }
+
+  get commonViews(): ViewItem[] {
+    return [
+      { id: 'card', icon: CardIcon },
+      { id: 'strip', icon: StripIcon },
+      { id: 'grid', icon: GridIcon },
+    ];
+  }
+
+  get tabViews(): ViewItem[] {
+    const views =
+      this.activeTabId === 'Deal' ? this.dealView : this.commonViews;
+    return views;
+  }
+
   @tracked private searchKey = '';
-  @tracked private deals: Deal[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -156,8 +212,9 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       attributes: { displayName: string; total: number };
     }[];
 
-    for (let tab of this.tabs ?? []) {
-      let filters = this.filterMap.get(tab.tabId);
+    for (let tab of TABS) {
+      let tabId = tab.tabId;
+      let filters = this.filterMap.get(tabId);
       if (filters) {
         for (let filter of filters) {
           let summary = cardTypeSummaries.find(
@@ -173,25 +230,23 @@ class CrmAppTemplate extends Component<typeof AppCard> {
           };
           filter.cardRef = cardRef;
           filter.query = { filter: { type: cardRef } };
-          this.filterMap.set(tab.tabId, filters);
+          this.filterMap.set(tabId, filters);
         }
       }
     }
   });
 
-  private loadDealCards = restartableTask(async () => {
-    if (!this.query || this.activeTabId !== 'Deal') {
-      return;
-    }
+  get deals() {
+    return this.dealSearch.instances as Deal[];
+  }
 
-    const result = getCards(this.query, this.realmHrefs, {
+  dealSearch = getCards(
+    () => this.query,
+    () => this.realmHrefs,
+    {
       isLive: true,
-    });
-
-    await result.loaded;
-    this.deals = result.instances as Deal[];
-    return result;
-  });
+    },
+  );
 
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
@@ -203,30 +258,17 @@ class CrmAppTemplate extends Component<typeof AppCard> {
 
   //Tabs
   @action setActiveTab(id: string) {
+    this.selectedView = id === 'Deal' ? 'strip' : 'card';
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
-    this.loadDealCards.perform();
   }
+
   get headerColor() {
     return (
       Object.getPrototypeOf(this.args.model).constructor.headerColor ??
       undefined
     );
-  }
-  get activeTab() {
-    return (
-      this.tabs?.find((t: Tab) => t.tabId === this.activeTabId) ??
-      this.tabs?.[0]
-    );
-  }
-
-  get activeTabClass() {
-    return this.activeTab?.tabId ? this.activeTab.tabId.toLowerCase() : '';
-  }
-
-  setTabs(tabs: Tab[]) {
-    this.args.model.tabs = tabs ?? [];
   }
 
   //misc
@@ -343,23 +385,24 @@ class CrmAppTemplate extends Component<typeof AppCard> {
     this.activeFilter = this.activeFilter;
   }
 
+  @action viewCard() {
+    if (!this.args.model.id) {
+      throw new Error('No card id');
+    }
+    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+  }
+
   <template>
     <TabbedHeader
       class='crm-app-header'
-      @tabs={{@model.tabs}}
+      @tabs={{TABS}}
       @setActiveTab={{this.setActiveTab}}
-      @activeTabId={{this.activeTab.tabId}}
+      @activeTabId={{this.activeTabId}}
       @headerBackgroundColor={{this.headerColor}}
-    >
-      <:headerIcon>
-        {{#if @model.headerIcon.base64}}
-          <@fields.headerIcon />
-        {{/if}}
-      </:headerIcon>
-    </TabbedHeader>
+    />
 
     <Layout
-      class='crm-app {{this.activeTabClass}}'
+      class='crm-app {{this.activeTabId}}'
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
@@ -418,6 +461,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
             class='view-menu content-header-row-2'
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
+            @items={{this.tabViews}}
           />
         {{/if}}
         {{#if this.activeFilter.sortOptions.length}}
@@ -433,12 +477,11 @@ class CrmAppTemplate extends Component<typeof AppCard> {
       </:contentHeader>
       <:grid>
         {{#if (eq this.activeTabId 'Task')}}
-          <CRMTaskPlannerIsolated
+          <CRMTaskPlanner
             @model={{@model}}
             @context={{@context}}
-            @fields={{@fields}}
-            @set={{@set}}
-            @fieldName={{@fieldName}}
+            @realmURL={{this.currentRealm}}
+            @viewCard={{this.viewCard}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}
@@ -559,7 +602,7 @@ class CrmAppTemplate extends Component<typeof AppCard> {
   </template>
 }
 
-export class CrmApp extends AppCard {
+export class CrmApp extends CardDef {
   static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';

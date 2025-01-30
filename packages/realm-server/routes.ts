@@ -10,11 +10,13 @@ import { healthCheck, jwtMiddleware, livenessCheck } from './middleware';
 import Koa from 'koa';
 import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
+import handleQueueStatusRequest from './handlers/handle-queue-status';
 
 export type CreateRoutesArgs = {
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
-  secretSeed: string;
+  realmServerSecretSeed: string;
+  realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
   createRealm: ({
     ownerUserId,
@@ -44,19 +46,20 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',
-    jwtMiddleware(args.secretSeed),
+    jwtMiddleware(args.realmSecretSeed),
     handleCreateRealmRequest(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get('/_queue-status', handleQueueStatusRequest(args));
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.get(
     '/_user',
-    jwtMiddleware(args.secretSeed),
+    jwtMiddleware(args.realmSecretSeed),
     handleFetchUserRequest(args),
   );
   router.post(
     '/_user',
-    jwtMiddleware(args.secretSeed),
+    jwtMiddleware(args.realmSecretSeed),
     handleCreateUserRequest(args),
   );
   router.get('/_stripe-links', handleStripeLinksRequest());

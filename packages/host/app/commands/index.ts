@@ -9,6 +9,7 @@ import * as ReloadCardCommandModule from './reload-card';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
+import * as SetActiveLlmModule from './set-active-llm';
 import * as ShowCardCommandModule from './show-card';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
@@ -50,6 +51,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-ai-assistant-message',
     SendAiAssistantMessageModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-active-llm',
+    SetActiveLlmModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/show-card',

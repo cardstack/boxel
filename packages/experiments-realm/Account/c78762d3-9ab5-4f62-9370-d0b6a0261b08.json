@@ -29,11 +29,8 @@
       "urgencyTag": {
         "index": 5,
         "label": "Pending Contract",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#512DA8",
-          "backgroundColor": "#EDE7F6"
-        }
+        "foregroundColor": "#512DA8",
+        "backgroundColor": "#EDE7F6"
       },
       "description": "Proposal sent for website redesign and booking system integration",
       "thumbnailURL": null

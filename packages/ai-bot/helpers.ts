@@ -451,6 +451,12 @@ export function getModifyPrompt(
     if (isCommandResultEvent(event)) {
       continue;
     }
+    if (
+      'isStreamingFinished' in event.content &&
+      event.content.isStreamingFinished === false
+    ) {
+      continue;
+    }
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {

@@ -4,7 +4,7 @@
     "attributes": {
       "firstName": "Liam",
       "lastName": "O'Connor",
-      "position": "Data Analystic",
+      "position": "Data Analytics",
       "department": "app",
       "primaryEmail": "liam@gmail.com",
       "secondaryEmail": "liamOConnor@gmail.com",
@@ -17,10 +17,8 @@
           "index": 0,
           "label": "Mobile",
           "color": null,
-          "colorScheme": {
-            "foregroundColor": null,
-            "backgroundColor": null
-          }
+          "foregroundColor": null,
+          "backgroundColor": null
         }
       },
       "phoneOffice": {
@@ -31,11 +29,8 @@
         "type": {
           "index": 2,
           "label": "Work",
-          "color": null,
-          "colorScheme": {
-            "foregroundColor": null,
-            "backgroundColor": null
-          }
+          "foregroundColor": null,
+          "backgroundColor": null
         }
       },
       "socialLinks": [

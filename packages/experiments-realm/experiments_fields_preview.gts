@@ -8,7 +8,7 @@ import { Address as AddressField } from './address';
 import { PercentageField } from './percentage';
 import { CurrencyField } from './fields/currency';
 import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
-import { StatusTagField } from './crm/contact';
+import { StatusTagField } from './crm/contact-status-tag';
 import {
   CardDef,
   field,
