@@ -529,13 +529,13 @@ export class IndexQueryEngine {
   }): (string | Param)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
     if (!htmlFormat || htmlFormat === 'atom') {
-      return [fieldName];
+      return [`ANY_VALUE(${fieldName})`];
     }
 
     let htmlColumnExpression = [];
     htmlColumnExpression.push('COALESCE(');
     if (renderType) {
-      htmlColumnExpression.push(`${fieldName} ->> `);
+      htmlColumnExpression.push(`ANY_VALUE(${fieldName}) ->> `);
       htmlColumnExpression.push(param(internalKeyFor(renderType, undefined)));
       htmlColumnExpression.push(',');
     }
@@ -548,7 +548,7 @@ export class IndexQueryEngine {
         SELECT value 
         FROM jsonb_each_text(ANY_VALUE(${fieldName})) 
         WHERE key = (
-          SELECT replace(ANY_VALUE(types[1]::text), '"', '')
+          SELECT replace(ANY_VALUE(types[0]::text), '"', '')
         )) 
       ELSE NULL 
       END), 
@@ -569,14 +569,19 @@ export class IndexQueryEngine {
     let usedRenderTypeColumnExpression = [];
     if (htmlFormat && htmlFormat !== 'atom' && renderType) {
       usedRenderTypeColumnExpression.push(`CASE`);
-      usedRenderTypeColumnExpression.push(`WHEN ${fieldName} ->> `);
+      usedRenderTypeColumnExpression.push(`WHEN ANY_VALUE(${fieldName}) ->> `);
       usedRenderTypeColumnExpression.push(
         param(internalKeyFor(renderType, undefined)),
       );
-      usedRenderTypeColumnExpression.push(`IS NOT NULL THEN ${renderType}`);
-      usedRenderTypeColumnExpression.push(`ELSE ANY_VALUE(types[1]) END`);
+      usedRenderTypeColumnExpression.push(`IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`);
+      usedRenderTypeColumnExpression.push(
+        `ELSE replace(ANY_VALUE(types[0]::text), '"', '')
+         END`,
+      );
     } else {
-      usedRenderTypeColumnExpression.push('ANY_VALUE(types[1])');
+      usedRenderTypeColumnExpression.push(
+        `replace(ANY_VALUE(types[0]::text), '"', '')`,
+      );
     }
 
     return usedRenderTypeColumnExpression;

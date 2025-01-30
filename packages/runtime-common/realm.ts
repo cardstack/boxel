@@ -1661,6 +1661,7 @@ export class Realm {
     // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
     delete parsedQueryString.cardUrls;
+    delete parsedQueryString.renderType;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
