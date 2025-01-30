@@ -349,16 +349,15 @@ function callSerializeHook(
 
 export function cardTypeFor(
   field: Field<typeof BaseDef>,
-  boxedElement: Box<BaseDef>,
+  cardOrField: BaseDef,
 ): typeof BaseDef {
   if (primitive in field.card) {
     return field.card;
   }
-  if (boxedElement.value == null) {
+  if (cardOrField == null) {
     return field.card;
   }
-  return Reflect.getPrototypeOf(boxedElement.value)!
-    .constructor as typeof BaseDef;
+  return Reflect.getPrototypeOf(cardOrField)!.constructor as typeof BaseDef;
 }
 
 function resourceFrom(
@@ -659,7 +658,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       model,
       arrayField,
       field: this,
-      cardTypeFor,
     });
   }
 }
@@ -1515,7 +1513,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return getLinksToManyComponent({
       model: arrayField,
       field: this,
-      cardTypeFor,
     });
   }
 }

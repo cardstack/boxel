@@ -167,7 +167,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               {{/if}}
               {{#let
                 (getBoxComponent
-                  (cardTypeFor @field boxedElement) boxedElement @field
+                  (cardTypeFor @field boxedElement.value) boxedElement @field
                 )
                 as |Item|
               }}
@@ -262,7 +262,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       {{#each @model.children as |boxedElement i|}}
         {{#let
           (getBoxComponent
-            (cardTypeFor @field boxedElement) boxedElement @field
+            (cardTypeFor @field boxedElement.value) boxedElement @field
           )
           as |Item|
         }}
@@ -357,18 +357,13 @@ function shouldRenderEditor(
 export function getLinksToManyComponent({
   model,
   field,
-  cardTypeFor,
 }: {
   model: Box<CardDef[]>;
   field: Field<typeof CardDef>;
-  cardTypeFor(
-    field: Field<typeof BaseDef>,
-    boxedElement: Box<BaseDef>,
-  ): typeof BaseDef;
 }): BoxComponent {
   let getComponents = () =>
     model.children.map((child) =>
-      getBoxComponent(cardTypeFor(field, child), child, field),
+      getBoxComponent(cardTypeFor(field, child.value), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let isComputed = !!field.computeVia;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
