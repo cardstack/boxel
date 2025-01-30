@@ -347,7 +347,7 @@ function callSerializeHook(
   }
 }
 
-function cardTypeFor(
+export function cardTypeFor(
   field: Field<typeof BaseDef>,
   boxedElement: Box<BaseDef>,
 ): typeof BaseDef {

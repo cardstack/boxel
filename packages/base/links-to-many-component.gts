@@ -8,8 +8,8 @@ import {
   type BoxComponent,
   type CardDef,
   type Field,
-  type FieldDef,
   type Format,
+  cardTypeFor,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -47,10 +47,6 @@ interface Signature {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
     field: Field<typeof CardDef>;
-    cardTypeFor(
-      field: Field<typeof BaseDef>,
-      boxedElement: Box<BaseDef>,
-    ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
   };
 }
@@ -66,7 +62,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           @model={{@model}}
           @arrayField={{@arrayField}}
           @field={{@field}}
-          @cardTypeFor={{@cardTypeFor}}
           @add={{this.add}}
           @remove={{this.remove}}
           ...attributes
@@ -76,7 +71,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           @model={{@model}}
           @arrayField={{@arrayField}}
           @field={{@field}}
-          @cardTypeFor={{@cardTypeFor}}
           @add={{this.add}}
           @remove={{this.remove}}
           ...attributes
@@ -128,10 +122,6 @@ interface LinksToManyStandardEditorSignature {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
     field: Field<typeof CardDef>;
-    cardTypeFor(
-      field: Field<typeof BaseDef>,
-      boxedElement: Box<BaseDef>,
-    ): typeof BaseDef;
     add: () => void;
     remove: (i: number) => void;
   };
@@ -181,7 +171,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               {{/if}}
               {{#let
                 (getBoxComponent
-                  (@cardTypeFor @field boxedElement) boxedElement @field
+                  (cardTypeFor @field boxedElement) boxedElement @field
                 )
                 as |Item|
               }}
@@ -265,10 +255,7 @@ interface LinksToManyCompactEditorSignature {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
     field: Field<typeof CardDef>;
-    cardTypeFor(
-      field: Field<typeof BaseDef>,
-      boxedElement: Box<BaseDef>,
-    ): typeof BaseDef;
+
     add: () => void;
     remove: (i: number) => void;
   };
@@ -281,7 +268,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       {{#each @arrayField.children as |boxedElement i|}}
         {{#let
           (getBoxComponent
-            (@cardTypeFor @field boxedElement) boxedElement @field
+            (cardTypeFor @field boxedElement) boxedElement @field
           )
           as |Item|
         }}
@@ -399,7 +386,6 @@ export function getLinksToManyComponent({
             @model={{model}}
             @arrayField={{arrayField}}
             @field={{field}}
-            @cardTypeFor={{cardTypeFor}}
             @childFormat={{getEditorChildFormat
               @format
               defaultFormats.cardDef
