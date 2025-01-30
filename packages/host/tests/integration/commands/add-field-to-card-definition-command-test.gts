@@ -91,7 +91,7 @@ module(
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
-            @field lastName = field(StringField);
+            @field lastName = contains(StringField);
           }
         `,
         'lastName field was added to the card definition',
