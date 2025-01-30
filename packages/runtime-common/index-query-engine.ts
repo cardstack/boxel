@@ -135,7 +135,7 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string | null;
-  usedRenderType: string;
+  usedRenderType: ResolvedCodeRef;
   isError?: true;
 }
 
@@ -511,10 +511,14 @@ export class IndexQueryEngine {
         }
       });
 
+      let moduleNameSeparatorIndex = card.used_render_type.lastIndexOf('/');
       return {
         url: card.url!,
         html: card.html,
-        usedRenderType: card.used_render_type,
+        usedRenderType: {
+          module: card.used_render_type.substring(0, moduleNameSeparatorIndex),
+          name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
+        },
         ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });
