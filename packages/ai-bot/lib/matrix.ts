@@ -3,7 +3,10 @@ import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
-import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -56,21 +59,24 @@ export async function updateStateEvent(
 export async function sendMessage(
   client: MatrixClient,
   roomId: string,
-  content: string,
+  body: string,
+  reasoning: string,
   eventToUpdate: string | undefined,
   data: any = {},
 ) {
-  log.debug('sending message', content);
+  log.debug('sending message', body);
   let messageObject: IContent = {
     ...{
-      body: content,
+      body,
       msgtype: 'm.text',
-      formatted_body: content,
+      formatted_body: body,
       format: 'org.matrix.custom.html',
+      [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       'm.new_content': {
-        body: content,
+        body,
         msgtype: 'm.text',
-        formatted_body: content,
+        formatted_body: body,
+        [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
         format: 'org.matrix.custom.html',
       },
     },
@@ -121,6 +127,7 @@ export async function sendError(
       client,
       roomId,
       'There was an error processing your request, please try again later',
+      '',
       eventToUpdate,
       {
         isStreamingFinished: true,

@@ -6,6 +6,7 @@ import {
   type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
@@ -13,8 +14,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 interface BaseMatrixEvent {
@@ -112,6 +113,7 @@ export interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
+    [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
     isStreamingFinished: boolean;
     errorMessage?: string;
   };

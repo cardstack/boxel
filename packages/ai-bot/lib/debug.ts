@@ -61,6 +61,7 @@ export async function handleDebugCommands(
         client,
         roomId,
         `Error parsing your debug patch, ${error} ${patchMessage}`,
+        '',
         undefined,
       );
     }

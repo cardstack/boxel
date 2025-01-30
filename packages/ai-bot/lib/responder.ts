@@ -22,31 +22,29 @@ let log = logger('ai-bot');
 export class Responder {
   // internally has a debounced function that will send the text messages
 
-  initialMessageId: string | undefined;
+  responseEventId: string | undefined;
   initialMessageReplaced = false;
   client: MatrixClient;
   roomId: string;
   includesFunctionToolCall = false;
-  latestContent?: string;
+  latestContent = '';
+  reasoning = '';
   messagePromises: Promise<ISendEventResponse | void>[] = [];
-  debouncedMessageSender: (
-    content: string,
-    eventToUpdate: string | undefined,
-    isStreamingFinished?: boolean,
-  ) => Promise<void>;
+  isStreamingFinished = false;
+  sendMessageDebounced: () => Promise<void>;
 
   constructor(client: MatrixClient, roomId: string) {
     this.roomId = roomId;
     this.client = client;
-    this.debouncedMessageSender = debounce(
-      async (
-        content: string,
-        eventToUpdate: string | undefined,
-        isStreamingFinished = false,
-      ) => {
-        this.latestContent = content;
+    this.sendMessageDebounced = debounce(
+      async () => {
+        const content = this.latestContent;
+        const reasoning = this.reasoning;
+        const eventToUpdate = this.responseEventId;
+        const isStreamingFinished = this.isStreamingFinished;
+
         let dataOverrides: Record<string, string | boolean> = {
-          isStreamingFinished: isStreamingFinished,
+          isStreamingFinished,
         };
         if (this.includesFunctionToolCall) {
           dataOverrides = {
@@ -58,6 +56,7 @@ export class Responder {
           this.client,
           this.roomId,
           content,
+          reasoning,
           eventToUpdate,
           dataOverrides,
         );
@@ -74,10 +73,11 @@ export class Responder {
       this.client,
       this.roomId,
       thinkingMessage,
+      '',
       undefined,
       { isStreamingFinished: false },
     );
-    this.initialMessageId = initialMessage.event_id;
+    this.responseEventId = initialMessage.event_id;
   }
 
   async onChunk(chunk: OpenAI.Chat.Completions.ChatCompletionChunk) {
@@ -85,11 +85,14 @@ export class Responder {
     if (chunk.choices[0].delta?.tool_calls?.[0]?.function) {
       if (!this.includesFunctionToolCall) {
         this.includesFunctionToolCall = true;
-        await this.debouncedMessageSender(
-          this.latestContent || '',
-          this.initialMessageId,
-        );
+        await this.sendMessageDebounced();
       }
+    }
+    // @ts-expect-error reasoning is not in the types yet
+    if (chunk.choices[0].delta?.reasoning) {
+      // @ts-expect-error reasoning is not in the types yet
+      this.reasoning += chunk.choices[0].delta.reasoning;
+      await this.sendMessageDebounced();
     }
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
@@ -102,10 +105,8 @@ export class Responder {
 
   async onContent(snapshot: string) {
     log.debug('onContent: ', snapshot);
-    await this.debouncedMessageSender(
-      cleanContent(snapshot),
-      this.initialMessageId,
-    );
+    this.latestContent = cleanContent(snapshot);
+    await this.sendMessageDebounced();
     this.initialMessageReplaced = true;
   }
 
@@ -142,7 +143,7 @@ export class Responder {
           this.client,
           this.roomId,
           this.deserializeToolCall(toolCall),
-          this.initialMessageId,
+          this.responseEventId,
         );
         this.messagePromises.push(commandMessagePromise);
         await commandMessagePromise;
@@ -154,7 +155,7 @@ export class Responder {
           this.client,
           this.roomId,
           error,
-          this.initialMessageId,
+          this.responseEventId,
         );
         this.messagePromises.push(errorPromise);
         await errorPromise;
@@ -169,19 +170,16 @@ export class Responder {
       this.client,
       this.roomId,
       error,
-      this.initialMessageId,
+      this.responseEventId,
     );
   }
 
   async finalize(finalContent: string | void | null | undefined) {
     log.debug('finalize: ', finalContent);
     if (finalContent) {
-      finalContent = cleanContent(finalContent);
-      await this.debouncedMessageSender(
-        finalContent,
-        this.initialMessageId,
-        true,
-      );
+      this.latestContent = cleanContent(finalContent);
+      this.isStreamingFinished = true;
+      await this.sendMessageDebounced();
     }
     await Promise.all(this.messagePromises);
   }

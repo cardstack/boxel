@@ -97,6 +97,7 @@ class Assistant {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
         messages: prompt.messages as ChatCompletionMessageParam[],
+        include_reasoning: true,
       });
     } else {
       return this.openai.beta.chat.completions.stream({
@@ -104,6 +105,7 @@ class Assistant {
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
+        include_reasoning: true,
       });
     }
   }
