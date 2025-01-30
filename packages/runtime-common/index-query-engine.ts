@@ -573,7 +573,9 @@ export class IndexQueryEngine {
       usedRenderTypeColumnExpression.push(
         param(internalKeyFor(renderType, undefined)),
       );
-      usedRenderTypeColumnExpression.push(`IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`);
+      usedRenderTypeColumnExpression.push(
+        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`,
+      );
       usedRenderTypeColumnExpression.push(
         `ELSE replace(ANY_VALUE(types[0]::text), '"', '')
          END`,

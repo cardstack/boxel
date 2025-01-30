@@ -2571,7 +2571,11 @@ const tests = Object.freeze({
     );
     assert.strictEqual(
       prerenderedCards[0].html,
-      '<div>Donald (CardDef embedded template)</div>',
+      '<div>Donald (FancyPerson embedded template)</div>',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].usedRenderType,
+      `${testRealmURL}fancy-person/FancyPerson`,
     );
 
     assert.strictEqual(
@@ -2580,7 +2584,11 @@ const tests = Object.freeze({
     );
     assert.strictEqual(
       prerenderedCards[1].html,
-      '<div>Jimmy (CardDef embedded template)</div>',
+      '<div>Jimmy (Person embedded template)</div>',
+    );
+    assert.strictEqual(
+      prerenderedCards[1].usedRenderType,
+      `${testRealmURL}person/Person`,
     );
 
     assert.strictEqual(
@@ -2589,7 +2597,11 @@ const tests = Object.freeze({
     );
     assert.strictEqual(
       prerenderedCards[2].html,
-      '<div>Van Gogh (CardDef embedded template)</div>',
+      '<div>Van Gogh (Person embedded template)</div>',
+    );
+    assert.strictEqual(
+      prerenderedCards[2].usedRenderType,
+      `${testRealmURL}person/Person`,
     );
 
     // Requesting embedded template with ON filter
@@ -2628,6 +2640,10 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (FancyPerson embedded template)</div>',
     );
+    assert.strictEqual(
+      prerenderedCards[0].usedRenderType,
+      `${testRealmURL}fancy-person/FancyPerson`,
+    );
 
     //  Requesting atom template
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
@@ -2653,6 +2669,55 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
+    assert.strictEqual(
+      prerenderedCards[0].usedRenderType,
+      `${testRealmURL}fancy-person/FancyPerson`,
+    );
+
+    // Define renderType argument
+    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}fancy-person`,
+            name: 'FancyPerson',
+          },
+          not: {
+            eq: {
+              name: 'Richard',
+            },
+          },
+        },
+      },
+      loader,
+      {
+        htmlFormat: 'embedded',
+        renderType: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+      },
+    ));
+
+    assert.strictEqual(
+      prerenderedCards.length,
+      1,
+      'the actual returned total results are correct (there is only one FancyPerson)',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/donald.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].html,
+      '<div>Donald (Person embedded template)</div>',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].usedRenderType,
+      `${testRealmURL}person/Person`,
+    );
   },
 
   'can get prerendered cards in an error state from the indexer': async (
