@@ -44,8 +44,7 @@ import { action } from '@ember/object';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    model: Box<CardDef>;
-    arrayField: Box<CardDef[]>;
+    model: Box<CardDef[]>;
     field: Field<typeof CardDef>;
     childFormat: 'atom' | 'fitted';
   };
@@ -60,7 +59,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       {{#if (eq @childFormat 'atom')}}
         <LinksToManyCompactEditor
           @model={{@model}}
-          @arrayField={{@arrayField}}
           @field={{@field}}
           @add={{this.add}}
           @remove={{this.remove}}
@@ -69,7 +67,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       {{else}}
         <LinksToManyStandardEditor
           @model={{@model}}
-          @arrayField={{@arrayField}}
           @field={{@field}}
           @add={{this.add}}
           @remove={{this.remove}}
@@ -119,8 +116,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
 interface LinksToManyStandardEditorSignature {
   Element: HTMLElement;
   Args: {
-    model: Box<CardDef>;
-    arrayField: Box<CardDef[]>;
+    model: Box<CardDef[]>;
     field: Field<typeof CardDef>;
     add: () => void;
     remove: (i: number) => void;
@@ -137,9 +133,9 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 
   <template>
     <PermissionsConsumer as |permissions|>
-      {{#if @arrayField.children.length}}
+      {{#if @model.children.length}}
         <ul class='list' {{sortableGroup onChange=this.setItems}} ...attributes>
-          {{#each @arrayField.children as |boxedElement i|}}
+          {{#each @model.children as |boxedElement i|}}
             <li
               class='editor'
               data-test-item={{i}}
@@ -252,10 +248,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 interface LinksToManyCompactEditorSignature {
   Element: HTMLElement;
   Args: {
-    model: Box<CardDef>;
-    arrayField: Box<CardDef[]>;
+    model: Box<CardDef[]>;
     field: Field<typeof CardDef>;
-
     add: () => void;
     remove: (i: number) => void;
   };
@@ -265,7 +259,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
 
   <template>
     <div class='boxel-pills' data-test-pills ...attributes>
-      {{#each @arrayField.children as |boxedElement i|}}
+      {{#each @model.children as |boxedElement i|}}
         {{#let
           (getBoxComponent
             (cardTypeFor @field boxedElement) boxedElement @field
@@ -362,12 +356,10 @@ function shouldRenderEditor(
 
 export function getLinksToManyComponent({
   model,
-  arrayField,
   field,
   cardTypeFor,
 }: {
-  model: Box<CardDef>;
-  arrayField: Box<CardDef[]>;
+  model: Box<CardDef[]>;
   field: Field<typeof CardDef>;
   cardTypeFor(
     field: Field<typeof BaseDef>,
@@ -375,7 +367,7 @@ export function getLinksToManyComponent({
   ): typeof BaseDef;
 }): BoxComponent {
   let getComponents = () =>
-    arrayField.children.map((child) =>
+    model.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let isComputed = !!field.computeVia;
@@ -385,12 +377,11 @@ export function getLinksToManyComponent({
         {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
-            @arrayField={{arrayField}}
             @field={{field}}
             @childFormat={{getEditorChildFormat
               @format
               defaultFormats.cardDef
-              arrayField
+              model
             }}
             ...attributes
           />
@@ -403,7 +394,7 @@ export function getLinksToManyComponent({
             <div
               class='plural-field linksToMany-field
                 {{effectiveFormat}}-effectiveFormat
-                {{unless arrayField.children.length "empty"}}
+                {{unless model.children.length "empty"}}
                 display-container-{{displayContainer}}'
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}

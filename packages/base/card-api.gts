@@ -1513,8 +1513,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       useIndexBasedKey in this.card,
     ) as unknown as Box<CardDef[]>;
     return getLinksToManyComponent({
-      model,
-      arrayField,
+      model: arrayField,
       field: this,
       cardTypeFor,
     });
