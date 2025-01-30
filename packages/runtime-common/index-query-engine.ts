@@ -581,7 +581,9 @@ export class IndexQueryEngine {
     let usedRenderTypeColumnExpression = [];
     if (htmlFormat && htmlFormat !== 'atom' && renderType) {
       usedRenderTypeColumnExpression.push(`CASE`);
-      usedRenderTypeColumnExpression.push(`WHEN ANY_VALUE(${htmlFormat}_html) ->> `);
+      usedRenderTypeColumnExpression.push(
+        `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
+      );
       usedRenderTypeColumnExpression.push(
         param(internalKeyFor(renderType, undefined)),
       );
