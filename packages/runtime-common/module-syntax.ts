@@ -400,7 +400,7 @@ function makeNewField({
     `${baseRealm.url}card-api`,
     'field',
   );
-  debugger;
+
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
@@ -441,7 +441,6 @@ function makeNewField({
   );
 
   if (sourceCodeForComputedField) {
-    debugger;
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name}, {
               computeVia: function () {
                 return ${sourceCodeForComputedField}
