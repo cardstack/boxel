@@ -241,24 +241,6 @@ export default class Room extends Component<Signature> {
     registerDestructor(this, () => {
       this.scrollState().messageVisibilityObserver.disconnect();
     });
-
-    this.setRoomLLM();
-  }
-
-  private async setRoomLLM() {
-    let isCodeMode =
-      this.operatorModeStateService.state.submode === Submodes.Code;
-
-    if (isCodeMode) {
-      await this.roomResource.loading;
-      let llmModel = 'anthropic/claude-3.5-sonnet';
-      let foundModel = DEFAULT_LLM_LIST.includes(llmModel);
-      if (!foundModel) {
-        throw new Error(`Cannot find LLM model: ${llmModel}`);
-      }
-      await this.roomResource.loading;
-      this.roomResource.activateLLM(llmModel);
-    } // When in interactive mode, the default LLM is used
   }
 
   private scrollState() {
