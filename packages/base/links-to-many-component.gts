@@ -335,8 +335,9 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
 function getEditorChildFormat(
   format: Format | undefined,
   defaultFormat: Format,
-  model: Box<FieldDef>,
+  arrayField: Box<CardDef[]>,
 ) {
+  let model = arrayField.containingBox;
   if (
     (format ?? defaultFormat) === 'edit' &&
     'isFieldDef' in model.value.constructor &&
@@ -389,7 +390,7 @@ export function getLinksToManyComponent({
             @childFormat={{getEditorChildFormat
               @format
               defaultFormats.cardDef
-              model
+              arrayField
             }}
             ...attributes
           />

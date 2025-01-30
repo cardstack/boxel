@@ -3035,6 +3035,14 @@ export class Box<T> {
     this.state = state;
   }
 
+  get containingBox(): Box<T> {
+    if (this.state.type === 'root') {
+      throw new Error('no parent for root box');
+    } else {
+      return this.state.containingBox;
+    }
+  }
+
   get value(): T {
     if (this.state.type === 'root') {
       return this.state.model;
