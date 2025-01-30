@@ -29,7 +29,9 @@ import {
   fieldArity,
   tableValuedFunctionsPlaceholder,
   query,
+  dbExpression,
   isDbExpression,
+  DBSpecificExpression,
   Param,
 } from './expression';
 import {
@@ -526,7 +528,7 @@ export class IndexQueryEngine {
   }: {
     htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
     renderType?: ResolvedCodeRef;
-  }): (string | Param)[] {
+  }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
     if (!htmlFormat || htmlFormat === 'atom') {
       return [`ANY_VALUE(${fieldName})`];
@@ -540,19 +542,27 @@ export class IndexQueryEngine {
       htmlColumnExpression.push(',');
     }
 
-    htmlColumnExpression.push(`(
-      CASE 
-      WHEN ANY_VALUE(${fieldName}) IS NOT NULL 
-        AND jsonb_typeof(ANY_VALUE(${fieldName})) = 'object'
-      THEN (
-        SELECT value 
-        FROM jsonb_each_text(ANY_VALUE(${fieldName})) 
-        WHERE key = (
-          SELECT replace(ANY_VALUE(types[0]::text), '"', '')
-        )) 
-      ELSE NULL 
-      END), 
-    NULL)`);
+    htmlColumnExpression.push(
+      ...[
+        `(
+      CASE WHEN ANY_VALUE(${fieldName}) IS NOT NULL AND `,
+        dbExpression({
+          pg: `jsonb_typeof(ANY_VALUE(${fieldName})) = 'object'`,
+          sqlite: `json_type(ANY_VALUE(${fieldName})) = 'object'`,
+        }),
+        ` THEN ( SELECT value FROM `,
+        dbExpression({
+          pg: `jsonb_each_text(ANY_VALUE(${fieldName}))`,
+          sqlite: `json_each(ANY_VALUE(${fieldName}))`,
+        }),
+        ` WHERE key = (SELECT replace(ANY_VALUE( `,
+        dbExpression({
+          pg: `types[0]::text`,
+          sqlite: `json_extract(types, '$[0]')`,
+        }),
+        `), '"', ''))) ELSE NULL END), NULL)`,
+      ],
+    );
 
     return htmlColumnExpression;
   }
@@ -563,7 +573,7 @@ export class IndexQueryEngine {
   }: {
     htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
     renderType?: ResolvedCodeRef;
-  }): (string | Param)[] {
+  }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
 
     let usedRenderTypeColumnExpression = [];
@@ -577,12 +587,25 @@ export class IndexQueryEngine {
         `IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`,
       );
       usedRenderTypeColumnExpression.push(
-        `ELSE replace(ANY_VALUE(types[0]::text), '"', '')
-         END`,
+        ...[
+          `ELSE replace(ANY_VALUE(`,
+          dbExpression({
+            pg: `types[0]::text`,
+            sqlite: `json_extract(types, '$[0]')`,
+          }),
+          `), '"', '') END`,
+        ],
       );
     } else {
       usedRenderTypeColumnExpression.push(
-        `replace(ANY_VALUE(types[0]::text), '"', '')`,
+        ...[
+          `replace(ANY_VALUE(`,
+          dbExpression({
+            pg: `types[0]::text`,
+            sqlite: `json_extract(types, '$[0]')`,
+          }),
+          `), '"', '')`,
+        ],
       );
     }
 
