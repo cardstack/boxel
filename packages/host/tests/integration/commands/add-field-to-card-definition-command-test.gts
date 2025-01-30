@@ -5,9 +5,9 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
-import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
+import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
+import CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
-import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -15,23 +15,13 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   lookupLoaderService,
-  lookupNetworkService,
   lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
-import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
-import {
-  CardDef,
-  StringField,
-  contains,
-  field,
-} from '../../helpers/base-realm';
-import CardService from '@cardstack/host/services/card-service';
 
 let loader: Loader;
-let fetch: NetworkService['fetch'];
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -51,7 +41,6 @@ module(
     hooks.beforeEach(function (this: RenderingTestContext) {
       getOwner(this)!.register('service:realm', StubRealmService);
       loader = lookupLoaderService().loader;
-      fetch = lookupNetworkService().fetch;
     });
 
     hooks.beforeEach(async function () {
