@@ -578,12 +578,10 @@ export class IndexQueryEngine {
     htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
-    let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
-
     let usedRenderTypeColumnExpression = [];
     if (htmlFormat && htmlFormat !== 'atom' && renderType) {
       usedRenderTypeColumnExpression.push(`CASE`);
-      usedRenderTypeColumnExpression.push(`WHEN ANY_VALUE(${fieldName}) ->> `);
+      usedRenderTypeColumnExpression.push(`WHEN ANY_VALUE(${htmlFormat}_html) ->> `);
       usedRenderTypeColumnExpression.push(
         param(internalKeyFor(renderType, undefined)),
       );
