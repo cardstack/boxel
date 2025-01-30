@@ -434,14 +434,6 @@ function makeNewField({
     suggestedCardName(fieldRef, fieldDefinitionType),
   );
 
-  if (
-    fieldRef.module.startsWith(baseRealm.url) &&
-    fieldRef.name === 'default'
-  ) {
-    // primitive fields
-    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
-  }
-
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
 }
 
