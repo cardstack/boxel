@@ -81,7 +81,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   };
 
   private chooseCard = restartableTask(async () => {
-    let selectedCards = (this.args.model.value as any)[this.args.field.name];
+    let selectedCards = this.args.model.value;
     let selectedCardsQuery =
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
@@ -102,14 +102,14 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     );
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
-      (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      this.args.model.set(selectedCards);
     }
   });
 
   remove = (index: number) => {
-    let cards = (this.args.model.value as any)[this.args.field.name];
+    let cards = this.args.model.value;
     cards = cards.filter((_c: CardDef, i: number) => i !== index);
-    (this.args.model.value as any)[this.args.field.name] = cards;
+    this.args.model.set(cards);
   };
 }
 
@@ -128,7 +128,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 
   @action
   setItems(items: any) {
-    (this.args.model.value as any)[this.args.field.name] = items;
+    this.args.model.set(items);
   }
 
   <template>
