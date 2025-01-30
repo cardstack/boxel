@@ -6,6 +6,7 @@ import {
   type Box,
   type BoxComponent,
   type CardDef,
+  type FieldDef,
   type Field,
   type Format,
   cardTypeFor,
@@ -328,7 +329,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
 function getEditorChildFormat(
   format: Format | undefined,
   defaultFormat: Format,
-  arrayField: Box<CardDef[]>,
+  arrayField: Box<FieldDef[]>,
 ) {
   let model = arrayField.containingBox;
   if (
