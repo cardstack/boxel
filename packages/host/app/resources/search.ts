@@ -28,8 +28,8 @@ import type RealmServerService from '../services/realm-server';
 
 interface Args {
   named: {
-    query: Query;
-    realms?: string[];
+    query: Query | undefined;
+    realms: string[] | undefined;
     isLive?: true;
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   };
@@ -47,7 +47,13 @@ export class Search extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
-    this.realmsToSearch = realms ?? this.realmServer.availableRealmURLs;
+    if (query === undefined) {
+      return;
+    }
+    this.realmsToSearch =
+      realms === undefined || realms.length === 0
+        ? this.realmServer.availableRealmURLs
+        : realms;
 
     this.loaded = this.search.perform(query);
     waitForPromise(this.loaded);
@@ -58,6 +64,9 @@ export class Search extends Resource<Args> {
         unsubscribe: subscribeToRealm(
           realm,
           ({ type, data }: { type: string; data: string }) => {
+            if (query === undefined) {
+              return;
+            }
             let eventData = JSON.parse(data);
             // we are only interested in incremental index events
             if (type !== 'index' || eventData.type !== 'incremental') {
@@ -202,32 +211,27 @@ export class Search extends Resource<Args> {
   }
 }
 
-export function getSearchResults(
+export interface SearchQuery {
+  instances: CardDef[];
+  isLoading: boolean;
+  loaded: Promise<void>;
+}
+
+export function getSearch(
   parent: object,
-  query: Query,
-  realms?: string[],
+  getQuery: () => Query | undefined,
+  getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: true;
-    // it is probably desirable that dynamic context action `doWithStableScroll()`
-    // is used here. For example:
-    //
-    //   async (ready: Promise<void> | undefined) => {
-    //     if (this.args.context?.actions) {
-    //       this.args.context.actions.doWithStableScroll(
-    //         this.args.model as CardDef,
-    //         async () => { await ready; }
-    //       );
-    //     }
-    //   }
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   },
 ) {
   return Search.from(parent, () => ({
     named: {
-      query,
-      realms: realms ?? undefined,
+      query: getQuery(),
+      realms: getRealms ? getRealms() : undefined,
       isLive: opts?.isLive,
       doWhileRefreshing: opts?.doWhileRefreshing,
     },
-  })) as Search;
+  })) as SearchQuery;
 }

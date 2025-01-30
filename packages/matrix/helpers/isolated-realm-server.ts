@@ -27,6 +27,7 @@ export async function startServer() {
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
   process.env.NODE_NO_WARNINGS = '1';
+  process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.MATRIX_URL = 'http://localhost:8008';
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';

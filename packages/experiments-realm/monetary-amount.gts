@@ -38,24 +38,26 @@ class Edit extends Component<typeof MonetaryAmount> {
 
   // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
   liveCurrencyQuery = getCards(
-    {
-      filter: {
-        type: {
-          module: new URL('./asset', import.meta.url).href,
-          name: 'Currency',
-        },
-      },
-      sort: [
-        {
-          on: {
+    () => {
+      return {
+        filter: {
+          type: {
             module: new URL('./asset', import.meta.url).href,
             name: 'Currency',
           },
-          by: 'name',
         },
-      ],
+        sort: [
+          {
+            on: {
+              module: new URL('./asset', import.meta.url).href,
+              name: 'Currency',
+            },
+            by: 'name',
+          },
+        ],
+      };
     },
-    [new URL('./', import.meta.url).href],
+    () => [new URL('./', import.meta.url).href],
   );
 
   @action

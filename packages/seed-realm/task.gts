@@ -31,6 +31,7 @@ import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { Todo } from './todo';
+import { ColorField } from './fields/color';
 
 export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;
@@ -73,7 +74,7 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
 export class TaskStatusField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
-  @field color = contains(StringField);
+  @field color = contains(ColorField);
   @field completed = contains(BooleanField);
   static values = [
     { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
@@ -472,7 +473,6 @@ class EditPriority extends Component<typeof TaskPriority> {
 export class TaskPriority extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
-  // loosey goosey pattern
   static values = [
     { index: 0, label: 'Lowest', icon: ChevronsDown },
     { index: 1, label: 'Low', icon: ChevronDown },

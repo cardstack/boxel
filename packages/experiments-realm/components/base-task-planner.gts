@@ -1,6 +1,5 @@
 import {
-  Component,
-  realmURL,
+  CardContext,
   CardDef,
   BaseDef,
 } from 'https://cardstack.com/base/card-api';
@@ -150,12 +149,21 @@ export interface TaskCollection {
   columns: TaskColumn[];
 }
 
-export class BaseTaskPlannerIsolated<
-  T extends typeof CardDef = typeof CardDef,
-> extends Component<T> {
+interface TaskPlannerArgs {
+  Args: {
+    config: TaskPlannerConfig;
+    realmURL: URL | undefined;
+    parentId: string | undefined;
+    context: CardContext | undefined;
+    emptyStateMessage?: string;
+    viewCard: () => void;
+  };
+  Element: HTMLElement;
+}
+
+export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
   @tracked loadingColumnKey: string | undefined;
   @tracked selectedFilter: FilterType | undefined;
-  config: TaskPlannerConfig;
   selectedItems = new TrackedMap<FilterType, SelectedItem[]>();
   filters: Record<
     FilterType,
@@ -170,17 +178,17 @@ export class BaseTaskPlannerIsolated<
     }
   >;
   cards: {
-    instances: CardDef[];
+    instances: CardDef[]; // possible can be generic type
     isLoading?: boolean;
   };
   assigneeQuery: {
-    instances: any[];
+    // should be assignee
+    instances: CardDef[];
     isLoading?: boolean;
   };
 
-  constructor(owner: Owner, args: any, config: TaskPlannerConfig) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.config = config;
     this.selectedItems = new TrackedMap();
 
     // Initialize filters
@@ -189,16 +197,16 @@ export class BaseTaskPlannerIsolated<
         searchKey: 'label',
         label: 'Status',
         codeRef: {
-          module: config.taskSource.module,
+          module: this.args.config.taskSource.module,
           name: 'Status',
         },
-        options: () => config.status.values,
+        options: () => this.args.config.status.values,
       },
       assignee: {
         searchKey: 'name',
         label: 'Assignee',
         codeRef: {
-          module: config.taskSource.module,
+          module: this.args.config.taskSource.module,
           name: 'Assignee',
         },
         options: () => this.assigneeCards,
@@ -206,34 +214,37 @@ export class BaseTaskPlannerIsolated<
     };
 
     // Initialize cards and assignee query
-    this.cards = getCards(this.getTaskQuery, this.realmHrefs, {
-      isLive: true,
-    });
-    this.assigneeQuery = getCards(
+    this.cards = getCards(
+      () => this.getTaskQuery,
+      () => this.realmHrefs,
       {
-        filter: {
-          type: this.config.filters.assignee.codeRef,
-        },
+        isLive: true,
       },
-      this.realmHrefs,
+    );
+
+    this.assigneeQuery = getCards(
+      () => {
+        return {
+          filter: {
+            type: this.args.config.filters.assignee.codeRef,
+          },
+        };
+      },
+      () => this.realmHrefs,
       { isLive: true },
     );
   }
 
-  get parentId(): string | undefined {
-    return undefined;
-  }
-
   get emptyStateMessage(): string {
-    return 'Select a parent to continue';
+    return this.args.emptyStateMessage ?? 'Select a parent to continue';
   }
 
   get getTaskQuery(): Query {
-    return this.config.taskSource.getQuery();
+    return this.args.config.taskSource.getQuery();
   }
 
   get filterTypes() {
-    return Object.keys(this.config.filters) as FilterType[];
+    return Object.keys(this.args.config.filters) as FilterType[];
   }
 
   get cardInstances() {
@@ -247,16 +258,15 @@ export class BaseTaskPlannerIsolated<
     return this.assigneeQuery?.instances ?? [];
   }
 
-  get realmURL(): URL {
-    return this.args.model[realmURL]!;
-  }
-
   get realmHref() {
-    return this.realmURL.href;
+    return this.args.realmURL?.href;
   }
 
   get realmHrefs() {
-    return [this.realmURL?.href];
+    if (!this.args.realmURL) {
+      return [];
+    }
+    return [this.args.realmURL.href];
   }
 
   @action async onMoveCardMutation(
@@ -265,7 +275,7 @@ export class BaseTaskPlannerIsolated<
     sourceColumnAfterDrag: DndColumn,
     targetColumnAfterDrag: DndColumn,
   ) {
-    await this.config.cardOperations.onMoveCard({
+    await this.args.config.cardOperations.onMoveCard({
       draggedCard,
       targetCard,
       sourceColumn: sourceColumnAfterDrag,
@@ -304,7 +314,7 @@ export class BaseTaskPlannerIsolated<
     if (this.selectedFilter === undefined) {
       return undefined;
     }
-    return this.config.filters[this.selectedFilter];
+    return this.args.config.filters[this.selectedFilter];
   }
 
   get selectedItemsForFilter() {
@@ -372,24 +382,17 @@ export class BaseTaskPlannerIsolated<
     }
   }
 
-  @action viewCard() {
-    if (!this.args.model.id) {
-      throw new Error('No card id');
-    }
-    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
-  }
-
   taskCollection = getKanbanResource(
     this,
     () => this.cardInstances,
-    () => this.config.status.values.map((status) => status.label) ?? [],
-    () => this.config.cardOperations.hasColumnKey,
+    () => this.args.config.status.values.map((status) => status.label) ?? [],
+    () => this.args.config.cardOperations.hasColumnKey,
   );
 
   @action async createNewTask(statusLabel: string) {
     this.loadingColumnKey = statusLabel;
     try {
-      await this.config.cardOperations.onCreateTask(statusLabel);
+      await this.args.config.cardOperations.onCreateTask(statusLabel);
     } finally {
       this.loadingColumnKey = undefined;
     }
@@ -401,13 +404,11 @@ export class BaseTaskPlannerIsolated<
 
   <template>
     <div class='task-app'>
-      {{#if (not this.parentId)}}
+      {{#if (not @parentId)}}
         <div class='disabled'>
-          {{#if @context.actions.viewCard}}
-            <BoxelButton @kind='primary' {{on 'click' this.viewCard}}>
-              {{this.emptyStateMessage}}
-            </BoxelButton>
-          {{/if}}
+          <BoxelButton @kind='primary' {{on 'click' @viewCard}}>
+            {{this.emptyStateMessage}}
+          </BoxelButton>
         </div>
       {{/if}}
       <div class='filter-section'>

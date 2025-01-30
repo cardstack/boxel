@@ -15,7 +15,6 @@ import {
   getPromptParts,
   extractCardFragmentsFromEvents,
   eventRequiresResponse,
-  cleanupPromptParts,
 } from './helpers';
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -47,6 +46,7 @@ const MINIMUM_CREDITS = 10;
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
+  private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
 
@@ -58,6 +58,21 @@ class Assistant {
     this.id = id;
     this.client = client;
     this.pgAdapter = new PgAdapter();
+    this.toolCallCapableModels = new Set();
+  }
+
+  async loadToolCallCapableModels() {
+    // api request is https://openrouter.ai/api/v1/models?supported_parameters=tools
+    let response = await fetch(
+      'https://openrouter.ai/api/v1/models?supported_parameters=tools',
+    );
+    let responseJson = (await response.json()) as {
+      data: { id: string }[];
+    };
+    let modelList = responseJson.data;
+    this.toolCallCapableModels = new Set(
+      modelList.map((model: any) => model.id),
+    );
   }
 
   async trackAiUsageCost(matrixUserId: string, generationId: string) {
@@ -73,7 +88,12 @@ class Assistant {
   }
 
   getResponse(prompt: PromptParts) {
-    if (prompt.tools.length === 0) {
+    // Sending tools to models that don't support them results in an error
+    // from openrouter.
+    if (
+      prompt.tools.length === 0 ||
+      !this.toolCallCapableModels.has(prompt.model)
+    ) {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
         messages: prompt.messages as ChatCompletionMessageParam[],
@@ -145,6 +165,7 @@ Common issues are:
     });
   let { user_id: aiBotUserId } = auth;
   let assistant = new Assistant(client, aiBotUserId);
+  await assistant.loadToolCallCapableModels();
 
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
@@ -204,9 +225,7 @@ Common issues are:
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
         try {
-          promptParts = cleanupPromptParts(
-            getPromptParts(eventList, aiBotUserId),
-          );
+          promptParts = getPromptParts(eventList, aiBotUserId);
         } catch (e) {
           log.error(e);
           responder.finalize(
