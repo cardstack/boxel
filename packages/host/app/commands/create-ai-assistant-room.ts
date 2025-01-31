@@ -4,6 +4,11 @@ import format from 'date-fns/format';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
+import {
+  APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_LLM,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -51,6 +56,9 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
       aiBotFullId,
       matrixService.aiBotPowerLevel,
     );
+    await this.matrixService.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
+      model: DEFAULT_LLM,
+    });
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomResult } = commandModule;
     return new CreateAIAssistantRoomResult({ roomId });
