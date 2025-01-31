@@ -6,7 +6,11 @@ import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
 import debounce from 'lodash/debounce';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import {
+  ChatCompletionAssistantMessageParam,
+  ChatCompletionMessageParam,
+  ChatCompletionMessageToolCall,
+} from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import { thinkingMessage } from '../constants';
 
@@ -83,12 +87,11 @@ export class Responder {
     this.initialMessageReplaced = true;
   }
 
-  async onMessage(msg: {
-    role: string;
-    tool_calls?: ChatCompletionMessageToolCall[];
-  }) {
+  async onMessage(msg: ChatCompletionMessageParam) {
     if (msg.role === 'assistant') {
-      await this.handleFunctionToolCalls(msg);
+      await this.handleFunctionToolCalls(
+        msg as ChatCompletionAssistantMessageParam,
+      );
     }
   }
 
@@ -106,17 +109,19 @@ export class Responder {
 
   async handleFunctionToolCalls(msg: {
     role: string;
+    content?: string | null;
     tool_calls?: ChatCompletionMessageToolCall[];
   }) {
     for (const toolCall of msg.tool_calls || []) {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
-        let optionPromise = sendOption(
-          this.client,
-          this.roomId,
-          this.deserializeToolCall(toolCall),
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
-        );
+        let optionPromise = sendOption({
+          client: this.client,
+          roomId: this.roomId,
+          content: msg.content,
+          functionCall: this.deserializeToolCall(toolCall),
+          eventToUpdate: this.initialMessageId,
+        });
         this.messagePromises.push(optionPromise);
         await optionPromise;
         this.initialMessageReplaced = true;
@@ -127,7 +132,7 @@ export class Responder {
           this.client,
           this.roomId,
           error,
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.initialMessageId,
         );
         this.messagePromises.push(errorPromise);
         await errorPromise;

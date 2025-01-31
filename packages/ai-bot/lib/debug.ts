@@ -59,17 +59,18 @@ export async function handleDebugCommands(
         undefined,
       );
     }
-    return await sendOption(
+    return await sendOption({
       client,
       roomId,
-      {
+      content: null,
+      functionCall: {
         id: 'patchCard-debug',
         name: 'patchCard',
         type: 'function',
         arguments: toolArguments,
       },
-      undefined,
-    );
+      eventToUpdate: undefined,
+    });
   }
   return;
 }
