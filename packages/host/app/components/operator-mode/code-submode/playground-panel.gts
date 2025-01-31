@@ -2,18 +2,35 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
-import { LoadingIndicator, BoxelSelect } from '@cardstack/boxel-ui/components';
+import { task } from 'ember-concurrency';
 
-import { getCards, type ResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  LoadingIndicator,
+  BoxelSelect,
+  CardContainer,
+  CardHeader,
+} from '@cardstack/boxel-ui/components';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { IconLink } from '@cardstack/boxel-ui/icons';
+
+import {
+  cardTypeDisplayName,
+  cardTypeIcon,
+  getCards,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
-import type RealmServerService from '@cardstack/host/services/realm-server';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type RealmService from '../../../services/realm';
+import type RealmServerService from '../../../services/realm-server';
+
+import Preview from '../../preview';
 
 const getItemTitle = (item: CardDef, displayName?: string) => {
   if (!item) {
@@ -59,33 +76,82 @@ interface PlaygroundContentSignature {
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
-    <BoxelSelect
-      class='instance-chooser'
-      @options={{this.instances}}
-      @selected={{this.selectedItem}}
-      @selectedItemComponent={{if
-        this.selectedItem
-        (component
-          SelectedItem title=(getItemTitle this.selectedItem @displayName)
-        )
-      }}
-      @onChange={{this.onSelect}}
-      @placeholder='Please Select'
-      data-test-instance-chooser
-      as |item|
-    >
-      {{getItemTitle item @displayName}}
-    </BoxelSelect>
+    <div class='instance-chooser-container'>
+      <BoxelSelect
+        class='instance-chooser'
+        @options={{this.options.instances}}
+        @selected={{this.card}}
+        @selectedItemComponent={{if
+          this.card
+          (component SelectedItem title=(getItemTitle this.card @displayName))
+        }}
+        @onChange={{this.onSelect}}
+        @placeholder='Please Select'
+        data-test-instance-chooser
+        as |item|
+      >
+        {{getItemTitle item @displayName}}
+      </BoxelSelect>
+    </div>
+    <div class='preview-area'>
+      {{#if this.card}}
+        {{#if (eq this.format 'isolated')}}
+          <CardContainer class='isolated-preview-container'>
+            {{#let (this.realm.info this.card.id) as |realmInfo|}}
+              <CardHeader
+                class='isolated-preview-header'
+                @cardTypeDisplayName={{cardTypeDisplayName this.card}}
+                @cardTypeIcon={{cardTypeIcon this.card}}
+                @realmInfo={{realmInfo}}
+                @isTopCard={{true}}
+                @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              />
+            {{/let}}
+            <Preview
+              class='isolated-preview'
+              @card={{this.card}}
+              @format={{this.format}}
+            />
+          </CardContainer>
+        {{/if}}
+      {{/if}}
+    </div>
     <style scoped>
+      .instance-chooser-container {
+        position: sticky;
+        z-index: 1;
+        top: 0;
+        display: flex;
+        justify-content: center;
+      }
       .instance-chooser {
         color: var(--boxel-dark);
+        max-width: 405px;
         height: var(--boxel-form-control-height);
+        box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
+      }
+      .isolated-preview-container {
+        height: auto;
+        margin-top: var(--boxel-sp-sm);
+        color: var(--boxel-dark);
+        z-index: 0;
+      }
+      .isolated-preview-header {
+        background-color: var(--boxel-100);
+        box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
+        z-index: 1;
+      }
+      .isolated-preview {
+        box-shadow: none;
+        border-radius: 0;
       }
     </style>
   </template>
 
+  @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @tracked private selectedItem?: CardDef;
+  @tracked private card?: CardDef;
+  @tracked private format: Format = 'isolated';
 
   private options = getCards(
     () => ({
@@ -95,16 +161,25 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     () => this.realmServer.availableRealmURLs,
   );
 
-  @cached
-  private get instances() {
-    if (this.options?.isLoading) {
-      return undefined;
+  private copyToClipboard = task(async (id: string | undefined) => {
+    if (!id) {
+      return;
     }
-    return this.options.instances;
+    await navigator.clipboard.writeText(id);
+  });
+
+  private get moreOptionsMenuItems() {
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () => this.copyToClipboard.perform(this.card?.id),
+        icon: IconLink,
+      }),
+    ];
+    return menuItems;
   }
 
-  @action private onSelect(item: CardDef) {
-    this.selectedItem = item;
+  @action private onSelect(card: CardDef) {
+    this.card = card;
   }
 }
 
@@ -139,6 +214,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     </section>
     <style scoped>
       .playground-panel {
+        position: relative;
         background-image: url('./playground-background.png');
         background-position: left top;
         background-repeat: repeat;
