@@ -372,7 +372,7 @@ export class CatalogEntry extends CardDef {
     </template>
   };
 
-  static edit = class Edit extends this.isolated {};
+  static edit = CatalogEntry.isolated;
 }
 
 interface Signature {
