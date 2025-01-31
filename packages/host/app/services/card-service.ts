@@ -340,7 +340,7 @@ export default class CardService extends Service {
     return card;
   }
 
-  async getCard(url: URL | string): Promise<CardDef> {
+  async getCard<T extends CardDef = CardDef>(url: URL | string): Promise<T> {
     if (typeof url === 'string') {
       url = new URL(url);
     }
@@ -356,7 +356,7 @@ export default class CardService extends Service {
       json,
       new URL(json.data.id),
     );
-    return card;
+    return card as T;
   }
 
   private async loadPatchedCards(
