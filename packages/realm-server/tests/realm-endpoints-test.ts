@@ -2452,8 +2452,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[0].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('Person Aaron'),
-            'embedded html looks correct (CardDef template)',
+              .includes('Embedded Card Person: Aaron'),
+            'embedded html looks correct (Person template)',
           );
 
           // 2nd card: Person Craig
@@ -2461,8 +2461,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[1].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('Person Craig'),
-            'embedded html for Craig looks correct (CardDef template)',
+              .includes('Embedded Card Person: Craig'),
+            'embedded html for Craig looks correct (Person template)',
           );
 
           // 3rd card: FancyPerson Jane
@@ -2470,8 +2470,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[2].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('FancyPerson Jane'),
-            'embedded html for Jane looks correct (CardDef template)',
+              .includes('Embedded Card FancyPerson: Jane'),
+            'embedded html for Jane looks correct (FancyPerson template)',
           );
 
           // 4th card: FancyPerson Jimmy
@@ -2479,8 +2479,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[3].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('FancyPerson Jimmy'),
-            'embedded html for Jimmy looks correct (CardDef template)',
+              .includes('Embedded Card FancyPerson: Jimmy'),
+            'embedded html for Jimmy looks correct (FancyPerson template)',
           );
 
           assertScopedCssUrlsContain(

@@ -337,6 +337,7 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     id: card.url,
     attributes: {
       html: card.html,
+      usedRenderType: card.usedRenderType,
       ...(card.isError ? { isError: true as const } : {}),
     },
   }));
