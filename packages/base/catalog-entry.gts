@@ -81,36 +81,6 @@ export class CatalogEntry extends CardDef {
     },
   });
 
-  static fitted = class Fitted extends Component<typeof this> {
-    <template>
-      <CatalogEntryContainer class='fitted'>
-        <header class='title' data-test-title>
-          <@fields.title />
-        </header>
-        <p class='description' data-test-description>
-          <@fields.description />
-        </p>
-      </CatalogEntryContainer>
-      <style scoped>
-        .fitted > * {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .title {
-          font: 600 var(--boxel-font-sm);
-        }
-
-        .description {
-          margin: 0;
-          color: var(--boxel-500);
-          font-size: var(--boxel-font-size-xs);
-        }
-      </style>
-    </template>
-  };
-
   static isolated = class Isolated extends Component<typeof this> {
     icon: CardorFieldTypeIcon | undefined;
 
@@ -373,31 +343,6 @@ export class CatalogEntry extends CardDef {
   };
 
   static edit = CatalogEntry.isolated;
-}
-
-interface Signature {
-  Element: HTMLElement;
-  Blocks: {
-    default: [];
-  };
-}
-
-class CatalogEntryContainer extends GlimmerComponent<Signature> {
-  <template>
-    <div class='entry' ...attributes>
-      {{yield}}
-    </div>
-    <style scoped>
-      .entry {
-        display: grid;
-        gap: 3px;
-        font: var(--boxel-font-sm);
-        margin-top: auto;
-        margin-bottom: auto;
-        margin-left: var(--boxel-sp-xs);
-      }
-    </style>
-  </template>
 }
 
 interface SpecTagSignature {
