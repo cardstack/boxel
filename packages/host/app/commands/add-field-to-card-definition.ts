@@ -50,7 +50,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
         ? new URL(input.outgoingRealmURL)
         : undefined,
       addFieldAtIndex: input.addFieldAtIndex,
-      sourceCodeForComputedField: input.sourceCodeForComputedField,
+      computedFieldFunctionSourceCode: input.computedFieldFunctionSourceCode,
     });
 
     let writeTextFileCommand = new WriteTextFileCommand(this.commandContext);

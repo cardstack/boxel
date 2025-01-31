@@ -877,8 +877,10 @@ module(basename(__filename), function () {
         incomingRelativeTo: undefined,
         outgoingRelativeTo: undefined,
         outgoingRealmURL: undefined,
-        sourceCodeForComputedField:
-          "[this.firstName, this.lastName].filter(Boolean).join(' ');",
+        computedFieldFunctionSourceCode: `
+          function() {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          }`,
       });
 
       assert.codeEqual(

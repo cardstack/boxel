@@ -120,7 +120,12 @@ module(
         incomingRelativeTo: undefined,
         outgoingRelativeTo: undefined,
         outgoingRealmURL: undefined,
-        sourceCodeForComputedField: '`Lil ${this.firstName}`;',
+        computedFieldFunctionSourceCode: `
+          function () {
+            let prefix = this.firstName.length > 5 ? 'Big' : 'Lil';
+            let nickname = this.firstName.toUpperCase();
+            return \`\${prefix} \${nickname}\`;
+          }`,
       });
 
       let response = await cardService.getSource(
@@ -136,11 +141,14 @@ module(
             @field firstName = contains(StringField);
             @field rapName = contains(StringField, {
               computeVia: function () {
-                return \`Lil \${this.firstName}\`;
-              },
+                let prefix = this.firstName.length > 5 ? 'Big' : 'Lil';
+                let nickname = this.firstName.toUpperCase();
+                return \`\${prefix} \${nickname}\`;
+              }
             });
           }
         `,
+        'computed field was added to the card definition',
       );
     });
   },
