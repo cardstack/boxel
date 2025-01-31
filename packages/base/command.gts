@@ -54,7 +54,6 @@ export class WriteTextFileInput extends CardDef {
   @field content = contains(StringField);
   @field realm = contains(StringField);
   @field path = contains(StringField);
-  @field url = contains(StringField);
   @field overwrite = contains(BooleanField);
 }
 
@@ -125,6 +124,8 @@ export class OpenAiAssistantRoomInput extends CardDef {
 }
 
 export class AddFieldToCardDefinitionInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
   @field cardDefinitionToModify = contains(CodeRefField);
   @field fieldName = contains(StringField);
   @field module = contains(StringField);

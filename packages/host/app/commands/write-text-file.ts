@@ -21,7 +21,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.WriteTextFileInput,
   ): Promise<undefined> {
-    let url = input.url ? new URL(input.url) : new URL(input.path, input.realm);
+    let url = new URL(input.path, input.realm);
     if (!input.overwrite) {
       let existing = await this.network.authedFetch(url);
 

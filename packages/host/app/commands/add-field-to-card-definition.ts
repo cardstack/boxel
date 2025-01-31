@@ -56,7 +56,8 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
     let writeTextFileCommand = new WriteTextFileCommand(this.commandContext);
     await writeTextFileCommand.execute({
       content: moduleSyntax.code(),
-      url: input.cardDefinitionToModify.module + '.gts',
+      realm: input.realm,
+      path: input.cardDefinitionToModify.module + '.gts',
       overwrite: true,
     });
   }
