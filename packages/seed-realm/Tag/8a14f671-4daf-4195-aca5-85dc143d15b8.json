@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "Proposal",
-      "color": "var(--boxel-lilac)",
+      "color": "#A66DFA",
       "description": null,
       "thumbnailURL": null
     },

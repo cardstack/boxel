@@ -16,11 +16,11 @@ const log = logger('realm-server');
 
 export default function handleCreateSessionRequest({
   matrixClient,
-  secretSeed,
+  realmSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   let matrixBackendAuthentication = new MatrixBackendAuthentication(
     matrixClient,
-    secretSeed,
+    realmSecretSeed,
     {
       badRequest: function (message: string) {
         return new Response(JSON.stringify({ errors: message }), {
@@ -36,7 +36,7 @@ export default function handleCreateSessionRequest({
         return new Response(body, init);
       },
       createJWT: async (user: string, sessionRoom: string) =>
-        createJWT({ user, sessionRoom }, secretSeed),
+        createJWT({ user, sessionRoom }, realmSecretSeed),
     } as Utils,
   );
 

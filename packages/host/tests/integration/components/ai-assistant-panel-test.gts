@@ -1835,9 +1835,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
       roomId,
       '@aibot:localhost',
       {
-        body: 'French bulldog is a',
+        body: 'Thinking...',
         msgtype: 'm.text',
-        formatted_body: 'French bulldog is a',
+        formatted_body: 'Thinking...',
         format: 'org.matrix.custom.html',
         isStreamingFinished: false,
       },
@@ -1845,6 +1845,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         origin_server_ts: Date.now(),
       },
     );
+    let originalEventId = partialEventId;
 
     await waitFor('[data-test-message-idx="3"]');
 
@@ -1854,6 +1855,45 @@ module('Integration | ai-assistant-panel', function (hooks) {
         'ai-avatar-animated',
         'Answer to my previous question is not in progress',
       );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+      .hasClass(
+        'ai-avatar-animated',
+        'Answer to my current question is in progress',
+      );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('Thinking...');
+
+    partialEventId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'French bulldog is a',
+        msgtype: 'm.text',
+        formatted_body: 'French bulldog is a',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: originalEventId,
+        },
+      },
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
+
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-message-idx="3"] [data-test-ai-message-content]',
+      );
+      if (el) {
+        return (el as HTMLElement).innerText === 'French bulldog is a';
+      } else {
+        return false;
+      }
+    });
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
       .hasClass(
@@ -1875,7 +1915,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: false,
         'm.relates_to': {
           rel_type: 'm.replace',
-          event_id: partialEventId,
+          event_id: originalEventId,
         },
       },
       {
@@ -1921,7 +1961,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
         'm.relates_to': {
           rel_type: 'm.replace',
-          event_id: partialEventId,
+          event_id: originalEventId,
         },
       },
       {

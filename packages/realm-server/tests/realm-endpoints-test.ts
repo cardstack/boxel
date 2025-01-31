@@ -39,7 +39,8 @@ import {
   setupDB,
   createRealm,
   realmServerTestMatrix,
-  secretSeed,
+  realmServerSecretSeed,
+  realmSecretSeed,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
@@ -3756,14 +3757,15 @@ module(basename(__filename), function () {
         let matrixClient = new MatrixClient({
           matrixURL: realmServerTestMatrix.url,
           username: realmServerTestMatrix.username,
-          seed: secretSeed,
+          seed: realmSecretSeed,
         });
         let getIndexHTML = (await getFastbootState()).getIndexHTML;
         testRealmServer = new RealmServer({
           realms: [base, testRealm],
           virtualNetwork,
           matrixClient,
-          secretSeed,
+          realmServerSecretSeed,
+          realmSecretSeed,
           matrixRegistrationSecret,
           realmsRootPath: dir.name,
           dbAdapter,

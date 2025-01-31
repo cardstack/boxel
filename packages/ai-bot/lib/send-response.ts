@@ -8,6 +8,7 @@ import debounce from 'lodash/debounce';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import { thinkingMessage } from '../constants';
 
 let log = logger('ai-bot');
 
@@ -55,8 +56,9 @@ export class Responder {
     let initialMessage = await sendMessage(
       this.client,
       this.roomId,
-      'Thinking...',
+      thinkingMessage,
       undefined,
+      { isStreamingFinished: false },
     );
     this.initialMessageId = initialMessage.event_id;
   }
