@@ -244,6 +244,9 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       </:grid>
     </Layout>
     <style scoped>
+      .blog-app :where(.grid-view-container) {
+        aspect-ratio: 5 / 6;
+      }
       .sidebar-create-button {
         --icon-color: currentColor;
         --boxel-loading-indicator-size: 15px;
