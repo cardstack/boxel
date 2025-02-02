@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "BlogPost",
-      "description": "Boxel spec for BlogPost",
+      "description": "Spec for BlogPost",
       "specType": "card",
       "ref": {
         "module": "../blog-post",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

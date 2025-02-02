@@ -561,7 +561,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               type: 'card',
               attributes: {
                 title: 'Person',
-                description: 'Boxel spec',
+                description: 'Spec',
                 specType: 'card',
                 ref: {
                   module: `./person`,
@@ -570,8 +570,8 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}boxel-spec`,
-                  name: 'BoxelSpec',
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
                 },
               },
             },
@@ -588,8 +588,8 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}boxel-spec`,
-                  name: 'BoxelSpec',
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
                 },
               },
             },
@@ -606,8 +606,8 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}boxel-spec`,
-                  name: 'BoxelSpec',
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
                 },
               },
             },

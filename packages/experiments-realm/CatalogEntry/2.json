@@ -2,7 +2,7 @@
   "data": {
     "attributes": {
       "title": "Pet",
-      "description": "Boxel spec for Pet card",
+      "description": "Spec for Pet card",
       "ref": {
         "module": "../pet",
         "name": "Pet"
@@ -11,8 +11,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     },
     "type": "card"

@@ -48,18 +48,18 @@ module('Integration | card-catalog', function (hooks) {
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let boxelSpec: typeof import('https://cardstack.com/base/boxel-spec');
+    let spec: typeof import('https://cardstack.com/base/spec');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    boxelSpec = await loader.import(`${baseRealm.url}boxel-spec`);
+    spec = await loader.import(`${baseRealm.url}spec`);
 
     let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
     let { CardsGrid } = cardsGrid;
-    let { BoxelSpec } = boxelSpec;
+    let { Spec } = spec;
 
     class Author extends CardDef {
       static displayName = 'Author';
@@ -115,63 +115,63 @@ module('Integration | card-catalog', function (hooks) {
         'publishing-packet.gts': { PublishingPacket },
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
-        'BoxelSpec/publishing-packet.json': new BoxelSpec({
+        'Spec/publishing-packet.json': new Spec({
           name: 'Publishing Packet',
-          description: 'Boxel spec for PublishingPacket',
+          description: 'Spec for PublishingPacket',
           specType: 'card',
           ref: {
             module: `../publishing-packet`,
             name: 'PublishingPacket',
           },
         }),
-        'BoxelSpec/author.json': new BoxelSpec({
+        'Spec/author.json': new Spec({
           name: 'Author',
-          description: 'Boxel spec for Author',
+          description: 'Spec for Author',
           specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
           },
         }),
-        'BoxelSpec/person.json': new BoxelSpec({
+        'Spec/person.json': new Spec({
           name: 'Person',
-          description: 'Boxel spec for Person',
+          description: 'Spec for Person',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
           },
         }),
-        'BoxelSpec/pet.json': new BoxelSpec({
+        'Spec/pet.json': new Spec({
           name: 'Pet',
-          description: 'Boxel spec for Pet',
+          description: 'Spec for Pet',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
           },
         }),
-        'BoxelSpec/tree.json': new BoxelSpec({
+        'Spec/tree.json': new Spec({
           name: 'Tree',
-          description: 'Boxel spec for Tree',
+          description: 'Spec for Tree',
           specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
             name: 'Tree',
           },
         }),
-        'BoxelSpec/blog-post.json': new BoxelSpec({
+        'Spec/blog-post.json': new Spec({
           name: 'BlogPost',
-          description: 'Boxel spec for BlogPost',
+          description: 'Spec for BlogPost',
           specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
             name: 'BlogPost',
           },
         }),
-        'BoxelSpec/address.json': new BoxelSpec({
+        'Spec/address.json': new Spec({
           name: 'Address',
-          description: 'Boxel spec for Address field',
+          description: 'Spec for Address field',
           specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
@@ -234,11 +234,11 @@ module('Integration | card-catalog', function (hooks) {
 
       // note that Address field is not in the results
       assert.deepEqual(localResults, [
-        'http://test-realm/test/BoxelSpec/author',
-        'http://test-realm/test/BoxelSpec/blog-post',
-        'http://test-realm/test/BoxelSpec/person',
-        'http://test-realm/test/BoxelSpec/pet',
-        'http://test-realm/test/BoxelSpec/publishing-packet',
+        'http://test-realm/test/Spec/author',
+        'http://test-realm/test/Spec/blog-post',
+        'http://test-realm/test/Spec/person',
+        'http://test-realm/test/Spec/pet',
+        'http://test-realm/test/Spec/publishing-packet',
       ]);
     });
 
@@ -296,19 +296,19 @@ module('Integration | card-catalog', function (hooks) {
         ),
       ].map((n) => n.getAttribute('data-test-card-catalog-item'));
       assert.deepEqual(localResults, [
-        'http://test-realm/test/BoxelSpec/author',
-        'http://test-realm/test/BoxelSpec/blog-post',
-        'http://test-realm/test/BoxelSpec/person',
-        'http://test-realm/test/BoxelSpec/pet',
-        'http://test-realm/test/BoxelSpec/publishing-packet',
-        'http://test-realm/test/BoxelSpec/tree',
+        'http://test-realm/test/Spec/author',
+        'http://test-realm/test/Spec/blog-post',
+        'http://test-realm/test/Spec/person',
+        'http://test-realm/test/Spec/pet',
+        'http://test-realm/test/Spec/publishing-packet',
+        'http://test-realm/test/Spec/tree',
       ]);
     });
   });
 
   module('mouse and key events', function () {
     test(`pressing enter on a card selects it and submits the selection`, async function (assert) {
-      const card = `${testRealmURL}BoxelSpec/publishing-packet`;
+      const card = `${testRealmURL}Spec/publishing-packet`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
@@ -331,7 +331,7 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test(`can select card using mouse click and then submit selection using enter key`, async function (assert) {
-      const card = `${testRealmURL}BoxelSpec/blog-post`;
+      const card = `${testRealmURL}Spec/blog-post`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
@@ -359,8 +359,8 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test(`selecting a card, then focusing on another card and pressing enter submits the focused card`, async function (assert) {
-      const card1 = `${testRealmURL}BoxelSpec/blog-post`;
-      const card2 = `${testRealmURL}BoxelSpec/author`;
+      const card1 = `${testRealmURL}Spec/blog-post`;
+      const card2 = `${testRealmURL}Spec/author`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
@@ -394,7 +394,7 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test(`double-clicking on a card selects the card and submits the selection`, async function (assert) {
-      const card = `${testRealmURL}BoxelSpec/blog-post`;
+      const card = `${testRealmURL}Spec/blog-post`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,

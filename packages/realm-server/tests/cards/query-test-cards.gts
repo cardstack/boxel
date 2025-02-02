@@ -38,7 +38,7 @@ export class Cat extends CardDef {
   @field name = contains(StringField);
 }
 
-export class SimpleBoxelSpec extends CardDef {
+export class SimpleSpec extends CardDef {
   @field title = contains(StringField);
   @field ref = contains(CodeRefField);
 }

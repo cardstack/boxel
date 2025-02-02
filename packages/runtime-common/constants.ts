@@ -3,9 +3,9 @@ import type { ResolvedCodeRef } from './code-ref';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
-export const boxelSpecRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}boxel-spec`,
-  name: 'BoxelSpec',
+export const specRef: ResolvedCodeRef = {
+  module: `${baseRealm.url}spec`,
+  name: 'Spec',
 };
 export const baseCardRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-api`,

@@ -58,7 +58,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { type BoxelSpecType } from 'https://cardstack.com/base/boxel-spec';
+import { type SpecType } from 'https://cardstack.com/base/spec';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import { htmlComponent } from '../../lib/html-component';
@@ -70,7 +70,7 @@ import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
-import BoxelSpecPreview from './code-submode/boxel-spec-preview';
+import SpecPreview from './code-submode/spec-preview';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import PlaygroundPanel from './code-submode/playground-panel';
@@ -104,7 +104,7 @@ type PanelHeights = {
 
 type SelectedAccordionItem =
   | 'schema-editor'
-  | 'boxel-spec-preview'
+  | 'spec-preview'
   | 'playground'
   | null;
 
@@ -508,7 +508,7 @@ export default class CodeSubmode extends Component<Signature> {
     return isCardDef(declaration.cardOrField);
   }
 
-  get showBoxelSpecPreview() {
+  get showSpecPreview() {
     return (
       !this.moduleContentsResource.isLoading &&
       this.selectedDeclaration?.exportName
@@ -685,7 +685,7 @@ export default class CodeSubmode extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
-        specType?: BoxelSpecType;
+        specType?: SpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -1012,36 +1012,34 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       {{/if}}
-                      {{#if this.showBoxelSpecPreview}}
-                        <BoxelSpecPreview
+                      {{#if this.showSpecPreview}}
+                        <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @createFile={{perform this.createFile}}
                           @isCreateModalShown={{bool this.isCreateModalOpen}}
-                          as |BoxelSpecPreviewTitle BoxelSpecPreviewContent|
+                          as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item
                             class='accordion-item'
                             @contentClass='accordion-item-content'
                             @onClick={{fn
                               this.selectAccordionItem
-                              'boxel-spec-preview'
+                              'spec-preview'
                             }}
                             @isOpen={{eq
                               this.selectedAccordionItem
-                              'boxel-spec-preview'
+                              'spec-preview'
                             }}
-                            data-test-accordion-item='boxel-spec-preview'
+                            data-test-accordion-item='spec-preview'
                           >
                             <:title>
-                              <BoxelSpecPreviewTitle />
+                              <SpecPreviewTitle />
                             </:title>
                             <:content>
-                              <BoxelSpecPreviewContent
-                                class='accordion-content'
-                              />
+                              <SpecPreviewContent class='accordion-content' />
                             </:content>
                           </A.Item>
-                        </BoxelSpecPreview>
+                        </SpecPreview>
                       {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}

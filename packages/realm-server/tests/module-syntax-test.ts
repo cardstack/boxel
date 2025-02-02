@@ -413,11 +413,9 @@ module(basename(__filename), function () {
         },
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
-        incomingRelativeTo: new URL(
-          `http://localhost:4202/node-test/boxel-spec/1`,
-        ), // hypothethical boxel spec that lives at this id
+        incomingRelativeTo: new URL(`http://localhost:4202/node-test/spec/1`), // hypothethical spec that lives at this id
         outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
-        outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the boxel spec lives in
+        outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the spec lives in
       });
 
       assert.codeEqual(
@@ -454,9 +452,9 @@ module(basename(__filename), function () {
         },
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
-        incomingRelativeTo: new URL(`http://localhost:4202/test/boxel-spec/1`), // hypothethical boxel spec that lives at this id
+        incomingRelativeTo: new URL(`http://localhost:4202/test/spec/1`), // hypothethical spec that lives at this id
         outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
-        outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the boxel spec lives in
+        outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that thel spec lives in
       });
 
       assert.codeEqual(

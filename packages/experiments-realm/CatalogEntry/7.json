@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Booking Card",
-      "description": "Boxel spec for Booking Card",
+      "description": "Spec for Booking Card",
       "specType": "card",
       "ref": {
         "module": "../booking",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

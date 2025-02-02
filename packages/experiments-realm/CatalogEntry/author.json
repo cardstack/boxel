@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Author",
-      "description": "Boxel spec for Author",
+      "description": "Spec for Author",
       "ref": {
         "name": "Author",
         "module": "../author"
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

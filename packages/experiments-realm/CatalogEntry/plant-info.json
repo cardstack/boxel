@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Plant Info",
-      "description": "Boxel spec for Plant Info card",
+      "description": "Spec for Plant Info card",
       "specType": "card",
       "ref": {
         "module": "../plant-info",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

@@ -30,29 +30,29 @@ import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import Brain from '@cardstack/boxel-icons/brain';
 
-export type BoxelSpecType = 'card' | 'field' | 'app' | 'skill';
+export type SpecType = 'card' | 'field' | 'app' | 'skill';
 
-export class SpecType extends StringField {
+class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
 }
 
-export class BoxelSpec extends CardDef {
-  static displayName = 'Boxel Spec';
+export class Spec extends CardDef {
+  static displayName = 'Spec';
   static icon = BoxModel;
   @field name = contains(StringField);
   @field readMe = contains(MarkdownField);
 
   @field ref = contains(CodeRef);
-  @field specType = contains(SpecType);
+  @field specType = contains(SpecTypeField);
 
   @field isField = contains(BooleanField, {
-    computeVia: function (this: BoxelSpec) {
+    computeVia: function (this: Spec) {
       return this.specType === 'field';
     },
   });
 
   @field isCard = contains(BooleanField, {
-    computeVia: function (this: BoxelSpec) {
+    computeVia: function (this: Spec) {
       return (
         this.specType === 'card' ||
         this.specType === 'app' ||
@@ -61,14 +61,14 @@ export class BoxelSpec extends CardDef {
     },
   });
   @field moduleHref = contains(StringField, {
-    computeVia: function (this: BoxelSpec) {
+    computeVia: function (this: Spec) {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
   @field title = contains(StringField, {
-    computeVia: function (this: BoxelSpec) {
+    computeVia: function (this: Spec) {
       if (this.name) {
         return this.name;
       }
@@ -78,14 +78,14 @@ export class BoxelSpec extends CardDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <BoxelSpecContainer class='fitted'>
+      <SpecContainer class='fitted'>
         <header class='title' data-test-title>
           <@fields.title />
         </header>
         <p class='description' data-test-description>
           <@fields.description />
         </p>
-      </BoxelSpecContainer>
+      </SpecContainer>
       <style scoped>
         .fitted > * {
           white-space: nowrap;
@@ -337,7 +337,7 @@ interface Signature {
   };
 }
 
-class BoxelSpecContainer extends GlimmerComponent<Signature> {
+class SpecContainer extends GlimmerComponent<Signature> {
   <template>
     <div class='entry' ...attributes>
       {{yield}}

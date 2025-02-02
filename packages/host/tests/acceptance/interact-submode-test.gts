@@ -67,11 +67,11 @@ module('Acceptance | interact submode tests', function (hooks) {
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
-    let boxelSpec: typeof import('https://cardstack.com/base/boxel-spec');
+    let spec: typeof import('https://cardstack.com/base/spec');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    boxelSpec = await loader.import(`${baseRealm.url}boxel-spec`);
+    spec = await loader.import(`${baseRealm.url}spec`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
     let {
@@ -85,7 +85,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       FieldDef,
     } = cardApi;
     let { default: StringField } = string;
-    let { BoxelSpec } = boxelSpec;
+    let { Spec } = spec;
     let { CardsGrid } = cardsGrid;
 
     class Pet extends CardDef {
@@ -248,21 +248,21 @@ module('Acceptance | interact submode tests', function (hooks) {
       static displayName = 'Personnel';
     }
 
-    let generateBoxelSpec = (
+    let generateSpec = (
       fileName: string,
       title: string,
       ref: { module: string; name: string },
     ) => ({
-      [`${fileName}.json`]: new BoxelSpec({
+      [`${fileName}.json`]: new Spec({
         title,
-        description: `Boxel spec for ${title}`,
+        description: `Spec for ${title}`,
         specType: 'card',
         ref,
       }),
     });
     let catalogEntries = {};
     for (let i = 0; i < 5; i++) {
-      let entry = generateBoxelSpec(`p-${i + 1}`, `Personnel-${i + 1}`, {
+      let entry = generateSpec(`p-${i + 1}`, `Personnel-${i + 1}`, {
         module: `${testRealmURL}personnel`,
         name: 'Personnel',
       });
@@ -279,18 +279,18 @@ module('Acceptance | interact submode tests', function (hooks) {
         'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
-        'person-entry.json': new BoxelSpec({
+        'person-entry.json': new Spec({
           name: 'Person Card',
-          description: 'Boxel spec for Person Card',
+          description: 'Spec for Person Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
           },
         }),
-        'pet-entry.json': new BoxelSpec({
+        'pet-entry.json': new Spec({
           name: 'Pet Card',
-          description: 'Boxel spec for Pet Card',
+          description: 'Spec for Pet Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -298,9 +298,9 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         }),
         ...catalogEntries,
-        'puppy-entry.json': new BoxelSpec({
+        'puppy-entry.json': new Spec({
           name: 'Puppy Card',
-          description: 'Boxel spec for Puppy Card',
+          description: 'Spec for Puppy Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -818,7 +818,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom(
           `[data-test-card-catalog-item="${testRealmURL}person-entry"][data-test-card-catalog-item-selected]`,
         )
-        .exists('Person boxel spec is pre-selected');
+        .exists('Person spec is pre-selected');
       assert
         .dom('[data-test-card-catalog-item-selected]')
         .exists({ count: 1 }, 'Only 1 card is selected');
@@ -843,7 +843,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom(
           `[data-test-card-catalog-item="${testRealmURL}puppy-entry"][data-test-card-catalog-item-selected]`,
         )
-        .exists('Puppy boxel spec is pre-selected');
+        .exists('Puppy spec is pre-selected');
       assert
         .dom('[data-test-card-catalog-item-selected]')
         .exists({ count: 1 }, 'Only 1 card is selected');
@@ -890,7 +890,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom(
           `[data-test-card-catalog-item="${testRealmURL}puppy-entry"][data-test-card-catalog-item-selected]`,
         )
-        .exists('Puppy boxel spec is pre-selected');
+        .exists('Puppy spec is pre-selected');
       assert
         .dom('[data-test-card-catalog-item-selected]')
         .exists({ count: 1 }, 'Only 1 card is selected');

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Puppy",
-      "description": "Boxel spec for Puppy card",
+      "description": "Spec for Puppy card",
       "specType": "card",
       "ref": {
         "module": "../puppy-card",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

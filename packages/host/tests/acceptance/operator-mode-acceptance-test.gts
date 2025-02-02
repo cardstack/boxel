@@ -300,7 +300,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person Card',
-              description: 'Boxel spec for Person Card',
+              description: 'Spec for Person Card',
               specType: 'card',
               ref: {
                 module: `${testRealmURL}person`,
@@ -309,8 +309,8 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/boxel-spec',
-                name: 'BoxelSpec',
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
               },
             },
           },

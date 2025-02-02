@@ -442,7 +442,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Boxel spec',
+              description: 'Spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -451,8 +451,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}boxel-spec`,
-                name: 'BoxelSpec',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },

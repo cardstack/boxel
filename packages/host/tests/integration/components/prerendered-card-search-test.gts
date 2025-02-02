@@ -253,7 +253,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
         },
       },
-      'boxel-spec-1.json': {
+      'spec-1.json': {
         data: {
           type: 'card',
           attributes: {
@@ -267,13 +267,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}boxel-spec`,
-              name: 'BoxelSpec',
+              module: `${baseRealm.url}spec`,
+              name: 'Spec',
             },
           },
         },
       },
-      'boxel-spec-2.json': {
+      'spec-2.json': {
         data: {
           type: 'card',
           attributes: {
@@ -287,8 +287,8 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}boxel-spec`,
-              name: 'BoxelSpec',
+              module: `${baseRealm.url}spec`,
+              name: 'Spec',
             },
           },
         },

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Review",
-      "description": "Boxel spec for Review card",
+      "description": "Spec for Review card",
       "specType": "card",
       "ref": {
         "module": "../review",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Sprint Task",
-      "description": "Boxel spec for Sprint Task",
+      "description": "Spec for Sprint Task",
       "ref": {
         "name": "SprintTask",
         "module": "../sprint-task"
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

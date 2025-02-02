@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Person",
-      "description": "Boxel spec for Person card",
+      "description": "Spec for Person card",
       "specType": "card",
       "ref": {
         "module": "../person",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
-        "name": "BoxelSpec"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

@@ -37,9 +37,9 @@ module('Acceptance | basic tests', function (hooks) {
     let { default: StringField } = await loader.import<
       typeof import('https://cardstack.com/base/string')
     >(`${baseRealm.url}string`);
-    let { BoxelSpec } = await loader.import<
-      typeof import('https://cardstack.com/base/boxel-spec')
-    >(`${baseRealm.url}boxel-spec`);
+    let { Spec } = await loader.import<
+      typeof import('https://cardstack.com/base/spec')
+    >(`${baseRealm.url}spec`);
 
     class Index extends CardDef {
       static isolated = class Isolated extends Component<typeof this> {
@@ -80,9 +80,9 @@ module('Acceptance | basic tests', function (hooks) {
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },
-        'person-entry.json': new BoxelSpec({
+        'person-entry.json': new Spec({
           name: 'Person',
-          description: 'Boxel spec',
+          description: 'Spec',
           isField: false,
           ref: {
             module: `./person`,
