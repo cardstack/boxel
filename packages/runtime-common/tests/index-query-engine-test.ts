@@ -2320,6 +2320,10 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
+        types: [
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
         last_modified: '1',
         resource_created_at: '1',
       },
@@ -2330,6 +2334,10 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
+        types: [
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
         last_modified: '3',
         resource_created_at: '3',
       },
@@ -2340,6 +2348,10 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
+        types: [
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
         last_modified: '2',
         resource_created_at: '2',
       },
@@ -2571,8 +2583,12 @@ const tests = Object.freeze({
     );
     assert.strictEqual(
       prerenderedCards[0].html,
-      '<div>Donald (CardDef embedded template)</div>',
+      '<div>Donald (FancyPerson embedded template)</div>',
     );
+    assert.deepEqual(prerenderedCards[0].usedRenderType, {
+      module: `${testRealmURL}fancy-person`,
+      name: 'FancyPerson',
+    });
 
     assert.strictEqual(
       prerenderedCards[1].url,
@@ -2580,8 +2596,12 @@ const tests = Object.freeze({
     );
     assert.strictEqual(
       prerenderedCards[1].html,
-      '<div>Jimmy (CardDef embedded template)</div>',
+      '<div>Jimmy (Person embedded template)</div>',
     );
+    assert.deepEqual(prerenderedCards[1].usedRenderType, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
 
     assert.strictEqual(
       prerenderedCards[2].url,
@@ -2589,8 +2609,12 @@ const tests = Object.freeze({
     );
     assert.strictEqual(
       prerenderedCards[2].html,
-      '<div>Van Gogh (CardDef embedded template)</div>',
+      '<div>Van Gogh (Person embedded template)</div>',
     );
+    assert.deepEqual(prerenderedCards[2].usedRenderType, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
 
     // Requesting embedded template with ON filter
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
@@ -2628,6 +2652,10 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (FancyPerson embedded template)</div>',
     );
+    assert.deepEqual(prerenderedCards[0].usedRenderType, {
+      module: `${testRealmURL}fancy-person`,
+      name: 'FancyPerson',
+    });
 
     //  Requesting atom template
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
@@ -2653,6 +2681,55 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
+    assert.deepEqual(prerenderedCards[0].usedRenderType, {
+      module: `${testRealmURL}fancy-person`,
+      name: 'FancyPerson',
+    });
+
+    // Define renderType argument
+    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}fancy-person`,
+            name: 'FancyPerson',
+          },
+          not: {
+            eq: {
+              name: 'Richard',
+            },
+          },
+        },
+      },
+      loader,
+      {
+        htmlFormat: 'embedded',
+        renderType: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+      },
+    ));
+
+    assert.strictEqual(
+      prerenderedCards.length,
+      1,
+      'the actual returned total results are correct (there is only one FancyPerson)',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/donald.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].html,
+      '<div>Donald (Person embedded template)</div>',
+    );
+    assert.deepEqual(prerenderedCards[0].usedRenderType, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
   },
 
   'can get prerendered cards in an error state from the indexer': async (

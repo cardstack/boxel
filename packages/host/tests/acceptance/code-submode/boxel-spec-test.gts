@@ -324,8 +324,7 @@ module('Spec preview', function (hooks) {
     await waitFor('[data-test-create-spec-instance]');
     assert.dom('[data-test-selected-type="NewSkill"]').exists();
     await click('[data-test-create-spec-instance]');
-    await waitFor('[data-test-field="specType"]');
-    assert.dom('[data-test-field="specType"] input').hasValue('card');
+    assert.dom('[data-test-exported-type]').hasText('card');
   });
   test('title does not default to "default"', async function (assert) {
     await visitOperatorMode({

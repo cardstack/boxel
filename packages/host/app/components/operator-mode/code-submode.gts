@@ -1210,6 +1210,13 @@ export default class CodeSubmode extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
+      .accordion-item {
+        --accordion-item-title-font: 600 var(--boxel-font-sm);
+        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .accordion-item > :deep(.title) {
+        height: var(--accordion-item-closed-height);
+      }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;
       }
