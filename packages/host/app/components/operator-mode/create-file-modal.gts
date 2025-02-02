@@ -41,9 +41,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { Spec } from 'https://cardstack.com/base/boxel-spec';
-
-import { type SpecType } from 'https://cardstack.com/base/boxel-spec';
+import { Spec, type SpecType } from 'https://cardstack.com/base/boxel-spec';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { cleanseString } from '../../lib/utils';
