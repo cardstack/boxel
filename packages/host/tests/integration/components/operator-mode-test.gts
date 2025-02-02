@@ -82,7 +82,7 @@ module('Integration | operator-mode', function (hooks) {
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let spec: typeof import('https://cardstack.com/base/spec');
+    let spec: typeof import('https://cardstack.com/base/boxel-spec');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

@@ -38,7 +38,7 @@ module('Acceptance | basic tests', function (hooks) {
       typeof import('https://cardstack.com/base/string')
     >(`${baseRealm.url}string`);
     let { Spec } = await loader.import<
-      typeof import('https://cardstack.com/base/spec')
+      typeof import('https://cardstack.com/base/boxel-spec')
     >(`${baseRealm.url}spec`);
 
     class Index extends CardDef {

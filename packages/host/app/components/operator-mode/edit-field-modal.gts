@@ -40,8 +40,8 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { Spec } from 'https://cardstack.com/base/spec';
 import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
+import type { Spec } from 'https://cardstack.com/base/boxel-spec';
 
 import { SelectedTypePill } from './create-file-modal';
 
