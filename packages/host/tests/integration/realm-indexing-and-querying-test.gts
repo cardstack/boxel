@@ -4788,8 +4788,6 @@ posts/ignore-me.json
           `${paths.url}card-2`, // book
           `${paths.url}booking1`, // booking
           `${paths.url}booking2`, // booking
-          `${paths.url}spec-1`, // spec
-          `${paths.url}spec-2`, // spec
           `${paths.url}mango`, // dog
           `${paths.url}ringo`, // dog
           `${paths.url}vangogh`, // dog
@@ -4803,6 +4801,8 @@ posts/ignore-me.json
           `${paths.url}person-card1`, // person
           `${paths.url}person-card2`, // person
           `${paths.url}cards/1`, // person
+          `${paths.url}spec-1`, // spec
+          `${paths.url}spec-2`, // spec
           `${paths.url}alicia`, // type example
           `${paths.url}bob`, // type example
           `${paths.url}margaret`, // type example
