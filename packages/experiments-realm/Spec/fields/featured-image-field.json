@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Featured Image Field",
+      "specType": "field",
+      "ref": {
+        "module": "../../fields/featured-image",
+        "name": "FeaturedImageField"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

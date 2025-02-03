@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Contact Link Field",
+      "specType": "field",
+      "ref": {
+        "module": "../../fields/contact-link",
+        "name": "ContactLinkField"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
