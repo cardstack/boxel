@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Task",
+      "description": "Spec for Task",
+      "ref": {
+        "name": "Task",
+        "module": "../task"
+      },
+      "specType": "card"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

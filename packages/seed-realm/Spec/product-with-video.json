@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Product with Video",
+      "description": "Spec for Product with Video card",
+      "specType": "card",
+      "ref": {
+        "module": "../product-with-video",
+        "name": "ProductWithVideo"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
