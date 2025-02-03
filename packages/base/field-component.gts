@@ -21,6 +21,7 @@ import {
   Loader,
   type CodeRef,
   type Permissions,
+  type Filter,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -33,7 +34,13 @@ import Component from '@glimmer/component';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
-  Args: { Named: { format?: Format; displayContainer?: boolean } };
+  Args: {
+    Named: {
+      format?: Format;
+      displayContainer?: boolean;
+      addCardFilter?: Filter;
+    };
+  };
   Blocks: {};
 }
 
@@ -185,7 +192,11 @@ export function getBoxComponent(
 
   let component: TemplateOnlyComponent<{
     Element: HTMLElement;
-    Args: { format?: Format; displayContainer?: boolean };
+    Args: {
+      format?: Format;
+      displayContainer?: boolean;
+      addCardFilter?: Filter;
+    };
   }> = <template>
     <CardContextConsumer as |context|>
       <PermissionsConsumer as |permissions|>
@@ -238,6 +249,7 @@ export function getBoxComponent(
                           (not field.computeVia)
                           permissions.canWrite
                         }}
+                        @addCardFilter={{@addCardFilter}}
                       />
                     </CardContainer>
                   </DefaultFormatsProvider>

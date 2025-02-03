@@ -22,6 +22,7 @@ import {
   identifyCard,
   CardContextName,
   RealmURLContextName,
+  type Filter,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
@@ -33,6 +34,7 @@ interface Signature {
   Args: {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
+    addCardFilter?: Filter;
   };
 }
 

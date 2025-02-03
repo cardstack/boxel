@@ -29,6 +29,7 @@ import {
   getPlural,
   CardContextName,
   RealmURLContextName,
+  type Filter,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -52,6 +53,7 @@ interface Signature {
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
+    addCardFilter?: Filter;
   };
 }
 
@@ -95,7 +97,13 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let filter = { every: [{ type }, ...selectedCardsQuery] };
+    let filter = {
+      every: [
+        { type },
+        ...selectedCardsQuery,
+        ...(this.args.addCardFilter ? [this.args.addCardFilter] : []),
+      ],
+    };
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
@@ -397,14 +405,13 @@ export function getLinksToManyComponent({
         {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
-            @arrayField={{arrayField}}
             @field={{field}}
-            @cardTypeFor={{cardTypeFor}}
             @childFormat={{getEditorChildFormat
               @format
               defaultFormats.cardDef
               model
             }}
+            @addCardFilter={{@addCardFilter}}
             ...attributes
           />
         {{else}}
