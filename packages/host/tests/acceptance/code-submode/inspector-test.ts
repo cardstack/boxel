@@ -442,7 +442,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
+              description: 'Spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -451,8 +451,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },

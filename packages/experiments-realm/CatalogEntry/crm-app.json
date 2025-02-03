@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "CrmApp",
-      "description": "Catalog entry for CRM App",
+      "description": "Spec for CRM App",
       "specType": "app",
       "ref": {
         "module": "../crm-app",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

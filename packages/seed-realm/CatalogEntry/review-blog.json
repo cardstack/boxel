@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Review Blog",
-      "description": "Catalog entry for Review Blog card",
+      "description": "Spec for Review Blog card",
       "specType": "card",
       "ref": {
         "module": "../review-blog",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

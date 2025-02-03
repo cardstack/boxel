@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Mortgage Calculator",
-      "description": "Catalog entry for Mortgage Calculator card",
+      "description": "Spec for Mortgage Calculator card",
       "specType": "card",
       "ref": {
         "module": "../mortgage-calculator",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

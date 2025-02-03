@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Skill Card",
-      "description": "Catalog entry for Skill card",
+      "description": "Spec for Skill card",
       "ref": {
         "module": "../skill-card",
         "name": "SkillCard"
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

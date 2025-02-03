@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Person",
-      "description": "Catalog entry for Person card",
+      "description": "Spec for Person card",
       "specType": "card",
       "ref": {
         "module": "../person",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

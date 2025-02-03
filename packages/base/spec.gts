@@ -35,29 +35,29 @@ import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import Brain from '@cardstack/boxel-icons/brain';
 
-export type BoxelSpecType = 'card' | 'field' | 'app' | 'skill';
+export type SpecType = 'card' | 'field' | 'app' | 'skill';
 
-export class SpecType extends StringField {
+class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
 }
 
-export class CatalogEntry extends CardDef {
-  static displayName = 'Catalog Entry';
+export class Spec extends CardDef {
+  static displayName = 'Spec';
   static icon = BoxModel;
   @field name = contains(StringField);
   @field readMe = contains(MarkdownField);
 
   @field ref = contains(CodeRef);
-  @field specType = contains(SpecType);
+  @field specType = contains(SpecTypeField);
 
   @field isField = contains(BooleanField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: Spec) {
       return this.specType === 'field';
     },
   });
 
   @field isCard = contains(BooleanField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: Spec) {
       return (
         this.specType === 'card' ||
         this.specType === 'app' ||
@@ -66,14 +66,14 @@ export class CatalogEntry extends CardDef {
     },
   });
   @field moduleHref = contains(StringField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: Spec) {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
   @field title = contains(StringField, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: Spec) {
       if (this.name) {
         return this.name;
       }
@@ -342,7 +342,7 @@ export class CatalogEntry extends CardDef {
     </template>
   };
 
-  static edit = CatalogEntry.isolated;
+  static edit = Spec.isolated;
 }
 
 interface SpecTagSignature {
