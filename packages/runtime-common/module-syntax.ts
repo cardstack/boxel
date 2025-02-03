@@ -117,6 +117,7 @@ export class ModuleSyntax {
     outgoingRelativeTo,
     outgoingRealmURL,
     addFieldAtIndex,
+    computedFieldFunctionSourceCode,
   }: {
     cardBeingModified: CodeRef;
     fieldName: string;
@@ -127,6 +128,7 @@ export class ModuleSyntax {
     outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
     addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
+    computedFieldFunctionSourceCode?: string; // if provided, the field will be added as a computed field
   }) {
     let card = this.getCard(cardBeingModified);
     if (card.possibleFields.has(fieldName)) {
@@ -147,6 +149,7 @@ export class ModuleSyntax {
       outgoingRelativeTo,
       outgoingRealmURL,
       moduleURL: this.url,
+      computedFieldFunctionSourceCode,
     });
 
     let src = this.code();
@@ -372,6 +375,7 @@ function makeNewField({
   outgoingRelativeTo,
   outgoingRealmURL,
   moduleURL,
+  computedFieldFunctionSourceCode,
 }: {
   target: NodePath<t.Node>;
   fieldRef: { name: string; module: string };
@@ -383,6 +387,7 @@ function makeNewField({
   outgoingRelativeTo: URL | undefined;
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
+  computedFieldFunctionSourceCode?: string;
 }): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -395,6 +400,7 @@ function makeNewField({
     `${baseRealm.url}card-api`,
     'field',
   );
+
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
@@ -434,12 +440,22 @@ function makeNewField({
     suggestedCardName(fieldRef, fieldDefinitionType),
   );
 
-  if (
-    fieldRef.module.startsWith(baseRealm.url) &&
-    fieldRef.name === 'default'
-  ) {
-    // primitive fields
-    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+  if (computedFieldFunctionSourceCode) {
+    let baseIndent = '  '; // Standard 2-space indent
+    let functionIndent = baseIndent.repeat(2); // Indent level for function body
+
+    let indentedFunctionCode = computedFieldFunctionSourceCode
+      .trim()
+      .split('\n')
+      .map((line, i) => {
+        if (i === 0) return line; // Keep first line as is
+        return functionIndent + line; // Add indentation for computed function body
+      })
+      .join('\n');
+
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name}, {
+              computeVia: ${indentedFunctionCode}
+            });`;
   }
 
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
