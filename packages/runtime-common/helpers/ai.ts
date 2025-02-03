@@ -391,9 +391,6 @@ export function getPatchTool(
       parameters: {
         type: 'object',
         properties: {
-          description: {
-            type: 'string',
-          },
           attributes: {
             type: 'object',
             properties: {
@@ -410,7 +407,7 @@ export function getPatchTool(
             },
           },
         },
-        required: ['attributes', 'description'],
+        required: ['attributes'],
       },
     },
   };
@@ -428,9 +425,6 @@ export function getSearchTool(): Tool {
       parameters: {
         type: 'object',
         properties: {
-          description: {
-            type: 'string',
-          },
           attributes: {
             type: 'object',
             properties: {
@@ -450,7 +444,7 @@ export function getSearchTool(): Tool {
             },
           },
         },
-        required: ['attributes', 'description'],
+        required: ['attributes'],
       },
     },
   };

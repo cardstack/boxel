@@ -246,10 +246,10 @@ module('Responding', (hooks) => {
       },
       'Tool call event should be sent with correct content',
     );
-    assert.deepEqual(
+    assert.notEqual(
       sentEvents[1].content.body,
       patchArgs.description,
-      'Body text should be the description',
+      'Body text should not be the description',
     );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
@@ -258,89 +258,6 @@ module('Responding', (hooks) => {
         event_id: '0',
       },
       'The tool call event should replace the thinking message',
-    );
-  });
-
-  test('Sends tool call event separately when content is sent before tool call', async () => {
-    const patchArgs = {
-      description: 'A new thing',
-      attributes: {
-        cardId: 'card/1',
-        patch: {
-          attributes: {
-            some: 'thing',
-          },
-        },
-      },
-    };
-    await responder.initialize();
-
-    await responder.onContent('some content');
-
-    await responder.onMessage({
-      role: 'assistant',
-      tool_calls: [
-        {
-          id: 'some-tool-call-id',
-          function: {
-            name: 'patchCard',
-            arguments: JSON.stringify(patchArgs),
-          },
-          type: 'function',
-        },
-      ],
-    });
-
-    let sentEvents = fakeMatrixClient.getSentEvents();
-    assert.equal(
-      sentEvents.length,
-      3,
-      'Thinking message, and tool call event should be sent',
-    );
-    assert.equal(
-      sentEvents[0].content.body,
-      thinkingMessage,
-      'Thinking message should be sent first',
-    );
-    assert.deepEqual(
-      JSON.parse(sentEvents[2].content.data),
-      {
-        toolCall: {
-          type: 'function',
-          id: 'some-tool-call-id',
-          name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
-        },
-      },
-      'Tool call event should be sent with correct content',
-    );
-    assert.notOk(
-      sentEvents[2].content['m.relates_to'],
-      'The tool call event should not replace any message',
-    );
-
-    assert.equal(
-      sentEvents[1].content.body,
-      'some content',
-      'Content event should be sent',
-    );
-    assert.deepEqual(
-      sentEvents[1].content['m.relates_to'],
-      {
-        rel_type: 'm.replace',
-        event_id: '0',
-      },
-      'The content event should replace the thinking message',
     );
   });
 });

@@ -873,9 +873,6 @@ module('getModifyPrompt', () => {
         parameters: {
           type: 'object',
           properties: {
-            description: {
-              type: 'string',
-            },
             attributes: {
               type: 'object',
               properties: {
@@ -899,7 +896,7 @@ module('getModifyPrompt', () => {
               },
             },
           },
-          required: ['attributes', 'description'],
+          required: ['attributes'],
         },
       },
     });
@@ -986,9 +983,6 @@ module('getModifyPrompt', () => {
           parameters: {
             type: 'object',
             properties: {
-              description: {
-                type: 'string',
-              },
               attributes: {
                 type: 'object',
                 properties: {
@@ -1012,7 +1006,7 @@ module('getModifyPrompt', () => {
                 },
               },
             },
-            required: ['attributes', 'description'],
+            required: ['attributes'],
           },
         },
       });
