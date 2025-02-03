@@ -13,7 +13,7 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink } from '@cardstack/boxel-ui/icons';
+import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
@@ -25,10 +25,11 @@ import {
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import type RealmService from '../../../services/realm';
-import type RealmServerService from '../../../services/realm-server';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import Preview from '../../preview';
 
@@ -104,7 +105,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                 @cardTypeIcon={{cardTypeIcon this.card}}
                 @realmInfo={{realmInfo}}
                 @isTopCard={{true}}
-                @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+                @moreOptionsMenuItems={{this.contextMenuItems}}
               />
             {{/let}}
             <Preview
@@ -148,6 +149,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @tracked private card?: CardDef;
@@ -161,18 +163,32 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     () => this.realmServer.availableRealmURLs,
   );
 
-  private copyToClipboard = task(async (id: string | undefined) => {
-    if (!id) {
-      return;
-    }
+  private copyToClipboard = task(async (id: string) => {
     await navigator.clipboard.writeText(id);
   });
 
-  private get moreOptionsMenuItems() {
+  private openInInteractMode = task(async (id: string) => {
+    await this.operatorModeStateService.openCardInInteractMode(new URL(id));
+  });
+
+  private get contextMenuItems() {
+    if (!this.card?.id) {
+      return;
+    }
+    let cardId = this.card.id;
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(this.card?.id),
+        action: () => this.copyToClipboard.perform(cardId),
         icon: IconLink,
+      }),
+      new MenuItem('Open in Code Mode', 'action', {
+        action: () =>
+          this.operatorModeStateService.updateCodePath(new URL(cardId)),
+        icon: IconCode,
+      }),
+      new MenuItem('Open in Interact Mode', 'action', {
+        action: () => this.openInInteractMode.perform(cardId),
+        icon: Eye,
       }),
     ];
     return menuItems;
