@@ -244,6 +244,9 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       </:grid>
     </Layout>
     <style scoped>
+      .blog-app {
+        --grid-view-height: max-content;
+      }
       .blog-app :where(.grid-view-container) {
         aspect-ratio: 5 / 6;
       }
