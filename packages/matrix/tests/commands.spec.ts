@@ -116,7 +116,7 @@ test.describe('Commands', () => {
               },
             },
           },
-          required: ['attributes', 'description'],
+          required: ['attributes'],
         },
       },
     });
@@ -202,7 +202,6 @@ test.describe('Commands', () => {
         toolCall: {
           name: 'patchCard',
           arguments: {
-            description: 'Patching card',
             attributes: {
               cardId,
               patch: {
@@ -251,7 +250,6 @@ test.describe('Commands', () => {
           name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${appURL}person`,
                 name: 'Person',
@@ -306,9 +304,6 @@ test.describe('Commands', () => {
     expect(boxelMessageData.context.tools[0].type).toEqual('function');
     expect(boxelMessageData.context.tools[0].function.name).toMatch(
       /^SwitchSubmodeCommand_/,
-    );
-    expect(boxelMessageData.context.tools[0].function.description).toEqual(
-      'Navigate the UI to another submode. Possible values for submode are "interact" and "code".',
     );
     // TODO: do we need to include `required: ['attributes'],` in the parameters object? If so, how?
     expect(boxelMessageData.context.tools[0].function.parameters).toMatchObject(

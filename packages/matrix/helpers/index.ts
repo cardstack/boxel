@@ -804,9 +804,6 @@ export function getSearchTool() {
       parameters: {
         type: 'object',
         properties: {
-          description: {
-            type: 'string',
-          },
           attributes: {
             type: 'object',
             properties: {
@@ -829,7 +826,7 @@ export function getSearchTool() {
             },
           },
         },
-        required: ['attributes', 'description'],
+        required: ['attributes'],
       },
     },
   };
