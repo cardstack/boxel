@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Author",
-      "description": "Catalog entry for Author",
+      "description": "Spec for Author",
       "ref": {
         "name": "Author",
         "module": "../author"
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

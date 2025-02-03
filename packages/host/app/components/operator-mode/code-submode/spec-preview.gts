@@ -23,7 +23,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
-  catalogEntryRef,
+  specRef,
   getCards,
   type Query,
   isCardDef,
@@ -42,11 +42,7 @@ import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
-import {
-  CatalogEntry,
-  type BoxelSpecType,
-} from 'https://cardstack.com/base/catalog-entry';
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import { type FileType } from '../create-file-modal';
 
@@ -61,7 +57,7 @@ interface Signature {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
-        specType?: BoxelSpecType;
+        specType?: SpecType;
       },
       sourceInstance?: CardDef,
     ) => Promise<void>;
@@ -70,19 +66,19 @@ interface Signature {
   Blocks: {
     default: [
       WithBoundArgs<
-        typeof BoxelSpecPreviewTitle,
-        | 'showCreateBoxelSpecIntent'
-        | 'boxelSpecInstances'
+        typeof SpecPreviewTitle,
+        | 'showCreateSpecIntent'
+        | 'specInstances'
         | 'selectedInstance'
-        | 'createBoxelSpec'
+        | 'createSpec'
         | 'isCreateModalShown'
       >,
       WithBoundArgs<
-        typeof BoxelSpecPreviewContent,
-        | 'showCreateBoxelSpecIntent'
-        | 'boxelSpecInstances'
+        typeof SpecPreviewContent,
+        | 'showCreateSpecIntent'
+        | 'specInstances'
         | 'selectedInstance'
-        | 'selectBoxelSpec'
+        | 'selectSpec'
       >,
     ];
   };
@@ -90,17 +86,17 @@ interface Signature {
 
 interface TitleSignature {
   Args: {
-    boxelSpecInstances: CatalogEntry[];
-    selectedInstance: CatalogEntry | null;
-    showCreateBoxelSpecIntent: boolean;
-    createBoxelSpec: () => void;
+    specInstances: Spec[];
+    selectedInstance: Spec | null;
+    showCreateSpecIntent: boolean;
+    createSpec: () => void;
     isCreateModalShown: boolean;
   };
 }
 
-class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
+class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
   get numberOfInstances() {
-    return this.args.boxelSpecInstances?.length;
+    return this.args.specInstances?.length;
   }
 
   get moreThanOneInstance() {
@@ -108,16 +104,16 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
   }
 
   <template>
-    Boxel Specification
+    Boxel Spec
 
-    <span class='has-boxel-spec' data-test-has-boxel-spec>
-      {{#if @showCreateBoxelSpecIntent}}
+    <span class='has-spec' data-test-has-spec>
+      {{#if @showCreateSpecIntent}}
         <BoxelButton
           @kind='primary'
           @size='small'
           @disabled={{@isCreateModalShown}}
-          {{on 'click' @createBoxelSpec}}
-          data-test-create-boxel-spec-button
+          {{on 'click' @createSpec}}
+          data-test-create-spec-button
         >
           Create
         </BoxelButton>
@@ -137,7 +133,7 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
     </span>
 
     <style scoped>
-      .has-boxel-spec {
+      .has-spec {
         margin-left: auto;
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
@@ -165,25 +161,25 @@ class BoxelSpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
-    boxelSpecInstances: CatalogEntry[];
-    selectedInstance: CatalogEntry | null;
-    selectBoxelSpec: (boxelSpec: CatalogEntry) => void;
-    showCreateBoxelSpecIntent: boolean;
+    specInstances: Spec[];
+    selectedInstance: Spec | null;
+    selectSpec: (spec: Spec) => void;
+    showCreateSpecIntent: boolean;
   };
 }
 
-class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
+class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
 
   get onlyOneInstance() {
-    return this.args.boxelSpecInstances.length === 1;
+    return this.args.specInstances.length === 1;
   }
 
-  @action realmInfo(card: CatalogEntry) {
+  @action realmInfo(card: Spec) {
     return this.realm.info(card.id);
   }
 
-  @action getLocalPath(card: CatalogEntry) {
+  @action getLocalPath(card: Spec) {
     let realmURL = this.realm.realmOfURL(new URL(card.id));
     if (!realmURL) {
       throw new Error('bug: no realm URL');
@@ -192,27 +188,27 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   <template>
-    {{#if @showCreateBoxelSpecIntent}}
+    {{#if @showCreateSpecIntent}}
       <div
-        class='create-boxel-spec-intent-message'
-        data-test-create-boxel-spec-intent-message
+        class='create-spec-intent-message'
+        data-test-create-spec-intent-message
       >
         Create a Boxel Specification to be able to create new instances
       </div>
     {{else}}
-      <div class='boxel-spec-preview'>
-        <div class='boxel-spec-selector' data-test-boxel-spec-selector>
+      <div class='spec-preview'>
+        <div class='spec-selector' data-test-spec-selector>
           <BoxelSelect
-            @options={{@boxelSpecInstances}}
+            @options={{@specInstances}}
             @selected={{@selectedInstance}}
-            @onChange={{@selectBoxelSpec}}
+            @onChange={{@selectSpec}}
             @matchTriggerWidth={{true}}
             @disabled={{this.onlyOneInstance}}
             as |card|
           >
             {{#let (this.getLocalPath card) as |localPath|}}
               {{#let (this.realmInfo card) as |realmInfo|}}
-                <div class='boxel-spec-selector-item'>
+                <div class='spec-selector-item'>
                   <RealmIcon class='url-realm-icon' @realmInfo={{realmInfo}} />
                   {{localPath}}
                 </div>
@@ -229,7 +225,7 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
     {{/if}}
 
     <style scoped>
-      .create-boxel-spec-intent-message {
+      .create-spec-intent-message {
         align-content: center;
         text-align: center;
         background-color: var(--boxel-200);
@@ -239,20 +235,19 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
         height: 100%;
         width: 100%;
       }
-      .boxel-spec-preview {
+      .spec-preview {
         display: flex;
         align-items: center;
         justify-content: center;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
       }
-      .boxel-spec-selector {
-        padding-top: var(--boxel-sp-sm);
-        padding-left: var(--boxel-sp-sm);
+      .spec-selector {
         min-width: 40%;
         align-self: flex-start;
       }
-      .boxel-spec-selector-item {
+      .spec-selector-item {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
@@ -261,11 +256,11 @@ class BoxelSpecPreviewContent extends GlimmerComponent<ContentSignature> {
   </template>
 }
 
-export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
+export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @tracked selectedInstance?: CatalogEntry = this.boxelSpecInstances[0];
+  @tracked selectedInstance?: Spec = this.specInstances[0];
 
   get realms() {
     return this.realmServer.availableRealmURLs;
@@ -287,10 +282,10 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  private get boxelSpecQuery(): Query {
+  private get specQuery(): Query {
     return {
       filter: {
-        on: catalogEntryRef,
+        on: specRef,
         eq: {
           ref: this.getSelectedDeclarationAsCodeRef, //ref is primitive
         },
@@ -304,22 +299,20 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  boxelSpecSearch = getCards(
-    () => this.boxelSpecQuery,
+  specSearch = getCards(
+    () => this.specQuery,
     () => this.realms,
     {
       isLive: true,
     },
   );
 
-  get boxelSpecInstances() {
-    return this.boxelSpecSearch.instances as CatalogEntry[];
+  get specInstances() {
+    return this.specSearch.instances as Spec[];
   }
 
-  private get showCreateBoxelSpecIntent() {
-    return (
-      !this.boxelSpecSearch.isLoading && this.boxelSpecInstances.length === 0
-    );
+  private get showCreateSpecIntent() {
+    return !this.specSearch.isLoading && this.specInstances.length === 0;
   }
 
   //TODO: Improve identification of isApp and isSkill
@@ -357,7 +350,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     return false;
   }
 
-  guessSpecType(selectedDeclaration: ModuleDeclaration): BoxelSpecType {
+  guessSpecType(selectedDeclaration: ModuleDeclaration): SpecType {
     if (isCardOrFieldDeclaration(selectedDeclaration)) {
       if (isCardDef(selectedDeclaration.cardOrField)) {
         if (this.isApp(selectedDeclaration)) {
@@ -372,10 +365,10 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
         return 'field';
       }
     }
-    throw new Error('Unidentified boxel spec');
+    throw new Error('Unidentified spec');
   }
 
-  @action private createBoxelSpec() {
+  @action private createSpec() {
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
     }
@@ -386,7 +379,7 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     let displayName = this.getSelectedDeclarationAsCodeRef.name;
     this.args.createFile(
       {
-        id: 'boxel-spec-instance',
+        id: 'spec-instance',
         displayName: 'Boxel Specification', //display name in modal
       },
       {
@@ -397,34 +390,34 @@ export default class BoxelSpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action selectBoxelSpec(boxelSpec: CatalogEntry): void {
-    this.selectedInstance = boxelSpec;
+  @action selectSpec(spec: Spec): void {
+    this.selectedInstance = spec;
   }
 
   <template>
-    {{#if (not this.boxelSpecSearch.isLoading)}}
+    {{#if (not this.specSearch.isLoading)}}
       {{yield
         (component
-          BoxelSpecPreviewTitle
-          showCreateBoxelSpecIntent=this.showCreateBoxelSpecIntent
-          boxelSpecInstances=this.boxelSpecInstances
+          SpecPreviewTitle
+          showCreateSpecIntent=this.showCreateSpecIntent
+          specInstances=this.specInstances
           selectedInstance=this.selectedInstance
-          createBoxelSpec=this.createBoxelSpec
+          createSpec=this.createSpec
           isCreateModalShown=@isCreateModalShown
         )
         (component
-          BoxelSpecPreviewContent
-          showCreateBoxelSpecIntent=this.showCreateBoxelSpecIntent
-          boxelSpecInstances=this.boxelSpecInstances
+          SpecPreviewContent
+          showCreateSpecIntent=this.showCreateSpecIntent
+          specInstances=this.specInstances
           selectedInstance=this.selectedInstance
-          selectBoxelSpec=this.selectBoxelSpec
+          selectSpec=this.selectSpec
         )
       }}
     {{/if}}
   </template>
 }
 
-function getComponent(cardOrField: CatalogEntry) {
+function getComponent(cardOrField: Spec) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
 
@@ -443,9 +436,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{#if this.icon}}
       <Pill class='spec-tag-pill' ...attributes>
         <:iconLeft>
-          <div class='spec-tagicon'>
-            {{this.icon}}
-          </div>
+          {{this.icon}}
         </:iconLeft>
         <:default>
           {{@specType}}
@@ -457,6 +448,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
       .spec-tag-pill {
         --pill-font: 500 var(--boxel-font-xs);
         --pill-background-color: var(--boxel-200);
+        word-break: initial;
       }
     </style>
   </template>

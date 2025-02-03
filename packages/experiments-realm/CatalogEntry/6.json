@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Friend from /friend",
-      "description": "Catalog entry for Friend from /friend",
+      "description": "Spec for Friend from /friend",
       "specType": "card",
       "ref": {
         "module": "../friend",
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

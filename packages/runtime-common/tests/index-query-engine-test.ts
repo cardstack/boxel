@@ -485,7 +485,7 @@ const tests = Object.freeze({
       },
     ]);
 
-    let type = await simpleCatalogEntryType(testCards);
+    let type = await SimpleSpecType(testCards);
     let { cards: results, meta } = await indexQueryEngine.search(
       new URL(testRealmURL),
       {
@@ -2971,11 +2971,11 @@ async function personCardType(testCards: TestCards) {
   return internalKeyToCodeRef(internalKey);
 }
 
-async function simpleCatalogEntryType(testCards: TestCards) {
+async function SimpleSpecType(testCards: TestCards) {
   let { stringFieldEntry } = testCards;
   if (!stringFieldEntry) {
     throw new Error(
-      `missing the 'stringFieldEntry' test card in the--this is the card we use to derive the SimpleCatalogEntry type`,
+      `missing the 'stringFieldEntry' test card in the--this is the card we use to derive the SimpleSpec type`,
     );
   }
   let internalKey = [...(await getTypes(stringFieldEntry))].shift()!;

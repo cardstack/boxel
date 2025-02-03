@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Blog",
-      "description": "Catalog entry for Blog App card",
+      "description": "Spec for Blog App card",
       "ref": {
         "module": "../blog-app",
         "name": "BlogApp"
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

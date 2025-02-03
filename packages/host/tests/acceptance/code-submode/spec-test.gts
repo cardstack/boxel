@@ -109,7 +109,7 @@ const newSkillCardSource = `
 `;
 
 let matrixRoomId: string;
-module('boxel spec preview', function (hooks) {
+module('Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -135,7 +135,7 @@ module('boxel spec preview', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
+              description: 'Spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -144,8 +144,8 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },
@@ -162,8 +162,8 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },
@@ -180,8 +180,8 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },
@@ -198,8 +198,8 @@ module('boxel spec preview', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },
@@ -272,69 +272,68 @@ module('boxel spec preview', function (hooks) {
     });
     setActiveRealms([testRealmURL]);
   });
-  test('view when there is a single boxel spec instance', async function (assert) {
+  test('view when there is a single spec instance', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="boxel-spec-preview"]');
-    assert.dom('[data-test-accordion-item="boxel-spec-preview"]').exists();
-    assert.dom('[data-test-has-boxel-spec]').containsText('card');
-    await click('[data-test-accordion-item="boxel-spec-preview"] button');
-    await waitFor('[data-test-boxel-spec-selector]');
-    assert.dom('[data-test-boxel-spec-selector]').exists();
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    assert.dom('[data-test-has-spec]').containsText('card');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await waitFor('[data-test-spec-selector]');
+    assert.dom('[data-test-spec-selector]').exists();
     await percySnapshot(assert);
     assert.dom('[data-test-title]').containsText('Person');
-    assert.dom('[data-test-description]').containsText('Catalog entry');
+    assert.dom('[data-test-description]').containsText('Spec');
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
   });
-  test('view when there are multiple boxel spec instances', async function (assert) {
+  test('view when there are multiple spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitFor('[data-test-accordion-item="boxel-spec-preview"]');
-    assert.dom('[data-test-accordion-item="boxel-spec-preview"]').exists();
-    assert.dom('[data-test-has-boxel-spec]').containsText('2 instances');
-    await click('[data-test-accordion-item="boxel-spec-preview"] button');
-    await waitFor('[data-test-boxel-spec-selector]');
-    assert.dom('[data-test-boxel-spec-selector]').exists();
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    assert.dom('[data-test-has-spec]').containsText('2 instances');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await waitFor('[data-test-spec-selector]');
+    assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
   });
-  test('view when there are no boxel spec instances', async function (assert) {
+  test('view when there are no spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
-    await waitFor('[data-test-accordion-item="boxel-spec-preview"]');
-    assert.dom('[data-test-accordion-item="boxel-spec-preview"]').exists();
-    assert.dom('[data-test-create-boxel-spec-button]').exists();
-    assert.dom('[data-test-create-boxel-spec-intent-message]').exists();
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    assert.dom('[data-test-create-spec-button]').exists();
+    assert.dom('[data-test-create-spec-intent-message]').exists();
   });
-  test('have ability to create new boxel spec instances', async function (assert) {
+  test('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
-    assert.dom('[data-test-create-boxel-spec-button]').exists();
-    await click('[data-test-create-boxel-spec-button]');
+    assert.dom('[data-test-create-spec-button]').exists();
+    await click('[data-test-create-spec-button]');
     assert.dom('[data-test-create-file-modal]').exists();
-    await waitFor('[data-test-create-boxel-spec-instance]');
+    await waitFor('[data-test-create-spec-instance]');
     assert.dom('[data-test-selected-type="NewSkill"]').exists();
-    await click('[data-test-create-boxel-spec-instance]');
-    await waitFor('[data-test-field="specType"]');
-    assert.dom('[data-test-field="specType"] input').hasValue('card');
+    await click('[data-test-create-spec-instance]');
+    assert.dom('[data-test-exported-type]').hasText('card');
   });
   test('title does not default to "default"', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
     });
-    await waitFor('[data-test-accordion-item="boxel-spec-preview"]');
-    assert.dom('[data-test-accordion-item="boxel-spec-preview"]').exists();
-    await click('[data-test-accordion-item="boxel-spec-preview"] button');
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-title]').doesNotContainText('default');
     assert.dom('[data-test-exported-name]').containsText('default');
   });

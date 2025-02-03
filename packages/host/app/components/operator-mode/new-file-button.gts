@@ -72,7 +72,7 @@ export default class NewFileButton extends Component<Signature> {
 
   private get menuItems() {
     return flatMap(newFileTypes, (id) => {
-      if (id === 'duplicate-instance' || id === 'boxel-spec-instance') {
+      if (id === 'duplicate-instance' || id === 'spec-instance') {
         return [];
       }
       let displayName = capitalize(startCase(id));
