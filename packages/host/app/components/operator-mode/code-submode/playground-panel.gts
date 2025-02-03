@@ -1,10 +1,13 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { LoadingIndicator, BoxelSelect } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { getCards, type ResolvedCodeRef } from '@cardstack/runtime-common';
 
@@ -13,7 +16,7 @@ import { ModuleContentsResource } from '@cardstack/host/resources/module-content
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 const getItemTitle = (item: CardDef, displayName?: string) => {
   if (!item) {
@@ -128,6 +131,34 @@ export default class PlaygroundPanel extends Component<Signature> {
               @codeRef={{codeRef}}
               @displayName={{@cardType.type.displayName}}
             />
+            <div class='format-chooser'>
+              <div class='format-chooser__buttons'>
+                <button
+                  class='format-chooser__button
+                    {{if (eq this.format "isolated") "active"}}'
+                  {{on 'click' (fn this.chooseFormat 'isolated')}}
+                  data-test-playground-panel-format-chooser-isolated
+                >
+                  Isolated
+                </button>
+                <button
+                  class='format-chooser__button
+                    {{if (eq this.format "embedded") "active"}}'
+                  {{on 'click' (fn this.chooseFormat 'embedded')}}
+                  data-test-playground-panel-format-chooser-embedded
+                >
+                  Embedded
+                </button>
+                <button
+                  class='format-chooser__button
+                    {{if (eq this.format "edit") "active"}}'
+                  {{on 'click' (fn this.chooseFormat 'edit')}}
+                  data-test-playground-panel-format-chooser-edit
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
           {{else}}
             Error: Playground could not be loaded.
           {{/if}}
@@ -151,14 +182,51 @@ export default class PlaygroundPanel extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
+        position: relative;
       }
       .loading-icon {
         display: inline-block;
         margin-right: var(--boxel-sp-xxxs);
         vertical-align: middle;
       }
+      .format-chooser {
+        position: sticky;
+        top: 100%;
+
+        display: flex;
+        justify-content: center;
+        min-width: fit-content;
+      }
+      .format-chooser__buttons {
+        display: flex;
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid #27232f;
+        overflow: hidden;
+      }
+      .format-chooser__button {
+        width: 80px;
+        min-width: 80px;
+        padding: var(--boxel-sp-xs);
+        font: 600 var(--boxel-font-xs);
+        background: transparent;
+        color: var(--boxel-dark);
+        border: 0;
+        border-right: 1px solid #27232f;
+      }
+      .format-chooser__button.active {
+        background: #27232f;
+        color: var(--boxel-teal);
+      }
     </style>
   </template>
+
+  @tracked format: Format = 'isolated';
+
+  @action
+  private chooseFormat(format: Format) {
+    this.format = format;
+  }
 
   get isLoading() {
     return (
