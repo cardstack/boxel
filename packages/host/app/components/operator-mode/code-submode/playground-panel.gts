@@ -173,7 +173,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   private get contextMenuItems() {
     if (!this.card?.id) {
-      return;
+      return undefined;
     }
     let cardId = this.card.id;
     let menuItems: MenuItem[] = [
