@@ -625,7 +625,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/boxel-spec',
+                module: 'https://cardstack.com/base/spec',
                 name: 'Spec',
               },
             },
@@ -669,7 +669,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/boxel-spec',
+            module: 'https://cardstack.com/base/spec',
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2015,7 +2015,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/boxel-spec',
+                module: 'https://cardstack.com/base/spec',
                 name: 'Spec',
               },
             },
@@ -2353,7 +2353,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             relationships: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/boxel-spec',
+                module: 'https://cardstack.com/base/spec',
                 name: 'Spec',
               },
             },
@@ -2409,7 +2409,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/boxel-spec',
+            module: 'https://cardstack.com/base/spec',
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(

@@ -11,7 +11,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/boxel-spec",
+        "module": "https://cardstack.com/base/spec",
         "name": "Spec"
       }
     }

@@ -41,7 +41,7 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { Spec, type SpecType } from 'https://cardstack.com/base/boxel-spec';
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import { type FileType } from '../create-file-modal';
