@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Skill Card",
+      "description": "Spec for Skill card",
+      "ref": {
+        "module": "../skill-card",
+        "name": "SkillCard"
+      },
+      "specType": "card"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

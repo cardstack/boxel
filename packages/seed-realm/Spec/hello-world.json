@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Hello World",
+      "description": "Spec for Hello World card",
+      "specType": "card",
+      "ref": {
+        "module": "../hello-world",
+        "name": "HelloWorld"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

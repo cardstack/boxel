@@ -16,10 +16,6 @@ import {
   extractCardFragmentsFromEvents,
   eventRequiresResponse,
 } from './helpers';
-import {
-  APP_BOXEL_ACTIVE_LLM,
-  DEFAULT_LLM,
-} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
@@ -28,7 +24,7 @@ import {
 } from './lib/set-title';
 import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient, updateStateEvent } from './lib/matrix';
+import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -125,12 +121,6 @@ class Assistant {
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
-
-  async setDefaultLLM(roomId: string) {
-    await updateStateEvent(this.client, roomId, APP_BOXEL_ACTIVE_LLM, {
-      model: DEFAULT_LLM,
-    });
-  }
 }
 
 let startTime = Date.now();
@@ -171,9 +161,8 @@ Common issues are:
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
-        .then(async function () {
+        .then(function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
-          await assistant.setDefaultLLM(member.roomId);
         })
         .catch(function (err) {
           log.info(

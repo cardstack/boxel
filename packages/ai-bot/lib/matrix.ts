@@ -44,15 +44,6 @@ export async function sendEvent(
   return await client.sendEvent(roomId, eventType, content);
 }
 
-export async function updateStateEvent(
-  client: MatrixClient,
-  roomId: string,
-  eventType: string,
-  content: IContent,
-) {
-  return await client.sendStateEvent(roomId, eventType, content, '');
-}
-
 export async function sendMessage(
   client: MatrixClient,
   roomId: string,
