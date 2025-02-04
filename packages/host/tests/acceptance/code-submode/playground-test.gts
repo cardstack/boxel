@@ -400,4 +400,25 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       )
       .exists();
   });
+
+  test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-playground-panel-format-chooser-edit]');
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+      )
+      .exists();
+    assert
+      .dom(`[data-test-stack-item-content] [data-test-card-format="edit"]`)
+      .exists();
+  });
 });

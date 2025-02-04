@@ -255,8 +255,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = task(async (id: string) => {
-    await this.operatorModeStateService.openCardInInteractMode(new URL(id));
+  private openInInteractMode = task(async (id: string, format: Format) => {
+    await this.operatorModeStateService.openCardInInteractMode(
+      new URL(id),
+      format,
+    );
   });
 
   private get contextMenuItems() {
@@ -275,7 +278,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode.perform(cardId),
+        action: () => this.openInInteractMode.perform(cardId, this.format),
         icon: Eye,
       }),
     ];
