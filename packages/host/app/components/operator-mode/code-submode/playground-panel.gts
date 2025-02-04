@@ -145,7 +145,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
-        height: 100%;
+        min-height: 100%;
       }
       .selected-item {
         display: flex;
@@ -154,6 +154,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       .instance-preview {
         border-radius: 0;
         box-shadow: none;
+        border-radius: 0 0 var(--boxel-border-radius) var(--boxel-border-radius);
         overflow: auto;
       }
       .instance-chooser {
@@ -163,6 +164,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       .format-chooser {
         position: sticky;
         bottom: 0;
+        margin-top: auto;
 
         display: flex;
         justify-content: center;
@@ -170,20 +172,27 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       }
       .format-chooser__buttons {
         display: flex;
-        background-color: var(--boxel-light);
+
+        border: 0;
         border-radius: var(--boxel-border-radius);
-        border: 1px solid #27232f;
-        overflow: hidden;
+        box-shadow: var(--boxel-deep-box-shadow);
+      }
+      .format-chooser__button:first-of-type {
+        border-radius: var(--boxel-border-radius) 0 0 var(--boxel-border-radius);
+        border-left: 1px solid #27232f;
+      }
+      .format-chooser__button:last-of-type {
+        border-radius: 0 var(--boxel-border-radius) var(--boxel-border-radius) 0;
       }
       .format-chooser__button {
         width: 80px;
         min-width: 80px;
         padding: var(--boxel-sp-xs);
         font: 600 var(--boxel-font-xs);
-        background: transparent;
+        background-color: var(--boxel-light);
         color: var(--boxel-dark);
-        border: 0;
-        border-right: 1px solid #27232f;
+        border: 1px solid #27232f;
+        border-left: 0;
       }
       .format-chooser__button.active {
         background: #27232f;
