@@ -4,14 +4,18 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
 
 import {
-  CardHeader,
   LoadingIndicator,
   BoxelSelect,
+  CardContainer,
+  CardHeader,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
@@ -23,7 +27,8 @@ import {
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
-import RealmService from '@cardstack/host/services/realm';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -75,42 +80,54 @@ interface PlaygroundContentSignature {
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
     <div class='playground-panel-content'>
-      <BoxelSelect
-        class='instance-chooser'
-        @options={{this.instances}}
-        @selected={{this.selectedItem}}
-        @selectedItemComponent={{if
-          this.selectedItem
-          (component
-            SelectedItem title=(getItemTitle this.selectedItem @displayName)
-          )
-        }}
-        @onChange={{this.onSelect}}
-        @placeholder='Please Select'
-        data-test-instance-chooser
-        as |item|
-      >
-        {{getItemTitle item @displayName}}
-      </BoxelSelect>
-      {{#if this.selectedItem}}
-        <div class='selected-item'>
-          <CardHeader
-            @cardTypeDisplayName={{cardTypeDisplayName this.selectedItem}}
-            @cardTypeIcon={{cardTypeIcon this.selectedItem}}
-            @realmInfo={{this.realm.info this.selectedItem.id}}
-            @onEdit={{if
-              (this.realm.canWrite this.selectedItem.id)
-              (fn this.chooseFormat 'edit')
-            }}
-            @onClose={{this.resetSelectedItem}}
-          />
-          <Preview
-            class='instance-preview'
-            @card={{this.selectedItem}}
-            @format={{this.format}}
-          />
-        </div>
-      {{/if}}
+      <div class='instance-chooser-container'>
+        <BoxelSelect
+          class='instance-chooser'
+          @options={{this.options.instances}}
+          @selected={{this.card}}
+          @selectedItemComponent={{if
+            this.card
+            (component SelectedItem title=(getItemTitle this.card @displayName))
+          }}
+          @onChange={{this.onSelect}}
+          @placeholder='Please Select'
+          data-test-instance-chooser
+          as |item|
+        >
+          {{getItemTitle item @displayName}}
+        </BoxelSelect>
+      </div>
+      <div class='preview-area'>
+        {{#if this.card}}
+          {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
+            <CardContainer class='preview-container'>
+              {{#let (this.realm.info this.card.id) as |realmInfo|}}
+                <CardHeader
+                  class='preview-header'
+                  @cardTypeDisplayName={{cardTypeDisplayName this.card}}
+                  @cardTypeIcon={{cardTypeIcon this.card}}
+                  @realmInfo={{realmInfo}}
+                  @isTopCard={{true}}
+                  @moreOptionsMenuItems={{this.contextMenuItems}}
+                />
+              {{/let}}
+              <Preview
+                class='preview'
+                @card={{this.card}}
+                @format={{this.format}}
+              />
+            </CardContainer>
+          {{else if (eq this.format 'embedded')}}
+            <CardContainer class='preview-container'>
+              <Preview
+                class='preview'
+                @card={{this.card}}
+                @format={{this.format}}
+              />
+            </CardContainer>
+          {{/if}}
+        {{/if}}
+      </div>
       <div class='format-chooser'>
         <div class='format-chooser__buttons'>
           <button
@@ -144,22 +161,41 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       .playground-panel-content {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp);
         min-height: 100%;
       }
-      .selected-item {
+      .instance-chooser-container {
+        position: sticky;
+        z-index: 1;
+        top: 0;
         display: flex;
-        flex-direction: column;
-      }
-      .instance-preview {
-        border-radius: 0;
-        box-shadow: none;
-        border-radius: 0 0 var(--boxel-border-radius) var(--boxel-border-radius);
-        overflow: auto;
+        justify-content: center;
       }
       .instance-chooser {
         color: var(--boxel-dark);
+        max-width: 405px;
         height: var(--boxel-form-control-height);
+        box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
+      }
+      .preview-container {
+        height: auto;
+        margin-top: var(--boxel-sp-sm);
+        color: var(--boxel-dark);
+        z-index: 0;
+      }
+      .preview-header {
+        background-color: var(--boxel-100);
+        box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
+        z-index: 1;
+      }
+      .preview {
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .playground-panel-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        min-height: 100%;
       }
       .format-chooser {
         position: sticky;
@@ -201,10 +237,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @tracked private selectedItem?: CardDef;
-  @tracked format: Format = 'isolated';
+  @tracked private card?: CardDef;
+  @tracked private format: Format = 'isolated';
 
   private options = getCards(
     () => ({
@@ -214,20 +251,39 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     () => this.realmServer.availableRealmURLs,
   );
 
-  @cached
-  private get instances() {
-    if (this.options?.isLoading) {
+  private copyToClipboard = task(async (id: string) => {
+    await navigator.clipboard.writeText(id);
+  });
+
+  private openInInteractMode = task(async (id: string) => {
+    await this.operatorModeStateService.openCardInInteractMode(new URL(id));
+  });
+
+  private get contextMenuItems() {
+    if (!this.card?.id) {
       return undefined;
     }
-    return this.options.instances;
+    let cardId = this.card.id;
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () => this.copyToClipboard.perform(cardId),
+        icon: IconLink,
+      }),
+      new MenuItem('Open in Code Mode', 'action', {
+        action: () =>
+          this.operatorModeStateService.updateCodePath(new URL(cardId)),
+        icon: IconCode,
+      }),
+      new MenuItem('Open in Interact Mode', 'action', {
+        action: () => this.openInInteractMode.perform(cardId),
+        icon: Eye,
+      }),
+    ];
+    return menuItems;
   }
 
-  @action private onSelect(item: CardDef) {
-    this.selectedItem = item;
-  }
-
-  @action private resetSelectedItem() {
-    this.selectedItem = undefined;
+  @action private onSelect(card: CardDef) {
+    this.card = card;
   }
 
   @action
@@ -268,6 +324,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     </section>
     <style scoped>
       .playground-panel {
+        position: relative;
         background-image: url('./playground-background.png');
         background-position: left top;
         background-repeat: repeat;

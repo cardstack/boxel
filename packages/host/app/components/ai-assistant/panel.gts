@@ -24,6 +24,8 @@ import { aiBotUsername } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import AddSkillsToRoomCommand from '../../commands/add-skills-to-room';
 import CreateAIAssistantRoomCommand from '../../commands/create-ai-assistant-room';
 import { Message } from '../../lib/matrix-classes/message';
@@ -39,6 +41,8 @@ import AiAssistantPastSessionsList from '../ai-assistant/past-sessions';
 import RenameSession from '../ai-assistant/rename-session';
 import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
+
+import { Submodes } from '../submode-switcher';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -368,6 +372,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare monacoService: MonacoService;
   @service private declare router: RouterService;
   @service private declare commandService: CommandService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private isShowingPastSessions = false;
   @tracked private roomToRename: SessionRoomData | undefined = undefined;
@@ -545,6 +550,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   @action
   private enterRoom(roomId: string, hidePastSessionsList = true) {
     this.matrixService.currentRoomId = roomId;
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      this.matrixService.setLLMForCodeMode();
+    }
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
