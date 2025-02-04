@@ -1,5 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -18,16 +19,18 @@ import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCards,
+  getCard,
+  identifyCard,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -71,6 +74,10 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
+const getComponent = (card: CardDef) => {
+  return card?.constructor?.getComponent(card);
+};
+
 interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -83,7 +90,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       <div class='instance-chooser-container'>
         <BoxelSelect
           class='instance-chooser'
-          @options={{this.options.instances}}
+          @options={{this.instances}}
           @selected={{this.card}}
           @selectedItemComponent={{if
             this.card
@@ -92,9 +99,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           @onChange={{this.onSelect}}
           @placeholder='Please Select'
           data-test-instance-chooser
-          as |item|
+          as |card|
         >
-          {{getItemTitle item @displayName}}
+          {{#let (getComponent card) as |Card|}}
+            <Card @format='fitted' />
+          {{/let}}
         </BoxelSelect>
       </div>
       <div class='preview-area'>
@@ -188,16 +197,41 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
+  @service declare recentFilesService: RecentFilesService;
   @tracked private card?: CardDef;
   @tracked private format: Format = 'isolated';
+  @tracked private potentialOptions?: { card: CardDef | undefined }[];
 
-  private options = getCards(
-    () => ({
-      filter: { type: this.args.codeRef },
-      sort: [{ by: 'createdAt', direction: 'desc' }],
-    }),
-    () => this.realmServer.availableRealmURLs,
-  );
+  constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
+    super(owner, args);
+    this.potentialOptions = this.getRecentCardJsonFiles();
+  }
+
+  private getRecentCardJsonFiles = () => {
+    let recentJSONFiles = this.recentFilesService.recentFiles
+      .filter((f) => f.filePath.endsWith('.json'))
+      .map((f) => getCard(new URL(`${f.realmURL}${f.filePath}`)))
+      .filter(Boolean);
+    return recentJSONFiles;
+  };
+
+  private get instances() {
+    let cards = this.potentialOptions?.map((option) => option.card);
+    let matches = cards
+      ?.map((card) => {
+        let type = identifyCard(card?.constructor);
+        if (!type || !('module' in type)) {
+          return;
+        }
+        let { name, module } = this.args.codeRef;
+        if (type.module === module && type.name === name) {
+          return card;
+        }
+        return;
+      })
+      .filter(Boolean);
+    return matches;
+  }
 
   private copyToClipboard = task(async (id: string) => {
     await navigator.clipboard.writeText(id);
