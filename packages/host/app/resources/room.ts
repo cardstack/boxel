@@ -228,6 +228,9 @@ export class RoomResource extends Resource<Args> {
   }
 
   activateLLM(model: string) {
+    if (this.activeLLM === model) {
+      return;
+    }
     this._activeLLM = model;
     this.activateLLMTask.perform(model);
   }
