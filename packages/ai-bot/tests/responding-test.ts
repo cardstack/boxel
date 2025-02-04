@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { Responder } from '../lib/send-response';
+import { Responder } from '../lib/responder';
 import { IContent } from 'matrix-js-sdk';
 import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
