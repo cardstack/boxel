@@ -1,5 +1,10 @@
 import { setTitle } from './set-title';
-import { sendError, sendOption, sendMessage, MatrixClient } from './matrix';
+import {
+  sendErrorEvent,
+  sendCommandEvent,
+  sendMessageEvent,
+  MatrixClient,
+} from './matrix';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
@@ -18,7 +23,7 @@ export async function handleDebugCommands(
       eventBody.split('debug:title:set:')[1],
     );
   } else if (eventBody.startsWith('debug:boom')) {
-    await sendError(
+    await sendErrorEvent(
       client,
       roomId,
       `Boom! Throwing an unhandled error`,
@@ -52,14 +57,14 @@ export async function handleDebugCommands(
       }
     } catch (error) {
       Sentry.captureException(error);
-      return await sendMessage(
+      return await sendMessageEvent(
         client,
         roomId,
         `Error parsing your debug patch, ${error} ${patchMessage}`,
         undefined,
       );
     }
-    return await sendOption(
+    return await sendCommandEvent(
       client,
       roomId,
       {

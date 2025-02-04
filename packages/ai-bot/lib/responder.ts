@@ -1,6 +1,11 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendError, sendMessage, sendOption } from './matrix';
+import {
+  MatrixClient,
+  sendErrorEvent,
+  sendMessageEvent,
+  sendCommandEvent,
+} from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -20,7 +25,7 @@ export class Responder {
   client: MatrixClient;
   roomId: string;
   messagePromises: Promise<ISendEventResponse | void>[] = [];
-  debouncedMessageSender: (
+  sendMessageEventWithDebouncing: (
     content: string,
     eventToUpdate: string | undefined,
     isStreamingFinished?: boolean,
@@ -29,13 +34,13 @@ export class Responder {
   constructor(client: MatrixClient, roomId: string) {
     this.roomId = roomId;
     this.client = client;
-    this.debouncedMessageSender = debounce(
+    this.sendMessageEventWithDebouncing = debounce(
       async (
         content: string,
         eventToUpdate: string | undefined,
         isStreamingFinished = false,
       ) => {
-        const messagePromise = sendMessage(
+        const messagePromise = sendMessageEvent(
           this.client,
           this.roomId,
           content,
@@ -53,7 +58,7 @@ export class Responder {
   }
 
   async initialize() {
-    let initialMessage = await sendMessage(
+    let initialMessage = await sendMessageEvent(
       this.client,
       this.roomId,
       thinkingMessage,
@@ -76,7 +81,7 @@ export class Responder {
   }
 
   async onContent(snapshot: string) {
-    await this.debouncedMessageSender(
+    await this.sendMessageEventWithDebouncing(
       cleanContent(snapshot),
       this.initialMessageId,
     );
@@ -111,7 +116,7 @@ export class Responder {
     for (const toolCall of msg.tool_calls || []) {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
-        let optionPromise = sendOption(
+        let optionPromise = sendCommandEvent(
           this.client,
           this.roomId,
           this.deserializeToolCall(toolCall),
@@ -123,7 +128,7 @@ export class Responder {
       } catch (error) {
         Sentry.captureException(error);
         this.initialMessageReplaced = true;
-        let errorPromise = sendError(
+        let errorPromise = sendErrorEvent(
           this.client,
           this.roomId,
           error,
@@ -137,7 +142,7 @@ export class Responder {
 
   async onError(error: OpenAIError | string) {
     Sentry.captureException(error);
-    return await sendError(
+    return await sendErrorEvent(
       this.client,
       this.roomId,
       error,
@@ -148,7 +153,7 @@ export class Responder {
   async finalize(finalContent: string | void | null | undefined) {
     if (finalContent) {
       finalContent = cleanContent(finalContent);
-      await this.debouncedMessageSender(
+      await this.sendMessageEventWithDebouncing(
         finalContent,
         this.initialMessageId,
         true,

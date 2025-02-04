@@ -24,7 +24,7 @@ export interface MatrixClient {
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
 }
 
-export async function sendEvent(
+export async function sendMatrixEvent(
   client: MatrixClient,
   roomId: string,
   eventType: string,
@@ -44,7 +44,7 @@ export async function sendEvent(
   return await client.sendEvent(roomId, eventType, content);
 }
 
-export async function sendMessage(
+export async function sendMessageEvent(
   client: MatrixClient,
   roomId: string,
   content: string,
@@ -67,7 +67,7 @@ export async function sendMessage(
     },
     ...data,
   };
-  return await sendEvent(
+  return await sendMatrixEvent(
     client,
     roomId,
     'm.room.message',
@@ -79,7 +79,7 @@ export async function sendMessage(
 // TODO we might want to think about how to handle patches that are larger than
 // 65KB (the maximum matrix event size), such that we split them into fragments
 // like we split cards into fragments
-export async function sendOption(
+export async function sendCommandEvent(
   client: MatrixClient,
   roomId: string,
   functionCall: FunctionToolCall,
@@ -91,7 +91,7 @@ export async function sendOption(
   );
 
   if (messageObject !== undefined) {
-    return await sendEvent(
+    return await sendMatrixEvent(
       client,
       roomId,
       'm.room.message',
@@ -102,7 +102,7 @@ export async function sendOption(
   return;
 }
 
-export async function sendError(
+export async function sendErrorEvent(
   client: MatrixClient,
   roomId: string,
   error: any,
@@ -111,7 +111,7 @@ export async function sendError(
   try {
     let errorMessage = getErrorMessage(error);
     log.error(errorMessage);
-    await sendMessage(
+    await sendMessageEvent(
       client,
       roomId,
       'There was an error processing your request, please try again later',
