@@ -41,6 +41,7 @@ interface Signature {
     }) => void;
     errorMessage?: string;
     isPending?: boolean;
+    isCommandMessage?: boolean;
     retryAction?: () => void;
   };
   Blocks: { default: [] };
@@ -170,7 +171,11 @@ export default class AiAssistantMessage extends Component<Signature> {
           </div>
         {{/if}}
 
-        <div class='content' data-test-ai-message-content>
+        <div
+          class='content'
+          data-test-ai-message-content
+          data-test-command-message={{@isCommandMessage}}
+        >
           {{@formattedMessage}}
 
           {{yield}}

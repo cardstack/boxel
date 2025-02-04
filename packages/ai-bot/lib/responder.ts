@@ -124,15 +124,24 @@ export class Responder {
     for (const toolCall of msg.tool_calls || []) {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
+        const functionToolCall = this.deserializeToolCall(toolCall);
+        this.latestContent = [
+          this.latestContent,
+          functionToolCall.arguments['description'],
+        ]
+          .filter(Boolean)
+          .join('\n\n');
         let commandEventPromise = sendCommandEvent(
           this.client,
           this.roomId,
-          this.deserializeToolCall(toolCall),
-          this.initialMessageReplaced ? undefined : this.responseEventId,
+          this.latestContent,
+          functionToolCall,
+          this.responseEventId,
         );
         this.messagePromises.push(commandEventPromise);
         await commandEventPromise;
         this.initialMessageReplaced = true;
+        this.isStreamingFinished = true;
       } catch (error) {
         Sentry.captureException(error);
         this.initialMessageReplaced = true;
@@ -159,7 +168,7 @@ export class Responder {
   }
 
   async finalize(finalContent: string | void | null | undefined) {
-    if (finalContent) {
+    if (finalContent && !this.isStreamingFinished) {
       this.latestContent = cleanContent(finalContent);
       this.isStreamingFinished = true;
       await this.sendMessageEventWithDebouncing();

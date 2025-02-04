@@ -82,10 +82,11 @@ export async function sendMessageEvent(
 export async function sendCommandEvent(
   client: MatrixClient,
   roomId: string,
+  messageBody: string,
   functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ) {
-  let messageObject = toMatrixMessageCommandContent(functionCall);
+  let messageObject = toMatrixMessageCommandContent(functionCall, messageBody);
 
   if (messageObject !== undefined) {
     return await sendMatrixEvent(
@@ -128,9 +129,10 @@ export async function sendErrorEvent(
 
 export const toMatrixMessageCommandContent = (
   functionCall: FunctionToolCall,
+  messageBody: string | undefined,
 ): IContent | undefined => {
   let { arguments: payload } = functionCall;
-  const body = payload['description'] || 'Issuing command';
+  const body = messageBody || payload['description'] || 'Issuing command';
   let messageObject: IContent = {
     body: body,
     msgtype: APP_BOXEL_COMMAND_MSGTYPE,
