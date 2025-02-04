@@ -129,6 +129,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
         is-pending=@isPending
+        is-streaming=@isStreaming
         is-error=@errorMessage
       }}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
@@ -301,6 +302,21 @@ export default class AiAssistantMessage extends Component<Signature> {
         color: var(--boxel-500);
         max-height: 300px;
         overflow: auto;
+      }
+
+      .is-streaming
+        .content
+        > :not(ol):not(ul):not(pre):not(div):last-child:after {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: currentColor;
+        border-radius: 50%;
+        display: inline-block;
+        font-family: system-ui, sans-serif;
+        line-height: normal;
+        vertical-align: baseline;
+        margin-left: 5px;
       }
 
       .content > :deep(.command-message) {
