@@ -551,7 +551,7 @@ export default class AiAssistantPanel extends Component<Signature> {
   private enterRoom(roomId: string, hidePastSessionsList = true) {
     this.matrixService.currentRoomId = roomId;
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      this.matrixService.setLLMModelForCodeMode();
+      this.matrixService.setLLMForCodeMode();
     }
     if (hidePastSessionsList) {
       this.hidePastSessions();

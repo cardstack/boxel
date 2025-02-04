@@ -1329,7 +1329,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async setLLMModelForCodeMode() {
+  async setLLMForCodeMode() {
     this.setLLMModel('anthropic/claude-3.5-sonnet');
   }
 

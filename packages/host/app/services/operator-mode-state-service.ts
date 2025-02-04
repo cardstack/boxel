@@ -314,7 +314,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
-      this.matrixService.setLLMModelForCodeMode();
+      this.matrixService.setLLMForCodeMode();
     }
   }
 
