@@ -343,4 +343,61 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       .exists();
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
   });
+
+  test('can display selected card in the chosen format', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="isolated"]`,
+      )
+      .exists();
+    assert.dom('[data-test-author-title]').hasText('Jane Doe');
+    assert
+      .dom('[data-test-author-bio]')
+      .containsText('Jane Doe is the Senior Managing Editor');
+    assert
+      .dom('[data-test-playground-panel-format-chooser-isolated]')
+      .hasClass('active');
+
+    await click('[data-test-playground-panel-format-chooser-embedded]');
+    assert
+      .dom('[data-test-playground-panel-format-chooser-isolated]')
+      .hasNoClass('active');
+    assert
+      .dom('[data-test-playground-panel-format-chooser-embedded]')
+      .hasClass('active');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .doesNotExist();
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="embedded"]`,
+      )
+      .exists();
+
+    await click('[data-test-playground-panel-format-chooser-edit]');
+    assert
+      .dom('[data-test-playground-panel-format-chooser-embedded]')
+      .hasNoClass('active');
+    assert
+      .dom('[data-test-playground-panel-format-chooser-edit]')
+      .hasClass('active');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="edit"]`,
+      )
+      .exists();
+  });
 });
