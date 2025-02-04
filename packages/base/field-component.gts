@@ -21,7 +21,7 @@ import {
   Loader,
   type CodeRef,
   type Permissions,
-  type Filter,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -38,7 +38,7 @@ export interface BoxComponentSignature {
     Named: {
       format?: Format;
       displayContainer?: boolean;
-      addCardFilter?: Filter;
+      subclassType?: ResolvedCodeRef;
     };
   };
   Blocks: {};
@@ -195,7 +195,7 @@ export function getBoxComponent(
     Args: {
       format?: Format;
       displayContainer?: boolean;
-      addCardFilter?: Filter;
+      subclassType?: ResolvedCodeRef;
     };
   }> = <template>
     <CardContextConsumer as |context|>
@@ -249,7 +249,7 @@ export function getBoxComponent(
                           (not field.computeVia)
                           permissions.canWrite
                         }}
-                        @addCardFilter={{@addCardFilter}}
+                        @subclassType={{@subclassType}}
                       />
                     </CardContainer>
                   </DefaultFormatsProvider>

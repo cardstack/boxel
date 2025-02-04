@@ -227,3 +227,60 @@ export function humanReadable(ref: CodeRef): string {
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
 }
+
+function refEquals(ref1: CodeRef, ref2: CodeRef): boolean {
+  // For now, let's only handle for resolved code refs
+  if (!isResolvedCodeRef(ref1) || !isResolvedCodeRef(ref2)) {
+    return false;
+  }
+  return ref1.name === ref1.module && ref1.module === ref2.module;
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
+}
+
+async function getAncestorRef(codeRef: CodeRef) {
+  let card = await loadCard(codeRef, { loader: myLoader() });
+  let ancestor = getAncestor(card);
+  return identifyCard(ancestor);
+}
+
+//This function identifies the code ref identity of the card and verifies
+//that it is a child of the ancestor
+async function isInsideAncestorChain(
+  codeRef: CodeRef,
+  codeRefAncestor: CodeRef,
+): Promise<boolean | undefined> {
+  if (refEquals(codeRef, codeRefAncestor)) {
+    return true;
+  } else {
+    let newAncestorRef = await getAncestorRef(codeRef);
+    if (newAncestorRef) {
+      return isInsideAncestorChain(newAncestorRef, codeRefAncestor);
+    } else {
+      return undefined;
+    }
+  }
+}
+
+// utility to return subclassType when it exists and is part of the ancestor chain of type
+export async function getNarrowestType(
+  subclassType: CodeRef | undefined,
+  type: CodeRef,
+) {
+  let narrowTypeExists: boolean = false;
+  if (subclassType) {
+    narrowTypeExists =
+      (await isInsideAncestorChain(subclassType, type)) ?? false;
+  }
+  let narrowestType = narrowTypeExists && subclassType ? subclassType : type;
+  return narrowestType;
+}

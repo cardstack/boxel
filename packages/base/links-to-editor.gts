@@ -22,7 +22,8 @@ import {
   identifyCard,
   CardContextName,
   RealmURLContextName,
-  type Filter,
+  type ResolvedCodeRef,
+  getNarrowestType,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
@@ -34,7 +35,7 @@ interface Signature {
   Args: {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
-    addCardFilter?: Filter;
+    subclassType?: ResolvedCodeRef;
   };
 }
 
@@ -145,6 +146,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    type = await getNarrowestType(this.args.subclassType, type);
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter: { type } },
       {
