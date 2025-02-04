@@ -4,6 +4,7 @@ import { IContent } from 'matrix-js-sdk';
 import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
+import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -45,6 +46,14 @@ class FakeMatrixClient implements MatrixClient {
   resetSentEvents() {
     this.sentEvents = [];
     this.eventId = 0;
+  }
+  sendStateEvent(
+    _roomId: string,
+    _eventType: string,
+    _content: IContent,
+    _stateKey: string,
+  ): Promise<{ event_id: string }> {
+    throw new Error('Method not implemented.');
   }
 }
 
@@ -226,7 +235,6 @@ module('Responding', (hooks) => {
     assert.deepEqual(
       JSON.parse(sentEvents[1].content.data),
       {
-        eventId: '0',
         toolCall: {
           type: 'function',
           id: 'some-tool-call-id',
@@ -341,6 +349,59 @@ module('Responding', (hooks) => {
         event_id: '0',
       },
       'The content event should replace the thinking message',
+    );
+  });
+
+  test('Updates message type to command when tool call is in progress', async () => {
+    await responder.initialize();
+    await responder.onChunk({
+      id: '0',
+      created: 0,
+      model: 'gpt-3.5-turbo',
+      object: 'chat.completion.chunk',
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                type: 'function',
+                function: {
+                  name: 'patchCard',
+                  arguments: '',
+                },
+              },
+            ],
+          },
+          index: 0,
+          finish_reason: 'stop',
+        },
+      ],
+    });
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(
+      sentEvents.length,
+      2,
+      'Thinking message and event updating message type should be sent',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      thinkingMessage,
+      'Thinking message should be sent first',
+    );
+    assert.deepEqual(
+      sentEvents[1].content['msgtype'],
+      APP_BOXEL_COMMAND_MSGTYPE,
+      'The message type should reflect that the model is preparing a tool call',
+    );
+    assert.deepEqual(
+      sentEvents[1].content['m.relates_to'],
+      {
+        rel_type: 'm.replace',
+        event_id: '0',
+      },
+      'The tool call event should replace the thinking message',
     );
   });
 });
