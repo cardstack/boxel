@@ -75,7 +75,10 @@ module('Acceptance | Commands tests', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = await createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = await createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     class Pet extends CardDef {

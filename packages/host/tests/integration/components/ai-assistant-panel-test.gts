@@ -436,8 +436,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-    let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+    let room1Id = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
+    let room2Id = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 2',
+    });
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Incorrect command',
@@ -1178,9 +1184,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom('@testuser:staging', 'test room 0');
-      let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-      const room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+      createAndJoinRoom({ sender: '@testuser:staging', name: 'test room 0' });
+      let room1Id = createAndJoinRoom({
+        sender: '@testuser:staging',
+        name: 'test room 1',
+      });
+      const room2Id = createAndJoinRoom({
+        sender: '@testuser:staging',
+        name: 'test room 2',
+      });
       await settled();
 
       await openAiAssistant();
@@ -1415,7 +1427,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'Another Room',
+    });
 
     simulateRemoteMessage(
       anotherRoomId,
@@ -1576,7 +1591,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId, false);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1598,7 +1616,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1636,7 +1657,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'Another Room',
+    });
 
     let eventId3 = simulateRemoteMessage(
       anotherRoomId,
@@ -2007,10 +2031,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await createAndJoinRoom(
-      '@testuser:staging',
-      'Another Room',
-    );
+    let anotherRoomId = await createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'Another Room',
+    });
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
@@ -2105,7 +2129,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Changing first name to Evie',
@@ -2178,7 +2205,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
@@ -2546,7 +2576,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let room1Id = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
