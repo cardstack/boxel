@@ -220,6 +220,14 @@ export class CardResource extends Resource<Args> {
     },
   );
 
+  private reloadLiveModel = restartableTask(async (url: string) => {
+    let subscribers = liveCardIdentityContext.subscribers(url);
+    liveCardIdentityContext.delete(url);
+    let cardOrError = await this.getCard(url);
+    await this.updateCardInstance(cardOrError);
+    liveCardIdentityContext.update(url, this._card, subscribers);
+  });
+
   private subscribeToRealm(cardOrId: CardDef | string) {
     let card: CardDef | undefined;
     let id: string;
@@ -288,14 +296,7 @@ export class CardResource extends Resource<Args> {
                 // code before re-running the card as well as clear out the
                 // identity context as the card has a new implementation
                 this.resetLoader();
-                let subscribers = liveCardIdentityContext.subscribers(card.id);
-                liveCardIdentityContext.delete(card.id);
-                this.loadStaticModel.perform(card.id);
-                liveCardIdentityContext.update(
-                  card.id,
-                  this._card,
-                  subscribers,
-                );
+                this.reloadLiveModel.perform(card.id);
               } else {
                 this.reload.perform(card);
               }
