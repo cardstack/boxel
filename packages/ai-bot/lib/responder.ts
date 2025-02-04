@@ -10,13 +10,8 @@ import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { thinkingMessage } from '../constants';
-<<<<<<< HEAD
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-=======
-import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
-import type OpenAI from 'openai';
->>>>>>> fee947ed2 (When we see a tool call being prepared, update the msgtype of the response event to 'app.boxel.command')
 
 let log = logger('ai-bot');
 

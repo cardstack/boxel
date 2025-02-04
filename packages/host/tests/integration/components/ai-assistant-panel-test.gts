@@ -2220,6 +2220,48 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
   });
 
+  test('when a command is being prepared, apply button is shown in preparing state', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      formatted_body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists();
+  });
+
   test('after command is issued, a reaction event will be dispatched', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(

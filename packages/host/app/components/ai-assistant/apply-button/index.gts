@@ -44,6 +44,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
           @kind='secondary-dark'
           @size='small'
           class='apply-button'
+          tabindex='-1'
           {{setCssVar boxel-button-text-color='var(--boxel-200)'}}
           data-test-apply-state='preparing'
           ...attributes
@@ -92,6 +93,12 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     .state-indicator.preparing .apply-button {
       border: 0;
       min-width: 74px;
+    }
+    .state-indicator.preparing .apply-button:hover,
+    .state-indicator.preparing .apply-button:focus {
+      --boxel-button-color: inherit;
+      filter: none;
+      cursor: not-allowed;
     }
 
     .state-indicator.preparing::before {
@@ -149,6 +156,12 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       --icon-color: var(--boxel-light);
       background-color: var(--boxel-error-200);
       border-color: var(--boxel-error-200);
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </template>;

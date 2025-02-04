@@ -78,6 +78,7 @@ interface Signature {
     }) => void;
     errorMessage?: string;
     isPending?: boolean;
+    isCommandMessage?: boolean;
     retryAction?: () => void;
   };
   Blocks: { default: [] };
