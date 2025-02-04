@@ -269,7 +269,7 @@ module('Responding', (hooks) => {
     );
   });
 
-  test('Sends tool call event separately when content is sent before tool call', async () => {
+  test('Sends tool call event and adds to event when content is sent before tool call', async () => {
     const patchArgs = {
       description: 'A new thing',
       attributes: {
@@ -303,12 +303,36 @@ module('Responding', (hooks) => {
     assert.equal(
       sentEvents.length,
       3,
-      'Thinking message, and tool call event should be sent',
+      'Thinking message, and content, and tool call event should be sent',
     );
     assert.equal(
       sentEvents[0].content.body,
       thinkingMessage,
       'Thinking message should be sent first',
+    );
+    assert.notOk(
+      sentEvents[0].content['m.relates_to'],
+      'The tool call event should not replace any message',
+    );
+    assert.equal(
+      sentEvents[1].content.body,
+      'some content',
+      'Content message should be sent next',
+    );
+    assert.strictEqual(
+      sentEvents[1].content['m.relates_to']?.event_id,
+      sentEvents[0].eventId,
+      'The content event should replace the initial message',
+    );
+    assert.equal(
+      sentEvents[2].content.body,
+      'some content\n\nA new thing',
+      'Content message plus function description should be sent next',
+    );
+    assert.strictEqual(
+      sentEvents[2].content['m.relates_to']?.event_id,
+      sentEvents[0].eventId,
+      'The command event should replace the initial message',
     );
     assert.deepEqual(
       JSON.parse(sentEvents[2].content.data),
@@ -331,24 +355,6 @@ module('Responding', (hooks) => {
         },
       },
       'Tool call event should be sent with correct content',
-    );
-    assert.notOk(
-      sentEvents[2].content['m.relates_to'],
-      'The tool call event should not replace any message',
-    );
-
-    assert.equal(
-      sentEvents[1].content.body,
-      'some content',
-      'Content event should be sent',
-    );
-    assert.deepEqual(
-      sentEvents[1].content['m.relates_to'],
-      {
-        rel_type: 'm.replace',
-        event_id: '0',
-      },
-      'The content event should replace the thinking message',
     );
   });
 
