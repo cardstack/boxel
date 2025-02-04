@@ -14,6 +14,8 @@ import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import { thinkingMessage } from '../constants';
+import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import type OpenAI from 'openai';
 
 let log = logger('ai-bot');
 
@@ -27,6 +29,7 @@ export class Responder {
   responseEventId: string | undefined;
   initialMessageReplaced = false;
   latestContent = '';
+  includesFunctionToolCall = false;
   isStreamingFinished = false;
 
   sendMessageEventWithDebouncing: () => Promise<void>;
@@ -36,14 +39,21 @@ export class Responder {
     this.client = client;
     this.sendMessageEventWithDebouncing = debounce(
       async () => {
+        let dataOverrides: Record<string, string | boolean> = {
+          isStreamingFinished: this.isStreamingFinished,
+        };
+        if (this.includesFunctionToolCall) {
+          dataOverrides = {
+            ...dataOverrides,
+            msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+          };
+        }
         const messagePromise = sendMessageEvent(
           this.client,
           this.roomId,
           this.latestContent,
           this.responseEventId,
-          {
-            isStreamingFinished: this.isStreamingFinished,
-          },
+          dataOverrides,
         );
         this.messagePromises.push(messagePromise);
         await messagePromise;
@@ -64,9 +74,13 @@ export class Responder {
     this.responseEventId = initialMessage.event_id;
   }
 
-  async onChunk(chunk: {
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  }) {
+  async onChunk(chunk: OpenAI.Chat.Completions.ChatCompletionChunk) {
+    if (chunk.choices[0].delta?.tool_calls?.[0]?.function) {
+      if (!this.includesFunctionToolCall) {
+        this.includesFunctionToolCall = true;
+        await this.sendMessageEventWithDebouncing();
+      }
+    }
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
     if (chunk.usage) {
