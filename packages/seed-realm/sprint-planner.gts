@@ -83,15 +83,21 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
     return Object.keys(this.filters) as FilterType[];
   }
 
-  cards = getCards(this.getTaskQuery, this.realmHrefs, { isLive: true });
+  cards = getCards(
+    () => this.getTaskQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
 
   assigneeQuery = getCards(
-    {
-      filter: {
-        type: this.filters.assignee.codeRef,
-      },
+    () => {
+      return {
+        filter: {
+          type: this.filters.assignee.codeRef,
+        },
+      };
     },
-    this.realmHrefs,
+    () => this.realmHrefs,
     { isLive: true },
   );
 

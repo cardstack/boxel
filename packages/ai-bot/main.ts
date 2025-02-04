@@ -16,10 +16,6 @@ import {
   extractCardFragmentsFromEvents,
   eventRequiresResponse,
 } from './helpers';
-import {
-  APP_BOXEL_ACTIVE_LLM,
-  DEFAULT_LLM,
-} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
@@ -28,7 +24,7 @@ import {
 } from './lib/set-title';
 import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient, updateStateEvent } from './lib/matrix';
+import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -46,6 +42,7 @@ const MINIMUM_CREDITS = 10;
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
+  private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
 
@@ -57,6 +54,21 @@ class Assistant {
     this.id = id;
     this.client = client;
     this.pgAdapter = new PgAdapter();
+    this.toolCallCapableModels = new Set();
+  }
+
+  async loadToolCallCapableModels() {
+    // api request is https://openrouter.ai/api/v1/models?supported_parameters=tools
+    let response = await fetch(
+      'https://openrouter.ai/api/v1/models?supported_parameters=tools',
+    );
+    let responseJson = (await response.json()) as {
+      data: { id: string }[];
+    };
+    let modelList = responseJson.data;
+    this.toolCallCapableModels = new Set(
+      modelList.map((model: any) => model.id),
+    );
   }
 
   async trackAiUsageCost(matrixUserId: string, generationId: string) {
@@ -72,7 +84,12 @@ class Assistant {
   }
 
   getResponse(prompt: PromptParts) {
-    if (prompt.tools.length === 0) {
+    // Sending tools to models that don't support them results in an error
+    // from openrouter.
+    if (
+      prompt.tools.length === 0 ||
+      !this.toolCallCapableModels.has(prompt.model)
+    ) {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
         messages: prompt.messages as ChatCompletionMessageParam[],
@@ -103,12 +120,6 @@ class Assistant {
     event?: MatrixEvent,
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
-  }
-
-  async setDefaultLLM(roomId: string) {
-    await updateStateEvent(this.client, roomId, APP_BOXEL_ACTIVE_LLM, {
-      model: DEFAULT_LLM,
-    });
   }
 }
 
@@ -144,14 +155,14 @@ Common issues are:
     });
   let { user_id: aiBotUserId } = auth;
   let assistant = new Assistant(client, aiBotUserId);
+  await assistant.loadToolCallCapableModels();
 
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
-        .then(async function () {
+        .then(function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
-          await assistant.setDefaultLLM(member.roomId);
         })
         .catch(function (err) {
           log.info(

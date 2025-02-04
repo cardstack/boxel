@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Product List",
+      "description": "Spec for Product List card",
+      "specType": "card",
+      "ref": {
+        "module": "../product-list",
+        "name": "ProductList"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

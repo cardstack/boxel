@@ -26,6 +26,7 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
@@ -57,9 +58,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
-
-import { type BoxelSpecType } from 'https://cardstack.com/base/catalog-entry';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
@@ -70,10 +70,11 @@ import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
-import BoxelSpecPreview from './code-submode/boxel-spec-preview';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import PlaygroundPanel from './code-submode/playground-panel';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
+import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
@@ -103,7 +104,7 @@ type PanelHeights = {
 
 type SelectedAccordionItem =
   | 'schema-editor'
-  | 'boxel-spec-preview'
+  | 'spec-preview'
   | 'playground'
   | null;
 
@@ -496,7 +497,18 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  get showBoxelSpecPreview() {
+  private get shouldDisplayPlayground() {
+    if (!isPlaygroundEnabled) {
+      return false;
+    }
+    let declaration = this.selectedDeclaration;
+    if (!declaration || !('cardOrField' in declaration)) {
+      return false;
+    }
+    return isCardDef(declaration.cardOrField);
+  }
+
+  get showSpecPreview() {
     return (
       !this.moduleContentsResource.isLoading &&
       this.selectedDeclaration?.exportName
@@ -673,7 +685,7 @@ export default class CodeSubmode extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
-        specType?: BoxelSpecType;
+        specType?: SpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -983,7 +995,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if isPlaygroundEnabled}}
+                      {{#if this.shouldDisplayPlayground}}
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
@@ -993,39 +1005,41 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title>Playground</:title>
                           <:content>
+                            <PlaygroundPanel
+                              @moduleContentsResource={{this.moduleContentsResource}}
+                              @cardType={{this.selectedCardOrField.cardType}}
+                            />
                           </:content>
                         </A.Item>
                       {{/if}}
-                      {{#if this.showBoxelSpecPreview}}
-                        <BoxelSpecPreview
+                      {{#if this.showSpecPreview}}
+                        <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @createFile={{perform this.createFile}}
                           @isCreateModalShown={{bool this.isCreateModalOpen}}
-                          as |BoxelSpecPreviewTitle BoxelSpecPreviewContent|
+                          as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item
                             class='accordion-item'
                             @contentClass='accordion-item-content'
                             @onClick={{fn
                               this.selectAccordionItem
-                              'boxel-spec-preview'
+                              'spec-preview'
                             }}
                             @isOpen={{eq
                               this.selectedAccordionItem
-                              'boxel-spec-preview'
+                              'spec-preview'
                             }}
-                            data-test-accordion-item='boxel-spec-preview'
+                            data-test-accordion-item='spec-preview'
                           >
                             <:title>
-                              <BoxelSpecPreviewTitle />
+                              <SpecPreviewTitle />
                             </:title>
                             <:content>
-                              <BoxelSpecPreviewContent
-                                class='accordion-content'
-                              />
+                              <SpecPreviewContent class='accordion-content' />
                             </:content>
                           </A.Item>
-                        </BoxelSpecPreview>
+                        </SpecPreview>
                       {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}
@@ -1195,6 +1209,13 @@ export default class CodeSubmode extends Component<Signature> {
         background-color: var(--boxel-light-100);
         align-items: center;
         justify-content: center;
+      }
+      .accordion-item {
+        --accordion-item-title-font: 600 var(--boxel-font-sm);
+        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .accordion-item > :deep(.title) {
+        height: var(--accordion-item-closed-height);
       }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;

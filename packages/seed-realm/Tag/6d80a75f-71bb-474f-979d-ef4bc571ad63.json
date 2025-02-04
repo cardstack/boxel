@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "High Priority",
-      "color": "var(--boxel-yellow)",
+      "color": "#FFD800",
       "description": null,
       "thumbnailURL": null
     },

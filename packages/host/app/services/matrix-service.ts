@@ -75,7 +75,6 @@ import type {
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -142,7 +141,6 @@ export default class MatrixService extends Service {
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
   private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
-  private defaultSkills: SkillCard[] = [];
 
   constructor(owner: Owner) {
     super(owner);
@@ -781,19 +779,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills() {
-    if (this.defaultSkills.length > 0) {
-      return this.defaultSkills;
-    }
-
-    await Promise.all(
+    return await Promise.all(
       DefaultSkillCards.map(async (skillCardURL) => {
-        let cardResource = getCard(this, () => skillCardURL);
-        await cardResource.loaded;
-        this.defaultSkills.push(cardResource.card as SkillCard);
+        return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
-
-    return this.defaultSkills;
   }
 
   @cached

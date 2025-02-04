@@ -36,6 +36,7 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  type ResolvedCodeRef,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -1645,6 +1646,7 @@ export class Realm {
     let parsedQueryString = parseQuery(href);
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
     let cardUrls = parsedQueryString.cardUrls as string[];
+    let renderType = parsedQueryString.renderType as ResolvedCodeRef;
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
@@ -1659,6 +1661,7 @@ export class Realm {
     // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
     delete parsedQueryString.cardUrls;
+    delete parsedQueryString.renderType;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
@@ -1669,6 +1672,7 @@ export class Realm {
         useWorkInProgressIndex,
         htmlFormat,
         cardUrls,
+        renderType,
         includeErrors: true,
       },
     );

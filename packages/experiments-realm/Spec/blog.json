@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Blog",
+      "description": "Spec for Blog App card",
+      "ref": {
+        "module": "../blog-app",
+        "name": "BlogApp"
+      },
+      "specType": "card"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Team Member",
+      "description": "Spec for Team Member",
+      "ref": {
+        "name": "TeamMember",
+        "module": "../sprint-task"
+      },
+      "specType": "card"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

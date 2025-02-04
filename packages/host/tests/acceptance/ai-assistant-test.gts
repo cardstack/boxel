@@ -9,6 +9,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
+  DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -316,7 +317,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(DEFAULT_LLM.split('/')[1]);
     await click('[data-test-llm-select-selected]');
 
-    assert.dom('[data-test-llm-select-item]').exists({ count: 4 });
+    assert.dom('[data-test-llm-select-item]').exists({
+      count: DEFAULT_LLM_LIST.length,
+    });
     assert
       .dom('[data-test-llm-select-item="google/gemini-pro-1.5"]')
       .hasText('google/gemini-pro-1.5');

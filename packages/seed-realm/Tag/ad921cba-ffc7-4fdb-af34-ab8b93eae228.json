@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "name": "App",
-      "color": "",
+      "color": null,
       "description": null,
       "thumbnailURL": null
     },

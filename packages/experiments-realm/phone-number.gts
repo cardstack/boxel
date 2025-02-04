@@ -5,13 +5,15 @@ import {
   FieldDef,
   StringField,
 } from 'https://cardstack.com/base/card-api';
-import { LooseGooseyField, LooseyGooseyData } from './loosey-goosey';
 import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
+import NumberField from 'https://cardstack.com/base/number';
 import EntityDisplayWithIcon from './components/entity-icon-display';
+
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 
 class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
@@ -21,7 +23,7 @@ class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
   selectedStatus = this.selected;
   placeholder = 'Select phone number type';
 
-  @action onSelectStatus(type: LooseyGooseyData): void {
+  @action onSelectStatus(type: PhoneNumberType): void {
     this.onSelect(type);
   }
 
@@ -35,7 +37,7 @@ class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
     });
   }
 
-  @action onSelect(type: LooseyGooseyData): void {
+  @action onSelect(type: PhoneNumberType): void {
     this.label = type.label;
     this.args.model.label = this.selected?.label;
     this.args.model.index = this.selected?.index;
@@ -58,13 +60,15 @@ class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
   </template>
 }
 
-export class PhoneNumberType extends LooseGooseyField {
+export class PhoneNumberType extends FieldDef {
   static displayName = 'Phone Number Type';
   static values = [
     { index: 0, label: 'Mobile' },
     { index: 1, label: 'Home' },
     { index: 2, label: 'Work' },
   ];
+  @field index = contains(NumberField);
+  @field label = contains(StringField);
   static edit = PhoneNumberTypeEdit;
 }
 
