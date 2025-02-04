@@ -1632,6 +1632,100 @@ module('Acceptance | code submode tests', function (_hooks) {
         .includesText('FadhlanXXX');
     });
 
+    test<TestContextWithSSE>('card preview live updates when there is a change in module', async function (assert) {
+      const personGts = `
+        import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { Friend } from './friend';
+        import { Pet } from "./pet";
+        import { Address } from './address';
+        import { Trips } from './trips';
+
+        export class Person extends CardDef {
+          static displayName = 'Person';
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Person) {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
+          @field pet = linksTo(Pet);
+          @field friends = linksToMany(Friend);
+          @field address = containsMany(StringCard);
+          @field addressDetail = contains(Address);
+          @field trips = contains(Trips);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-person>
+                Hello <@fields.firstName />
+              </div>
+              <style scoped>
+                div {
+                  color: blue;
+                }
+              </style>
+            </template>
+          };
+        };
+      `;
+      const getElementColor = (selector: string) => {
+        let element = document.querySelector(selector);
+        if (!element) {
+          return;
+        }
+        return window.getComputedStyle(element).color;
+      };
+      let expectedEvents = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}person.gts`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}person.gts`],
+          },
+        },
+      ];
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/1.json`,
+      });
+      await waitFor('[data-test-card-resource-loaded]');
+      assert.dom('[data-test-person]').containsText('First name: Hassan');
+      assert.strictEqual(
+        getElementColor('[data-test-person]'),
+        'rgb(0, 128, 0)',
+      );
+
+      await this.expectEvents({
+        assert,
+        realm,
+        expectedEvents,
+        callback: async () => await realm.write('person.gts', personGts),
+      });
+      assert.dom('[data-test-person]').includesText('Hello Hassan');
+      assert.strictEqual(
+        getElementColor('[data-test-person]'),
+        'rgb(0, 0, 255)',
+      );
+
+      await click('[data-test-file-browser-toggle]');
+      await click('[data-test-file="Person/1.json"]');
+      assert.dom('[data-test-person]').includesText('Hello Hassan');
+      assert.strictEqual(
+        getElementColor('[data-test-person]'),
+        'rgb(0, 0, 255)',
+      );
+    });
+
     test<TestContextWithSSE>('card preview live updates with error', async function (assert) {
       let expectedEvents = [
         {

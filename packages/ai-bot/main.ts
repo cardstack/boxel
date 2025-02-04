@@ -22,7 +22,7 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import { Responder } from './lib/send-response';
+import { Responder } from './lib/responder';
 import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';

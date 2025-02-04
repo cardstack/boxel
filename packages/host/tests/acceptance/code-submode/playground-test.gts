@@ -23,7 +23,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   });
 
   const authorCard = `
-  import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
   export class Author extends CardDef {
@@ -32,10 +32,25 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     @field lastName = contains(StringField);
     @field bio = contains(MarkdownField);
     @field title = contains(StringField, {
-      computeVia: function (this: Person) {
+      computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-author-title><@fields.title /></h1>
+          </header>
+          <p data-test-author-bio><@fields.bio /></p>
+        </article>
+        <style scoped>
+          article {
+            padding: 20px;
+          }
+        </style>
+      </template>
+    }
   }
 `;
   const blogPostCard = `
@@ -83,6 +98,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
             attributes: {
               firstName: 'Jane',
               lastName: 'Doe',
+              bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
             },
             meta: {
               adoptsFrom: {
@@ -264,5 +280,67 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     assert.dom('[data-option-index="0"]').hasText('Jane Doe');
     await click('[data-option-index="0"]');
     assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+  });
+
+  test('can display selected card in isolated format', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="isolated"]`,
+      )
+      .exists();
+    assert.dom('[data-test-author-title]').hasText('Jane Doe');
+    assert
+      .dom('[data-test-author-bio]')
+      .containsText('Jane Doe is the Senior Managing Editor');
+  });
+
+  test('can use the header context menu to open instance in code mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-more-options-button]');
+    assert
+      .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+      .exists({ count: 3 });
+
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+    assert
+      .dom(
+        `[data-test-code-mode-card-preview-header="${testRealmURL}Author/jane-doe"]`,
+      )
+      .exists();
+    assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
+  });
+
+  test('can use the header context menu to open instance in interact mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+      )
+      .exists();
+    assert.dom('[data-test-author-title]').hasText('Jane Doe');
   });
 });

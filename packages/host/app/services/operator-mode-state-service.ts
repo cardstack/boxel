@@ -34,6 +34,7 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
+import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
@@ -97,6 +98,7 @@ export default class OperatorModeStateService extends Service {
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
   @service private declare network: NetworkService;
+  @service private declare matrixService: MatrixService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -310,6 +312,10 @@ export default class OperatorModeStateService extends Service {
   updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
+
+    if (submode === Submodes.Code) {
+      this.matrixService.setLLMForCodeMode();
+    }
   }
 
   updateCodePathWithCodeSelection(
