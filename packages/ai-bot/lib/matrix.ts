@@ -47,21 +47,21 @@ export async function sendMatrixEvent(
 export async function sendMessageEvent(
   client: MatrixClient,
   roomId: string,
-  content: string,
+  body: string,
   eventToUpdate: string | undefined,
   data: any = {},
 ) {
-  log.debug('sending message', content);
+  log.debug('sending message', body);
   let messageObject: IContent = {
     ...{
-      body: content,
+      body,
       msgtype: 'm.text',
-      formatted_body: content,
+      formatted_body: body,
       format: 'org.matrix.custom.html',
       'm.new_content': {
-        body: content,
+        body,
         msgtype: 'm.text',
-        formatted_body: content,
+        formatted_body: body,
         format: 'org.matrix.custom.html',
       },
     },
