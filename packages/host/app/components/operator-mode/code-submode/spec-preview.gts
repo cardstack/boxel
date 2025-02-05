@@ -257,6 +257,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         gap: var(--boxel-sp-sm);
         height: 100%;
         width: 100%;
+        padding: var(--boxel-sp-sm);
       }
       .create-spec-intent-message {
         background-color: var(--boxel-200);
@@ -270,7 +271,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       .spec-selector {
         min-width: 40%;
         align-self: flex-start;
-        padding: var(--boxel-sp-sm);
       }
       .spec-selector-item {
         display: flex;
