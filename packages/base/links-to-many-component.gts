@@ -31,6 +31,7 @@ import {
   RealmURLContextName,
   type ResolvedCodeRef,
   getNarrowestType,
+  Loader,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -98,7 +99,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    type = await getNarrowestType(this.args.subclassType, type);
+    type = await getNarrowestType(this.args.subclassType, type, myLoader());
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
     };
@@ -487,4 +488,15 @@ export function getLinksToManyComponent({
       return linksToManyComponent;
     },
   });
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }

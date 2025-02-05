@@ -233,22 +233,11 @@ function refEquals(ref1: CodeRef, ref2: CodeRef): boolean {
   if (!isResolvedCodeRef(ref1) || !isResolvedCodeRef(ref2)) {
     return false;
   }
-  return ref1.name === ref1.module && ref1.module === ref2.module;
+  return ref1.name === ref2.name && ref1.module === ref2.module;
 }
 
-function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
-  // @ts-ignore
-  return (import.meta as any).loader;
-}
-
-async function getAncestorRef(codeRef: CodeRef) {
-  let card = await loadCard(codeRef, { loader: myLoader() });
+async function getAncestorRef(codeRef: CodeRef, loader: Loader) {
+  let card = await loadCard(codeRef, { loader: loader });
   let ancestor = getAncestor(card);
   return identifyCard(ancestor);
 }
@@ -258,13 +247,14 @@ async function getAncestorRef(codeRef: CodeRef) {
 async function isInsideAncestorChain(
   codeRef: CodeRef,
   codeRefAncestor: CodeRef,
+  loader: Loader,
 ): Promise<boolean | undefined> {
   if (refEquals(codeRef, codeRefAncestor)) {
     return true;
   } else {
-    let newAncestorRef = await getAncestorRef(codeRef);
+    let newAncestorRef = await getAncestorRef(codeRef, loader);
     if (newAncestorRef) {
-      return isInsideAncestorChain(newAncestorRef, codeRefAncestor);
+      return isInsideAncestorChain(newAncestorRef, codeRefAncestor, loader);
     } else {
       return undefined;
     }
@@ -275,11 +265,12 @@ async function isInsideAncestorChain(
 export async function getNarrowestType(
   subclassType: CodeRef | undefined,
   type: CodeRef,
+  loader: Loader,
 ) {
   let narrowTypeExists: boolean = false;
   if (subclassType) {
     narrowTypeExists =
-      (await isInsideAncestorChain(subclassType, type)) ?? false;
+      (await isInsideAncestorChain(subclassType, type, loader)) ?? false;
   }
   let narrowestType = narrowTypeExists && subclassType ? subclassType : type;
   return narrowestType;
