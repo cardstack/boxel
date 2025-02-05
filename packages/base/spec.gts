@@ -21,7 +21,12 @@ import {
   Pill,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { loadCard, Loader } from '@cardstack/runtime-common';
+import {
+  codeRefWithAbsoluteURL,
+  Loader,
+  loadCard,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -102,6 +107,18 @@ export class Spec extends CardDef {
       }
     });
 
+    get absoluteRef() {
+      if (!this.args.model.ref || !this.args.model.id) {
+        return undefined;
+      }
+      let url = new URL(this.args.model.id);
+      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+      if (!isResolvedCodeRef(ref)) {
+        throw new Error('ref is not a resolved code ref');
+      }
+      return ref;
+    }
+
     private get realmInfo() {
       return getCardMeta(this.args.model as CardDef, 'realmInfo');
     }
@@ -140,7 +157,7 @@ export class Spec extends CardDef {
           {{#if (eq @model.specType 'field')}}
             <@fields.containedExamples />
           {{else}}
-            <@fields.linkedExamples />
+            <@fields.linkedExamples @subclassType={{this.absoluteRef}} />
           {{/if}}
         </section>
         <section class='module section'>

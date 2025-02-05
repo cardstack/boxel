@@ -172,7 +172,8 @@ export class IndexQueryEngine {
   }
 
   async #queryCards(query: CardExpression, loader: Loader) {
-    return this.#query(await this.makeExpression(query, loader));
+    let expression = await this.makeExpression(query, loader);
+    return this.#query(expression);
   }
 
   async getModule(
