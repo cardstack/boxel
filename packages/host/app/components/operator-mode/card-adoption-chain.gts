@@ -1,6 +1,8 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -13,8 +15,6 @@ import { Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
-
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Element: HTMLDivElement;

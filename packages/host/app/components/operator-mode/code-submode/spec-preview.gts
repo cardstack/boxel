@@ -19,7 +19,7 @@ import {
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
 
-import { not } from '@cardstack/boxel-ui/helpers';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import {
   type ResolvedCodeRef,
@@ -37,7 +37,9 @@ import {
 } from '@cardstack/host/resources/module-contents';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import RealmService from '@cardstack/host/services/realm';
+import RealmService, {
+  EnhancedRealmInfo,
+} from '@cardstack/host/services/realm';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -79,6 +81,7 @@ interface Signature {
         | 'specInstances'
         | 'selectedInstance'
         | 'selectSpec'
+        | 'isLoading'
       >,
     ];
   };
@@ -165,6 +168,7 @@ interface ContentSignature {
     selectedInstance: Spec | null;
     selectSpec: (spec: Spec) => void;
     showCreateSpecIntent: boolean;
+    isLoading: boolean;
   };
 }
 
@@ -175,20 +179,44 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.specInstances.length === 1;
   }
 
-  @action realmInfo(card: Spec) {
-    return this.realm.info(card.id);
+  get dropdownData() {
+    return this.args.specInstances.map((spec) => {
+      let realmInfo = this.realm.info(spec.id);
+      let realmURL = this.realm.realmOfURL(new URL(spec.id));
+      if (!realmURL) {
+        throw new Error('bug: no realm URL');
+      }
+      return {
+        id: spec.id,
+        realmInfo,
+        localPath: getRelativePath(realmURL.href, spec.id),
+      };
+    });
   }
 
-  @action getLocalPath(card: Spec) {
-    let realmURL = this.realm.realmOfURL(new URL(card.id));
-    if (!realmURL) {
-      throw new Error('bug: no realm URL');
+  get selectedDropdownData() {
+    return this.dropdownData.find(
+      ({ id }) => id === this.args.selectedInstance?.id,
+    );
+  }
+
+  @action selectDropdownData(data: DropdownData) {
+    let selectedSpec = this.args.specInstances.find(
+      (spec) => spec.id === data.id,
+    );
+    if (!selectedSpec) {
+      throw new Error('No spec selected');
     }
-    return getRelativePath(realmURL.href, card.id);
+    this.args.selectSpec(selectedSpec);
   }
 
   <template>
-    {{#if @showCreateSpecIntent}}
+    {{#if @isLoading}}
+      <div class='loading'>
+        <LoadingIndicator class='loading-icon' />
+        Loading...
+      </div>
+    {{else if @showCreateSpecIntent}}
       <div
         class='create-spec-intent-message'
         data-test-create-spec-intent-message
@@ -199,21 +227,17 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       <div class='spec-preview'>
         <div class='spec-selector' data-test-spec-selector>
           <BoxelSelect
-            @options={{@specInstances}}
-            @selected={{@selectedInstance}}
+            @options={{this.dropdownData}}
+            @selected={{this.selectedDropdownData}}
             @onChange={{@selectSpec}}
             @matchTriggerWidth={{true}}
             @disabled={{this.onlyOneInstance}}
-            as |card|
+            as |d|
           >
-            {{#let (this.getLocalPath card) as |localPath|}}
-              {{#let (this.realmInfo card) as |realmInfo|}}
-                <div class='spec-selector-item'>
-                  <RealmIcon class='url-realm-icon' @realmInfo={{realmInfo}} />
-                  {{localPath}}
-                </div>
-              {{/let}}
-            {{/let}}
+            <div class='spec-selector-item'>
+              <RealmIcon class='url-realm-icon' @realmInfo={{d.realmInfo}} />
+              {{d.localPath}}
+            </div>
           </BoxelSelect>
         </div>
         {{#if @selectedInstance}}
@@ -252,15 +276,34 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
+      }
+      .loading-icon {
+        display: inline-block;
+        margin-right: var(--boxel-sp-xxxs);
+        vertical-align: middle;
+      }
     </style>
   </template>
+}
+
+interface DropdownData {
+  id: string;
+  realmInfo: EnhancedRealmInfo;
+  localPath: string;
 }
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @tracked selectedInstance?: Spec = this.specInstances[0];
+  @tracked _selectedInstance?: Spec;
 
   get realms() {
     return this.realmServer.availableRealmURLs;
@@ -391,29 +434,35 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   @action selectSpec(spec: Spec): void {
-    this.selectedInstance = spec;
+    this._selectedInstance = spec;
+  }
+
+  get selectedInstanceInDropdown() {
+    return (
+      this._selectedInstance ??
+      (this.specInstances.length ? this.specInstances[0] : null)
+    );
   }
 
   <template>
-    {{#if (not this.specSearch.isLoading)}}
-      {{yield
-        (component
-          SpecPreviewTitle
-          showCreateSpecIntent=this.showCreateSpecIntent
-          specInstances=this.specInstances
-          selectedInstance=this.selectedInstance
-          createSpec=this.createSpec
-          isCreateModalShown=@isCreateModalShown
-        )
-        (component
-          SpecPreviewContent
-          showCreateSpecIntent=this.showCreateSpecIntent
-          specInstances=this.specInstances
-          selectedInstance=this.selectedInstance
-          selectSpec=this.selectSpec
-        )
-      }}
-    {{/if}}
+    {{yield
+      (component
+        SpecPreviewTitle
+        showCreateSpecIntent=this.showCreateSpecIntent
+        specInstances=this.specInstances
+        selectedInstance=this.selectedInstanceInDropdown
+        createSpec=this.createSpec
+        isCreateModalShown=@isCreateModalShown
+      )
+      (component
+        SpecPreviewContent
+        showCreateSpecIntent=this.showCreateSpecIntent
+        specInstances=this.specInstances
+        selectedInstance=this.selectedInstanceInDropdown
+        selectSpec=this.selectSpec
+        isLoading=this.specSearch.isLoading
+      )
+    }}
   </template>
 }
 
