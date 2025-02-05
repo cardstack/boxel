@@ -61,7 +61,10 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     let loader = lookupLoaderService().loader;
