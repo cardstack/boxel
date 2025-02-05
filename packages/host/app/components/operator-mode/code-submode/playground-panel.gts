@@ -178,7 +178,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       }
       .preview-container {
         height: auto;
-        margin-top: var(--boxel-sp-sm);
         color: var(--boxel-dark);
         z-index: 0;
       }
@@ -215,7 +214,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       }
       .format-chooser__button:first-of-type {
         border-radius: var(--boxel-border-radius) 0 0 var(--boxel-border-radius);
-        border-left: 1px solid #27232f;
+        border-left: 1px solid var(--boxel-700);
       }
       .format-chooser__button:last-of-type {
         border-radius: 0 var(--boxel-border-radius) var(--boxel-border-radius) 0;
@@ -227,11 +226,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         font: 600 var(--boxel-font-xs);
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
-        border: 1px solid #27232f;
+        border: 1px solid var(--boxel-700);
         border-left: 0;
       }
       .format-chooser__button.active {
-        background: #27232f;
+        background: var(--boxel-700);
         color: var(--boxel-teal);
       }
     </style>
