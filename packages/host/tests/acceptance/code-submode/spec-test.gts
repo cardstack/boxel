@@ -326,6 +326,33 @@ module('Spec preview', function (hooks) {
     await click('[data-test-create-spec-instance]');
     assert.dom('[data-test-exported-type]').hasText('card');
   });
+
+  test('can add linked examples to spec instance narrows the chooser by code ref inside of the instance', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}person-entry`,
+            format: 'edit',
+          },
+        ],
+      ],
+      submode: 'interact',
+    });
+    assert.dom('[data-test-links-to-many="linkedExamples"]').exists();
+    await click('[data-test-add-new]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Person');
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+  });
+
   test('title does not default to "default"', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
