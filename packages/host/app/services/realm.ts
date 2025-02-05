@@ -504,6 +504,20 @@ export default class RealmService extends Service {
     return undefined;
   }
 
+  realmOfMatrixUsername(username: string) {
+    // FIXME username is not fully-qualified (@experiments_realm:localhost vs experiments_realm)
+    username = `@${username}:localhost`;
+    console.log(
+      'all realm usernames ',
+      Array.from(this.realms.values()).map((r) => r.info?.realmUserId),
+    );
+    let realm = Array.from(this.realms.values()).find(
+      (r) => r.info?.realmUserId === username,
+    );
+    console.log('realm', realm);
+    return realm;
+  }
+
   @cached
   get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let maybePersonalRealm = `${this.realmServer.url.href}${this.matrixService.userName}/personal/`;

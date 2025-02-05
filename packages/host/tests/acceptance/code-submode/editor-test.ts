@@ -44,10 +44,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
+
+  let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
@@ -268,6 +270,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          realmUserId: '@test_realm:localhost',
         },
         'Person/john-with-bad-pet-link.json': {
           data: {
@@ -400,6 +403,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
+      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         setMonacoContent(JSON.stringify(editedCard));
@@ -482,6 +486,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
+      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         setMonacoContent(JSON.stringify(expected));
@@ -570,6 +575,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
+      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         await fillIn('[data-test-field="name"] input', 'MangoXXX');
@@ -784,6 +790,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
+      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         setMonacoContent(expected);

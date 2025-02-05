@@ -14,6 +14,8 @@ import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
+  @tracked listenerCallbacks: Map<string, ((ev: ServerEvents) => void)[]> =
+    new Map();
   @service private declare network: NetworkService;
 
   register() {
@@ -21,11 +23,13 @@ export default class MessageService extends Service {
   }
 
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+    console.log('subscribe', realmURL, cb);
     if (isTesting()) {
-      // we don't have a way of dealing with internal testing realm URLs when
-      // creating an EventSource. The EventSource API is a native browser API
-      // that will try to issue a network request for our testing realm URLs
-      // otherwise.
+      // only use Matrix-y callbacks in testing
+      if (!this.listenerCallbacks.has(realmURL)) {
+        this.listenerCallbacks.set(realmURL, []);
+      }
+      this.listenerCallbacks.get(realmURL)?.push(cb);
       return () => {};
     }
 
@@ -48,12 +52,30 @@ export default class MessageService extends Service {
     // TODO might want to consider making separate subscription methods so that
     // you can subscribe to a specific type of events instead of all of the
     // events...
+
+    if (!this.listenerCallbacks.has(realmURL)) {
+      this.listenerCallbacks.set(realmURL, []);
+    }
+    this.listenerCallbacks.get(realmURL)?.push(cb);
+
     eventSource.addEventListener('update', cb);
     eventSource.addEventListener('index', cb);
     return () => {
       eventSource.removeEventListener('update', cb);
       eventSource.removeEventListener('index', cb);
     };
+  }
+
+  relayMatrixSSE(realmURL: string, event: any) {
+    console.log('relaying matrix sse event', realmURL, event);
+    this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
+      console.log('callback', cb);
+      let eventWithStringData = {
+        type: event.type,
+        data: JSON.stringify(event.data),
+      };
+      cb(eventWithStringData);
+    });
   }
 }
 

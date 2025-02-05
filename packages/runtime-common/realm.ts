@@ -489,6 +489,11 @@ export class Realm {
     return this.#flushUpdateEvents;
   }
 
+  // FIXME this is for tests only…?
+  get matrixUsername() {
+    return this.#matrixClient.username;
+  }
+
   createJWT(claims: TokenClaims, expiration: string): string {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
@@ -1837,13 +1842,17 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
+    console.log('parse realm info realmUserId', this.#matrixClient.getUserId());
+    console.log(`OR ${this.#matrixClient.username}`);
     let realmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      realmUserId: this.#matrixClient.getUserId()!,
+      // FIXME can the latter replace the former?
+      realmUserId:
+        this.#matrixClient.getUserId()! || this.#matrixClient.username,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1858,6 +1867,10 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        // FIXME can the latter replace the former?
+        realmInfo.realmUserId =
+          realmConfigJson.realmUserId ??
+          (this.#matrixClient.getUserId()! || this.#matrixClient.username);
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }

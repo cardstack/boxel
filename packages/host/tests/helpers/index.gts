@@ -306,7 +306,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         return () => {};
       }
     }
-    this.owner.register('service:message-service', MockMessageService);
+    // this.owner.register('service:message-service', MockMessageService);
     let messageService = this.owner.lookup(
       'service:message-service',
     ) as MessageService;
@@ -315,6 +315,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     this.expectEvents = async <T,>({
       assert,
       realm,
+      mockMatrixUtils,
       expectedEvents,
       expectedNumberOfEvents,
       onEvents,
@@ -323,6 +324,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     }: {
       assert: Assert;
       realm: Realm;
+      mockMatrixUtils?: MockUtils;
       expectedEvents?: { type: string; data: Record<string, any> }[];
       expectedNumberOfEvents?: number;
       onEvents?: (
@@ -331,6 +333,38 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       callback: () => Promise<T>;
       opts?: { timeout?: number };
     }): Promise<T> => {
+      if (mockMatrixUtils) {
+        console.log('mockMatrixUtils', mockMatrixUtils);
+
+        // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
+        let realmSessionRoomId = `session-room-for-testuser`;
+
+        let { createAndJoinRoom, getRoomIds, simulateRemoteMessage } =
+          mockMatrixUtils;
+
+        if (!getRoomIds().includes(realmSessionRoomId)) {
+          createAndJoinRoom({
+            sender: realm.matrixUsername,
+            name: realmSessionRoomId,
+            id: realmSessionRoomId,
+          });
+        }
+
+        for (let event of expectedEvents ?? []) {
+          simulateRemoteMessage(realmSessionRoomId, realm.matrixUsername, {
+            msgtype: 'app.boxel.sse', // FIXME extract/constant
+            format: 'app.boxel.sse-format', // FIXME does this matter?
+            body: JSON.stringify({
+              type: event.type,
+              data: event.data,
+            }),
+          });
+        }
+
+        await settled();
+
+        return await callback();
+      }
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
       let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
