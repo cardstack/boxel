@@ -91,7 +91,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .hasClass('ai-avatar-animated');
     assert.dom('[data-test-card-error]').doesNotExist();
     assert
-      .dom('.is-streaming [data-test-ai-message-content]')
+      .dom('[data-test-ai-message-content] span.streaming-text')
       .includesText('Hello,');
   });
 });

@@ -3,6 +3,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { format as formatDate, formatISO } from 'date-fns';
@@ -10,7 +11,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import CardPill from '@cardstack/host/components/card-pill';
@@ -20,6 +21,33 @@ import type CardService from '@cardstack/host/services/card-service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { ComponentLike } from '@glint/template';
+
+function findLastTextNodeWithContent(parentNode: Node): Text | null {
+  // iterate childNodes in reverse to find the last text node with non-whitespace text
+  for (let i = parentNode.childNodes.length - 1; i >= 0; i--) {
+    let child = parentNode.childNodes[i];
+    if (child.textContent && child.textContent.trim() !== '') {
+      if (child instanceof Text) {
+        return child;
+      }
+      return findLastTextNodeWithContent(child);
+    }
+  }
+  return null;
+}
+
+function wrapLastTextNodeInStreamingTextSpan(html: SafeString): SafeString {
+  let parser = new DOMParser();
+  let doc = parser.parseFromString(html.toString(), 'text/html');
+  let lastTextNode = findLastTextNodeWithContent(doc.body);
+  if (lastTextNode) {
+    let span = doc.createElement('span');
+    span.textContent = lastTextNode.textContent;
+    span.classList.add('streaming-text');
+    lastTextNode.replaceWith(span);
+  }
+  return htmlSafe(doc.body.innerHTML);
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -129,7 +157,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
         is-pending=@isPending
-        is-streaming=@isStreaming
         is-error=@errorMessage
       }}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
@@ -172,7 +199,11 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
 
         <div class='content' data-test-ai-message-content>
-          {{@formattedMessage}}
+          {{if
+            (and @isFromAssistant @isStreaming)
+            (wrapLastTextNodeInStreamingTextSpan @formattedMessage)
+            @formattedMessage
+          }}
 
           {{yield}}
 
@@ -304,9 +335,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         overflow: auto;
       }
 
-      .is-streaming
-        .content
-        > :not(ol):not(ul):not(pre):not(div):last-child:after {
+      .content :deep(span.streaming-text:after) {
         content: '';
         width: 8px;
         height: 8px;
