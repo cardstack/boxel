@@ -267,7 +267,7 @@ export async function getNarrowestType(
   type: CodeRef,
   loader: Loader,
 ) {
-  let narrowTypeExists: boolean = false;
+  let narrowTypeExists = false;
   if (subclassType) {
     narrowTypeExists =
       (await isInsideAncestorChain(subclassType, type, loader)) ?? false;
