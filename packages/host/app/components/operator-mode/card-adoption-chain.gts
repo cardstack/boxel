@@ -14,6 +14,8 @@ import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -25,31 +27,54 @@ interface Signature {
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
     ) => void;
+    isLoading: boolean;
   };
 }
 
 export default class CardAdoptionChain extends Component<Signature> {
   <template>
     <div ...attributes>
-      {{#each @cardInheritanceChain as |data index|}}
-        <CardSchemaEditor
-          @card={{data.card}}
-          @cardType={{data.cardType}}
-          @file={{@file}}
-          @moduleSyntax={{@moduleSyntax}}
-          @childFields={{this.getFields index 'successors'}}
-          @parentFields={{this.getFields index 'ancestors'}}
-          @allowFieldManipulation={{this.allowFieldManipulation
-            @file
-            data.cardType
-          }}
-          @goToDefinition={{@goToDefinition}}
-        />
-        {{#unless (this.isLastItem index @cardInheritanceChain)}}
-          <Divider @label='Inherits From' />
-        {{/unless}}
-      {{/each}}
+      {{#if @isLoading}}
+        <div class='loading'>
+          <LoadingIndicator class='loading-icon' />
+          Loading...
+        </div>
+      {{else}}
+        {{#each @cardInheritanceChain as |data index|}}
+          <CardSchemaEditor
+            @card={{data.card}}
+            @cardType={{data.cardType}}
+            @file={{@file}}
+            @moduleSyntax={{@moduleSyntax}}
+            @childFields={{this.getFields index 'successors'}}
+            @parentFields={{this.getFields index 'ancestors'}}
+            @allowFieldManipulation={{this.allowFieldManipulation
+              @file
+              data.cardType
+            }}
+            @goToDefinition={{@goToDefinition}}
+          />
+          {{#unless (this.isLastItem index @cardInheritanceChain)}}
+            <Divider @label='Inherits From' />
+          {{/unless}}
+        {{/each}}
+      {{/if}}
     </div>
+    <style scoped>
+      .loading {
+        align-content: center;
+        text-align: center;
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+        height: 100%;
+        width: 100%;
+      }
+      .loading-icon {
+        display: inline-block;
+        margin-right: var(--boxel-sp-xxxs);
+        vertical-align: middle;
+      }
+    </style>
   </template>
 
   isLastItem = (index: number, items: any[] = []) => index + 1 === items.length;
