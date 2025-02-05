@@ -1,6 +1,4 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -34,6 +32,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import Preview from '../../preview';
+
+import FormatChooser from './format-chooser';
 
 const getItemTitle = (item: CardDef, displayName?: string) => {
   if (!item) {
@@ -128,34 +128,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           {{/if}}
         {{/if}}
       </div>
-      <div class='format-chooser'>
-        <div class='format-chooser__buttons'>
-          <button
-            class='format-chooser__button
-              {{if (eq this.format "isolated") "active"}}'
-            {{on 'click' (fn this.chooseFormat 'isolated')}}
-            data-test-playground-panel-format-chooser-isolated
-          >
-            Isolated
-          </button>
-          <button
-            class='format-chooser__button
-              {{if (eq this.format "embedded") "active"}}'
-            {{on 'click' (fn this.chooseFormat 'embedded')}}
-            data-test-playground-panel-format-chooser-embedded
-          >
-            Embedded
-          </button>
-          <button
-            class='format-chooser__button
-              {{if (eq this.format "edit") "active"}}'
-            {{on 'click' (fn this.chooseFormat 'edit')}}
-            data-test-playground-panel-format-chooser-edit
-          >
-            Edit
-          </button>
-        </div>
-      </div>
+      <FormatChooser
+        class='format-chooser'
+        @format={{this.format}}
+        @setFormat={{this.setFormat}}
+      />
     </div>
     <style scoped>
       .playground-panel-content {
@@ -201,37 +178,9 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         bottom: 0;
         margin-top: auto;
 
-        display: flex;
-        justify-content: center;
-        min-width: fit-content;
-      }
-      .format-chooser__buttons {
-        display: flex;
-
-        border: 0;
-        border-radius: var(--boxel-border-radius);
-        box-shadow: var(--boxel-deep-box-shadow);
-      }
-      .format-chooser__button:first-of-type {
-        border-radius: var(--boxel-border-radius) 0 0 var(--boxel-border-radius);
-        border-left: 1px solid var(--boxel-700);
-      }
-      .format-chooser__button:last-of-type {
-        border-radius: 0 var(--boxel-border-radius) var(--boxel-border-radius) 0;
-      }
-      .format-chooser__button {
-        width: 80px;
-        min-width: 80px;
-        padding: var(--boxel-sp-xs);
-        font: 600 var(--boxel-font-xs);
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        border: 1px solid var(--boxel-700);
-        border-left: 0;
-      }
-      .format-chooser__button.active {
-        background: var(--boxel-700);
-        color: var(--boxel-teal);
+        --boxel-format-chooser-button-bg-color: var(--boxel-light);
+        --boxel-format-chooser-button-width: 80px;
+        --boxel-format-chooser-button-min-width: 80px;
       }
     </style>
   </template>
@@ -289,7 +238,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   @action
-  private chooseFormat(format: Format) {
+  private setFormat(format: Format) {
     this.format = format;
   }
 }

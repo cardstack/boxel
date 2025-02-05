@@ -364,17 +364,11 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     assert
       .dom('[data-test-author-bio]')
       .containsText('Jane Doe is the Senior Managing Editor');
-    assert
-      .dom('[data-test-playground-panel-format-chooser-isolated]')
-      .hasClass('active');
+    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
 
-    await click('[data-test-playground-panel-format-chooser-embedded]');
-    assert
-      .dom('[data-test-playground-panel-format-chooser-isolated]')
-      .hasNoClass('active');
-    assert
-      .dom('[data-test-playground-panel-format-chooser-embedded]')
-      .hasClass('active');
+    await click('[data-test-format-chooser-embedded]');
+    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .doesNotExist();
@@ -384,13 +378,9 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       )
       .exists();
 
-    await click('[data-test-playground-panel-format-chooser-edit]');
-    assert
-      .dom('[data-test-playground-panel-format-chooser-embedded]')
-      .hasNoClass('active');
-    assert
-      .dom('[data-test-playground-panel-format-chooser-edit]')
-      .hasClass('active');
+    await click('[data-test-format-chooser-edit]');
+    assert.dom('[data-test-format-chooser-embedded]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
@@ -409,7 +399,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
-    await click('[data-test-playground-panel-format-chooser-edit]');
+    await click('[data-test-format-chooser-edit]');
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
     assert
