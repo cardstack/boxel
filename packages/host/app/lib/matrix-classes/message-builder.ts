@@ -10,7 +10,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -26,7 +25,6 @@ import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
-  CommandEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,

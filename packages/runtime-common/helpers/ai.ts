@@ -472,3 +472,9 @@ export type ToolChoice =
         name: string;
       };
     };
+
+export interface CommandRequestContent {
+  id: string;
+  name: string;
+  arguments: { [key: string]: any };
+}

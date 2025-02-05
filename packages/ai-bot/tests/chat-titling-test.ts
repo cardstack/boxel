@@ -2,11 +2,12 @@ import { module, test, assert } from 'qunit';
 import { shouldSetRoomTitle } from '../lib/set-title';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import {
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { IEvent, IRoomEvent, MatrixEvent } from 'matrix-js-sdk';
+import { IEvent, IRoomEvent, IStateEvent, MatrixEvent } from 'matrix-js-sdk';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {
@@ -38,7 +39,7 @@ module('shouldSetRoomTitle', () => {
   });
 
   test('Do not set a title when there are more than 5 messages but they are state/invites/etc', () => {
-    const eventLog: IRoomEvent[] = [
+    const eventLog: (IRoomEvent | IStateEvent)[] = [
       {
         type: 'm.room.message',
         event_id: '1',
@@ -376,13 +377,14 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'patching card',
           formatted_body: 'patching card',
-          data: {
-            toolCall: {
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
               name: 'patchCard',
+              id: 'patchCard-1',
               arguments: {
                 attributes: {
                   cardId: 'http://localhost:4201/experiments/Friend/1',
@@ -394,7 +396,7 @@ module('shouldSetRoomTitle', () => {
                 },
               },
             },
-          },
+          ],
         },
         sender: '@aibot:localhost',
         room_id: 'room1',
@@ -442,13 +444,14 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'patching card',
           formatted_body: 'patching card',
-          data: {
-            toolCall: {
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
               name: 'patchCard',
+              id: 'patchCard-1',
               arguments: {
                 attributes: {
                   cardId: 'http://localhost:4201/drafts/Friend/1',
@@ -460,7 +463,7 @@ module('shouldSetRoomTitle', () => {
                 },
               },
             },
-          },
+          ],
         },
         sender: '@aibot:localhost',
         room_id: 'room1',

@@ -1,14 +1,14 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import {
-  FunctionToolCall,
   type AttributesSchema,
+  type CommandRequestContent,
   type ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -124,32 +124,6 @@ export interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-export interface CommandEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandMessageContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
-export interface CommandMessageContent {
-  'm.relates_to'?: {
-    rel_type: string;
-    event_id: string;
-  };
-  msgtype: typeof APP_BOXEL_COMMAND_MSGTYPE;
-  format: 'org.matrix.custom.html';
-  body: string;
-  formatted_body: string;
-  data: {
-    toolCall: FunctionToolCall;
-    eventId: string;
-  };
-}
-
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
@@ -180,6 +154,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequestContent>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -255,6 +230,7 @@ export interface CommandResultWithOutputContent {
     event_id: string;
   };
   data: {
+    commandRequestId: string;
     cardEventId: string;
     // we materialize this field on the server
     card?: LooseSingleCardDocument;
@@ -268,6 +244,9 @@ export interface CommandResultWithNoOutputContent {
     key: string;
     event_id: string;
   };
+  data: {
+    commandRequestId: string;
+  };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
 }
 
@@ -276,7 +255,6 @@ export type MatrixEvent =
   | RoomJoinRules
   | RoomPowerLevels
   | MessageEvent
-  | CommandEvent
   | CommandResultEvent
   | CardMessageEvent
   | RoomNameEvent
