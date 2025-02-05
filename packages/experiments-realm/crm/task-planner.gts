@@ -3,7 +3,7 @@ import { CRMTaskStatusField } from './task';
 import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from '../components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
+import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { DndItem } from '@cardstack/boxel-ui/components';
 import { AppCard } from '../app-card';
@@ -14,6 +14,8 @@ interface CRMTaskPlannerArgs {
     context: CardContext | undefined;
     realmURL: URL | undefined;
     viewCard: () => void;
+    searchFilter?: Filter[];
+    taskFilter?: Filter[];
   };
   Element: HTMLElement;
 }
@@ -38,6 +40,14 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       everyArr.push({ eq: { 'crmApp.id': null } });
     } else {
       everyArr.push({ eq: { 'crmApp.id': this.parentId } });
+    }
+
+    if (this.args.searchFilter) {
+      everyArr.push(...this.args.searchFilter);
+    }
+
+    if (this.args.taskFilter) {
+      everyArr.push(...this.args.taskFilter);
     }
 
     return everyArr.length > 0
