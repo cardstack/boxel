@@ -249,7 +249,10 @@ async function isInsideAncestorChain(
   codeRefAncestor: CodeRef,
   loader: Loader,
 ): Promise<boolean | undefined> {
-  if (refEquals(codeRef, baseCardRef)) {
+  if (
+    refEquals(codeRef, baseCardRef) &&
+    !refEquals(codeRefAncestor, baseCardRef)
+  ) {
     return false;
   }
   if (refEquals(codeRef, codeRefAncestor)) {
