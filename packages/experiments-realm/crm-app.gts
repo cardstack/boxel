@@ -533,6 +533,8 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @context={{@context}}
             @realmURL={{this.currentRealm}}
             @viewCard={{this.viewCard}}
+            @searchFilter={{this.searchFilter}}
+            @taskFilter={{this.taskFilter}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}
