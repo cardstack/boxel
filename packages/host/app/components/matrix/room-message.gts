@@ -10,7 +10,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, or } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
@@ -25,6 +25,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
+import PreparingRoomMessageCommand from './preparing-room-message-command';
 import RoomMessageCommand from './room-message-command';
 
 interface Signature {
@@ -119,6 +120,10 @@ export default class RoomMessage extends Component<Signature> {
         @isStreaming={{@isStreaming}}
         @retryAction={{if @message.command (perform this.run) @retryAction}}
         @isPending={{@isPending}}
+        @isCommandMessage={{or
+          (bool @message.command)
+          @message.isPreparingCommand
+        }}
         data-test-boxel-message-from={{@message.author.name}}
         data-test-boxel-message-instance-id={{@message.instanceId}}
         ...attributes
@@ -137,6 +142,8 @@ export default class RoomMessage extends Component<Signature> {
             @failedCommandState={{this.failedCommandState}}
             @isError={{bool this.errorMessage}}
           />
+        {{else if @message.isPreparingCommand}}
+          <PreparingRoomMessageCommand />
         {{/if}}
       </AiAssistantMessage>
     {{/if}}
