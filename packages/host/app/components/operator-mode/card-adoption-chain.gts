@@ -62,12 +62,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     </div>
     <style scoped>
       .loading {
-        align-content: center;
-        text-align: center;
-        font-weight: 500;
-        padding: var(--boxel-sp-xl);
-        height: 100%;
-        width: 100%;
+        display: inline-flex;
       }
       .loading-icon {
         display: inline-block;

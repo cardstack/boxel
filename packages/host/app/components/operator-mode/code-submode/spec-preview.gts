@@ -211,20 +211,20 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   <template>
-    {{#if @isLoading}}
-      <div class='loading'>
-        <LoadingIndicator class='loading-icon' />
-        Loading...
-      </div>
-    {{else if @showCreateSpecIntent}}
-      <div
-        class='create-spec-intent-message'
-        data-test-create-spec-intent-message
-      >
-        Create a Boxel Specification to be able to create new instances
-      </div>
-    {{else}}
-      <div class='spec-preview'>
+    <section class='spec-preview'>
+      {{#if @isLoading}}
+        <div class='loading'>
+          <LoadingIndicator class='loading-icon' />
+          Loading...
+        </div>
+      {{else if @showCreateSpecIntent}}
+        <div
+          class='create-spec-intent-message'
+          data-test-create-spec-intent-message
+        >
+          Create a Boxel Specification to be able to create new instances
+        </div>
+      {{else}}
         <div class='spec-selector' data-test-spec-selector>
           <BoxelSelect
             @options={{this.dropdownData}}
@@ -245,27 +245,27 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             <CardComponent />
           {{/let}}
         {{/if}}
-      </div>
-    {{/if}}
+      {{/if}}
+    </section>
 
     <style scoped>
-      .create-spec-intent-message {
-        align-content: center;
-        text-align: center;
-        background-color: var(--boxel-200);
-        color: var(--boxel-450);
-        font-weight: 500;
-        padding: var(--boxel-sp-xl);
-        height: 100%;
-        width: 100%;
-      }
       .spec-preview {
         display: flex;
         align-items: center;
         justify-content: center;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-sm);
+        height: 100%;
+        width: 100%;
+      }
+      .create-spec-intent-message {
+        background-color: var(--boxel-200);
+        color: var(--boxel-450);
+        font-weight: 500;
+        height: 100%;
+        width: 100%;
+        align-content: center;
+        text-align: center;
       }
       .spec-selector {
         min-width: 40%;
@@ -277,12 +277,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         gap: var(--boxel-sp-xxxs);
       }
       .loading {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-sm);
+        display: inline-flex;
       }
       .loading-icon {
         display: inline-block;
