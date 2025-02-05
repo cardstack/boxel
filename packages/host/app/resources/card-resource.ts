@@ -258,6 +258,7 @@ export class CardResource extends Resource<Args> {
       unsubscribe: this.messageService.subscribe(
         realmURL.href,
         ({ type, data: dataStr }) => {
+          console.log('received message event', type, dataStr);
           if (type !== 'index') {
             return;
           }
