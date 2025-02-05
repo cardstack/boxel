@@ -14,40 +14,46 @@ import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import { thinkingMessage } from '../constants';
+import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import type OpenAI from 'openai';
 
 let log = logger('ai-bot');
 
 export class Responder {
   // internally has a debounced function that will send the text messages
 
-  initialMessageId: string | undefined;
-  initialMessageReplaced = false;
   client: MatrixClient;
   roomId: string;
   messagePromises: Promise<ISendEventResponse | void>[] = [];
-  sendMessageEventWithDebouncing: (
-    content: string,
-    eventToUpdate: string | undefined,
-    isStreamingFinished?: boolean,
-  ) => Promise<void>;
+
+  responseEventId: string | undefined;
+  initialMessageReplaced = false;
+  latestContent = '';
+  includesFunctionToolCall = false;
+  isStreamingFinished = false;
+
+  sendMessageEventWithDebouncing: () => Promise<void>;
 
   constructor(client: MatrixClient, roomId: string) {
     this.roomId = roomId;
     this.client = client;
     this.sendMessageEventWithDebouncing = debounce(
-      async (
-        content: string,
-        eventToUpdate: string | undefined,
-        isStreamingFinished = false,
-      ) => {
+      async () => {
+        let dataOverrides: Record<string, string | boolean> = {
+          isStreamingFinished: this.isStreamingFinished,
+        };
+        if (this.includesFunctionToolCall) {
+          dataOverrides = {
+            ...dataOverrides,
+            msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+          };
+        }
         const messagePromise = sendMessageEvent(
           this.client,
           this.roomId,
-          content,
-          eventToUpdate,
-          {
-            isStreamingFinished: isStreamingFinished,
-          },
+          this.latestContent,
+          this.responseEventId,
+          dataOverrides,
         );
         this.messagePromises.push(messagePromise);
         await messagePromise;
@@ -65,12 +71,16 @@ export class Responder {
       undefined,
       { isStreamingFinished: false },
     );
-    this.initialMessageId = initialMessage.event_id;
+    this.responseEventId = initialMessage.event_id;
   }
 
-  async onChunk(chunk: {
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  }) {
+  async onChunk(chunk: OpenAI.Chat.Completions.ChatCompletionChunk) {
+    if (chunk.choices[0].delta?.tool_calls?.[0]?.function) {
+      if (!this.includesFunctionToolCall) {
+        this.includesFunctionToolCall = true;
+        await this.sendMessageEventWithDebouncing();
+      }
+    }
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
     if (chunk.usage) {
@@ -81,10 +91,8 @@ export class Responder {
   }
 
   async onContent(snapshot: string) {
-    await this.sendMessageEventWithDebouncing(
-      cleanContent(snapshot),
-      this.initialMessageId,
-    );
+    this.latestContent = cleanContent(snapshot);
+    await this.sendMessageEventWithDebouncing();
     this.initialMessageReplaced = true;
   }
 
@@ -116,15 +124,24 @@ export class Responder {
     for (const toolCall of msg.tool_calls || []) {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
-        let optionPromise = sendCommandEvent(
+        const functionToolCall = this.deserializeToolCall(toolCall);
+        this.latestContent = [
+          this.latestContent,
+          functionToolCall.arguments['description'],
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+        let commandEventPromise = sendCommandEvent(
           this.client,
           this.roomId,
-          this.deserializeToolCall(toolCall),
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.latestContent,
+          functionToolCall,
+          this.responseEventId,
         );
-        this.messagePromises.push(optionPromise);
-        await optionPromise;
+        this.messagePromises.push(commandEventPromise);
+        await commandEventPromise;
         this.initialMessageReplaced = true;
+        this.isStreamingFinished = true;
       } catch (error) {
         Sentry.captureException(error);
         this.initialMessageReplaced = true;
@@ -132,7 +149,7 @@ export class Responder {
           this.client,
           this.roomId,
           error,
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.responseEventId,
         );
         this.messagePromises.push(errorPromise);
         await errorPromise;
@@ -146,18 +163,15 @@ export class Responder {
       this.client,
       this.roomId,
       error,
-      this.initialMessageId,
+      this.responseEventId,
     );
   }
 
   async finalize(finalContent: string | void | null | undefined) {
-    if (finalContent) {
-      finalContent = cleanContent(finalContent);
-      await this.sendMessageEventWithDebouncing(
-        finalContent,
-        this.initialMessageId,
-        true,
-      );
+    if (finalContent && !this.isStreamingFinished) {
+      this.latestContent = cleanContent(finalContent);
+      this.isStreamingFinished = true;
+      await this.sendMessageEventWithDebouncing();
     }
     await Promise.all(this.messagePromises);
   }
