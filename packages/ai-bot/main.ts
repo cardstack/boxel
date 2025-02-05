@@ -1,11 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import {
-  RoomMemberEvent,
-  RoomEvent,
-  createClient,
-  type MatrixEvent,
-} from 'matrix-js-sdk';
+import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
@@ -25,7 +20,10 @@ import {
 import { Responder } from './lib/responder';
 import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  CommandResultEvent,
+} from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
@@ -117,7 +115,7 @@ class Assistant {
   async setTitle(
     roomId: string,
     history: DiscreteMatrixEvent[],
-    event?: MatrixEvent,
+    event?: CommandResultEvent,
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
@@ -217,9 +215,12 @@ Common issues are:
           promptParts = getPromptParts(eventList, aiBotUserId);
         } catch (e) {
           log.error(e);
-          responder.finalize(
-            'There was an error processing chat history. Please open another session.',
+          await responder.onError(
+            new Error(
+              'There was an error processing chat history. Please open another session.',
+            ),
           );
+          await responder.finalize();
           return;
         }
 
@@ -252,24 +253,17 @@ Common issues are:
         let generationId: string | undefined;
         const runner = assistant
           .getResponse(promptParts)
-          .on('chunk', async (chunk, _snapshot) => {
+          .on('chunk', async (chunk, snapshot) => {
             generationId = chunk.id;
-            await responder.onChunk(chunk);
-          })
-          .on('content', async (_delta, snapshot) => {
-            await responder.onContent(snapshot);
-          })
-          .on('message', async (msg) => {
-            await responder.onMessage(msg);
+            await responder.onChunk(chunk, snapshot);
           })
           .on('error', async (error) => {
             await responder.onError(error);
           });
 
-        let finalContent;
         try {
-          finalContent = await runner.finalContent();
-          await responder.finalize(finalContent);
+          await runner.finalChatCompletion();
+          await responder.finalize();
         } catch (error) {
           await responder.onError(error as OpenAIError);
         } finally {
@@ -282,7 +276,7 @@ Common issues are:
           return await assistant.setTitle(
             room.roomId,
             promptParts.history,
-            event,
+            event as CommandResultEvent,
           );
         }
         return;

@@ -472,3 +472,10 @@ export type ToolChoice =
         name: string;
       };
     };
+
+// TODO: should this have the code ref?
+export interface CommandRequestContent {
+  id: string;
+  name: string;
+  arguments: { [key: string]: any };
+}
