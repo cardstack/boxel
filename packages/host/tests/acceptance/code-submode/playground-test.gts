@@ -1,5 +1,5 @@
 import { click } from '@ember/test-helpers';
-
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import {
@@ -193,6 +193,17 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
         },
       },
     });
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'BlogPost/mad-hatter.json'],
+        [testRealmURL, 'Category/city-design.json'],
+        [testRealmURL, 'Category/future-tech.json'],
+        [testRealmURL, 'BlogPost/remote-work.json'],
+        [testRealmURL, 'BlogPost/urban-living.json'],
+        [testRealmURL, 'Author/jane-doe.json'],
+      ]),
+    );
   });
 
   test('can render playground panel when a card def is selected', async function (assert) {
@@ -247,18 +258,18 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 2 });
-    assert.dom('[data-option-index="0"]').hasText('City Design');
+    assert.dom('[data-option-index="0"]').containsText('City Design');
     await click('[data-option-index="0"]');
-    assert.dom('[data-test-selected-item]').hasText('City Design');
+    assert.dom('[data-test-selected-item]').containsText('City Design');
 
     await click(
       '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
     );
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 3 });
-    assert.dom('[data-option-index="0"]').hasText('Mad As a Hatter');
+    assert.dom('[data-option-index="0"]').containsText('Mad As a Hatter');
     await click('[data-option-index="0"]');
-    assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
+    assert.dom('[data-test-selected-item]').containsText('Mad As a Hatter');
   });
 
   test('can update the instance chooser when a different file is opened', async function (assert) {
@@ -269,17 +280,17 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 2 });
-    assert.dom('[data-option-index="0"]').hasText('City Design');
+    assert.dom('[data-option-index="0"]').containsText('City Design');
     await click('[data-option-index="0"]');
-    assert.dom('[data-test-selected-item]').hasText('City Design');
+    assert.dom('[data-test-selected-item]').containsText('City Design');
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="author.gts"]');
     await click('[data-test-instance-chooser]');
     assert.dom('li.ember-power-select-option').exists({ count: 1 });
-    assert.dom('[data-option-index="0"]').hasText('Jane Doe');
+    assert.dom('[data-option-index="0"]').containsText('Jane Doe');
     await click('[data-option-index="0"]');
-    assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+    assert.dom('[data-test-selected-item]').containsText('Jane Doe');
   });
 
   test('can display selected card in isolated format', async function (assert) {
