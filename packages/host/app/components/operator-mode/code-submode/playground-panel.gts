@@ -5,7 +5,8 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   LoadingIndicator,
@@ -78,34 +79,51 @@ const getComponent = (card: CardDef) => {
   return card?.constructor?.getComponent(card);
 };
 
+const isMatchingCardType = (card: CardDef, ref: ResolvedCodeRef) => {
+  let cardRef = identifyCard(card?.constructor);
+  return (
+    cardRef &&
+    'module' in cardRef &&
+    cardRef.module === ref.module &&
+    cardRef.name === ref.name
+  );
+};
+
 interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
+    moduleId: string;
     displayName?: string;
   };
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
     <div class='playground-panel-content'>
-      <div class='instance-chooser-container'>
-        <BoxelSelect
-          class='instance-chooser'
-          @options={{this.instances}}
-          @selected={{this.card}}
-          @selectedItemComponent={{if
-            this.card
-            (component SelectedItem title=(getItemTitle this.card @displayName))
-          }}
-          @onChange={{this.onSelect}}
-          @placeholder='Please Select'
-          data-test-instance-chooser
-          as |card|
-        >
-          {{#let (getComponent card) as |Card|}}
-            <Card @format='fitted' />
-          {{/let}}
-        </BoxelSelect>
-      </div>
+      {{#if this.getRecentCardInstances.isRunning}}
+        <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
+      {{else}}
+        <div class='instance-chooser-container'>
+          <BoxelSelect
+            class='instance-chooser'
+            @options={{this.instances}}
+            @selected={{this.card}}
+            @selectedItemComponent={{if
+              this.card
+              (component
+                SelectedItem title=(getItemTitle this.card @displayName)
+              )
+            }}
+            @onChange={{this.onSelect}}
+            @placeholder='Please Select'
+            data-test-instance-chooser
+            as |card|
+          >
+            {{#let (getComponent card) as |Card|}}
+              <Card @format='fitted' />
+            {{/let}}
+          </BoxelSelect>
+        </div>
+      {{/if}}
       <div class='preview-area'>
         {{#if this.card}}
           {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
@@ -157,14 +175,15 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         justify-content: center;
       }
       .instance-chooser {
-        color: var(--boxel-dark);
         max-width: 405px;
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
       }
+      .loading-icon {
+        height: var(--boxel-form-control-height);
+      }
       .preview-container {
         height: auto;
-        color: var(--boxel-dark);
         z-index: 0;
       }
       .preview-header {
@@ -198,39 +217,57 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
-  @tracked private card?: CardDef;
+  @tracked private _card?: CardDef;
   @tracked private format: Format = 'isolated';
-  @tracked private potentialOptions?: { card: CardDef | undefined }[];
+  @tracked private potentialOptions?: CardDef[] | [];
+  playgroundSelections = new TrackedObject<Record<string, string>>();
 
   constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
-    this.potentialOptions = this.getRecentCardJsonFiles();
+    this.getRecentCardInstances.perform();
+    let selections = window.localStorage.getItem('playground-selections');
+    if (selections?.length) {
+      this.playgroundSelections = JSON.parse(selections);
+    }
   }
 
-  private getRecentCardJsonFiles = () => {
-    let recentJSONFiles = this.recentFilesService.recentFiles
-      .filter((f) => f.filePath.endsWith('.json'))
-      .map((f) => getCard(new URL(`${f.realmURL}${f.filePath}`)))
-      .filter(Boolean);
-    return recentJSONFiles;
-  };
+  private loadSelectedCard = restartableTask(async (id: string) => {
+    let r = getCard(new URL(id));
+    await r.loaded;
+    this._card = r.card;
+  });
+
+  private getRecentCardInstances = restartableTask(async () => {
+    let cards = await Promise.all(
+      this.recentFilesService.recentFiles
+        .filter((f) => f.filePath.endsWith('.json'))
+        .map(async (f) => {
+          let r = getCard(new URL(`${f.realmURL}${f.filePath}`));
+          await r.loaded;
+          return r.card;
+        }),
+    );
+    this.potentialOptions = cards.filter(Boolean) as CardDef[] | [];
+  });
 
   private get instances() {
-    let cards = this.potentialOptions?.map((option) => option.card);
-    let matches = cards
-      ?.map((card) => {
-        let type = identifyCard(card?.constructor);
-        if (!type || !('module' in type)) {
-          return;
-        }
-        let { name, module } = this.args.codeRef;
-        if (type.module === module && type.name === name) {
-          return card;
-        }
-        return;
-      })
+    let matches = this.potentialOptions
+      ?.map((card) =>
+        isMatchingCardType(card, this.args.codeRef) ? card : undefined,
+      )
       .filter(Boolean);
     return matches;
+  }
+
+  private get card() {
+    if (this._card && isMatchingCardType(this._card, this.args.codeRef)) {
+      return this._card;
+    }
+    let selectedCardId = this.playgroundSelections[this.args.moduleId];
+    if (selectedCardId) {
+      this.loadSelectedCard.perform(selectedCardId);
+    }
+    return;
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -267,8 +304,17 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     return menuItems;
   }
 
+  private persistSelections = (cardId: string) => {
+    this.playgroundSelections[this.args.moduleId] = cardId;
+    window.localStorage.setItem(
+      'playground-selections',
+      JSON.stringify(this.playgroundSelections),
+    );
+  };
+
   @action private onSelect(card: CardDef) {
-    this.card = card;
+    this._card = card;
+    this.persistSelections(card.id);
   }
 
   @action
@@ -288,23 +334,25 @@ export default class PlaygroundPanel extends Component<Signature> {
   <template>
     <section class='playground-panel' data-test-playground-panel>
       {{#if this.isLoading}}
-        <LoadingIndicator class='loading-icon' />
-        Loading...
+        <LoadingIndicator @color='var(--boxel-light)' />
       {{else if @cardType.type}}
         {{#let (getCodeRef @cardType.type) as |codeRef|}}
           {{#if codeRef}}
             <PlaygroundPanelContent
               @codeRef={{codeRef}}
+              @moduleId={{@cardType.type.id}}
               @displayName={{@cardType.type.displayName}}
             />
-
           {{else}}
-            Error: Playground could not be loaded.
+            <p class='error'>
+              Error: Selected module is not for an exported card, or its code
+              ref could not be loaded.
+            </p>
           {{/if}}
         {{/let}}
       {{else}}
         {{! TODO: error state }}
-        Error: Playground could not be loaded.
+        <p class='error'>Error: Playground could not be loaded.</p>
       {{/if}}
     </section>
     <style scoped>
@@ -321,12 +369,10 @@ export default class PlaygroundPanel extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
-        position: relative;
       }
-      .loading-icon {
-        display: inline-block;
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: middle;
+      .error {
+        margin: 0;
+        color: var(--boxel-light);
       }
     </style>
   </template>
