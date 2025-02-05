@@ -1,7 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { Pill } from '@cardstack/boxel-ui/components';
-import { htmlSafe } from '@ember/template';
-import { concat } from '@ember/helper';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { CardorFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 
 interface StatusPillSignature {
@@ -22,7 +21,7 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
       {{#if @icon}}
         <div
           class='status-icon'
-          style={{htmlSafe (concat 'background-color: ' @iconDarkColor ';')}}
+          style={{cssVar status-icon-background-color=@iconDarkColor}}
         >
           <@icon />
         </div>
@@ -30,7 +29,7 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
       <Pill
         class='status-pill'
         data-test-selected-type={{@label}}
-        style={{htmlSafe (concat 'background-color: ' @iconLightColor ';')}}
+        @pillBackgroundColor={{@iconLightColor}}
       >
         <:default>
           <span class='status-label-text'>
@@ -55,6 +54,7 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
         border-bottom-left-radius: 0;
       }
       .status-icon {
+        background-color: var(--status-icon-background-color);
         flex-shrink: 0;
         border-radius: 0;
         width: auto;

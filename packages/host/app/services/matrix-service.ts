@@ -48,6 +48,7 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+  DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -74,7 +75,6 @@ import type {
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -141,7 +141,6 @@ export default class MatrixService extends Service {
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
   private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
-  private defaultSkills: SkillCard[] = [];
 
   constructor(owner: Owner) {
     super(owner);
@@ -337,17 +336,20 @@ export default class MatrixService extends Service {
     name,
     iconURL,
     backgroundURL,
+    copyFromSeedRealm,
   }: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
+    copyFromSeedRealm?: boolean;
   }) {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint,
       name,
       iconURL,
       backgroundURL,
+      copyFromSeedRealm,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
@@ -777,19 +779,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills() {
-    if (this.defaultSkills.length > 0) {
-      return this.defaultSkills;
-    }
-
-    await Promise.all(
+    return await Promise.all(
       DefaultSkillCards.map(async (skillCardURL) => {
-        let cardResource = getCard(this, () => skillCardURL);
-        await cardResource.loaded;
-        this.defaultSkills.push(cardResource.card as SkillCard);
+        return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
-
-    return this.defaultSkills;
   }
 
   @cached
@@ -1333,6 +1327,25 @@ export default class MatrixService extends Service {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
     }
+  }
+
+  async setLLMForCodeMode() {
+    this.setLLMModel('anthropic/claude-3.5-sonnet');
+  }
+
+  private async setLLMModel(model: string) {
+    if (!DEFAULT_LLM_LIST.includes(model)) {
+      throw new Error(`Cannot find LLM model: ${model}`);
+    }
+    if (!this.currentRoomId) {
+      return;
+    }
+    let roomResource = this.roomResources.get(this.currentRoomId);
+    if (!roomResource) {
+      return;
+    }
+    await roomResource.loading;
+    roomResource.activateLLM(model);
   }
 }
 

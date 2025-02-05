@@ -70,6 +70,11 @@ export class CreateAIAssistantRoomResult extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class SetActiveLLMInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field model = contains(StringField);
+}
+
 export class AddSkillsToRoomInput extends CardDef {
   @field roomId = contains(StringField);
   @field skills = linksToMany(SkillCard);
@@ -116,6 +121,22 @@ export class GetBoxelUIStateResult extends CardDef {
 
 export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
+}
+
+export class AddFieldToCardDefinitionInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+  @field cardDefinitionToModify = contains(CodeRefField);
+  @field fieldName = contains(StringField);
+  @field module = contains(StringField);
+  @field fieldType = contains(StringField); // 'contains' or 'containsMany'
+  @field fieldRef = contains(CodeRefField);
+  @field fieldDefinitionType = contains(StringField); // 'card' or 'field'
+  @field incomingRelativeTo = contains(StringField); // can be undefined when you know the url is not going to be relative
+  @field outgoingRelativeTo = contains(StringField); // can be undefined when you know url is not going to be relative
+  @field outgoingRealmURL = contains(StringField); // should be provided when the other 2 params are provided
+  @field addFieldAtIndex = contains(NumberField); // if provided, the field will be added at the specified index in the card's possibleFields map
+  @field computedFieldFunctionSourceCode = contains(StringField); // if provided, the field will be added as a computed field
 }
 
 export {

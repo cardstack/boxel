@@ -26,6 +26,7 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
@@ -37,6 +38,8 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+
+import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -55,7 +58,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
@@ -68,12 +72,16 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import PlaygroundPanel from './code-submode/playground-panel';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
+import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+
+const isPlaygroundEnabled = ENV.featureFlags?.ENABLE_PLAYGROUND;
 
 interface Signature {
   Args: {
@@ -94,7 +102,11 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem = 'schema-editor' | null;
+type SelectedAccordionItem =
+  | 'schema-editor'
+  | 'spec-preview'
+  | 'playground'
+  | null;
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -367,7 +379,6 @@ export default class CodeSubmode extends Component<Signature> {
         return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
       }
     }
-
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
       // this will prevent displaying message during a page refresh
@@ -484,6 +495,24 @@ export default class CodeSubmode extends Component<Signature> {
       return this.selectedDeclaration;
     }
     return undefined;
+  }
+
+  private get shouldDisplayPlayground() {
+    if (!isPlaygroundEnabled) {
+      return false;
+    }
+    let declaration = this.selectedDeclaration;
+    if (!declaration || !('cardOrField' in declaration)) {
+      return false;
+    }
+    return isCardDef(declaration.cardOrField);
+  }
+
+  get showSpecPreview() {
+    return (
+      !this.moduleContentsResource.isLoading &&
+      this.selectedDeclaration?.exportName
+    );
   }
 
   private get itemToDeleteAsCard() {
@@ -656,6 +685,7 @@ export default class CodeSubmode extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: SpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -772,7 +802,6 @@ export default class CodeSubmode extends Component<Signature> {
     {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
-      @hideAiAssistant={{true}}
       as |search|
     >
       <div
@@ -956,6 +985,7 @@ export default class CodeSubmode extends Component<Signature> {
                             this.selectedAccordionItem
                             'schema-editor'
                           }}
+                          data-test-accordion-item='schema-editor'
                         >
                           <:title>
                             <SchemaEditorTitle />
@@ -965,6 +995,52 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                      {{#if this.shouldDisplayPlayground}}
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.selectAccordionItem 'playground'}}
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          data-test-accordion-item='playground'
+                        >
+                          <:title>Playground</:title>
+                          <:content>
+                            <PlaygroundPanel
+                              @moduleContentsResource={{this.moduleContentsResource}}
+                              @cardType={{this.selectedCardOrField.cardType}}
+                            />
+                          </:content>
+                        </A.Item>
+                      {{/if}}
+                      {{#if this.showSpecPreview}}
+                        <SpecPreview
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @createFile={{perform this.createFile}}
+                          @isCreateModalShown={{bool this.isCreateModalOpen}}
+                          as |SpecPreviewTitle SpecPreviewContent|
+                        >
+                          <A.Item
+                            class='accordion-item'
+                            @contentClass='accordion-item-content'
+                            @onClick={{fn
+                              this.selectAccordionItem
+                              'spec-preview'
+                            }}
+                            @isOpen={{eq
+                              this.selectedAccordionItem
+                              'spec-preview'
+                            }}
+                            data-test-accordion-item='spec-preview'
+                          >
+                            <:title>
+                              <SpecPreviewTitle />
+                            </:title>
+                            <:content>
+                              <SpecPreviewContent class='accordion-content' />
+                            </:content>
+                          </A.Item>
+                        </SpecPreview>
+                      {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}
                     <Accordion as |A|>
@@ -1133,6 +1209,13 @@ export default class CodeSubmode extends Component<Signature> {
         background-color: var(--boxel-light-100);
         align-items: center;
         justify-content: center;
+      }
+      .accordion-item {
+        --accordion-item-title-font: 600 var(--boxel-font-sm);
+        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .accordion-item > :deep(.title) {
+        height: var(--accordion-item-closed-height);
       }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;

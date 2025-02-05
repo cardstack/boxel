@@ -6,20 +6,14 @@
       "status": {
         "index": 3,
         "label": "Closed Won",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#000000",
-          "backgroundColor": "#E8F5E9"
-        }
+        "foregroundColor": "#000000",
+        "backgroundColor": "#E8F5E9"
       },
       "priority": {
         "index": 2,
         "label": "High Priority",
-        "color": null,
-        "colorScheme": {
-          "foregroundColor": "#000000",
-          "backgroundColor": "#FFE0B2"
-        }
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFE0B2"
       },
       "closeDate": "2024-03-15",
       "currentValue": {
@@ -74,9 +68,9 @@
           "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
         }
       },
-      "document": {
+      "event": {
         "links": {
-          "self": null
+          "self": "../DealEvent/60cf6fcf-10ec-4d04-b6a8-e409679ccc0a"
         }
       },
       "primaryStakeholder": {

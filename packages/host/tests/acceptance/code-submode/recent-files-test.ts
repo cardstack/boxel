@@ -209,8 +209,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
-              isField: false,
+              description: 'Spec',
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -218,8 +218,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },
@@ -496,7 +496,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       'recent-files',
       JSON.stringify([
         ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        ['https://cardstack.com/base/', 'spec.gts'],
         'a-non-url-to-ignore',
       ]),
     );
@@ -552,9 +552,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('code-ref.gts');
-    assert
-      .dom('[data-test-recent-file]:nth-child(3)')
-      .containsText('catalog-entry.gts');
+    assert.dom('[data-test-recent-file]:nth-child(3)').containsText('spec.gts');
 
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
@@ -562,7 +560,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         ['https://cardstack.com/base/', 'field-component.gts'],
         ['https://cardstack.com/base/', 'date.gts'],
         ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        ['https://cardstack.com/base/', 'spec.gts'],
       ],
     );
   });

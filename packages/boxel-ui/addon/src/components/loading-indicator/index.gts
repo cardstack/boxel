@@ -7,20 +7,20 @@ interface Signature {
   Args: {
     color?: string;
   };
-  Element: HTMLDivElement;
+  Element: HTMLSpanElement;
 }
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
-  <div
+  <span
     class='boxel-loading-indicator'
     data-test-loading-indicator
     ...attributes
   >
     <LoadingIndicatorIcon
-      style={{cssVar icon-color=(if @color @color '#000')}}
+      style={{cssVar icon-color=@color}}
       role='presentation'
     />
-  </div>
+  </span>
   <style scoped>
     /* zero specificity default sizing */
     :where(.boxel-loading-indicator) {

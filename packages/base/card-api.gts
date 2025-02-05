@@ -1699,7 +1699,10 @@ export class BaseDef {
       }
       return Object.fromEntries(
         Object.entries(
-          getFields(value, { includeComputeds: true, usedFieldsOnly: true }),
+          getFields(value, {
+            includeComputeds: true,
+            usedLinksToFieldsOnly: true,
+          }),
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
@@ -1909,7 +1912,7 @@ export class CardDef extends BaseDef {
       // we need to be careful that we don't trigger the ambient recompute() in our setters
       // when we are instantiating an instance that is placed in the identityMap that has
       // not had it's field values set yet, as computeds will be run that may assume dependent
-      // fields are available when they are not (e.g. CatalogEntry.isPrimitive trying to load
+      // fields are available when they are not (e.g. Spec.isPrimitive trying to load
       // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
       // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
       // triggering the recompute.
@@ -1967,7 +1970,7 @@ export function subscribeToChanges(
   changeSubscribers.add(subscriber);
 
   let fields = getFields(fieldOrCard, {
-    usedFieldsOnly: true,
+    usedLinksToFieldsOnly: true,
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
@@ -2010,7 +2013,7 @@ export function unsubscribeFromChanges(
   changeSubscribers.delete(subscriber);
 
   let fields = getFields(fieldOrCard, {
-    usedFieldsOnly: true,
+    usedLinksToFieldsOnly: true,
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
@@ -2308,7 +2311,7 @@ function serializeCardResource(
   let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    usedFieldsOnly: !opts?.includeUnrenderedFields,
+    usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let fieldResources = Object.entries(fields)
     .filter(([_fieldName, field]) =>
@@ -2830,7 +2833,7 @@ export async function recompute(
       Object.keys(
         getFields(model, {
           includeComputeds: true,
-          usedFieldsOnly: !opts?.recomputeAllFields,
+          usedLinksToFieldsOnly: !opts?.recomputeAllFields,
         }),
       ),
     );
@@ -2936,15 +2939,15 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
 
 export function getFields(
   card: typeof BaseDef,
-  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean },
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> };
 export function getFields<T extends BaseDef>(
   card: T,
-  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean },
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [P in keyof T]?: Field<BaseDefConstructor> };
 export function getFields(
   cardInstanceOrClass: BaseDef | typeof BaseDef,
-  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean },
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
@@ -2979,9 +2982,10 @@ export function getFields(
         !['contains', 'containsMany'].includes(maybeField.fieldType)
       ) {
         if (
-          opts?.usedFieldsOnly &&
+          opts?.usedLinksToFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
-          !maybeField.isUsed
+          !maybeField.isUsed &&
+          !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
           return [];
         }

@@ -39,7 +39,8 @@ import {
   setupDB,
   createRealm,
   realmServerTestMatrix,
-  secretSeed,
+  realmServerSecretSeed,
+  realmSecretSeed,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
@@ -2451,8 +2452,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[0].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('Person Aaron'),
-            'embedded html looks correct (CardDef template)',
+              .includes('Embedded Card Person: Aaron'),
+            'embedded html looks correct (Person template)',
           );
 
           // 2nd card: Person Craig
@@ -2460,8 +2461,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[1].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('Person Craig'),
-            'embedded html for Craig looks correct (CardDef template)',
+              .includes('Embedded Card Person: Craig'),
+            'embedded html for Craig looks correct (Person template)',
           );
 
           // 3rd card: FancyPerson Jane
@@ -2469,8 +2470,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[2].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('FancyPerson Jane'),
-            'embedded html for Jane looks correct (CardDef template)',
+              .includes('Embedded Card FancyPerson: Jane'),
+            'embedded html for Jane looks correct (FancyPerson template)',
           );
 
           // 4th card: FancyPerson Jimmy
@@ -2478,8 +2479,8 @@ module(basename(__filename), function () {
           assert.true(
             json.data[3].attributes.html
               .replace(/\s+/g, ' ')
-              .includes('FancyPerson Jimmy'),
-            'embedded html for Jimmy looks correct (CardDef template)',
+              .includes('Embedded Card FancyPerson: Jimmy'),
+            'embedded html for Jimmy looks correct (FancyPerson template)',
           );
 
           assertScopedCssUrlsContain(
@@ -3040,6 +3041,7 @@ module(basename(__filename), function () {
       let publisher: QueuePublisher;
       let runner: QueueRunner;
       let testRealmDir: string;
+      let seedRealm: Realm | undefined;
 
       hooks.beforeEach(async function () {
         shimExternals(virtualNetwork);
@@ -3057,17 +3059,20 @@ module(basename(__filename), function () {
         if (testRealm2) {
           virtualNetwork.unmount(testRealm2.handle);
         }
-        ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
-          await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_2'),
-            realmURL: testRealm2URL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          }));
+        ({
+          seedRealm,
+          testRealm: testRealm2,
+          testRealmHttpServer: testRealmHttpServer2,
+        } = await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_2'),
+          realmURL: testRealm2URL,
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+        }));
       }
 
       setupDB(hooks, {
@@ -3081,6 +3086,9 @@ module(basename(__filename), function () {
           await startRealmServer(dbAdapter, publisher, runner);
         },
         afterEach: async () => {
+          if (seedRealm) {
+            virtualNetwork.unmount(seedRealm.handle);
+          }
           await closeServer(testRealmHttpServer2);
         },
       });
@@ -3399,6 +3407,7 @@ module(basename(__filename), function () {
       });
     });
   });
+
   module('Realm server with realm mounted at the origin', function (hooks) {
     let testRealmServer: Server;
 
@@ -3748,14 +3757,15 @@ module(basename(__filename), function () {
         let matrixClient = new MatrixClient({
           matrixURL: realmServerTestMatrix.url,
           username: realmServerTestMatrix.username,
-          seed: secretSeed,
+          seed: realmSecretSeed,
         });
         let getIndexHTML = (await getFastbootState()).getIndexHTML;
         testRealmServer = new RealmServer({
           realms: [base, testRealm],
           virtualNetwork,
           matrixClient,
-          secretSeed,
+          realmServerSecretSeed,
+          realmSecretSeed,
           matrixRegistrationSecret,
           realmsRootPath: dir.name,
           dbAdapter,

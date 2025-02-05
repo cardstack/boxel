@@ -254,8 +254,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
-              isField: false,
+              description: 'Spec',
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -263,8 +263,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },

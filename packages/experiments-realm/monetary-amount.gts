@@ -13,9 +13,6 @@ import { getCards } from '@cardstack/runtime-common';
 import { guidFor } from '@ember/object/internals';
 import GlimmerComponent from '@glimmer/component';
 
-// TODO: should this be configurable?
-const CURRENCIES_REALM_URL = 'http://localhost:4201/experiments/';
-
 interface MonetaryAmountAtomSignature {
   Element: HTMLSpanElement;
   Args: {
@@ -41,24 +38,26 @@ class Edit extends Component<typeof MonetaryAmount> {
 
   // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
   liveCurrencyQuery = getCards(
-    {
-      filter: {
-        type: {
-          module: `${CURRENCIES_REALM_URL}asset`,
-          name: 'Currency',
-        },
-      },
-      sort: [
-        {
-          on: {
-            module: `${CURRENCIES_REALM_URL}asset`,
+    () => {
+      return {
+        filter: {
+          type: {
+            module: new URL('./asset', import.meta.url).href,
             name: 'Currency',
           },
-          by: 'name',
         },
-      ],
+        sort: [
+          {
+            on: {
+              module: new URL('./asset', import.meta.url).href,
+              name: 'Currency',
+            },
+            by: 'name',
+          },
+        ],
+      };
     },
-    [CURRENCIES_REALM_URL],
+    () => [new URL('./', import.meta.url).href],
   );
 
   @action

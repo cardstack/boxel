@@ -822,7 +822,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       assert.dom('[data-test-realm-indicator-not-writable]').exists();
       assert.strictEqual(
         window
-          .getComputedStyle(find('.monaco-editor')!)
+          .getComputedStyle(find('.monaco-editor-background')!)
           .getPropertyValue('background-color')!,
         'rgb(235, 234, 237)', // equivalent to #ebeaed
         'monaco editor is greyed out when read-only',

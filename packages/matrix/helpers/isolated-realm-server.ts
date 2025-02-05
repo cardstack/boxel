@@ -27,9 +27,11 @@ export async function startServer() {
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
   process.env.NODE_NO_WARNINGS = '1';
+  process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.MATRIX_URL = 'http://localhost:8008';
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
+  process.env.NODE_ENV = 'test';
 
   let workerManager = spawn(
     'ts-node',
@@ -42,6 +44,8 @@ export async function startServer() {
 
       `--fromUrl='http://localhost:4205/test/'`,
       `--toUrl='http://localhost:4205/test/'`,
+      `--fromUrl='http://localhost:4205/seed/'`,
+      `--toUrl='http://localhost:4205/seed/'`,
       `--fromUrl='https://cardstack.com/base/'`,
       `--toUrl='http://localhost:4201/base/'`,
     ],
@@ -70,6 +74,7 @@ export async function startServer() {
       `--matrixURL='http://localhost:8008'`,
       `--realmsRootPath='${dir.name}'`,
       `--seedPath='${seedPath}'`,
+      `--seedRealmURL='http://localhost:4205/seed/'`,
       `--workerManagerPort=4212`,
       `--migrateDB`,
       `--useRegistrationSecretFunction`,
@@ -78,6 +83,12 @@ export async function startServer() {
       `--username='test_realm'`,
       `--fromUrl='http://localhost:4205/test/'`,
       `--toUrl='http://localhost:4205/test/'`,
+
+      `--path='${seedPath}'`,
+      `--username='seed_realm'`,
+      `--fromUrl='http://localhost:4205/seed/'`,
+      `--toUrl='http://localhost:4205/seed/'`,
+
       `--fromUrl='https://cardstack.com/base/'`,
       `--toUrl='http://localhost:4201/base/'`,
     ],

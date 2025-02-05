@@ -1,12 +1,13 @@
-import { field, CardDef, linksTo } from 'https://cardstack.com/base/card-api';
-import type Owner from '@ember/owner';
+import {
+  field,
+  CardDef,
+  Component,
+  linksTo,
+  realmURL,
+} from 'https://cardstack.com/base/card-api';
 import { SprintTaskStatusField, Project } from './sprint-task';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
-import {
-  BaseTaskPlannerIsolated,
-  TaskPlannerConfig,
-  TaskCard,
-} from './components/base-task-planner';
+import { TaskPlanner, TaskCard } from './components/base-task-planner';
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   AnyFilter,
@@ -14,12 +15,83 @@ import {
   Query,
   EqFilter,
 } from '@cardstack/runtime-common/query';
+import { DndItem } from '@cardstack/boxel-ui/components';
+import { getCards } from '@cardstack/runtime-common';
+import { action } from '@ember/object';
 
-class SprintPlannerIsolated extends BaseTaskPlannerIsolated<
-  typeof SprintPlanner
-> {
-  constructor(owner: Owner, args: any) {
-    const config: TaskPlannerConfig = {
+class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
+  get parentId() {
+    return this.args.model?.project?.id;
+  }
+
+  get emptyStateMessage() {
+    return 'Link a project to continue';
+  }
+
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
+
+  get getTaskQuery(): Query {
+    let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
+    if (!this.currentRealm) {
+      throw new Error('No realm url');
+    }
+    if (!this.parentId) {
+      console.log('No project');
+      everyArr.push({ eq: { 'project.id': null } });
+    } else {
+      everyArr.push({ eq: { 'project.id': this.parentId } });
+    }
+    return everyArr.length > 0
+      ? {
+          filter: {
+            on: {
+              module: this.config.taskSource.module,
+              name: this.config.taskSource.name,
+            },
+            every: everyArr,
+          },
+        }
+      : {
+          filter: {
+            type: {
+              module: this.config.taskSource.module,
+              name: this.config.taskSource.name,
+            },
+          },
+        };
+  }
+
+  get realmHref() {
+    return this.currentRealm?.href;
+  }
+
+  get realmHrefs() {
+    if (!this.currentRealm) {
+      return [];
+    }
+    return [this.currentRealm.href];
+  }
+
+  assigneeQuery = getCards(
+    () => {
+      return {
+        filter: {
+          type: this.config.filters.assignee.codeRef,
+        },
+      };
+    },
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  get assigneeCards() {
+    return this.assigneeQuery?.instances ?? [];
+  }
+
+  get config() {
+    return {
       status: {
         values: SprintTaskStatusField.values,
       },
@@ -28,11 +100,10 @@ class SprintPlannerIsolated extends BaseTaskPlannerIsolated<
           return card.status?.label === key;
         },
         onCreateTask: async (statusLabel: string) => {
-          if (this.realmURL === undefined) {
+          if (this.currentRealm === undefined) {
             return;
           }
 
-          this.loadingColumnKey = statusLabel;
           try {
             let index = this.config.status.values.find((value) => {
               return value.label === statusLabel;
@@ -77,17 +148,21 @@ class SprintPlannerIsolated extends BaseTaskPlannerIsolated<
               this.config.taskSource,
               new URL(this.config.taskSource.module),
               {
-                realmURL: this.realmURL,
+                realmURL: this.currentRealm,
                 doc,
               },
             );
           } catch (error) {
             console.error('Error creating card:', error);
-          } finally {
-            this.loadingColumnKey = undefined;
           }
         },
-        onMoveCard: async ({ draggedCard, targetColumn }) => {
+        onMoveCard: async ({
+          draggedCard,
+          targetColumn,
+        }: {
+          draggedCard: DndItem;
+          targetColumn: DndItem;
+        }) => {
           let cardInNewCol = targetColumn.cards.find(
             (c: CardDef) => c.id === draggedCard.id,
           );
@@ -129,47 +204,25 @@ class SprintPlannerIsolated extends BaseTaskPlannerIsolated<
         },
       },
     };
-    super(owner, args, config);
   }
 
-  get parentId() {
-    return this.args.model?.project?.id;
-  }
-
-  get emptyStateMessage() {
-    return 'Link a project to continue';
-  }
-
-  get getTaskQuery(): Query {
-    let everyArr: (AnyFilter | CardTypeFilter | EqFilter)[] = [];
-    if (!this.realmURL) {
-      throw new Error('No realm url');
+  @action viewCard() {
+    if (!this.args.model.id) {
+      throw new Error('No card id');
     }
-    if (!this.parentId) {
-      console.log('No project');
-      everyArr.push({ eq: { 'project.id': null } });
-    } else {
-      everyArr.push({ eq: { 'project.id': this.parentId } });
-    }
-    return everyArr.length > 0
-      ? {
-          filter: {
-            on: {
-              module: this.config.taskSource.module,
-              name: this.config.taskSource.name,
-            },
-            every: everyArr,
-          },
-        }
-      : {
-          filter: {
-            type: {
-              module: this.config.taskSource.module,
-              name: this.config.taskSource.name,
-            },
-          },
-        };
+    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
   }
+
+  <template>
+    <TaskPlanner
+      @config={{this.config}}
+      @realmURL={{this.currentRealm}}
+      @parentId={{this.parentId}}
+      @context={{@context}}
+      @emptyStateMessage={{this.emptyStateMessage}}
+      @viewCard={{this.viewCard}}
+    />
+  </template>
 }
 
 export class SprintPlanner extends CardDef {

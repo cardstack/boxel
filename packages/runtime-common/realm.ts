@@ -36,6 +36,7 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  type ResolvedCodeRef,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -166,8 +167,7 @@ export interface RealmAdapter {
 
 interface Options {
   disableModuleCaching?: true;
-  invalidateEntireRealm?: true;
-  userInitiatedRealmCreation?: true;
+  copiedFromRealm?: URL;
 }
 
 interface UpdateItem {
@@ -206,7 +206,8 @@ interface FileRemovedEventData {
 export type IndexEventData =
   | IncrementalIndexInitiation
   | IncrementalIndexEventData
-  | FullIndexEventData;
+  | FullIndexEventData
+  | CopiedIndexEventData;
 
 interface IndexEvent {
   type: 'index';
@@ -223,6 +224,11 @@ interface IncrementalIndexEventData {
 interface FullIndexEventData {
   type: 'full';
   realmURL: string;
+}
+interface CopiedIndexEventData {
+  type: 'copy';
+  sourceRealmURL: string;
+  destRealmURL: string;
 }
 
 interface IncrementalIndexInitiation {
@@ -257,8 +263,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #invalidateEntireRealm = false;
-  #userInitiatedRealmCreation = false;
+  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -312,11 +317,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    this.#invalidateEntireRealm = Boolean(opts?.invalidateEntireRealm);
-    this.#userInitiatedRealmCreation = Boolean(
-      opts?.userInitiatedRealmCreation,
-    );
-
+    this.#copiedFromRealm = opts?.copiedFromRealm;
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -621,19 +622,28 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    let promise = this.#realmIndexUpdater.run({
-      invalidateEntireRealm: this.#invalidateEntireRealm,
-      userInitiatedRequest: this.#userInitiatedRealmCreation,
-    });
-    if (isNewIndex) {
-      // we only await the full indexing at boot if this is a brand new index
-      await promise;
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+      this.sendServerEvent({
+        type: 'index',
+        data: {
+          type: 'copy',
+          sourceRealmURL: this.#copiedFromRealm.href,
+          destRealmURL: this.url,
+        },
+      });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      let promise = this.#realmIndexUpdater.run();
+      if (isNewIndex) {
+        // we only await the full indexing at boot if this is a brand new index
+        await promise;
+      }
+      this.sendServerEvent({
+        type: 'index',
+        data: { type: 'full', realmURL: this.url },
+      });
     }
-    this.sendServerEvent({
-      type: 'index',
-      data: { type: 'full', realmURL: this.url },
-    });
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
@@ -719,14 +729,15 @@ export class Realm {
         if (!request.headers.get('X-Boxel-Building-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
-            new Promise((resolve) =>
-              setTimeout(() => {
-                resolve(
-                  new Error(
-                    `Timeout waiting for realm ${this.url} to become ready`,
-                  ),
-                );
-              }, 60 * 1000),
+            new Promise(
+              (resolve) =>
+                setTimeout(() => {
+                  resolve(
+                    new Error(
+                      `Timeout waiting for realm ${this.url} to become ready`,
+                    ),
+                  );
+                }, 60 * 1000).unref?.(),
             ),
           ]);
           if (timeout) {
@@ -1635,6 +1646,7 @@ export class Realm {
     let parsedQueryString = parseQuery(href);
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
     let cardUrls = parsedQueryString.cardUrls as string[];
+    let renderType = parsedQueryString.renderType as ResolvedCodeRef;
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
@@ -1649,6 +1661,7 @@ export class Realm {
     // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
     delete parsedQueryString.cardUrls;
+    delete parsedQueryString.renderType;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
@@ -1659,6 +1672,7 @@ export class Realm {
         useWorkInProgressIndex,
         htmlFormat,
         cardUrls,
+        renderType,
         includeErrors: true,
       },
     );

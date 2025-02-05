@@ -82,13 +82,13 @@ module('Integration | operator-mode', function (hooks) {
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+    let spec: typeof import('https://cardstack.com/base/spec');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    spec = await loader.import(`${baseRealm.url}spec`);
 
     let {
       field,
@@ -103,7 +103,7 @@ module('Integration | operator-mode', function (hooks) {
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
     let { CardsGrid } = cardsGrid;
-    let { CatalogEntry } = catalogEntry;
+    let { Spec } = spec;
 
     // use string source so we can get the transpiled scoped CSS
     let friendWithCSSSource = `
@@ -470,32 +470,32 @@ module('Integration | operator-mode', function (hooks) {
             },
           } as LooseSingleCardDocument,
           'grid.json': new CardsGrid(),
-          'CatalogEntry/publishing-packet.json': new CatalogEntry({
-            title: 'Publishing Packet',
-            description: 'Catalog entry for PublishingPacket',
-            isField: false,
+          'Spec/publishing-packet.json': new Spec({
+            name: 'Publishing Packet',
+            description: 'Spec for PublishingPacket',
+            specType: 'card',
             ref: {
               module: `${testRealmURL}publishing-packet`,
               name: 'PublishingPacket',
             },
           }),
-          'CatalogEntry/pet-room.json': new CatalogEntry({
-            title: 'General Pet Room',
-            description: 'Catalog entry for Pet Room Card',
-            isField: false,
+          'Spec/pet-room.json': new Spec({
+            name: 'General Pet Room',
+            description: 'Spec for Pet Room Card',
+            specType: 'card',
             ref: {
               module: `${testRealmURL}pet-room`,
               name: 'PetRoom',
             },
           }),
-          'CatalogEntry/pet-card.json': new CatalogEntry({
-            title: 'Pet',
-            description: 'Catalog entry for Pet',
+          'Spec/pet-card.json': new Spec({
+            name: 'Pet',
+            description: 'Spec for Pet',
+            specType: 'card',
             ref: {
               module: `${testRealmURL}pet`,
               name: 'Pet',
             },
-            isField: false,
           }),
           'Author/1.json': author1,
           'Author/2.json': new Author({ firstName: 'R2-D2' }),
@@ -901,7 +901,7 @@ module('Integration | operator-mode', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
+  test('displays cards on cards-grid and includes `spec` instances', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
@@ -921,20 +921,17 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-cards-grid-item]`).exists();
 
     assert
-      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`)
-      .includesText('Blog Post');
-    assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] `)
       .includesText('Outer Space Journey');
 
     assert
       .dom(
-        `[data-test-cards-grid-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+        `[data-test-cards-grid-item="${testRealmURL}Spec/publishing-packet"]`,
       )
-      .exists('publishing-packet catalog-entry is displayed on cards-grid');
+      .exists('publishing-packet spec is displayed on cards-grid');
     assert
-      .dom(`[data-test-cards-grid-item="${testRealmURL}CatalogEntry/pet-room"]`)
-      .exists('pet-room catalog-entry instance is displayed on cards-grid');
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Spec/pet-room"]`)
+      .exists('pet-room spec instance is displayed on cards-grid');
   });
 
   test<TestContextWithSave>('can create a card using the cards-grid', async function (assert) {
@@ -960,17 +957,15 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-create-new-card-button]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Catalog Entry card');
+      .containsText('Choose a Spec card');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
     );
     assert
       .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
       .exists({ count: 3 });
 
-    await click(
-      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
-    );
+    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
@@ -1038,18 +1033,16 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-create-new-card-button]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
     );
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Catalog Entry card');
+      .containsText('Choose a Spec card');
     assert
       .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
       .exists({ count: 3 });
 
-    await click(
-      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
-    );
+    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
@@ -1823,13 +1816,13 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
       )
       .exists();
 
     await fillIn(`[data-test-search-field]`, `pet`);
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
       { count: 0 },
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
@@ -1838,14 +1831,12 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(
       () =>
         !document.querySelector(
-          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+          `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`,
         ),
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 1 });
 
-    await click(
-      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
-    );
+    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
     await waitUntil(
       () =>
         (
@@ -1942,7 +1933,7 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn(`[data-test-search-field]`, `general`);
 
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+      `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`,
       { count: 0 },
     );
 
@@ -1970,7 +1961,7 @@ module('Integration | operator-mode', function (hooks) {
 
     assert
       .dom(
-        `[data-test-realm="Operator Mode Workspace"] [data-test-select="${testRealmURL}CatalogEntry/pet-room"]`,
+        `[data-test-realm="Operator Mode Workspace"] [data-test-select="${testRealmURL}Spec/pet-room"]`,
       )
       .exists();
 
@@ -1986,9 +1977,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
-    assert
-      .dom(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`)
-      .exists();
+    assert.dom(`[data-test-select="${testRealmURL}Spec/pet-room"]`).exists();
 
     await click('[data-test-realm-filter-button]');
     await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]'); // Unselects the Operator Mode Workspace
@@ -2002,9 +1991,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
-    assert
-      .dom(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`)
-      .exists();
+    assert.dom(`[data-test-select="${testRealmURL}Spec/pet-room"]`).exists();
   });
 
   test(`can open new card editor in the stack after searching in card catalog`, async function (assert) {
@@ -2025,15 +2012,15 @@ module('Integration | operator-mode', function (hooks) {
 
     await typeIn(`[data-test-search-field]`, `pet`);
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
       { count: 0 },
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
-    await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-card"]`);
+    await click(`[data-test-select="${testRealmURL}Spec/pet-card"]`);
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"][data-test-card-catalog-item-selected]`,
+        `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"][data-test-card-catalog-item-selected]`,
       )
       .exists({ count: 1 });
 
@@ -2046,7 +2033,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Pet');
   });
 
-  test(`cancel button closes the catalog-entry card picker`, async function (assert) {
+  test(`cancel button closes the spec card picker`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2064,10 +2051,10 @@ module('Integration | operator-mode', function (hooks) {
     await typeIn(`[data-test-search-field]`, `pet`);
     assert.dom(`[data-test-search-field]`).hasValue('pet');
     await waitFor('[data-test-card-catalog-item]', { count: 2 });
-    await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
+    await click(`[data-test-select="${testRealmURL}Spec/pet-room"]`);
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-room"][data-test-card-catalog-item-selected]`,
+        `[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"][data-test-card-catalog-item-selected]`,
       )
       .exists({ count: 1 });
 
@@ -2638,7 +2625,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
-  test<TestContextWithSave>('Choosing a new catalog entry card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
+  test<TestContextWithSave>('Choosing a new  card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -2659,17 +2646,15 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-create-new-card-button]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Catalog Entry card');
+      .containsText('Choose a Spec card');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
     );
     assert
       .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
       .exists({ count: 3 });
 
-    await click(
-      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
-    );
+    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
 
