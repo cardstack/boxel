@@ -589,13 +589,9 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       .view-menu {
         margin-left: auto;
       }
-      /* Cards grid crm */
-      /* contact tab */
-      .crm-app.contact {
-        --grid-view-min-width: 300px;
-      }
-      /* deal tab */
-      .crm-app.deal {
+      /* Cards List & Grid Customization */
+      /* Deal tab */
+      .crm-app.Deal {
         --strip-view-min-width: 1fr;
       }
     </style>
