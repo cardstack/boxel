@@ -343,4 +343,72 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       .exists();
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
   });
+
+  test('can display selected card in the chosen format', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="isolated"]`,
+      )
+      .exists();
+    assert.dom('[data-test-author-title]').hasText('Jane Doe');
+    assert
+      .dom('[data-test-author-bio]')
+      .containsText('Jane Doe is the Senior Managing Editor');
+    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+
+    await click('[data-test-format-chooser-embedded]');
+    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .doesNotExist();
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="embedded"]`,
+      )
+      .exists();
+
+    await click('[data-test-format-chooser-edit]');
+    assert.dom('[data-test-format-chooser-embedded]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="edit"]`,
+      )
+      .exists();
+  });
+
+  test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-format-chooser-edit]');
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+      )
+      .exists();
+    assert
+      .dom(`[data-test-stack-item-content] [data-test-card-format="edit"]`)
+      .exists();
+  });
 });
