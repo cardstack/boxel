@@ -6,7 +6,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField } from './constants';
+import { baseCardRef, isField } from './constants';
 import { CardError } from './error';
 import { trimExecutableExtension } from './index';
 
@@ -249,6 +249,9 @@ async function isInsideAncestorChain(
   codeRefAncestor: CodeRef,
   loader: Loader,
 ): Promise<boolean | undefined> {
+  if (refEquals(codeRef, baseCardRef)) {
+    return false;
+  }
   if (refEquals(codeRef, codeRefAncestor)) {
     return true;
   } else {
@@ -256,7 +259,7 @@ async function isInsideAncestorChain(
     if (newAncestorRef) {
       return isInsideAncestorChain(newAncestorRef, codeRefAncestor, loader);
     } else {
-      return undefined;
+      return false;
     }
   }
 }
