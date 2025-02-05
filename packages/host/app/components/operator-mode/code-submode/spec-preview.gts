@@ -229,7 +229,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
           <BoxelSelect
             @options={{this.dropdownData}}
             @selected={{this.selectedDropdownData}}
-            @onChange={{@selectSpec}}
+            @onChange={{this.selectDropdownData}}
             @matchTriggerWidth={{true}}
             @disabled={{this.onlyOneInstance}}
             as |d|
@@ -270,6 +270,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       .spec-selector {
         min-width: 40%;
         align-self: flex-start;
+        padding: var(--boxel-sp-sm);
       }
       .spec-selector-item {
         display: flex;
@@ -432,7 +433,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     this._selectedInstance = spec;
   }
 
-  get selectedInstanceInDropdown() {
+  get selectedInstance() {
     return (
       this._selectedInstance ??
       (this.specInstances.length ? this.specInstances[0] : null)
@@ -445,7 +446,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         SpecPreviewTitle
         showCreateSpecIntent=this.showCreateSpecIntent
         specInstances=this.specInstances
-        selectedInstance=this.selectedInstanceInDropdown
+        selectedInstance=this.selectedInstance
         createSpec=this.createSpec
         isCreateModalShown=@isCreateModalShown
       )
@@ -453,7 +454,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         SpecPreviewContent
         showCreateSpecIntent=this.showCreateSpecIntent
         specInstances=this.specInstances
-        selectedInstance=this.selectedInstanceInDropdown
+        selectedInstance=this.selectedInstance
         selectSpec=this.selectSpec
         isLoading=this.specSearch.isLoading
       )
