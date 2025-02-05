@@ -58,14 +58,6 @@ class FakeMatrixClient implements MatrixClient {
     this.sentEvents = [];
     this.eventId = 0;
   }
-  sendStateEvent(
-    _roomId: string,
-    _eventType: string,
-    _content: IContent,
-    _stateKey: string,
-  ): Promise<{ event_id: string }> {
-    throw new Error('Method not implemented.');
-  }
 }
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
@@ -386,7 +378,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[2].content.body,
-      'some content\n\nA new thing',
+      'some content',
       'Content message plus function description should be sent next',
     );
     assert.strictEqual(
@@ -568,30 +560,13 @@ module('Responding', (hooks) => {
 
   test('Updates message type to command when tool call is in progress', async () => {
     await responder.initialize();
-    await responder.onChunk({
-      id: '0',
-      created: 0,
-      model: 'gpt-3.5-turbo',
-      object: 'chat.completion.chunk',
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                type: 'function',
-                function: {
-                  name: 'patchCard',
-                  arguments: '',
-                },
-              },
-            ],
-          },
-          index: 0,
-          finish_reason: 'stop',
-        },
-      ],
-    });
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        name: 'patchCard',
+        arguments: {},
+      }),
+    );
 
     let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(
@@ -605,8 +580,8 @@ module('Responding', (hooks) => {
       'Thinking message should be sent first',
     );
     assert.deepEqual(
-      sentEvents[1].content['msgtype'],
-      APP_BOXEL_COMMAND_MSGTYPE,
+      sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY].length,
+      1,
       'The message type should reflect that the model is preparing a tool call',
     );
     assert.deepEqual(

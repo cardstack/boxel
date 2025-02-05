@@ -2240,10 +2240,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
       isStreamingFinished: false,
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
+        },
+      ],
       isStreamingFinished: false,
       'm.relates_to': {
         rel_type: 'm.replace',

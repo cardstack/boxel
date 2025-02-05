@@ -11,7 +11,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
-import { bool, or } from '@cardstack/boxel-ui/helpers';
+import { bool } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
@@ -27,7 +27,6 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
-import PreparingRoomMessageCommand from './preparing-room-message-command';
 import RoomMessageCommand from './room-message-command';
 
 interface Signature {
@@ -122,17 +121,8 @@ export default class RoomMessage extends Component<Signature> {
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
         @isPending={{@isPending}}
-<<<<<<< HEAD
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
-=======
-        @isCommandMessage={{or
-          (bool @message.command)
-          @message.isPreparingCommand
-        }}
-        data-test-boxel-message-from={{@message.author.name}}
-        data-test-boxel-message-instance-id={{@message.instanceId}}
->>>>>>> dd3d939b8 (Show ApplyButton's preparing state when a command is being prepared)
         ...attributes
       >
         {{#each this.message.commands as |command|}}
@@ -145,13 +135,7 @@ export default class RoomMessage extends Component<Signature> {
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
           />
-<<<<<<< HEAD
         {{/each}}
-=======
-        {{else if @message.isPreparingCommand}}
-          <PreparingRoomMessageCommand />
-        {{/if}}
->>>>>>> dd3d939b8 (Show ApplyButton's preparing state when a command is being prepared)
       </AiAssistantMessage>
     {{/if}}
 

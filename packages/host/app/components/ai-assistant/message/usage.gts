@@ -68,7 +68,6 @@ export default class AiAssistantMessageUsage extends Component {
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
               @isStreaming={{this.isStreaming}}
-              @isCommandMessage={{this.isCommandMessage}}
             >
               <em>Optional embedded content</em>
             </AiAssistantMessage>
@@ -143,7 +142,6 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
               }}
               @isStreaming={{false}}
-              @isCommandMessage={{false}}
             />
             <AiAssistantMessage
               @formattedMessage={{htmlSafe
@@ -155,7 +153,6 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}
               @isStreaming={{false}}
-              @isCommandMessage={{false}}
             />
           </AiAssistantConversation>
         </div>
