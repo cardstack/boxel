@@ -211,7 +211,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   <template>
-    <section class='container'>
+    <div class='container'>
       {{#if @isLoading}}
         <div class='loading'>
           <LoadingIndicator class='loading-icon' />
@@ -248,7 +248,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
           {{/if}}
         </div>
       {{/if}}
-    </section>
+    </div>
 
     <style scoped>
       .container {
@@ -256,11 +256,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         align-items: center;
         justify-content: center;
         flex-direction: column;
-        gap: var(--boxel-sp-sm);
         height: 100%;
         width: 100%;
       }
       .spec-preview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        height: 100%;
+        width: 100%;
         padding: var(--boxel-sp-sm);
       }
       .create-spec-intent-message {
