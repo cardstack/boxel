@@ -125,6 +125,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                 @format={{this.format}}
               />
             </CardContainer>
+          {{else if (eq this.format 'atom')}}
+            <div class='atom-preview-container' data-test-atom-preview>Lorem
+              ipsum dolor sit amet, consectetur adipiscing elit, sed do
+              <Preview
+                class='atom-preview'
+                @card={{this.card}}
+                @format={{this.format}}
+                @displayContainer={{false}}
+              />
+              tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+              minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+              aliquip ex ea commodo consequat.</div>
           {{/if}}
         {{/if}}
       </div>
@@ -181,6 +193,22 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
         --boxel-format-chooser-button-width: 80px;
         --boxel-format-chooser-button-min-width: 80px;
+      }
+      .atom-preview-container {
+        color: #c7c7c7;
+        font: 500 var(--boxel-font-sm);
+        line-height: 2.15;
+        letter-spacing: 0.13px;
+      }
+      .atom-preview :deep(.atom-default-template) {
+        color: var(--boxel-dark);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-4xs);
+        background-color: var(--boxel-light);
+        margin: 0 var(--boxel-sp-xxxs);
+        font: 600 var(--boxel-font-xs);
+        line-height: 1.27;
+        letter-spacing: 0.17px;
       }
     </style>
   </template>
