@@ -2,6 +2,8 @@ import { click } from '@ember/test-helpers';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
+import type { Realm } from '@cardstack/runtime-common';
+
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
@@ -9,11 +11,13 @@ import {
   setupServerSentEvents,
   testRealmURL,
   visitOperatorMode,
+  type TestContextWithSSE,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 module('Acceptance | code-submode | playground panel', function (hooks) {
+  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -89,7 +93,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
 `;
 
   hooks.beforeEach(async function () {
-    await setupAcceptanceTestRealm({
+    ({ realm } = await setupAcceptanceTestRealm({
       contents: {
         'author.gts': authorCard,
         'blog-post.gts': blogPostCard,
@@ -192,7 +196,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
           },
         },
       },
-    });
+    }));
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
@@ -421,5 +425,71 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     assert
       .dom(`[data-test-stack-item-content] [data-test-card-format="edit"]`)
       .exists();
+  });
+
+  test<TestContextWithSSE>('playground preview live updates when there is a change in module', async function (assert) {
+    // change: added "Hello" before rendering title on the template
+    const authorCard = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import MarkdownField from 'https://cardstack.com/base/markdown';
+        import StringField from "https://cardstack.com/base/string";
+        export class Author extends CardDef {
+          static displayName = 'Author';
+          @field firstName = contains(StringField);
+          @field lastName = contains(StringField);
+          @field bio = contains(MarkdownField);
+          @field title = contains(StringField, {
+            computeVia: function (this: Author) {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article>
+                <header>
+                  <h1 data-test-author-title>Hello <@fields.title /></h1>
+                </header>
+                <p data-test-author-bio><@fields.bio /></p>
+              </article>
+              <style scoped>
+                article {
+                  padding: 20px;
+                }
+              </style>
+            </template>
+          }
+        }
+      `;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}author.gts`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}author.gts`],
+        },
+      },
+    ];
+    await visitOperatorMode({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}Author/jane-doe.json`,
+    });
+    assert.dom('[data-test-author-title]').containsText('Jane Doe');
+
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => await realm.write('author.gts', authorCard),
+    });
+    assert.dom('[data-test-author-title]').includesText('Hello Jane Doe');
   });
 });
