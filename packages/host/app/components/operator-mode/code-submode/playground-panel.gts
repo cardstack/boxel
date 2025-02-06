@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -20,10 +20,11 @@ import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCard,
   identifyCard,
+  type Query,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { getCard as getCardResource } from '@cardstack/host/resources/card-resource';
 
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
@@ -32,6 +33,9 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import PrerenderedCardSearch, {
+  type PrerenderedCard,
+} from '../../prerendered-card-search';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -75,20 +79,6 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
-const getComponent = (card: CardDef) => {
-  return card?.constructor?.getComponent(card);
-};
-
-const isMatchingCardType = (card: CardDef, ref: ResolvedCodeRef) => {
-  let cardRef = identifyCard(card?.constructor);
-  return (
-    cardRef &&
-    'module' in cardRef &&
-    cardRef.module === ref.module &&
-    cardRef.name === ref.name
-  );
-};
-
 interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -99,31 +89,39 @@ interface PlaygroundContentSignature {
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
     <div class='playground-panel-content'>
-      {{#if this.getRecentCardInstances.isRunning}}
-        <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
-      {{else}}
-        <div class='instance-chooser-container'>
-          <BoxelSelect
-            class='instance-chooser'
-            @options={{this.instances}}
-            @selected={{this.card}}
-            @selectedItemComponent={{if
-              this.card
-              (component
-                SelectedItem title=(getItemTitle this.card @displayName)
-              )
-            }}
-            @onChange={{this.onSelect}}
-            @placeholder='Please Select'
-            data-test-instance-chooser
-            as |card|
-          >
-            {{#let (getComponent card) as |Card|}}
-              <Card @format='fitted' />
-            {{/let}}
-          </BoxelSelect>
-        </div>
-      {{/if}}
+      <div class='instance-chooser-container'>
+        <PrerenderedCardSearch
+          @query={{this.query}}
+          @format='fitted'
+          @realms={{this.recentRealms}}
+        >
+          <:loading>
+            <LoadingIndicator
+              class='loading-icon'
+              @color='var(--boxel-light)'
+            />
+          </:loading>
+          <:response as |cards|>
+            <BoxelSelect
+              class='instance-chooser'
+              @options={{cards}}
+              @selected={{this.card}}
+              @selectedItemComponent={{if
+                this.card
+                (component
+                  SelectedItem title=(getItemTitle this.card @displayName)
+                )
+              }}
+              @onChange={{this.onSelect}}
+              @placeholder='Please Select'
+              data-test-instance-chooser
+              as |card|
+            >
+              <card.component />
+            </BoxelSelect>
+          </:response>
+        </PrerenderedCardSearch>
+      </div>
       <div class='preview-area'>
         {{#if this.card}}
           {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
@@ -217,57 +215,60 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
-  @tracked private _card?: CardDef;
   @tracked private format: Format = 'isolated';
-  @tracked private potentialOptions?: CardDef[] | [];
-  playgroundSelections = new TrackedObject<Record<string, string>>();
+  private playgroundSelections: Record<string, string>;
 
   constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
-    this.getRecentCardInstances.perform();
     let selections = window.localStorage.getItem('playground-selections');
-    if (selections?.length) {
-      this.playgroundSelections = JSON.parse(selections);
-    }
-  }
 
-  private loadSelectedCard = restartableTask(async (id: string) => {
-    let r = getCard(new URL(id));
-    await r.loaded;
-    this._card = r.card;
-  });
-
-  private getRecentCardInstances = restartableTask(async () => {
-    let cards = await Promise.all(
-      this.recentFilesService.recentFiles
-        .filter((f) => f.filePath.endsWith('.json'))
-        .map(async (f) => {
-          let r = getCard(new URL(`${f.realmURL}${f.filePath}`));
-          await r.loaded;
-          return r.card;
-        }),
+    this.playgroundSelections = new TrackedObject(
+      selections?.length ? JSON.parse(selections) : {},
     );
-    this.potentialOptions = cards.filter(Boolean) as CardDef[] | [];
-  });
-
-  private get instances() {
-    let matches = this.potentialOptions
-      ?.map((card) =>
-        isMatchingCardType(card, this.args.codeRef) ? card : undefined,
-      )
-      .filter(Boolean);
-    return matches;
   }
 
-  private get card() {
-    if (this._card && isMatchingCardType(this._card, this.args.codeRef)) {
-      return this._card;
-    }
-    let selectedCardId = this.playgroundSelections[this.args.moduleId];
-    if (selectedCardId) {
-      this.loadSelectedCard.perform(selectedCardId);
-    }
-    return;
+  get recentCardIds() {
+    return this.recentFilesService.recentFiles
+      .map((f) => `${f.realmURL}${f.filePath}`)
+      .filter((id) => id.endsWith('.json'))
+      .map((id) => id.slice(0, -1 * '.json'.length));
+  }
+
+  get recentRealms() {
+    return [
+      ...new Set(
+        this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
+      ),
+    ];
+  }
+
+  get query(): Query {
+    return {
+      filter: {
+        every: [
+          {
+            type: this.args.codeRef,
+          },
+          {
+            any: this.recentCardIds.map((id) => ({ eq: { id } })).slice(0, 20),
+          },
+        ],
+      },
+      sort: [
+        {
+          by: 'createdAt',
+          direction: 'desc',
+        },
+      ],
+    };
+  }
+
+  private cardResource = getCardResource(this, () =>
+    this.playgroundSelections[this.args.moduleId]?.replace(/\.json$/, ''),
+  );
+
+  private get card(): CardDef | undefined {
+    return this.cardResource.card;
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -312,9 +313,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     );
   };
 
-  @action private onSelect(card: CardDef) {
-    this._card = card;
-    this.persistSelections(card.id);
+  @action private onSelect(card: PrerenderedCard) {
+    this.persistSelections(card.url);
   }
 
   @action
