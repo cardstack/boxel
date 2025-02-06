@@ -211,7 +211,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   <template>
-    <section class='spec-preview'>
+    <section class='container'>
       {{#if @isLoading}}
         <div class='loading'>
           <LoadingIndicator class='loading-icon' />
@@ -225,31 +225,33 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
           Create a Boxel Specification to be able to create new instances
         </div>
       {{else}}
-        <div class='spec-selector' data-test-spec-selector>
-          <BoxelSelect
-            @options={{this.dropdownData}}
-            @selected={{this.selectedDropdownData}}
-            @onChange={{this.selectDropdownData}}
-            @matchTriggerWidth={{true}}
-            @disabled={{this.onlyOneInstance}}
-            as |d|
-          >
-            <div class='spec-selector-item'>
-              <RealmIcon class='url-realm-icon' @realmInfo={{d.realmInfo}} />
-              {{d.localPath}}
-            </div>
-          </BoxelSelect>
+        <div class='spec-preview'>
+          <div class='spec-selector' data-test-spec-selector>
+            <BoxelSelect
+              @options={{this.dropdownData}}
+              @selected={{this.selectedDropdownData}}
+              @onChange={{this.selectDropdownData}}
+              @matchTriggerWidth={{true}}
+              @disabled={{this.onlyOneInstance}}
+              as |d|
+            >
+              <div class='spec-selector-item'>
+                <RealmIcon class='url-realm-icon' @realmInfo={{d.realmInfo}} />
+                {{d.localPath}}
+              </div>
+            </BoxelSelect>
+          </div>
+          {{#if @selectedInstance}}
+            {{#let (getComponent @selectedInstance) as |CardComponent|}}
+              <CardComponent />
+            {{/let}}
+          {{/if}}
         </div>
-        {{#if @selectedInstance}}
-          {{#let (getComponent @selectedInstance) as |CardComponent|}}
-            <CardComponent />
-          {{/let}}
-        {{/if}}
       {{/if}}
     </section>
 
     <style scoped>
-      .spec-preview {
+      .container {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -257,6 +259,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         gap: var(--boxel-sp-sm);
         height: 100%;
         width: 100%;
+      }
+      .spec-preview {
         padding: var(--boxel-sp-sm);
       }
       .create-spec-intent-message {
