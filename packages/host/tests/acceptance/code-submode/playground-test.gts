@@ -389,6 +389,16 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
         `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="edit"]`,
       )
       .exists();
+
+    await click('[data-test-format-chooser-atom]');
+    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-atom]').hasClass('active');
+
+    assert
+      .dom('[data-test-atom-preview]')
+      .hasText(
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do Jane Doe tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+      );
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
