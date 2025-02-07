@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -20,11 +21,11 @@ import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  identifyCard,
   type Query,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { getCard as getCardResource } from '@cardstack/host/resources/card-resource';
+
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
@@ -33,11 +34,12 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import PrerenderedCardSearch, {
   type PrerenderedCard,
 } from '../../prerendered-card-search';
-
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import Preview from '../../preview';
 
@@ -263,7 +265,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     };
   }
 
-  private cardResource = getCardResource(this, () =>
+  private cardResource = getCard(this, () =>
     this.playgroundSelections[this.args.moduleId]?.replace(/\.json$/, ''),
   );
 

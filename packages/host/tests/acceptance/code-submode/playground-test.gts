@@ -1,6 +1,7 @@
 import { click } from '@ember/test-helpers';
+
 import window from 'ember-window-mock';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -26,71 +27,90 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  const authorCard = `
-  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
-  export class Author extends CardDef {
-    static displayName = 'Author';
-    @field firstName = contains(StringField);
-    @field lastName = contains(StringField);
-    @field bio = contains(MarkdownField);
-    @field title = contains(StringField, {
-      computeVia: function (this: Author) {
-        return [this.firstName, this.lastName].filter(Boolean).join(' ');
-      },
-    });
-    static isolated = class Isolated extends Component<typeof this> {
-      <template>
-        <article>
-          <header>
-            <h1 data-test-author-title><@fields.title /></h1>
-          </header>
-          <p data-test-author-bio><@fields.bio /></p>
-        </article>
-        <style scoped>
-          article {
-            padding: 20px;
-          }
-        </style>
-      </template>
-    }
+  const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from "https://cardstack.com/base/string";
+export class Author extends CardDef {
+  static displayName = 'Author';
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  @field bio = contains(MarkdownField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Author) {
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
+  static isolated = class Isolated extends Component<typeof this> {
+  <template>
+    <article>
+      <header>
+        <h1 data-test-author-title><@fields.title /></h1>
+      </header>
+      <div data-test-author-bio><@fields.bio /></div>
+    </article>
+    <style scoped>
+      article {
+        margin-inline: 20px;
+      }
+    </style>
+  </template>
   }
-`;
-  const blogPostCard = `
-  import { contains, field, linksTo, linksToMany, CardDef } from "https://cardstack.com/base/card-api";
-  import DatetimeField from 'https://cardstack.com/base/datetime';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
-  import { Author } from './author';
+}`;
 
-  export class Category extends CardDef {
-    static displayName = 'Category';
-  }
+  const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+import DatetimeField from 'https://cardstack.com/base/datetime';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from "https://cardstack.com/base/string";
+import { Author } from './author';
 
-  class Status extends StringField {
-    static displayName = 'Status';
+export class Category extends CardDef {
+  static displayName = 'Category';
+  static fitted = class Fitted extends Component<typeof this> {
+  <template>
+    <div data-test-category-fitted><@fields.title /></div>
+  </template>
   }
+}
 
-  export class BlogPost extends CardDef {
-    static displayName = 'Blog Post';
-    @field publishDate = contains(DatetimeField);
-    @field author = linksTo(Author);
-    @field categories = linksToMany(Category);
-    @field body = contains(MarkdownField);
-    @field status = contains(Status, {
-      computeVia: function (this: BlogPost) {
-        if (!this.publishDate) {
-          return 'Draft';
-        }
-        if (Date.now() >= Date.parse(String(this.publishDate))) {
-          return 'Published';
-        }
-        return 'Scheduled';
-      },
-    });
+class Status extends StringField {
+  static displayName = 'Status';
+}
+
+export class BlogPost extends CardDef {
+  static displayName = 'Blog Post';
+  @field publishDate = contains(DatetimeField);
+  @field author = linksTo(Author);
+  @field categories = linksToMany(Category);
+  @field body = contains(MarkdownField);
+  @field status = contains(Status, {
+    computeVia: function (this: BlogPost) {
+      if (!this.publishDate) {
+        return 'Draft';
+      }
+      if (Date.now() >= Date.parse(String(this.publishDate))) {
+        return 'Published';
+      }
+      return 'Scheduled';
+    },
+  });
+
+  static isolated = class Isolated extends Component<typeof this> {
+  <template>
+    <article>
+      <header>
+        <h1 data-test-post-title><@fields.title /></h1>
+      </header>
+      <div data-test-byline><@fields.author /></div>
+      <div data-test-post-body><@fields.body /></div>
+    </article>
+    <style scoped>
+      article {
+        margin-inline: 20px;
+      }
+    </style>
+  </template>
   }
-`;
+}`;
 
   hooks.beforeEach(async function () {
     ({ realm } = await setupAcceptanceTestRealm({
@@ -208,6 +228,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );
+    window.localStorage.setItem('playground-selections', '');
   });
 
   test('can render playground panel when a card def is selected', async function (assert) {
@@ -237,7 +258,10 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     assert.dom('[data-test-playground-panel]').exists();
   });
 
-  test('can select from available instances using the instance chooser', async function (assert) {
+  test('can populate instance chooser dropdown options from recent files', async function (assert) {
+    window.localStorage.setItem('recent-files', '');
+    window.localStorage.setItem('playground-selections', '');
+
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
@@ -245,8 +269,22 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
 
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'BlogPost/mad-hatter.json'],
+        [testRealmURL, 'Category/future-tech.json'],
+        [testRealmURL, 'Category/city-design.json'],
+        [testRealmURL, 'BlogPost/remote-work.json'],
+        [testRealmURL, 'BlogPost/urban-living.json'],
+        [testRealmURL, 'Author/jane-doe.json'],
+      ]),
+    );
+    await this.pauseTest();
     await click('[data-test-instance-chooser]');
-    assert.dom('[data-option-index]').exists({ count: 2 });
+    assert
+      .dom('[data-option-index] [data-test-category-fitted]')
+      .exists({ count: 2 });
 
     await click('[data-option-index="1"]');
     assert.dom('[data-test-selected-item]').hasText('Future Tech');
@@ -427,39 +465,37 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       .exists();
   });
 
-  test<TestContextWithSSE>('playground preview live updates when there is a change in module', async function (assert) {
+  test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
-    const authorCard = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import MarkdownField from 'https://cardstack.com/base/markdown';
-        import StringField from "https://cardstack.com/base/string";
-        export class Author extends CardDef {
-          static displayName = 'Author';
-          @field firstName = contains(StringField);
-          @field lastName = contains(StringField);
-          @field bio = contains(MarkdownField);
-          @field title = contains(StringField, {
-            computeVia: function (this: Author) {
-              return [this.firstName, this.lastName].filter(Boolean).join(' ');
-            },
-          });
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <article>
-                <header>
-                  <h1 data-test-author-title>Hello <@fields.title /></h1>
-                </header>
-                <p data-test-author-bio><@fields.bio /></p>
-              </article>
-              <style scoped>
-                article {
-                  padding: 20px;
-                }
-              </style>
-            </template>
-          }
-        }
-      `;
+    const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from "https://cardstack.com/base/string";
+export class Author extends CardDef {
+  static displayName = 'Author';
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  @field bio = contains(MarkdownField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Author) {
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
+  static isolated = class Isolated extends Component<typeof this> {
+<template>
+  <article>
+    <header>
+      <h1 data-test-author-title>Hello <@fields.title /></h1>
+    </header>
+    <div data-test-author-bio><@fields.bio /></div>
+  </article>
+  <style scoped>
+    article {
+      margin-inline: 20px;
+    }
+  </style>
+</template>
+  }
+}`;
     let expectedEvents = [
       {
         type: 'index',
@@ -480,8 +516,9 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
-      codePath: `${testRealmURL}Author/jane-doe.json`,
+      codePath: `${testRealmURL}author.gts`,
     });
+    await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
     await this.expectEvents({
@@ -491,5 +528,96 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       callback: async () => await realm.write('author.gts', authorCard),
     });
     assert.dom('[data-test-author-title]').includesText('Hello Jane Doe');
+  });
+
+  skip<TestContextWithSSE>('playground preview for card with linked fields can live update when module changes', async function (assert) {
+    // change: added "Hello" before rendering title on the template
+    const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+import DatetimeField from 'https://cardstack.com/base/datetime';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from "https://cardstack.com/base/string";
+import { Author } from './author';
+
+export class Category extends CardDef {
+  static displayName = 'Category';
+  static fitted = class Fitted extends Component<typeof this> {
+  <template>
+    <div data-test-category-fitted><@fields.title /></div>
+  </template>
+  }
+}
+
+class Status extends StringField {
+  static displayName = 'Status';
+}
+
+export class BlogPost extends CardDef {
+  static displayName = 'Blog Post';
+  @field publishDate = contains(DatetimeField);
+  @field author = linksTo(Author);
+  @field categories = linksToMany(Category);
+  @field body = contains(MarkdownField);
+  @field status = contains(Status, {
+    computeVia: function (this: BlogPost) {
+      if (!this.publishDate) {
+        return 'Draft';
+      }
+      if (Date.now() >= Date.parse(String(this.publishDate))) {
+        return 'Published';
+      }
+      return 'Scheduled';
+    },
+  });
+
+  static isolated = class Isolated extends Component<typeof this> {
+  <template>
+    <article>
+      <header>
+        <h1 data-test-post-title>Hello <@fields.title /></h1>
+      </header>
+      <div data-test-byline><@fields.author /></div>
+      <div data-test-post-body><@fields.body /></div>
+    </article>
+    <style scoped>
+      article {
+        margin-inline: 20px;
+      }
+    </style>
+  </template>
+  }
+}`;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}blog-post.gts`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}blog-post.gts`],
+        },
+      },
+    ];
+    await visitOperatorMode({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+    await click('[data-test-boxel-selector-item-text="BlogPost"]');
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
+
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => await realm.write('blog-post.gts', blogPostCard),
+    });
+    assert.dom('[data-test-post-title]').includesText('Hello Mad As a Hatter');
   });
 });
