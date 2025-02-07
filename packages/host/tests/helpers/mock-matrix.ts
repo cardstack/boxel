@@ -27,9 +27,7 @@ export function setupMockMatrix(
     opts: undefined,
   };
 
-  console.log('testState', testState);
   let mockUtils = new MockUtils(testState);
-  console.log('mockUtils', mockUtils);
 
   hooks.beforeEach(async function () {
     testState.owner = this.owner;
