@@ -9,6 +9,9 @@ import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { Submodes } from '../components/submode-switcher';
+import OperatorModeStateService from '../services/operator-mode-state-service';
+import { service } from '@ember/service';
 
 interface Args {
   named: {
@@ -26,8 +29,13 @@ export class AutoAttachment extends Resource<Args> {
   private lastStackedItems: StackItem[] = [];
   private lastRemovedCards: Set<string> = new Set(); // internal state, changed from the outside. It tracks, everytime a card is removed in the ai-panel
 
+  @service private declare operatorModeStateService: OperatorModeStateService;
+
   modify(_positional: never[], named: Args['named']) {
     const { topMostStackItems, attachedCards } = named;
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      return;
+    }
     this.updateAutoAttachedCardsTask.perform(topMostStackItems, attachedCards);
   }
 
