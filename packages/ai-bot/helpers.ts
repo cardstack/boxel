@@ -75,13 +75,13 @@ export class HistoryConstructionError extends Error {
   }
 }
 
-export function getPromptParts(
+export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): PromptParts {
+): Promise<PromptParts> {
   let cardFragments: Map<string, CardFragmentContent> =
     extractCardFragmentsFromEvents(eventList);
-  let history: DiscreteMatrixEvent[] = constructHistory(
+  let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
     cardFragments,
   );
@@ -113,7 +113,7 @@ export function extractCardFragmentsFromEvents(
   return fragments;
 }
 
-export function constructHistory(
+export async function constructHistory(
   eventlist: IRoomEvent[],
   cardFragments: Map<string, CardFragmentContent>,
 ) {
@@ -172,6 +172,17 @@ export function constructHistory(
         event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
           serializedCardFromFragments(id, cardFragments),
         );
+      }
+      let { attachedFiles } = event.content.data;
+      if (attachedFiles && attachedFiles.length > 0) {
+        let fileTextContents = await Promise.all(
+          attachedFiles.map(async (file) => {
+            let response = await fetch(file.url);
+            let text = await response.text(); // TODO: handle binary files, such as images
+            return { url: file.url, name: file.name, text };
+          }),
+        );
+        event.content.data.attachedFiles = fileTextContents;
       }
     }
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
@@ -285,6 +296,10 @@ function getMostRecentlyAttachedCard(attachedCards: LooseSingleCardDocument[]) {
   return cardResources.length
     ? cardResources[cardResources.length - 1]
     : undefined;
+}
+
+function getMostRecentlyAttachedFilesEvent(events: DiscreteMatrixEvent[]) {
+  return events.findLast((e) => e.content.data?.attachedFiles);
 }
 
 export function getRelevantCards(
@@ -500,11 +515,20 @@ export function getModifyPrompt(
     history,
     aiBotUserId,
   );
+
+  // FIXME: Only include attached files if they are actually attached to the message that was sent by the user
+  let mostRecentlyAttachedFilesEvent =
+    getMostRecentlyAttachedFilesEvent(history);
+
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
-  The user currently has given you the following data to work with:
-  Cards:\n`;
+  The user currently has given you the following data to work with: \n
+  Attached code files:\n
+  ${mostRecentlyAttachedFilesEvent?.content.data?.attachedFiles
+    ?.map((f) => `${f.name}: ${f.text}`)
+    .join('\n')}
+  \n Cards:\n`;
   systemMessage += attachedCardsToMessage(
     mostRecentlyAttachedCard,
     attachedCards,
