@@ -163,6 +163,8 @@ export interface RealmAdapter {
   unsubscribe(): void;
 
   setLoader?(loader: Loader): void;
+
+  isTestAdapter?: boolean;
 }
 
 interface Options {
@@ -2028,18 +2030,25 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#log.debug(
-      `sending updates to ${this.listeningClients.length} clients`,
-    );
-    let { type, data, id } = event;
-    let chunkArr = [];
-    for (let item in data) {
-      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
+    console.log('sendServerEvent', event);
+    if (this.#adapter.isTestAdapter) {
+      console.log('overridden sendServerEvent', event);
+      // @ts-ignore
+      this.#adapter.sendServerEventViaMatrix(event);
+    } else {
+      this.#log.debug(
+        `sending updates to ${this.listeningClients.length} clients`,
+      );
+      let { type, data, id } = event;
+      let chunkArr = [];
+      for (let item in data) {
+        chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
+      }
+      let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
+      await Promise.allSettled(
+        this.listeningClients.map((client) => writeToStream(client, chunk)),
+      );
     }
-    let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.allSettled(
-      this.listeningClients.map((client) => writeToStream(client, chunk)),
-    );
   }
 
   private async createRequestContext(): Promise<RequestContext> {

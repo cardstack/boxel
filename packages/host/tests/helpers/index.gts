@@ -8,6 +8,8 @@ import {
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
+
 import ms from 'ms';
 
 import {
@@ -46,6 +48,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type NetworkService from '@cardstack/host/services/network';
 
@@ -61,6 +64,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
+import { MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
@@ -176,6 +180,7 @@ export interface TestContextWithSSE extends TestContext {
   expectEvents: (args: {
     assert: Assert;
     realm: Realm;
+    mockMatrixUtils?: MockUtils;
     expectedEvents?: { type: string; data: Record<string, any> }[];
     expectedNumberOfEvents?: number;
     onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
@@ -274,6 +279,10 @@ class MockMessageService extends Service {
     return () => {};
   }
   register() {}
+
+  relayMatrixSSE(realmURL: string, event: any) {
+    console.log('would relay matrix sse event', realmURL, event);
+  }
 }
 
 export function setupOnSave(hooks: NestedHooks) {
@@ -287,23 +296,48 @@ export function setupOnSave(hooks: NestedHooks) {
 
 export function setupMockMessageService(hooks: NestedHooks) {
   hooks.beforeEach(function () {
-    this.owner.register('service:message-service', MockMessageService);
+    // this.owner.register('service:message-service', MockMessageService);
   });
 }
 
 export function setupServerSentEvents(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSSE>(function () {
     this.subscribers = [];
-    let self = this;
     testOnlyResetLiveCardState();
 
+    // FIXME to remove
     class MockMessageService extends Service {
+      @tracked subscriptions: Map<string, EventSource> = new Map();
+      @tracked listenerCallbacks: Map<string, ((ev: ServerEvents) => void)[]> =
+        new Map();
       register() {
         (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
       }
-      subscribe(_: never, cb: (e: { type: string; data: string }) => void) {
-        self.subscribers.push(cb);
-        return () => {};
+
+      // FIXME duplicated from host/app/services/message-service, to be made obsolete
+      subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+        console.log('subscribe', realmURL, cb);
+        if (!this.listenerCallbacks.has(realmURL)) {
+          this.listenerCallbacks.set(realmURL, []);
+        }
+        this.listenerCallbacks.get(realmURL)?.push(cb);
+
+        return () => {
+          // FIXME cleanup
+        };
+      }
+
+      relayMatrixSSE(realmURL: string, event: any) {
+        console.log('relaying matrix sse event', realmURL, event);
+        this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
+          console.log('callback', cb);
+          let eventWithStringData = {
+            type: event.type,
+            data: JSON.stringify(event.data),
+          };
+          console.log('eventWithStringData', eventWithStringData);
+          cb(eventWithStringData);
+        });
       }
     }
     // this.owner.register('service:message-service', MockMessageService);
@@ -311,6 +345,16 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       'service:message-service',
     ) as MessageService;
     messageService.register();
+
+    let matrixService = this.owner.lookup(
+      'service:matrix-service',
+    ) as MatrixService;
+
+    // let matrixMockUtils = this.owner.lookup(
+    //   'service:matrix-mock-utils',
+    // ) as MockUtils;
+
+    // FIXME choose an approach
 
     this.expectEvents = async <T,>({
       assert,
@@ -339,8 +383,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
         let realmSessionRoomId = `session-room-for-testuser`;
 
-        let { createAndJoinRoom, getRoomIds, simulateRemoteMessage } =
-          mockMatrixUtils;
+        let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
 
         if (!getRoomIds().includes(realmSessionRoomId)) {
           createAndJoinRoom({
@@ -350,20 +393,11 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           });
         }
 
-        for (let event of expectedEvents ?? []) {
-          simulateRemoteMessage(realmSessionRoomId, realm.matrixUsername, {
-            msgtype: 'app.boxel.sse', // FIXME extract/constant
-            format: 'app.boxel.sse-format', // FIXME does this matter?
-            body: JSON.stringify({
-              type: event.type,
-              data: event.data,
-            }),
-          });
-        }
+        let result = await callback();
+        console.log('subscribers?', this.subscribers);
 
         await settled();
-
-        return await callback();
+        return result;
       }
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
@@ -408,6 +442,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         }
         if (value) {
           let ev = getEventData(decoder.decode(value, { stream: true }));
+          console.log('got event', ev);
           if (ev) {
             events.push(ev);
             for (let subscriber of this.subscribers) {
@@ -551,7 +586,7 @@ async function setupTestRealm({
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
 
-  let adapter = new TestRealmAdapter(contents, new URL(realmURL));
+  let adapter = new TestRealmAdapter(contents, new URL(realmURL), owner);
   let indexRunner: IndexRunner = async (optsId) => {
     let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
     await localIndexer.configureRunner(registerRunner, adapter, indexWriter);

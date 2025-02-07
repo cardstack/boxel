@@ -22,6 +22,8 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
 
+import type { MockUtils } from './mock-matrix/_utils';
+
 interface Dir {
   kind: 'directory';
   contents: { [name: string]: File | Dir };
@@ -52,8 +54,14 @@ export class TestRealmAdapter implements RealmAdapter {
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
-
-  constructor(contents: TestAdapterContents, realmURL = new URL(testRealmURL)) {
+  isTestAdapter: boolean = true;
+  owner?: Owner;
+  constructor(
+    contents: TestAdapterContents,
+    realmURL = new URL(testRealmURL),
+    owner?: Owner,
+  ) {
+    this.owner = owner;
     this.#paths = new RealmPaths(realmURL);
     let now = unixTime(Date.now());
 
@@ -80,6 +88,45 @@ export class TestRealmAdapter implements RealmAdapter {
 
   get ready() {
     return this.#ready.promise;
+  }
+
+  async sendServerEventViaMatrix(event: ServerEvents) {
+    console.log('sendServerEventViaMatrix', event);
+
+    if (!this.owner) {
+      console.log('owner not set, skipping');
+      return;
+    }
+
+    let mockMatrixUtils = (await this.owner
+      .lookup('service:matrix-mock-utils')
+      .load()) as MockUtils;
+
+    // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
+    let realmSessionRoomId = `session-room-for-testuser`;
+
+    let { createAndJoinRoom, getRoomIds, simulateRemoteMessage } =
+      mockMatrixUtils;
+
+    // FIXME how can this be determined? Adapter doesn’t currently know
+    let realmMatrixUsername = 'test_realm';
+
+    if (!getRoomIds().includes(realmSessionRoomId)) {
+      createAndJoinRoom({
+        sender: realmMatrixUsername,
+        name: realmSessionRoomId,
+        id: realmSessionRoomId,
+      });
+    }
+
+    simulateRemoteMessage(realmSessionRoomId, realmMatrixUsername, {
+      msgtype: 'app.boxel.sse', // FIXME extract/constant
+      format: 'app.boxel.sse-format', // FIXME does this matter?
+      body: JSON.stringify({
+        type: event.type,
+        data: event.data,
+      }),
+    });
   }
 
   // We are eagerly establishing shims and preparing instances to be able to be
