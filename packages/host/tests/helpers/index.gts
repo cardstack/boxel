@@ -393,7 +393,55 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           });
         }
 
+        let timeout = setTimeout(
+          () =>
+            defer.reject(
+              new Error(
+                `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+              ),
+            ),
+          opts?.timeout ?? 10000,
+        );
+
         let result = await callback();
+
+        let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+        if (numOfEvents == null) {
+          throw new Error(
+            `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
+          );
+        }
+
+        let roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
+        let sseRoomEvents = roomEvents.filter(
+          (e) => e.type === 'app.boxel.sse',
+        );
+
+        if (expectedEvents) {
+          assert.deepEqual(
+            sseRoomEvents.forEach((e) => e.content.invalidations?.sort()),
+            expectedEvents.forEach((e) => e.data.invalidations?.sort()),
+            'sse response is correct',
+          );
+        } else {
+          assert.equal(
+            sseRoomEvents.length,
+            expectedNumberOfEvents,
+            'expected number of events',
+          );
+        }
+
+        if (onEvents) {
+          // FIXME this is probably wrong
+          onEvents(
+            sseRoomEvents.map((e) => ({
+              type: e.type,
+              data: e.content,
+            })),
+          );
+        }
+
+        clearTimeout(timeout);
 
         await settled();
         return result;
