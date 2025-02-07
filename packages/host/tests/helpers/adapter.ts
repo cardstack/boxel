@@ -98,9 +98,14 @@ export class TestRealmAdapter implements RealmAdapter {
       return;
     }
 
-    let mockMatrixUtils = (await this.owner
-      .lookup('service:matrix-mock-utils')
-      .load()) as MockUtils;
+    let mockLoader = this.owner.lookup('service:mock-loader');
+
+    if (!mockLoader) {
+      console.log('mockLoader not found, skipping');
+      return;
+    }
+
+    let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
 
     // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
     let realmSessionRoomId = `session-room-for-testuser`;
