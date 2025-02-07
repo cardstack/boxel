@@ -394,7 +394,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         }
 
         let result = await callback();
-        console.log('subscribers?', this.subscribers);
 
         await settled();
         return result;
