@@ -127,7 +127,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       <div class='preview-area'>
         {{#if this.card}}
           {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
-            <CardContainer class='preview-container'>
+            <CardContainer class='preview-container full-height-preview'>
               {{#let (this.realm.info this.card.id) as |realmInfo|}}
                 <CardHeader
                   class='preview-header'
@@ -165,7 +165,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       .playground-panel-content {
         display: flex;
         flex-direction: column;
+        gap: var(--boxel-sp);
         min-height: 100%;
+      }
+      .loading-icon {
+        height: var(--boxel-form-control-height);
       }
       .instance-chooser-container {
         position: sticky;
@@ -179,12 +183,19 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
       }
-      .loading-icon {
-        height: var(--boxel-form-control-height);
+      .preview-area {
+        flex-grow: 1;
+        z-index: 0;
+        display: flex;
+        flex-direction: column;
       }
       .preview-container {
         height: auto;
-        z-index: 0;
+      }
+      .full-height-preview {
+        flex-grow: 1;
+        display: grid;
+        grid-auto-rows: max-content 1fr;
       }
       .preview-header {
         background-color: var(--boxel-100);
@@ -194,12 +205,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       .preview {
         box-shadow: none;
         border-radius: 0;
-      }
-      .playground-panel-content {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-        min-height: 100%;
       }
       .format-chooser {
         position: sticky;
