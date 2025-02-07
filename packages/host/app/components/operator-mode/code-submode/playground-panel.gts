@@ -103,6 +103,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           <div class='instance-chooser-container'>
             <BoxelSelect
               class='instance-chooser'
+              @dropdownClass='instances-dropdown-content'
               @options={{cards}}
               @selected={{this.card}}
               @selectedItemComponent={{if
@@ -111,12 +112,15 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                   SelectedItem title=(getItemTitle this.card @displayName)
                 )
               }}
+              @renderInPlace={{true}}
               @onChange={{this.onSelect}}
               @placeholder='Please Select'
               data-test-instance-chooser
               as |card|
             >
-              <card.component />
+              <CardContainer class='card' @displayBoundaries={{true}}>
+                <card.component />
+              </CardContainer>
             </BoxelSelect>
           </div>
         </:response>
@@ -175,10 +179,24 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         display: flex;
         justify-content: center;
       }
+      .instance-chooser-container > :deep(.ember-basic-dropdown) {
+        max-width: 100%;
+      }
       .instance-chooser {
-        max-width: 405px;
+        width: 405px;
+        max-width: 100%;
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
+      }
+      :deep(.instances-dropdown-content > .ember-power-select-options) {
+        max-height: 20rem;
+      }
+      .card {
+        height: 75px;
+        width: 375px;
+        max-width: 100%;
+        container-name: fitted-card;
+        container-type: size;
       }
       .preview-area {
         flex-grow: 1;
