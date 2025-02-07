@@ -60,7 +60,8 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
-
+import type { FileAPI } from 'https://cardstack.com/base/file-api';
+import LoaderService from '@cardstack/host/services/loader-service';
 interface Signature {
   Args: {
     roomId: string;
@@ -136,6 +137,7 @@ export default class Room extends Component<Signature> {
             <div class='chat-input-area__bottom-section'>
               <AiAssistantCardPicker
                 @autoAttachedCards={{this.autoAttachedCards}}
+                @attachedFiles={{this.attachedFiles}}
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
@@ -207,12 +209,15 @@ export default class Room extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
 
+  @tracked private fileAPI: FileAPI | undefined;
   private roomResource = getRoom(
     this,
     () => this.args.roomId,
     () => this.matrixService.getRoomData(this.args.roomId)?.events,
   );
+
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
@@ -236,6 +241,7 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    this.doLoadFileAPI.perform();
     registerDestructor(this, () => {
       this.scrollState().messageVisibilityObserver.disconnect();
     });
@@ -270,6 +276,37 @@ export default class Room extends Component<Signature> {
       this.roomScrollState.set(this.room, state);
     }
     return state;
+  }
+
+  private get autoAttachedFileUrl() {
+    if (!this.fileAPI) {
+      return undefined;
+    }
+    return this.operatorModeStateService.state.codePath?.href;
+  }
+
+  private get autoAttachedFile() {
+    debugger;
+    if (!this.autoAttachedFileUrl) {
+      return undefined;
+    }
+
+    return this.fileAPI.createFileDef({
+      sourceUrl: this.autoAttachedFileUrl,
+      name: this.autoAttachedFileUrl.split('/').pop(),
+    });
+  }
+
+  private get attachedFiles() {
+    if (!this.fileAPI) {
+      return [];
+    }
+    // User will be eventually able to attach files manually (from the realm file system, or uploaded from the device),
+    // but for now we only support auto-attaching files from the operator mode code path
+    if (!this.autoAttachedFile) {
+      return [];
+    }
+    return [this.autoAttachedFile];
   }
 
   private get isScrolledToBottom() {
@@ -474,6 +511,14 @@ export default class Room extends Component<Signature> {
     await this.roomResource.loading;
   });
 
+  private doLoadFileAPI = restartableTask(async () => {
+    let fileAPI = await this.loaderService.loader.import<typeof FileAPI>(
+      'https://cardstack.com/base/file-api',
+    );
+    debugger;
+    this.fileAPI = fileAPI;
+  });
+
   private get messages() {
     return this.roomResource.messages;
   }
@@ -558,6 +603,7 @@ export default class Room extends Component<Signature> {
         cards.push(card);
       });
     }
+
     this.doSendMessage.perform(
       prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
@@ -598,6 +644,7 @@ export default class Room extends Component<Signature> {
       this.cardsToAttach?.length ? this.cardsToAttach : undefined,
     );
   }
+
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
@@ -619,11 +666,19 @@ export default class Room extends Component<Signature> {
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
+
+      // TODO: reuplad if file content changed, and add upload error handling
+      debugger;
+      let uploadedFiles = await this.matrixService.uploadFiles(
+        this.attachedFiles,
+      );
+
       try {
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
+          uploadedFiles,
           clientGeneratedId,
           context,
         );

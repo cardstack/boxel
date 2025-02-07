@@ -10,16 +10,19 @@ import { TrackedSet } from 'tracked-built-ins';
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 
+import FileCode from '@cardstack/boxel-icons/file-code';
+
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     autoAttachedCards?: TrackedSet<CardDef>;
+    attachedFiles?: FileDef[];
     cardsToAttach: CardDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
@@ -31,6 +34,18 @@ const MAX_CARDS_TO_DISPLAY = 4;
 export default class AiAssistantCardPicker extends Component<Signature> {
   <template>
     <div class='card-picker'>
+      {{#each @attachedFiles as |file|}}
+        <Pill class={{cn 'card-pill'}} ...attributes>
+          <:iconLeft>
+            <FileCode />
+          </:iconLeft>
+          <:default>
+            <div class='card-content' title={{file.name}}>
+              {{file.name}}
+            </div>
+          </:default>
+        </Pill>
+      {{/each}}
       {{#each this.cardsToDisplay as |card i|}}
         {{#if (this.isCardDisplayed card i)}}
           {{#if (this.isAutoAttachedCard card)}}

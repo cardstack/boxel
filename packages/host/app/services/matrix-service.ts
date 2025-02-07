@@ -63,6 +63,7 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardFragmentContent,
@@ -80,7 +81,9 @@ import { RoomResource, getRoom } from '../resources/room';
 
 import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
 
-import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
+import OperatorModeStateService, {
+  type SerializedState as OperatorModeSerializedState,
+} from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
@@ -92,7 +95,7 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-
+import type NetworkService from './network';
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
@@ -112,6 +115,8 @@ export default class MatrixService extends Service {
   @service private declare realmServer: RealmServerService;
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
+  @service private declare network: NetworkService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
@@ -619,10 +624,39 @@ export default class MatrixService extends Service {
     return eventIds;
   }
 
+  async uploadFiles(files: FileDef[]) {
+    const uploadedFiles = await Promise.all(
+      files.map(async (file) => {
+        if (!file.sourceUrl) {
+          throw new Error('File has no source URL');
+        }
+        let response = await this.network.authedFetch(file.sourceUrl, {
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+        });
+
+        let blob = await response.blob();
+        let type = response.headers.get('content-type') || '';
+        let uploadResponse = await this.client.uploadContent(blob, {
+          type,
+        });
+
+        file.url = this.client.mxcUrlToHttp(uploadResponse.content_uri);
+        file.type = type;
+
+        return file;
+      }),
+    );
+    console.log('uploadedFiles', uploadedFiles);
+    return uploadedFiles;
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
@@ -663,6 +697,7 @@ export default class MatrixService extends Service {
       formatted_body: html,
       clientGeneratedId,
       data: {
+        attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
         attachedCardsEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),

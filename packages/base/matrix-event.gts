@@ -192,6 +192,10 @@ export interface CardMessageContent {
     // fragments that we receive
     attachedCards?: LooseSingleCardDocument[];
     skillCards?: LooseSingleCardDocument[];
+    attachedFiles?: {
+      url: string;
+      name: string;
+    }[];
     context: {
       openCardIds?: string[];
       tools: Tool[];
