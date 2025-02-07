@@ -62,6 +62,7 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
+  private _processedEvents = new Set<string>();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
@@ -249,7 +250,19 @@ export class RoomResource extends Resource<Args> {
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
 
-    for (let event of this.sortedEvents) {
+    // We want to avoid reprocessing events, here we pick the
+    // first unprocessed event and run everything in order from there
+    const firstUnprocessedIndex = this.sortedEvents.findIndex(
+      (event) => !this._processedEvents.has(event.event_id),
+    );
+
+    if (firstUnprocessedIndex === -1) {
+      // All events have been processed
+      return;
+    }
+
+    for (let i = firstUnprocessedIndex; i < this.sortedEvents.length; i++) {
+      const event = this.sortedEvents[i];
       switch (event.type) {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
@@ -267,6 +280,7 @@ export class RoomResource extends Resource<Args> {
           await this.loadRoomNameEvent(event);
           break;
       }
+      this._processedEvents.add(event.event_id);
     }
   }
 
