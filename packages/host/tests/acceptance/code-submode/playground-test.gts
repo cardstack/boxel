@@ -220,6 +220,8 @@ export class BlogPost extends CardDef {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
+        [testRealmURL, 'blog-post.gts'],
+        [testRealmURL, 'author.gts'],
         [testRealmURL, 'BlogPost/mad-hatter.json'],
         [testRealmURL, 'Category/city-design.json'],
         [testRealmURL, 'Category/future-tech.json'],
@@ -280,7 +282,6 @@ export class BlogPost extends CardDef {
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );
-    await this.pauseTest();
     await click('[data-test-instance-chooser]');
     assert
       .dom('[data-option-index] [data-test-category-fitted]')
@@ -328,11 +329,45 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="author.gts"]');
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
     await click('[data-test-instance-chooser]');
     assert.dom('li.ember-power-select-option').exists({ count: 1 });
     assert.dom('[data-option-index="0"]').containsText('Jane Doe');
     await click('[data-option-index="0"]');
     assert.dom('[data-test-selected-item]').containsText('Jane Doe');
+  });
+
+  test('can populate playground preview with previous choices saved in local storage', async function (assert) {
+    let selections = {
+      [`${testRealmURL}author/Author`]: `${testRealmURL}Author/jane-doe.json`,
+      [`${testRealmURL}blog-post/BlogPost`]: `${testRealmURL}BlogPost/remote-work.json`,
+      [`${testRealmURL}blog-post/Category`]: `${testRealmURL}Category/city-design.json`,
+    };
+    window.localStorage.setItem(
+      'playground-selections',
+      JSON.stringify(selections),
+    );
+    const assertCardExists = (fileName: string) => {
+      const dataAttr = `[data-test-playground-panel] [data-test-card="${testRealmURL}${fileName}"]`;
+      assert.dom(dataAttr).exists();
+    };
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+    assertCardExists('Author/jane-doe');
+
+    await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`);
+    assert.dom('[data-test-selected-item]').hasText('City Design');
+    assertCardExists('Category/city-design');
+
+    await click(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
+    );
+    assert.dom('[data-test-selected-item]').containsText('Remote Work');
+    assertCardExists('BlogPost/remote-work');
   });
 
   test('can display selected card in isolated format', async function (assert) {
@@ -519,6 +554,8 @@ export class Author extends CardDef {
       codePath: `${testRealmURL}author.gts`,
     });
     await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
     assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
     await this.expectEvents({
@@ -527,7 +564,7 @@ export class Author extends CardDef {
       expectedEvents,
       callback: async () => await realm.write('author.gts', authorCard),
     });
-    assert.dom('[data-test-author-title]').includesText('Hello Jane Doe');
+    assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
   });
 
   skip<TestContextWithSSE>('playground preview for card with linked fields can live update when module changes', async function (assert) {
@@ -610,6 +647,8 @@ export class BlogPost extends CardDef {
     });
     await click('[data-test-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
     assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
 
     await this.expectEvents({
