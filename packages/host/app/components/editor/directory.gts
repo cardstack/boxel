@@ -20,10 +20,10 @@ interface Args {
   Args: {
     relativePath: string;
     realmURL: URL;
-    selectedFile?: string;
-    openDirs?: string[];
-    onFileSelected?: (entryPath: string) => void;
-    onDirectorySelected?: (entryPath: string) => void;
+    selectedFile?: LocalPath;
+    openDirs?: LocalPath[];
+    onFileSelected?: (entryPath: LocalPath) => void;
+    onDirectorySelected?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
   };
 }
@@ -73,6 +73,7 @@ export default class Directory extends Component<Args> {
                 @openDirs={{if @openDirs @openDirs this.openDirs}}
                 @onFileSelected={{this.selectFile}}
                 @onDirectorySelected={{this.selectDirectory}}
+                @scrollPositionKey={{@scrollPositionKey}}
               />
             {{/if}}
           {{/if}}
