@@ -91,19 +91,16 @@ interface PlaygroundContentSignature {
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
     <div class='playground-panel-content'>
-      <div class='instance-chooser-container'>
-        <PrerenderedCardSearch
-          @query={{this.query}}
-          @format='fitted'
-          @realms={{this.recentRealms}}
-        >
-          <:loading>
-            <LoadingIndicator
-              class='loading-icon'
-              @color='var(--boxel-light)'
-            />
-          </:loading>
-          <:response as |cards|>
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='fitted'
+        @realms={{this.recentRealms}}
+      >
+        <:loading>
+          <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
+        </:loading>
+        <:response as |cards|>
+          <div class='instance-chooser-container'>
             <BoxelSelect
               class='instance-chooser'
               @options={{cards}}
@@ -121,9 +118,9 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             >
               <card.component />
             </BoxelSelect>
-          </:response>
-        </PrerenderedCardSearch>
-      </div>
+          </div>
+        </:response>
+      </PrerenderedCardSearch>
       <div class='preview-area'>
         {{#if this.card}}
           {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
