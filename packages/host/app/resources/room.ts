@@ -138,7 +138,7 @@ export class RoomResource extends Resource<Args> {
     return this.members.filter((m) => m.membership === 'join');
   }
 
-  private get events() {
+  private get events(): DiscreteMatrixEvent[] {
     return this.matrixRoom?.events ?? [];
   }
 
