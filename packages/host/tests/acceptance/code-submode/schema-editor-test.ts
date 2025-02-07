@@ -26,6 +26,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { MockUtils } from '../../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -209,6 +210,7 @@ const ambiguousDisplayNamesCardSource = `
 let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
+  let mockMatrixUtils: MockUtils;
 
   async function saveField(
     context: TestContextWithSSE,
@@ -218,6 +220,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await context.expectEvents({
       assert,
       realm,
+      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         await click('[data-test-save-field-button]');
@@ -228,10 +231,13 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],
   });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -326,6 +332,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          realmUserId: '@test_realm:localhost',
         },
       },
     }));
