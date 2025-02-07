@@ -13,6 +13,8 @@ import {
   IconPencilCrossedOut,
 } from '@cardstack/boxel-ui/icons';
 
+import { type LocalPath } from '@cardstack/runtime-common';
+
 import RealmService from '@cardstack/host/services/realm';
 
 import WithLoadedRealm from '../with-loaded-realm';
@@ -22,6 +24,11 @@ import Directory from './directory';
 interface Signature {
   Args: {
     realmURL: URL;
+    selectedFile?: LocalPath;
+    openDirs?: LocalPath[];
+    onFileSelected?: (entryPath: LocalPath) => void;
+    onDirectorySelected?: (entryPath: LocalPath) => void;
+    scrollPositionKey?: LocalPath;
   };
 }
 
@@ -70,7 +77,15 @@ export default class FileTree extends Component<Signature> {
         {{/if}}
       </div>
       <nav>
-        <Directory @relativePath='' @realmURL={{@realmURL}} />
+        <Directory
+          @relativePath=''
+          @realmURL={{@realmURL}}
+          @selectedFile={{@selectedFile}}
+          @openDirs={{@openDirs}}
+          @onFileSelected={{@onFileSelected}}
+          @onDirectorySelected={{@onDirectorySelected}}
+          @scrollPositionKey={{@scrollPositionKey}}
+        />
         {{#if this.showMask}}
           <div class='mask' data-test-file-tree-mask></div>
         {{/if}}
