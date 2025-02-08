@@ -44,6 +44,7 @@ export default class AiAssistantCardPickerUsage extends Component {
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
           @maxNumberOfCards={{this.maxNumberOfCards}}
+          @submode={{'interact'}}
         />
         <CardCatalogModal />
       </:example>

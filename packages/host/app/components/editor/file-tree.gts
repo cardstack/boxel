@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { Label, RealmIcon, Tooltip } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import {
   IconPencilNotCrossedOut,
   IconPencilCrossedOut,
@@ -29,53 +30,57 @@ interface Signature {
     onFileSelected?: (entryPath: LocalPath) => void;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
+    hideRealmInfo?: boolean;
   };
 }
 
 export default class FileTree extends Component<Signature> {
   <template>
     <WithLoadedRealm @realmURL={{@realmURL.href}} as |realm|>
-      <div class='realm-info'>
-        <RealmIcon @realmInfo={{realm.info}} />
-        {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
-          <Label
-            @ellipsize={{true}}
-            title={{realmTitle}}
-            data-test-realm-name={{realm.info.name}}
-          >
-            {{realmTitle}}
-          </Label>
-        {{/let}}
-        {{#if realm.canWrite}}
-          <Tooltip @placement='top' class='editability-icon'>
-            <:trigger>
-              <IconPencilNotCrossedOut
-                width='18px'
-                height='18px'
-                aria-label='Can edit files in this workspace'
-                data-test-realm-writable
-              />
-            </:trigger>
-            <:content>
-              Can edit files in this workspace
-            </:content>
-          </Tooltip>
-        {{else}}
-          <Tooltip @placement='top' class='editability-icon'>
-            <:trigger>
-              <IconPencilCrossedOut
-                width='18px'
-                height='18px'
-                aria-label='Cannot edit files in this workspace'
-                data-test-realm-not-writable
-              />
-            </:trigger>
-            <:content>
-              Cannot edit files in this workspace
-            </:content>
-          </Tooltip>
-        {{/if}}
-      </div>
+      {{#if (not @hideRealmInfo)}}
+        <div class='realm-info'>
+          <RealmIcon @realmInfo={{realm.info}} />
+          {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
+            <Label
+              @ellipsize={{true}}
+              title={{realmTitle}}
+              data-test-realm-name={{realm.info.name}}
+            >
+              {{realmTitle}}
+            </Label>
+          {{/let}}
+
+          {{#if realm.canWrite}}
+            <Tooltip @placement='top' class='editability-icon'>
+              <:trigger>
+                <IconPencilNotCrossedOut
+                  width='18px'
+                  height='18px'
+                  aria-label='Can edit files in this workspace'
+                  data-test-realm-writable
+                />
+              </:trigger>
+              <:content>
+                Can edit files in this workspace
+              </:content>
+            </Tooltip>
+          {{else}}
+            <Tooltip @placement='top' class='editability-icon'>
+              <:trigger>
+                <IconPencilCrossedOut
+                  width='18px'
+                  height='18px'
+                  aria-label='Cannot edit files in this workspace'
+                  data-test-realm-not-writable
+                />
+              </:trigger>
+              <:content>
+                Cannot edit files in this workspace
+              </:content>
+            </Tooltip>
+          {{/if}}
+        </div>
+      {{/if}}
       <nav>
         <Directory
           @relativePath=''

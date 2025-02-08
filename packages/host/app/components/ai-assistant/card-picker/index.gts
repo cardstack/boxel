@@ -10,11 +10,13 @@ import { TrackedSet } from 'tracked-built-ins';
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
+import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import { Submode } from '../../submode-switcher';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -24,6 +26,7 @@ interface Signature {
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
     maxNumberOfCards?: number;
+    submode: Submode;
   };
 }
 
@@ -166,6 +169,10 @@ export default class AiAssistantCardPicker extends Component<Signature> {
   }
 
   private doChooseCard = restartableTask(async () => {
+    if (this.args.submode === 'code') {
+      let chosenFile = await chooseFile();
+      return chosenFile;
+    }
     let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type: baseCardRef },
     });

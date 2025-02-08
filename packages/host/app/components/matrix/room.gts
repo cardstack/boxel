@@ -139,6 +139,7 @@ export default class Room extends Component<Signature> {
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
+                @submode={{this.operatorModeStateService.state.submode}}
               />
               <LLMSelect
                 @selected={{this.roomResource.activeLLM}}
