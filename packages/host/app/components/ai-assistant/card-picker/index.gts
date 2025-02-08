@@ -8,7 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 import { TrackedSet } from 'tracked-built-ins';
 
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
-import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
 
@@ -86,7 +86,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           data-test-choose-card-btn
         >
           <span class={{if this.cardsToDisplay.length 'boxel-sr-only'}}>
-            Add Card
+            {{if (eq @submode 'code') 'Attach File' 'Add Card'}}
           </span>
         </AddButton>
       {{/if}}
