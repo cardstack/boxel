@@ -440,13 +440,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       }
 
       if (onEvents) {
-        // FIXME this is probably wrong
-        onEvents(
-          sseRoomEvents.map((e) => ({
-            type: e.type,
-            data: e.content,
-          })),
-        );
+        onEvents(sseRoomEvents.map((e) => JSON.parse(e.content.body)));
       }
 
       clearTimeout(timeout);
