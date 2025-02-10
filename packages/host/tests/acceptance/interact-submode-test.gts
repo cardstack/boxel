@@ -1807,7 +1807,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await this.expectEvents({
         assert,
         realm,
-        mockMatrixUtils,
         expectedEvents,
         callback: async () => {
           await realm.write(

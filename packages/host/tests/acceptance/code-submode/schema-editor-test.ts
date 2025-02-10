@@ -220,7 +220,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await context.expectEvents({
       assert,
       realm,
-      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         await click('[data-test-save-field-button]');

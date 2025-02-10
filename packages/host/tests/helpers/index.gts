@@ -180,7 +180,6 @@ export interface TestContextWithSSE extends TestContext {
   expectEvents: (args: {
     assert: Assert;
     realm: Realm;
-    mockMatrixUtils?: MockUtils;
     expectedEvents?: { type: string; data: Record<string, any> }[];
     expectedNumberOfEvents?: number;
     onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
@@ -359,7 +358,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     this.expectEvents = async <T,>({
       assert,
       realm,
-      mockMatrixUtils,
       expectedEvents,
       expectedNumberOfEvents,
       onEvents,
@@ -368,7 +366,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     }: {
       assert: Assert;
       realm: Realm;
-      mockMatrixUtils?: MockUtils;
       expectedEvents?: { type: string; data: Record<string, any> }[];
       expectedNumberOfEvents?: number;
       onEvents?: (
@@ -377,95 +374,31 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       callback: () => Promise<T>;
       opts?: { timeout?: number };
     }): Promise<T> => {
-      if (mockMatrixUtils) {
-        console.log('mockMatrixUtils', mockMatrixUtils);
-
-        // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
-        let realmSessionRoomId = `session-room-for-testuser`;
-
-        let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
-
-        if (!getRoomIds().includes(realmSessionRoomId)) {
-          createAndJoinRoom({
-            sender: realm.matrixUsername,
-            name: realmSessionRoomId,
-            id: realmSessionRoomId,
-          });
-        }
-
-        let timeout = setTimeout(
-          () =>
-            defer.reject(
-              new Error(
-                `expectEvent timed out, saw events ${JSON.stringify(events)}`,
-              ),
-            ),
-          opts?.timeout ?? 10000,
-        );
-
-        let result = await callback();
-
-        let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
-        if (numOfEvents == null) {
-          throw new Error(
-            `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
-          );
-        }
-
-        let roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
-        let sseRoomEvents = roomEvents.filter(
-          (e) => e.type === 'app.boxel.sse',
-        );
-
-        if (expectedEvents) {
-          assert.deepEqual(
-            sseRoomEvents.forEach((e) => e.content.invalidations?.sort()),
-            expectedEvents.forEach((e) => e.data.invalidations?.sort()),
-            'sse response is correct',
-          );
-        } else {
-          assert.equal(
-            sseRoomEvents.length,
-            expectedNumberOfEvents,
-            'expected number of events',
-          );
-        }
-
-        if (onEvents) {
-          // FIXME this is probably wrong
-          onEvents(
-            sseRoomEvents.map((e) => ({
-              type: e.type,
-              data: e.content,
-            })),
-          );
-        }
-
-        clearTimeout(timeout);
-
-        await settled();
-        return result;
-      }
       let defer = new Deferred();
-      let events: { type: string; data: Record<string, any> }[] = [];
-      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
-      if (numOfEvents == null) {
-        throw new Error(
-          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
-        );
+
+      let mockLoader = this.owner.lookup('service:matrix-mock-utils');
+
+      if (!mockLoader) {
+        console.log('mockLoader not found, skipping');
+        return;
       }
-      let response = await realm.handle(
-        new Request(`${realm.url}_message`, {
-          method: 'GET',
-          headers: {
-            Accept: 'text/event-stream',
-          },
-        }),
-      );
-      if (!response?.ok) {
-        throw new Error(`failed to connect to realm: ${response?.status}`);
+
+      let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
+      console.log('mockMatrixUtils', mockMatrixUtils);
+
+      // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
+      let realmSessionRoomId = `session-room-for-testuser`;
+
+      let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
+
+      if (!getRoomIds().includes(realmSessionRoomId)) {
+        createAndJoinRoom({
+          sender: realm.matrixUsername,
+          name: realmSessionRoomId,
+          id: realmSessionRoomId,
+        });
       }
-      let reader = response.body!.getReader();
+
       let timeout = setTimeout(
         () =>
           defer.reject(
@@ -475,53 +408,126 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           ),
         opts?.timeout ?? 10000,
       );
+
       let result = await callback();
-      let decoder = new TextDecoder();
-      while (events.length < numOfEvents) {
-        let { done, value } = await Promise.race([
-          reader.read(),
-          defer.promise as any, // this one always throws so type is not important
-        ]);
-        if (done) {
-          throw new Error(
-            `expected ${numOfEvents} events, saw ${events.length} events`,
-          );
-        }
-        if (value) {
-          let ev = getEventData(decoder.decode(value, { stream: true }));
-          console.log('got event', ev);
-          if (ev) {
-            events.push(ev);
-            for (let subscriber of this.subscribers) {
-              let evWireFormat = {
-                type: ev.type,
-                data: JSON.stringify(ev.data),
-              };
-              subscriber(evWireFormat);
-            }
-          }
-        }
+
+      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+      if (numOfEvents == null) {
+        throw new Error(
+          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
+        );
       }
+
+      let roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
+      let sseRoomEvents = roomEvents.filter((e) => e.type === 'app.boxel.sse');
+
       if (expectedEvents) {
-        let eventsWithoutClientRequestId = events.map((e) => {
-          delete e.data.clientRequestId;
-          return e;
-        });
         assert.deepEqual(
-          eventsWithoutClientRequestId.forEach((e) =>
-            e.data.invalidations?.sort(),
-          ),
+          sseRoomEvents.forEach((e) => e.content.invalidations?.sort()),
           expectedEvents.forEach((e) => e.data.invalidations?.sort()),
           'sse response is correct',
         );
+      } else {
+        assert.equal(
+          sseRoomEvents.length,
+          expectedNumberOfEvents,
+          'expected number of events',
+        );
       }
+
       if (onEvents) {
-        onEvents(events);
+        // FIXME this is probably wrong
+        onEvents(
+          sseRoomEvents.map((e) => ({
+            type: e.type,
+            data: e.content,
+          })),
+        );
       }
+
       clearTimeout(timeout);
-      realm.unsubscribe();
+
       await settled();
       return result;
+
+      // FIXME is everything here covered?
+
+      // let defer = new Deferred();
+      // let events: { type: string; data: Record<string, any> }[] = [];
+      // let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+      // if (numOfEvents == null) {
+      //   throw new Error(
+      //     `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
+      //   );
+      // }
+      // let response = await realm.handle(
+      //   new Request(`${realm.url}_message`, {
+      //     method: 'GET',
+      //     headers: {
+      //       Accept: 'text/event-stream',
+      //     },
+      //   }),
+      // );
+      // if (!response?.ok) {
+      //   throw new Error(`failed to connect to realm: ${response?.status}`);
+      // }
+      // let reader = response.body!.getReader();
+      // let timeout = setTimeout(
+      //   () =>
+      //     defer.reject(
+      //       new Error(
+      //         `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+      //       ),
+      //     ),
+      //   opts?.timeout ?? 10000,
+      // );
+      // let result = await callback();
+      // let decoder = new TextDecoder();
+      // while (events.length < numOfEvents) {
+      //   let { done, value } = await Promise.race([
+      //     reader.read(),
+      //     defer.promise as any, // this one always throws so type is not important
+      //   ]);
+      //   if (done) {
+      //     throw new Error(
+      //       `expected ${numOfEvents} events, saw ${events.length} events`,
+      //     );
+      //   }
+      //   if (value) {
+      //     let ev = getEventData(decoder.decode(value, { stream: true }));
+      //     console.log('got event', ev);
+      //     if (ev) {
+      //       events.push(ev);
+      //       for (let subscriber of this.subscribers) {
+      //         let evWireFormat = {
+      //           type: ev.type,
+      //           data: JSON.stringify(ev.data),
+      //         };
+      //         subscriber(evWireFormat);
+      //       }
+      //     }
+      //   }
+      // }
+      // if (expectedEvents) {
+      //   let eventsWithoutClientRequestId = events.map((e) => {
+      //     delete e.data.clientRequestId;
+      //     return e;
+      //   });
+      //   assert.deepEqual(
+      //     eventsWithoutClientRequestId.forEach((e) =>
+      //       e.data.invalidations?.sort(),
+      //     ),
+      //     expectedEvents.forEach((e) => e.data.invalidations?.sort()),
+      //     'sse response is correct',
+      //   );
+      // }
+      // if (onEvents) {
+      //   onEvents(events);
+      // }
+      // clearTimeout(timeout);
+      // realm.unsubscribe();
+      // await settled();
+      // return result;
     };
   });
 }

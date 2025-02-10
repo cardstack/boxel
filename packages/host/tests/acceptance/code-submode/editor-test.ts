@@ -403,7 +403,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         setMonacoContent(JSON.stringify(editedCard));
@@ -486,7 +485,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         setMonacoContent(JSON.stringify(expected));
@@ -575,7 +573,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         await fillIn('[data-test-field="name"] input', 'MangoXXX');
@@ -790,7 +787,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await this.expectEvents({
       assert,
       realm,
-      mockMatrixUtils,
       expectedEvents,
       callback: async () => {
         setMonacoContent(expected);
