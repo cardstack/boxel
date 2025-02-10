@@ -1032,34 +1032,26 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-code-mode-card-preview-body]')
         .includesText('Fadhlan');
 
-      assert
-        .dom('[data-test-preview-card-footer-button-isolated]')
-        .hasClass('active');
+      assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
 
-      await click('[data-test-preview-card-footer-button-fitted]');
-      assert
-        .dom('[data-test-preview-card-footer-button-fitted]')
-        .hasClass('active');
+      await click('[data-test-format-chooser-fitted]');
+      assert.dom('[data-test-format-chooser-fitted]').hasClass('active');
       assert
         .dom(
           '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
         )
         .exists();
 
-      await click('[data-test-preview-card-footer-button-embedded]');
-      assert
-        .dom('[data-test-preview-card-footer-button-embedded]')
-        .hasClass('active');
+      await click('[data-test-format-chooser-embedded]');
+      assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
       assert
         .dom(
           '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
         )
         .exists();
 
-      await click('[data-test-preview-card-footer-button-atom]');
-      assert
-        .dom('[data-test-preview-card-footer-button-atom]')
-        .hasClass('active');
+      await click('[data-test-format-chooser-atom]');
+      assert.dom('[data-test-format-chooser-atom]').hasClass('active');
       assert
         .dom('[data-test-code-mode-card-preview-body] .atom-format')
         .exists();
@@ -1067,10 +1059,8 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-code-mode-card-preview-body] .atom-format')
         .includesText('Fadhlan');
 
-      await click('[data-test-preview-card-footer-button-edit]');
-      assert
-        .dom('[data-test-preview-card-footer-button-edit]')
-        .hasClass('active');
+      await click('[data-test-format-chooser-edit]');
+      assert.dom('[data-test-format-chooser-edit]').hasClass('active');
 
       assert
         .dom(
@@ -1416,8 +1406,8 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-code-mode-card-preview-body]');
 
       await scrollTo('[data-test-code-mode-card-preview-body]', 0, 100);
-      await click('[data-test-preview-card-footer-button-edit]');
-      await click('[data-test-preview-card-footer-button-isolated]');
+      await click('[data-test-format-chooser-edit]');
+      await click('[data-test-format-chooser-isolated]');
       let element = document.querySelector(
         '[data-test-code-mode-card-preview-body]',
       )!;
@@ -1453,7 +1443,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitForCodeEditor();
       await waitFor('[data-test-code-mode-card-preview-body]');
 
-      await click('[data-test-preview-card-footer-button-edit]');
+      await click('[data-test-format-chooser-edit]');
 
       await this.expectEvents({
         assert,
@@ -1827,7 +1817,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .exists();
 
-      await click('[data-test-preview-card-footer-button-edit]');
+      await click('[data-test-format-chooser-edit]');
 
       // linksTo field
       await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');

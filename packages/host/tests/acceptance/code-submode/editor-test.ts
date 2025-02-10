@@ -569,7 +569,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       );
     });
 
-    await click('[data-test-preview-card-footer-button-edit]');
+    await click('[data-test-format-chooser-edit]');
     await this.expectEvents({
       assert,
       realm,
@@ -686,7 +686,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       }
     });
 
-    await click('[data-test-preview-card-footer-button-edit]');
+    await click('[data-test-format-chooser-edit]');
     await fillIn('[data-test-field="name"] input', 'MangoXXX');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');

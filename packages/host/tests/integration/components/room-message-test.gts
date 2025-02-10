@@ -93,6 +93,8 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
       .hasClass('ai-avatar-animated');
     assert.dom('[data-test-card-error]').doesNotExist();
-    assert.dom('[data-test-ai-message-content]').includesText('Hello,');
+    assert
+      .dom('[data-test-ai-message-content] span.streaming-text')
+      .includesText('Hello,');
   });
 });

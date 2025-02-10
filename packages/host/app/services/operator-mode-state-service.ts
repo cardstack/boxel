@@ -30,6 +30,8 @@ import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import { Format } from 'https://cardstack.com/base/card-api';
+
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
@@ -636,13 +638,13 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  async openCardInInteractMode(url: URL) {
+  async openCardInInteractMode(url: URL, format: Format = 'isolated') {
     this.clearStacks();
     let newItem = new StackItem({
       url,
       stackIndex: 0,
       owner: this, // We need to think for better owner
-      format: 'isolated',
+      format,
     });
     await newItem.ready();
     this.addItemToStack(newItem);

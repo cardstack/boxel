@@ -777,9 +777,11 @@ class FittedTemplate extends Component<typeof Deal> {
           {{/if}}
         </div>
 
-        <div class='event-details'>
-          {{! just serve the placeholder for grid system ,pending event card - https://linear.app/cardstack/issue/CS-7691/add-event-card }}
-        </div>
+        {{#if @model.event}}
+          <div class='event-details'>
+            <@fields.event @format='atom' @displayContainer={{false}} />
+          </div>
+        {{/if}}
       </div>
     </article>
 
@@ -804,7 +806,7 @@ class FittedTemplate extends Component<typeof Deal> {
           'deal-header'
           'deal-content';
         grid-template-rows: max-content auto;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp);
       }
       .deal-header {
@@ -819,8 +821,9 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: deal-content;
         display: grid;
         grid-template-areas: 'deal-details event-details';
-        grid-template-columns: 1fr 1fr;
-        align-items: center;
+        grid-template-columns: 1fr auto;
+        align-items: end;
+        justify-content: space-between;
         gap: var(--boxel-sp-lg);
         margin-top: auto;
       }
@@ -834,9 +837,12 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .account-name {
         grid-area: account-name;
-        font: 600 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-med);
+        font-weight: 600;
       }
       .account-info {
+        --entity-display-title-font-size: var(--boxel-font-size-sm);
+        --entity-display-title-font-weight: 500;
         display: flex;
         align-items: start;
         gap: var(--boxel-sp-xs);
@@ -880,7 +886,6 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .event-details {
         grid-area: event-details;
-        background-color: var(--boxel-300);
       }
       .deal-header:deep(.account-header-logo) {
         grid-area: account-header-logo;
@@ -914,6 +919,20 @@ class FittedTemplate extends Component<typeof Deal> {
         }
       }
 
+      /* Show event details when width >= 800px because the content is too compact */
+      @container fitted-card (width >= 800px) {
+        .event-details {
+          display: block;
+        }
+      }
+
+      @container fitted-card (width < 800px) {
+        .event-details {
+          display: none;
+        }
+      }
+
+      /* Container query: Show .event-details if aspect-ratio <= 2.0, example grid view */
       @container fitted-card (aspect-ratio <= 2.0) {
         .fitted-deal-card {
           display: grid;
@@ -924,13 +943,14 @@ class FittedTemplate extends Component<typeof Deal> {
             'grid-account-info'
             'deal-content';
           grid-template-rows: max-content max-content auto;
-          gap: var(--boxel-sp);
+          gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp);
         }
         .crm-account-header {
           --account-header-logo-size: 40px;
         }
         .account-name {
+          font-size: var(--boxel-font-size-sm);
           display: -webkit-box;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 3;
@@ -956,8 +976,16 @@ class FittedTemplate extends Component<typeof Deal> {
           display: none;
         }
         .deal-content {
+          grid-template-areas:
+            'deal-details'
+            'event-details';
           grid-template-columns: 1fr;
-          gap: 0;
+        }
+        .deal-content:has(.deal-details):not(:has(.event-details)) {
+          grid-template-areas: 'deal-details';
+        }
+        .deal-content:has(.event-details):not(:has(.deal-details)) {
+          grid-template-areas: 'event-details';
         }
         .deal-details {
           display: grid;
@@ -986,6 +1014,16 @@ class FittedTemplate extends Component<typeof Deal> {
         }
         .progress-bar {
           width: 100%;
+        }
+        .event-details {
+          --event-summary-content-font-size: var(--boxel-font-size-xs);
+          --event-summary-gap: var(--boxel-sp-sm);
+          --event-summary-padding: var(--boxel-sp-xs);
+          --entity-display-content-gap: var(--boxel-sp-4xs);
+          display: block;
+        }
+        .event-details :where(.entity-icon) {
+          display: none;
         }
       }
     </style>
