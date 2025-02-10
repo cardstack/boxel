@@ -8,8 +8,7 @@ import {
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
-
+import { MatrixEvent } from 'matrix-js-sdk';
 import ms from 'ms';
 
 import {
@@ -48,7 +47,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type NetworkService from '@cardstack/host/services/network';
 
@@ -276,17 +274,6 @@ export function setupLocalIndexing(hooks: NestedHooks) {
   });
 }
 
-class MockMessageService extends Service {
-  subscribe() {
-    return () => {};
-  }
-  register() {}
-
-  relayMatrixSSE(realmURL: string, event: any) {
-    console.log('would relay matrix sse event', realmURL, event);
-  }
-}
-
 export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSave>(function () {
     let cardService = this.owner.lookup('service:card-service') as CardService;
@@ -296,66 +283,15 @@ export function setupOnSave(hooks: NestedHooks) {
   });
 }
 
-export function setupMockMessageService(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
-    // this.owner.register('service:message-service', MockMessageService);
-  });
-}
-
 export function setupServerSentEvents(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSSE>(function () {
     this.subscribers = [];
     testOnlyResetLiveCardState();
 
-    // FIXME to remove
-    class MockMessageService extends Service {
-      @tracked subscriptions: Map<string, EventSource> = new Map();
-      @tracked listenerCallbacks: Map<string, ((ev: ServerEvents) => void)[]> =
-        new Map();
-      register() {
-        (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
-      }
-
-      // FIXME duplicated from host/app/services/message-service, to be made obsolete
-      subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
-        console.log('subscribe', realmURL, cb);
-        if (!this.listenerCallbacks.has(realmURL)) {
-          this.listenerCallbacks.set(realmURL, []);
-        }
-        this.listenerCallbacks.get(realmURL)?.push(cb);
-
-        return () => {
-          // FIXME cleanup
-        };
-      }
-
-      relayMatrixSSE(realmURL: string, event: any) {
-        console.log('relaying matrix sse event', realmURL, event);
-        this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
-          let eventWithStringData = {
-            type: event.type,
-            data: JSON.stringify(event.data),
-          };
-          console.log('eventWithStringData', eventWithStringData);
-          cb(eventWithStringData);
-        });
-      }
-    }
-    // this.owner.register('service:message-service', MockMessageService);
     let messageService = this.owner.lookup(
       'service:message-service',
     ) as MessageService;
     messageService.register();
-
-    let matrixService = this.owner.lookup(
-      'service:matrix-service',
-    ) as MatrixService;
-
-    // let matrixMockUtils = this.owner.lookup(
-    //   'service:matrix-mock-utils',
-    // ) as MockUtils;
-
-    // FIXME choose an approach
 
     this.expectEvents = async <T,>({
       assert,
@@ -378,15 +314,8 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     }): Promise<T> => {
       let defer = new Deferred();
 
-      let mockLoader = this.owner.lookup('service:matrix-mock-utils');
-
-      if (!mockLoader) {
-        console.log('mockLoader not found, skipping');
-        return;
-      }
-
+      let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
       let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
-      console.log('mockMatrixUtils', mockMatrixUtils);
 
       // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
       let realmSessionRoomId = `session-room-for-testuser`;
@@ -530,18 +459,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       // return result;
     };
   });
-}
-
-function getEventData(message: string) {
-  let [rawType, data] = message.split('\n');
-  let type = rawType.trim().split(':')[1].trim();
-  if (['index', 'update'].includes(type)) {
-    return {
-      type,
-      data: JSON.parse(data.split('data:')[1].trim()),
-    };
-  }
-  return;
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();
