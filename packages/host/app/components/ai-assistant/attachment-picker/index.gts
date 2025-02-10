@@ -68,7 +68,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
       {{/each}}
       {{#if
         (and
-          (gt this.itemsToDisplay.length MAX_ITEMS_TO_DISPLAY)
+          (gt this.items.length MAX_ITEMS_TO_DISPLAY)
           (not this.areAllItemsDisplayed)
         )
       }}
@@ -77,7 +77,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
           {{on 'click' this.toggleViewAllAttachedCards}}
           data-test-view-all
         >
-          View All ({{this.itemsToDisplay.length}})
+          View All ({{this.items.length}})
         </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
@@ -140,7 +140,14 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     return isCardInstance(item);
   };
 
-  private get itemsToDisplay() {
+  isAutoAttachedCard = (card: CardDef) => {
+    if (this.args.autoAttachedCards === undefined) {
+      return false;
+    }
+    return this.args.autoAttachedCards.has(card);
+  };
+
+  private get items() {
     let cards = this.args.cardsToAttach ?? [];
     let files = this.args.filesToAttach ?? [];
     if (this.args.autoAttachedCards) {
@@ -152,10 +159,13 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     if (this.args.autoAttachedFiles) {
       files = [...new Set([...this.args.autoAttachedFiles, ...files])];
     }
-    let items = [...cards, ...files];
+    return [...cards, ...files];
+  }
+
+  private get itemsToDisplay() {
     return this.areAllItemsDisplayed
-      ? items
-      : items.slice(0, MAX_ITEMS_TO_DISPLAY);
+      ? this.items
+      : this.items.slice(0, MAX_ITEMS_TO_DISPLAY);
   }
 
   private get canDisplayAddButton() {
@@ -179,12 +189,4 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     });
     return chosenCard;
   });
-
-  @action
-  private isAutoAttachedCard(card: CardDef) {
-    if (this.args.autoAttachedCards === undefined) {
-      return false;
-    }
-    return this.args.autoAttachedCards.has(card);
-  }
 }
