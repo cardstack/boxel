@@ -434,11 +434,11 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           'sse response is correct',
         );
       } else {
-        assert.equal(
-          sseRoomEvents.length,
-          expectedNumberOfEvents,
-          'expected number of events',
-        );
+        if (expectedNumberOfEvents !== sseRoomEvents.length) {
+          throw new Error(
+            `expected ${expectedNumberOfEvents} events, saw ${sseRoomEvents.length} events`,
+          );
+        }
       }
 
       if (onEvents) {
