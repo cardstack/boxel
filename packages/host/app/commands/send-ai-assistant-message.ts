@@ -17,9 +17,9 @@ import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 
-export class SendAIAssistantMessageCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SendAIAssistantMessageInput,
-  typeof BaseCommandModule.SendAIAssistantMessageResult
+export class SendAiAssistantMessageCommand extends HostBaseCommand<
+  typeof BaseCommandModule.SendAiAssistantMessageInput,
+  typeof BaseCommandModule.SendAiAssistantMessageResult
 > {
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -28,8 +28,8 @@ export class SendAIAssistantMessageCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { SendAIAssistantMessageInput } = commandModule;
-    return SendAIAssistantMessageInput;
+    const { SendAiAssistantMessageInput } = commandModule;
+    return SendAiAssistantMessageInput;
   }
 
   async loadCardAPI() {
@@ -42,8 +42,8 @@ export class SendAIAssistantMessageCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.SendAIAssistantMessageInput,
-  ): Promise<BaseCommandModule.SendAIAssistantMessageResult> {
+    input: BaseCommandModule.SendAiAssistantMessageInput,
+  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
     let { commandService, loaderService, matrixService } = this;
     let roomId = input.roomId;
     let html = markdownToHtml(input.prompt);
@@ -98,9 +98,9 @@ export class SendAIAssistantMessageCommand extends HostBaseCommand<
       },
     } as CardMessageContent);
     let commandModule = await this.loadCommandModule();
-    const { SendAIAssistantMessageResult } = commandModule;
-    return new SendAIAssistantMessageResult({ eventId: event_id });
+    const { SendAiAssistantMessageResult } = commandModule;
+    return new SendAiAssistantMessageResult({ eventId: event_id });
   }
 }
 
-export default SendAIAssistantMessageCommand;
+export default SendAiAssistantMessageCommand;
