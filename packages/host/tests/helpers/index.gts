@@ -76,7 +76,10 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-const testMatrix = {
+
+let testMatrixCount = 0;
+
+const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
   username: 'test_realm',
   password: 'password',
@@ -652,13 +655,20 @@ async function setupTestRealm({
     runnerOptsManager: runnerOptsMgr,
     indexRunner,
     virtualNetwork,
-    matrixURL: testMatrix.url,
+    matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
   });
+
+  let iteratedTestMatrix = {
+    ...baseTestMatrix,
+    username: `@${baseTestMatrix.username}-${testMatrixCount}:localhost`,
+  };
+  testMatrixCount++;
+
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: testMatrix,
+    matrix: iteratedTestMatrix,
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,

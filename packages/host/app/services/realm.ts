@@ -505,8 +505,6 @@ export default class RealmService extends Service {
   }
 
   realmOfMatrixUsername(username: string) {
-    // FIXME username is not fully-qualified (@experiments_realm:localhost vs experiments_realm)
-    username = `@${username}:localhost`;
     console.log(
       'all realm usernames ',
       Array.from(this.realms.values()).map((r) => r.info?.realmUserId),
@@ -515,6 +513,7 @@ export default class RealmService extends Service {
       (r) => r.info?.realmUserId === username,
     );
     console.log('realm', realm);
+    console.log('username looked for: ', username);
     return realm;
   }
 
