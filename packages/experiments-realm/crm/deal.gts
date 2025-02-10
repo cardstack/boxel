@@ -2,16 +2,12 @@
 import {
   CardDef,
   contains,
-  linksTo,
   StringField,
   field,
-  linksToMany,
-  containsMany,
   FieldDef,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -21,27 +17,18 @@ import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
 import CrmProgressBar from '../components/crm-progress-bar';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
-import { Account } from './account';
 import { action } from '@ember/object';
-import { PercentageField } from '../percentage';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Address as AddressField } from '../address';
-import { WebsiteField } from '../website';
-import { Contact } from './contact';
 import { ContactRow } from '../components/contact-row';
 import Users from '@cardstack/boxel-icons/users';
 import World from '@cardstack/boxel-icons/world';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
-import BooleanField from 'https://cardstack.com/base/boolean';
 import { getCards } from '@cardstack/runtime-common';
 import { Query } from '@cardstack/runtime-common/query';
-import { Company } from './company';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
-import { DealEvent } from './deal-event';
-import { DealStatus } from './deal-status';
-import { DealPriority } from './deal-priority';
+
+import type { Deal } from './shared';
 
 interface DealSizeSummary {
   summary: string;
@@ -54,7 +41,7 @@ const taskSource = {
   name: 'CRMTask',
 };
 
-class IsolatedTemplate extends Component<typeof Deal> {
+export class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
     //We default to account thumbnail
     return (
@@ -102,7 +89,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return {
       filter: {
         type: {
-          module: new URL('./crm/deal', import.meta.url).href,
+          module: new URL('./shared', import.meta.url).href,
           name: 'Deal',
         },
       },
@@ -665,7 +652,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
   </template>
 }
 
-class FittedTemplate extends Component<typeof Deal> {
+export class FittedTemplate extends Component<typeof Deal> {
   get logoURL() {
     return (
       this.args.model.thumbnailURL ?? this.args.model.account?.thumbnailURL
@@ -1064,86 +1051,6 @@ export class ValueLineItem extends FieldDef {
       </style>
     </template>
   };
-}
-
-export class Deal extends CardDef {
-  static displayName = 'CRM Deal';
-  static headerColor = '#f8f7fa';
-  @field name = contains(StringField);
-  @field account = linksTo(() => Account);
-  @field status = contains(DealStatus);
-  @field priority = contains(DealPriority);
-  @field closeDate = contains(DateField);
-  @field currentValue = contains(AmountWithCurrencyField);
-  @field computedValue = contains(AmountWithCurrencyField, {
-    computeVia: function (this: Deal) {
-      let total =
-        this.currentValue?.amount ??
-        this.valueBreakdown?.reduce((acc, item) => {
-          return acc + item.value.amount;
-        }, 0);
-      let result = new AmountWithCurrencyField();
-      result.amount = total;
-      result.currency = this.currentValue?.currency;
-      return result;
-    },
-  });
-  @field predictedRevenue = contains(AmountWithCurrencyField);
-  @field profitMargin = contains(PercentageField, {
-    computeVia: function (this: Deal) {
-      if (!this.currentValue?.amount || !this.predictedRevenue?.amount) {
-        return null;
-      }
-      return (this.currentValue?.amount / this.predictedRevenue?.amount) * 100;
-    },
-  });
-  @field healthScore = contains(PercentageField);
-  @field event = linksTo(() => DealEvent);
-  @field notes = contains(MarkdownField);
-  @field primaryStakeholder = linksTo(() => Contact);
-  @field stakeholders = linksToMany(() => Contact);
-  @field valueBreakdown = containsMany(ValueLineItem);
-  @field isActive = contains(BooleanField, {
-    computeVia: function (this: Deal) {
-      return (
-        this.status.label !== 'Closed Won' &&
-        this.status.label !== 'Closed Lost'
-      );
-    },
-    isUsed: true,
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field headquartersAddress = contains(AddressField, {
-    computeVia: function (this: Deal) {
-      return this.account?.headquartersAddress;
-    },
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field website = contains(WebsiteField, {
-    computeVia: function (this: Deal) {
-      return this.account?.website;
-    },
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field primaryContact = linksTo(Contact, {
-    computeVia: function (this: Deal) {
-      return this.account?.primaryContact;
-    },
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field company = linksTo(Company, {
-    computeVia: function (this: Deal) {
-      return this.account?.company;
-    },
-  });
-  @field title = contains(StringField, {
-    computeVia: function (this: Deal) {
-      return this.name;
-    },
-  });
-
-  static isolated = IsolatedTemplate;
-  static fitted = FittedTemplate;
 }
 
 interface DealPageLayoutArgs {

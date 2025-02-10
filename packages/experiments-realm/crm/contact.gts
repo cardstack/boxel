@@ -1,27 +1,15 @@
-import StringField from 'https://cardstack.com/base/string';
-import {
-  Component,
-  CardDef,
-  field,
-  contains,
-  linksTo,
-  containsMany,
-} from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 import AvatarGroup from '../components/avatar-group';
 
-import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
-import { Company } from './company';
-import { StatusTagField } from './contact-status-tag';
-import { ContactPhoneNumber } from '../phone-number';
-import { EmailField } from '../email';
 import { ContactLinkField } from '../fields/contact-link';
+import type { Contact } from './shared';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
@@ -48,7 +36,7 @@ export class SocialLinkField extends ContactLinkField {
   ];
 }
 
-class EmbeddedTemplate extends Component<typeof Contact> {
+export class EmbeddedTemplate extends Component<typeof Contact> {
   get hasSocialLinks() {
     return Boolean(this.args.model?.socialLinks?.length);
   }
@@ -152,7 +140,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
   </template>
 }
 
-class FittedTemplate extends Component<typeof Contact> {
+export class FittedTemplate extends Component<typeof Contact> {
   get hasSocialLinks() {
     return Boolean(this.args.model?.socialLinks?.length);
   }
@@ -640,7 +628,7 @@ class FittedTemplate extends Component<typeof Contact> {
   </template>
 }
 
-class AtomTemplate extends Component<typeof Contact> {
+export class AtomTemplate extends Component<typeof Contact> {
   get label() {
     return this.args.model?.name && this.args.model?.position
       ? `${this.args.model?.name} • ${this.args.model?.position}`
@@ -674,43 +662,4 @@ class AtomTemplate extends Component<typeof Contact> {
       }
     </style>
   </template>
-}
-
-export class Contact extends CardDef {
-  static displayName = 'CRM Contact';
-  static icon = ContactIcon;
-
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
-  @field position = contains(StringField);
-  @field company = linksTo(Company);
-  @field department = contains(StringField);
-  @field primaryEmail = contains(EmailField);
-  @field secondaryEmail = contains(EmailField);
-  @field phoneMobile = contains(ContactPhoneNumber);
-  @field phoneOffice = contains(ContactPhoneNumber);
-  @field socialLinks = containsMany(SocialLinkField);
-  @field statusTag = contains(StatusTagField); //this is an empty field that gets computed in subclasses
-
-  @field name = contains(StringField, {
-    computeVia: function (this: Contact) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
-    },
-  });
-
-  @field title = contains(StringField, {
-    computeVia: function (this: Contact) {
-      return this.name;
-    },
-  });
-
-  @field email = contains(StringField, {
-    computeVia: function (this: Contact) {
-      return this.primaryEmail ?? this.secondaryEmail;
-    },
-  });
-
-  static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
-  static atom = AtomTemplate;
 }

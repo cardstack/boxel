@@ -22,9 +22,16 @@
       "description": "Modern fitness center with 3 locations. Needs help with membership campaigns and class scheduling system.",
       "thumbnailURL": "https://example.com/fitness-first-logo.png"
     },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": null
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/company",
+        "module": "../crm/shared",
         "name": "Company"
       }
     }

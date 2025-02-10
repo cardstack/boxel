@@ -81,7 +81,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/deal",
+        "module": "../crm/shared",
         "name": "Deal"
       }
     }

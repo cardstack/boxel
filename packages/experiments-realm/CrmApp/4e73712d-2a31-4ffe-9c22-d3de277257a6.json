@@ -8,7 +8,7 @@
           "tabId": "Contact",
           "ref": {
             "name": "Contact",
-            "module": "crm/contact"
+            "module": "crm/shared"
           },
           "isTable": false
         },
@@ -17,7 +17,7 @@
           "tabId": "Account",
           "ref": {
             "name": "Account",
-            "module": "crm/account"
+            "module": "crm/shared"
           },
           "isTable": false
         },
@@ -26,7 +26,7 @@
           "tabId": "Deal",
           "ref": {
             "name": "Deal",
-            "module": "crm/deal"
+            "module": "crm/shared"
           },
           "isTable": false
         },
@@ -54,7 +54,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm-app",
+        "module": "../crm/shared",
         "name": "CrmApp"
       }
     }

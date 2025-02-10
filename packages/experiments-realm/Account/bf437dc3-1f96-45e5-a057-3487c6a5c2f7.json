@@ -54,7 +54,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/account",
+        "module": "../crm/shared",
         "name": "Account"
       }
     }

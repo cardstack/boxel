@@ -24,7 +24,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/company",
+        "module": "../crm/shared",
         "name": "Company"
       }
     }

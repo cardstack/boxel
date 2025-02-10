@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 
 import { getCards } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common';
+import type { Deal } from './shared';
 
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -32,7 +33,7 @@ export class DealSummary extends Component<Signature> {
   );
 
   get deals() {
-    return (this.dealCardsQuery.instances || []) as any[];
+    return (this.dealCardsQuery.instances || []) as Deal[];
   }
 
   get dealSummaries() {

@@ -50,7 +50,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/customer",
+        "module": "../crm/shared",
         "name": "Customer"
       }
     }

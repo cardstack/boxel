@@ -46,7 +46,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/representative",
+        "module": "../crm/shared",
         "name": "Representative"
       }
     }

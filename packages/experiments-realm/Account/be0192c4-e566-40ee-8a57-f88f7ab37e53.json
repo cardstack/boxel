@@ -27,6 +27,7 @@
         "poBoxNumber": null
       },
       "urgencyTag": {
+        "index": null,
         "label": "Follow-Up Required",
         "foregroundColor": "#1976D2",
         "backgroundColor": "#E3F2FD"
@@ -35,6 +36,11 @@
       "thumbnailURL": "https://picsum.photos/id/416/200/300"
     },
     "relationships": {
+      "crmApp": {
+        "links": {
+          "self": null
+        }
+      },
       "company": {
         "links": {
           "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
@@ -53,7 +59,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/account",
+        "module": "../crm/shared",
         "name": "Account"
       }
     }

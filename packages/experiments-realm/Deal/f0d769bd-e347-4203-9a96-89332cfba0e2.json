@@ -63,6 +63,11 @@
       "thumbnailURL": "https://picsum.photos/id/416/200/300"
     },
     "relationships": {
+      "crmApp": {
+        "links": {
+          "self": null
+        }
+      },
       "account": {
         "links": {
           "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
@@ -75,18 +80,18 @@
       },
       "primaryStakeholder": {
         "links": {
-          "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"
+          "self": null
         }
       },
-      "stakeholders.0": {
+      "stakeholders": {
         "links": {
-          "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"
+          "self": null
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/deal",
+        "module": "../crm/shared",
         "name": "Deal"
       }
     }

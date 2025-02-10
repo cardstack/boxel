@@ -53,7 +53,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../crm/lead",
+        "module": "../crm/shared",
         "name": "Lead"
       }
     }

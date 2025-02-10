@@ -1,26 +1,12 @@
-import {
-  CardDef,
-  linksTo,
-  contains,
-  realmURL,
-} from 'https://cardstack.com/base/card-api';
+import { realmURL } from 'https://cardstack.com/base/card-api';
 import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-import {
-  field,
-  linksToMany,
-  StringField,
-} from 'https://cardstack.com/base/card-api';
-import { Address as AddressField } from '../address';
-import { Company } from './company';
-import { Contact } from './contact';
-import { StatusTagField } from './contact-status-tag';
+import { Account, Deal } from './shared';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import AccountHeader from '../components/account-header';
-import { WebsiteField } from '../website';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
@@ -29,20 +15,18 @@ import CalendarTime from '@cardstack/boxel-icons/calendar-time';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
-import { Deal } from './deal';
 import EntityIconDisplay from '../components/entity-icon-display';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { UrgencyTag } from './urgency-tag';
 
 const taskSource = {
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
 
-class IsolatedTemplate extends Component<typeof Account> {
+export class IsolatedTemplate extends Component<typeof Account> {
   get hasCompanyInfo() {
     return this.args.model?.website || this.args.model?.headquartersAddress;
   }
@@ -71,7 +55,7 @@ class IsolatedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./shared', import.meta.url).href,
           name: 'Deal',
         },
         every: [
@@ -223,7 +207,7 @@ class IsolatedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./shared', import.meta.url).href,
           name: 'Deal',
         },
         every: [
@@ -643,7 +627,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   </template>
 }
 
-class EmbeddedTemplate extends Component<typeof Account> {
+export class EmbeddedTemplate extends Component<typeof Account> {
   get realmURL(): URL {
     return this.args.model[realmURL]!;
   }
@@ -661,7 +645,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./shared', import.meta.url).href,
           name: 'Deal',
         },
         every: [
@@ -762,7 +746,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./shared', import.meta.url).href,
           name: 'Deal',
         },
         every: [
@@ -1118,7 +1102,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
   </template>
 }
 
-class FittedTemplate extends Component<typeof Account> {
+export class FittedTemplate extends Component<typeof Account> {
   <template>
     <AccountPageLayout class='account-page-layout-fitted'>
       <:header>
@@ -1249,49 +1233,6 @@ class FittedTemplate extends Component<typeof Account> {
       }
     </style>
   </template>
-}
-
-export class Account extends CardDef {
-  static displayName = 'CRM Account';
-  @field company = linksTo(Company);
-  @field primaryContact = linksTo(Contact);
-  @field contacts = linksToMany(Contact);
-  @field shippingAddress = contains(AddressField);
-  @field billingAddress = contains(AddressField);
-  @field urgencyTag = contains(UrgencyTag);
-
-  @field name = contains(StringField, {
-    computeVia: function (this: Account) {
-      return this.company?.name;
-    },
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field headquartersAddress = contains(AddressField, {
-    computeVia: function (this: Account) {
-      return this.company?.headquartersAddress;
-    },
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field website = contains(WebsiteField, {
-    computeVia: function (this: Account) {
-      return this.company?.website;
-    },
-  });
-  //TODO: Fix after CS-7670. Maybe no fix needed
-  @field statusTag = contains(StatusTagField, {
-    computeVia: function (this: Account) {
-      return this.primaryContact?.statusTag;
-    },
-  });
-  @field title = contains(StringField, {
-    computeVia: function (this: Account) {
-      return this.company?.name;
-    },
-  });
-
-  static isolated = IsolatedTemplate;
-  static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
 }
 
 interface AccountPageLayoutArgs {
