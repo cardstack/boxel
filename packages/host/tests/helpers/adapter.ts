@@ -1,3 +1,5 @@
+import type Owner from '@ember/owner';
+
 import {
   Loader,
   LocalPath,
@@ -10,12 +12,14 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   FileRef,
   Kind,
   RequestContext,
   TokenClaims,
   UpdateEventData,
+  type ServerEvents,
 } from '@cardstack/runtime-common/realm';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
@@ -54,8 +58,8 @@ export class TestRealmAdapter implements RealmAdapter {
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
-  isTestAdapter: boolean = true;
   owner?: Owner;
+
   constructor(
     contents: TestAdapterContents,
     realmURL = new URL(testRealmURL),
@@ -90,7 +94,7 @@ export class TestRealmAdapter implements RealmAdapter {
     return this.#ready.promise;
   }
 
-  async sendServerEventViaMatrix(event: ServerEvents) {
+  async sendServerEvent(event: ServerEvents, matrixClient: MatrixClient) {
     console.log('sendServerEventViaMatrix', event);
 
     if (!this.owner) {
@@ -107,31 +111,20 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
 
-    // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
-    let realmSessionRoomId = `session-room-for-testuser`;
+    let { getRoomIds, simulateRemoteMessage } = mockMatrixUtils;
 
-    let { createAndJoinRoom, getRoomIds, simulateRemoteMessage } =
-      mockMatrixUtils;
+    let realmMatrixUsername = matrixClient.username;
 
-    // FIXME how can this be determined? Adapter doesn’t currently know
-    let realmMatrixUsername = 'test_realm';
-
-    if (!getRoomIds().includes(realmSessionRoomId)) {
-      createAndJoinRoom({
-        sender: realmMatrixUsername,
-        name: realmSessionRoomId,
-        id: realmSessionRoomId,
+    for (let roomId of getRoomIds()) {
+      simulateRemoteMessage(roomId, realmMatrixUsername, {
+        msgtype: 'app.boxel.sse', // FIXME extract/constant
+        format: 'app.boxel.sse-format', // FIXME does this matter?
+        body: JSON.stringify({
+          type: event.type,
+          data: event.data,
+        }),
       });
     }
-
-    simulateRemoteMessage(realmSessionRoomId, realmMatrixUsername, {
-      msgtype: 'app.boxel.sse', // FIXME extract/constant
-      format: 'app.boxel.sse-format', // FIXME does this matter?
-      body: JSON.stringify({
-        type: event.type,
-        data: event.data,
-      }),
-    });
   }
 
   // We are eagerly establishing shims and preparing instances to be able to be

@@ -164,7 +164,11 @@ export interface RealmAdapter {
 
   setLoader?(loader: Loader): void;
 
-  isTestAdapter?: boolean;
+  sendServerEvent(
+    event: ServerEvents,
+    matrixClient: MatrixClient,
+    usernames: string[],
+  ): Promise<void>;
 }
 
 interface Options {
@@ -177,7 +181,7 @@ interface UpdateItem {
   url: URL;
 }
 
-type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
+export type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
 
 interface UpdateEvent {
   type: 'update';
@@ -313,6 +317,16 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
+
+    // @ts-expect-error
+    if (!globalThis.realmUrlToSecretSeed) {
+      // @ts-expect-error
+      globalThis.realmUrlToSecretSeed = new Map();
+    }
+
+    // @ts-expect-error
+    globalThis.realmUrlToSecretSeed.set(this.url, secretSeed);
+
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
@@ -1976,7 +1990,9 @@ export class Realm {
       });
     }
 
+    // FIXME listeningClients should go away
     this.listeningClients.push(writable);
+
     this.sendServerEvent({
       type: 'message',
       data: { count: `${this.listeningClients.length} clients` },
@@ -2030,25 +2046,11 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    console.log('sendServerEvent', event);
-    if (this.#adapter.isTestAdapter) {
-      console.log('overridden sendServerEvent', event);
-      // @ts-ignore
-      this.#adapter.sendServerEventViaMatrix(event);
-    } else {
-      this.#log.debug(
-        `sending updates to ${this.listeningClients.length} clients`,
-      );
-      let { type, data, id } = event;
-      let chunkArr = [];
-      for (let item in data) {
-        chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
-      }
-      let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-      await Promise.allSettled(
-        this.listeningClients.map((client) => writeToStream(client, chunk)),
-      );
-    }
+    this.#adapter.sendServerEvent(
+      event,
+      this.#matrixClient,
+      this.listeningUsers,
+    );
   }
 
   private async createRequestContext(): Promise<RequestContext> {
