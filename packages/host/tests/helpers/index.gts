@@ -329,7 +329,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       relayMatrixSSE(realmURL: string, event: any) {
         console.log('relaying matrix sse event', realmURL, event);
         this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
-          console.log('callback', cb);
           let eventWithStringData = {
             type: event.type,
             data: JSON.stringify(event.data),
