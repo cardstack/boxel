@@ -212,7 +212,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   get commands() {
-    // get all the skills
+    // Usable commands are all commands on *active* skills
     let commands = [];
     for (let skill of this.skills) {
       if (skill.isActive) {
