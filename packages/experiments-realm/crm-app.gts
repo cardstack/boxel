@@ -345,9 +345,17 @@ export class CrmAppTemplate extends Component<typeof CrmApp> {
 
     if (!loadAllFilters.isIdle || !activeFilter?.query) return;
 
-    const defaultFilter = {
-      type: activeFilter.cardRef,
-    };
+    const defaultFilter = [
+      {
+        type: activeFilter.cardRef,
+      },
+      {
+        on: activeFilter.cardRef,
+        eq: {
+          'crmApp.id': this.args.model.id,
+        },
+      },
+    ];
 
     // filter field value by CRM Account
     const accountFilter =
@@ -379,7 +387,7 @@ export class CrmAppTemplate extends Component<typeof CrmApp> {
       filter: {
         on: activeFilter.cardRef,
         every: [
-          defaultFilter,
+          ...defaultFilter,
           ...accountFilter,
           ...dealFilter,
           ...this.searchFilter,

@@ -25,10 +25,7 @@
         },
         "type": {
           "index": null,
-          "label": null,
-          "color": null,
-          "foregroundColor": null,
-          "backgroundColor": null
+          "label": null
         }
       },
       "socialLinks": [],
@@ -36,6 +33,11 @@
       "thumbnailURL": null
     },
     "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
       "company": {
         "links": {
           "self": null
