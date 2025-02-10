@@ -29,6 +29,7 @@ import type {
   CardMessageEvent,
   MessageEvent,
   CommandResultEvent,
+  CommandDefinitionsEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -52,6 +53,7 @@ interface SkillId {
   skillCardId: string;
   skillEventId: string;
   isActive: boolean;
+  loadingPromise?: Promise<void>;
 }
 
 interface Args {
@@ -168,8 +170,9 @@ export class RoomResource extends Resource<Args> {
         continue;
       }
       let cardId = cardDoc.data.id;
+      let loadingPromise;
       if (!this._skillCardsCache.has(cardId)) {
-        this.cardService
+        loadingPromise = this.cardService
           .createFromSerialized(cardDoc.data, cardDoc)
           .then((skillsCard) => {
             this._skillCardsCache.set(cardId, skillsCard as SkillCard);
@@ -179,6 +182,7 @@ export class RoomResource extends Resource<Args> {
         skillCardId: cardDoc.data.id,
         skillEventId: eventId,
         isActive: skillsConfig.enabledEventIds.includes(eventId),
+        loadingPromise,
       });
     }
     return result;
@@ -198,6 +202,24 @@ export class RoomResource extends Resource<Args> {
         return null;
       })
       .filter(Boolean) as Skill[];
+  }
+
+  async waitForAllSkills() {
+    let skillCardLoadingPromises = this.skillIds
+      .map(({ loadingPromise }) => loadingPromise)
+      .filter(Boolean);
+    await Promise.all(skillCardLoadingPromises);
+  }
+
+  get commands() {
+    // get all the skills
+    let commands = [];
+    for (let skill of this.skills) {
+      if (skill.isActive) {
+        commands.push(...skill.card.commands);
+      }
+    }
+    return commands;
   }
 
   get roomId() {
@@ -289,20 +311,34 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
+  private isCommandDefinitionsEvent(
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
+  ): event is CommandDefinitionsEvent {
+    return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
+  }
+
   private loadRoomMessage({
     roomId,
     event,
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CommandEvent | CardMessageEvent;
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent;
     index: number;
   }) {
     if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
       this._fragmentCache.set(event.event_id, event.content);
       return;
     }
-    if (event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE) {
+    if (this.isCommandDefinitionsEvent(event)) {
       // We don't want to show this to the user
       return;
     }

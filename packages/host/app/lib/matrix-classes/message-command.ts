@@ -73,6 +73,21 @@ export default class MessageCommand {
     }
   }
 
+  async getCommandCodeRef() {
+    let roomResource = this.matrixService.roomResources.get(
+      this.message.roomId,
+    );
+    if (!roomResource) {
+      return undefined;
+    }
+    // We need to wait for the skills to actually be loaded
+    await roomResource.waitForAllSkills();
+    let commandDefinition = roomResource.commands.find(
+      (command) => command.functionName === this.name,
+    );
+    return commandDefinition?.codeRef;
+  }
+
   async getCommandResultCard(): Promise<CardDef | undefined> {
     let cardDoc = this.commandResultCardDoc;
     if (!cardDoc) {
