@@ -45,7 +45,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  writeToStream,
   waitForClose,
   type TextFileRef,
 } from './stream';
@@ -2145,14 +2144,6 @@ export interface CardDefinitionResource {
       };
     };
   };
-}
-
-function sseToChunkData(type: string, data: string, id?: string): string {
-  let info = [`event: ${type}`, `data: ${data}`];
-  if (id) {
-    info.push(`id: ${id}`);
-  }
-  return info.join('\n') + '\n\n';
 }
 
 function assertRealmPermissions(
