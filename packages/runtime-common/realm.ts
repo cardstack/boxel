@@ -167,7 +167,6 @@ export interface RealmAdapter {
   sendServerEvent(
     event: ServerEvents,
     matrixClient: MatrixClient,
-    usernames: string[],
   ): Promise<void>;
 }
 
@@ -2046,11 +2045,7 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#adapter.sendServerEvent(
-      event,
-      this.#matrixClient,
-      this.listeningUsers,
-    );
+    this.#adapter.sendServerEvent(event, this.#matrixClient);
   }
 
   private async createRequestContext(): Promise<RequestContext> {
