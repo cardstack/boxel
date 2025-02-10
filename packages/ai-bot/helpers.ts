@@ -353,7 +353,6 @@ export function getTools(
   for (let event of commandDefinitionEvents) {
     let { content } = event;
     let { commandDefinitions } = content.data;
-    console.log('commands', commandDefinitions);
     for (let commandDefinition of commandDefinitions) {
       if (enabledCommandNames.has(commandDefinition.tool.function.name)) {
         toolMap.set(
