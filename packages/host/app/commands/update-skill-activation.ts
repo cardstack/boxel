@@ -8,7 +8,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
 
-export default class UpdateSkillActivationCommand extends HostBaseCommand<
+export class UpdateSkillActivationCommand extends HostBaseCommand<
   typeof BaseCommandModule.UpdateSkillActivationInput
 > {
   @service private declare matrixService: MatrixService;
@@ -49,3 +49,5 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
     );
   }
 }
+
+export default UpdateSkillActivationCommand;

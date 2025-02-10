@@ -17,9 +17,9 @@ import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 
-export default class SendAiAssistantMessageCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SendAiAssistantMessageInput,
-  typeof BaseCommandModule.SendAiAssistantMessageResult
+export class SendAIAssistantMessageCommand extends HostBaseCommand<
+  typeof BaseCommandModule.SendAIAssistantMessageInput,
+  typeof BaseCommandModule.SendAIAssistantMessageResult
 > {
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -28,8 +28,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { SendAiAssistantMessageInput } = commandModule;
-    return SendAiAssistantMessageInput;
+    const { SendAIAssistantMessageInput } = commandModule;
+    return SendAIAssistantMessageInput;
   }
 
   async loadCardAPI() {
@@ -42,8 +42,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.SendAiAssistantMessageInput,
-  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
+    input: BaseCommandModule.SendAIAssistantMessageInput,
+  ): Promise<BaseCommandModule.SendAIAssistantMessageResult> {
     let { commandService, loaderService, matrixService } = this;
     let roomId = input.roomId;
     let html = markdownToHtml(input.prompt);
@@ -98,7 +98,9 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       },
     } as CardMessageContent);
     let commandModule = await this.loadCommandModule();
-    const { SendAiAssistantMessageResult } = commandModule;
-    return new SendAiAssistantMessageResult({ eventId: event_id });
+    const { SendAIAssistantMessageResult } = commandModule;
+    return new SendAIAssistantMessageResult({ eventId: event_id });
   }
 }
+
+export default SendAIAssistantMessageCommand;

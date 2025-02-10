@@ -19,7 +19,8 @@ import OperatorModeStateService from '../services/operator-mode-state-service';
 interface Configuration {
   cardType: typeof CardDef;
 }
-export default class PatchCardCommand extends HostBaseCommand<
+
+export class PatchCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchCardInput,
   undefined
 > {
@@ -87,3 +88,5 @@ export default class PatchCardCommand extends HostBaseCommand<
     return inputTypeCardSchema;
   }
 }
+
+export default PatchCardCommand;

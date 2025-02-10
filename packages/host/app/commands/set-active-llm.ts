@@ -6,7 +6,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
 
-export default class SetActiveLLMCommand extends HostBaseCommand<
+export class SetActiveLLMCommand extends HostBaseCommand<
   typeof BaseCommandModule.SetActiveLLMInput,
   undefined
 > {
@@ -25,3 +25,5 @@ export default class SetActiveLLMCommand extends HostBaseCommand<
     return undefined;
   }
 }
+
+export default SetActiveLLMCommand;

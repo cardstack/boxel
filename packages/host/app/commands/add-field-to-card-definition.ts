@@ -11,7 +11,7 @@ import WriteTextFileCommand from './write-text-file';
 
 import type CardService from '../services/card-service';
 
-export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
+export class AddFieldToCardDefinitionCommand extends HostBaseCommand<
   typeof BaseCommandModule.AddFieldToCardDefinitionInput
 > {
   @service private declare cardService: CardService;
@@ -62,3 +62,5 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
     });
   }
 }
+
+export default AddFieldToCardDefinitionCommand;

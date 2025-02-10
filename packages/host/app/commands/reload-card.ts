@@ -10,7 +10,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 
-export default class ReloadCardCommand extends HostBaseCommand<typeof CardDef> {
+export class ReloadCardCommand extends HostBaseCommand<typeof CardDef> {
   @service private declare cardService: CardService;
 
   async getInputType() {
@@ -26,3 +26,5 @@ export default class ReloadCardCommand extends HostBaseCommand<typeof CardDef> {
     await this.cardService.reloadCard(input);
   }
 }
+
+export default ReloadCardCommand;

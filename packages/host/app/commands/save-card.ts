@@ -6,7 +6,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 
-export default class SaveCardCommand extends HostBaseCommand<
+export class SaveCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.SaveCardInput
 > {
   @service private declare cardService: CardService;
@@ -24,3 +24,5 @@ export default class SaveCardCommand extends HostBaseCommand<
     await this.cardService.saveModel(input.card, input.realm);
   }
 }
+
+export default SaveCardCommand;
