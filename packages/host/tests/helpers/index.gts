@@ -401,11 +401,13 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         });
       }
 
+      let roomEvents: MatrixEvent[] = [];
+
       let timeout = setTimeout(
         () =>
           defer.reject(
             new Error(
-              `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+              `expectEvent timed out, saw events ${JSON.stringify(roomEvents)}`,
             ),
           ),
         opts?.timeout ?? 10000,
@@ -420,7 +422,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         );
       }
 
-      let roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
+      roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
       let sseRoomEvents = roomEvents.filter(
         (e) => e.content?.msgtype === 'app.boxel.sse',
       );
