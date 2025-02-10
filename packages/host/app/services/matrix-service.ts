@@ -26,6 +26,7 @@ import {
   baseRealm,
   LooseCardResource,
   ResolvedCodeRef,
+  getClass,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -40,6 +41,7 @@ import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -73,7 +75,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { CommandField, SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { importResource } from '../resources/import';
 
@@ -511,7 +513,8 @@ export default class MatrixService extends Service {
       | CardMessageContent
       | CardFragmentContent
       | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent,
+      | CommandResultWithOutputContent
+      | CommandDefinitionsContent,
   ) {
     let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -576,11 +579,60 @@ export default class MatrixService extends Service {
     }
   }
 
+  async addCommandDefinitionsToRoomHistory(
+    commandDefinitions: CommandField[],
+    roomId: string,
+  ) {
+    // Create the command defs so getting the json schema
+    // and send it to the matrix room.
+    let commandDefinitionSchemas = [];
+    const mappings = await basicMappings(this.loaderService.loader);
+    for (let commandDef of commandDefinitions) {
+      const Command = await getClass(
+        commandDef.codeRef,
+        this.loaderService.loader,
+      );
+      const command = new Command();
+      const name = commandDef.functionName;
+      commandDefinitionSchemas.push({
+        type: 'function',
+        function: {
+          name,
+          description: command.description,
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
+            },
+            required: ['attributes', 'description'],
+          },
+        },
+      });
+    }
+    console.log(
+      'Sending command definitions to room',
+      roomId,
+      APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+    );
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+      body: 'Command Definitions',
+      data: {
+        commandDefinitions: commandDefinitionSchemas,
+      },
+    });
+  }
+
   async addSkillCardsToRoomHistory(
     skills: SkillCard[],
     roomId: string,
     opts?: CardAPI.SerializeOpts,
   ): Promise<string[]> {
+    const commandDefinitions = skills.flatMap((skill) => skill.commands);
+    await this.addCommandDefinitionsToRoomHistory(commandDefinitions, roomId);
     return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
   }
 

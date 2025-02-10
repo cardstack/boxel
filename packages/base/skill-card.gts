@@ -10,7 +10,7 @@ import {
   containsMany,
 } from './card-api';
 import RobotIcon from '@cardstack/boxel-icons/robot';
-
+import { md5 } from 'super-fast-md5';
 export class CommandField extends FieldDef {
   static displayName = 'CommandField';
   @field codeRef = contains(CodeRefField, {
@@ -20,6 +20,14 @@ export class CommandField extends FieldDef {
     description:
       'If true, this command will require human approval before it is executed in the host.',
   });
+
+  get functionName() {
+    return (
+      this.codeRef.name +
+      '_' +
+      md5(this.codeRef.module + this.codeRef.name).slice(0, 4)
+    );
+  }
 }
 
 export class SkillCard extends CardDef {

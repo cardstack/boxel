@@ -15,6 +15,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 interface BaseMatrixEvent {
@@ -246,6 +247,12 @@ export interface CommandResultEvent extends BaseMatrixEvent {
   };
 }
 
+export interface CommandDefinitionsContent {
+  msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
+  content: {
+    commandDefinitions: Tool[];
+  };
+}
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
     rel_type: 'm.annotation';

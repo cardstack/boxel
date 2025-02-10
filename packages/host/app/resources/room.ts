@@ -12,6 +12,7 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -299,6 +300,10 @@ export class RoomResource extends Resource<Args> {
   }) {
     if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
       this._fragmentCache.set(event.event_id, event.content);
+      return;
+    }
+    if (event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE) {
+      // We don't want to show this to the user
       return;
     }
 
