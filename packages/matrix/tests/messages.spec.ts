@@ -483,7 +483,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 4', async ({
+  test('displays "view all" pill when there are more than 4 attached cards', async ({
     page,
   }) => {
     const testCard1 = `${appURL}/hassan`;
