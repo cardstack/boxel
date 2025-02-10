@@ -35,7 +35,6 @@ import {
   CardError,
   SupportedMimeType,
   Filter,
-  getCards,
 } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
@@ -46,7 +45,6 @@ import ListDetails from '@cardstack/boxel-icons/list-details';
 import { taskStatusValues } from './crm/shared';
 import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
 import { DEAL_STATUS_VALUES } from './crm/deal-status';
-import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
 
@@ -247,18 +245,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       }
     }
   });
-
-  get deals() {
-    return this.dealSearch.instances as Deal[];
-  }
-
-  dealSearch = getCards(
-    () => this.query,
-    () => this.realmHrefs,
-    {
-      isLive: true,
-    },
-  );
 
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
@@ -496,9 +482,14 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           </BoxelButton>
         {{/if}}
         {{#if (eq this.activeTabId 'Deal')}}
-          <div class='content-header-deal-summary'>
-            <DealSummary @deals={{this.deals}} />
-          </div>
+          {{#if this.query}}
+            <div class='content-header-deal-summary'>
+              <DealSummary
+                @query={{this.query}}
+                @realmHrefs={{this.realmHrefs}}
+              />
+            </div>
+          {{/if}}
         {{/if}}
         <div class='search-bar content-header-row-2'>
           <SearchInput
