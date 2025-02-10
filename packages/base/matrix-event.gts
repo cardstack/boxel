@@ -161,6 +161,17 @@ export interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
+export interface CommandDefinitionsEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: CommandDefinitionsContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 export interface Tool {
   type: 'function';
   function: {
@@ -249,8 +260,15 @@ export interface CommandResultEvent extends BaseMatrixEvent {
 
 export interface CommandDefinitionsContent {
   msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
-  content: {
-    commandDefinitions: Tool[];
+  body: string;
+  data: {
+    commandDefinitions: {
+      codeRef: {
+        module: string;
+        name: string;
+      };
+      tool: Tool;
+    }[];
   };
 }
 export interface CommandResultWithOutputContent {
@@ -283,6 +301,7 @@ export type MatrixEvent =
   | MessageEvent
   | CommandEvent
   | CommandResultEvent
+  | CommandDefinitionsEvent
   | CardMessageEvent
   | RoomNameEvent
   | RoomTopicEvent

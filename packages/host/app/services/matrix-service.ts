@@ -72,6 +72,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
+  CommandDefinitionsContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
@@ -592,22 +593,25 @@ export default class MatrixService extends Service {
         commandDef.codeRef,
         this.loaderService.loader,
       );
-      const command = new Command();
+      const command = new Command(this.commandService.commandContext);
       const name = commandDef.functionName;
       commandDefinitionSchemas.push({
-        type: 'function',
-        function: {
-          name,
-          description: command.description,
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
+        codeRef: commandDef.codeRef,
+        tool: {
+          type: 'function',
+          function: {
+            name,
+            description: command.description,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
               },
-              ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
+              required: ['attributes', 'description'],
             },
-            required: ['attributes', 'description'],
           },
         },
       });
