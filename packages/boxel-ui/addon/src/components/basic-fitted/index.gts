@@ -18,7 +18,7 @@ interface Signature {
 
 export default class BasicFitted extends Component<Signature> {
   <template>
-    <article class='fitted-template' ...attributes>
+    <div class='fitted-template' data-test-basic-fitted ...attributes>
       {{#if @isEmpty}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
@@ -46,11 +46,12 @@ export default class BasicFitted extends Component<Signature> {
             {{@secondary}}
           </h4>
         </div>
-        <p class='card-description' data-test-card-description>
-          {{@description}}
-        </p>
+        <div
+          class='card-description'
+          data-test-card-description
+        >{{@description}}</div>
       {{/if}}
-    </article>
+    </div>
     <style scoped>
       @layer {
         .fitted-template {
