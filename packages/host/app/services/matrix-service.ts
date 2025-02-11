@@ -586,7 +586,10 @@ export default class MatrixService extends Service {
   ) {
     // Create the command defs so getting the json schema
     // and send it to the matrix room.
-    let commandDefinitionSchemas = [];
+    let commandDefinitionSchemas: {
+      codeRef: ResolvedCodeRef;
+      tool: Tool;
+    }[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
     for (let commandDef of commandDefinitions) {
       const Command = await getClass(
