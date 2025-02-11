@@ -46,14 +46,14 @@ export default class RealmSubscriptionService extends Service {
   private subscribers: Map<
     string,
     {
-      // it's possible to have the card instance used in different resources as
-      // the owners of the resources can differ
+      // it's possible to have the same card instance used in different
+      // resources as the owners of the resources can differ
       resources: CardResource[];
       realm: string;
     }
   > = new Map();
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
-  liveCardIdentityContext = new ResettableIdentityContext();
+  identityContext = new ResettableIdentityContext();
 
   unloadResource(resource: CardResource) {
     let id = resource.url;
@@ -69,10 +69,10 @@ export default class RealmSubscriptionService extends Service {
       }
       if (resources.length === 0) {
         this.subscribers.delete(id);
-        this.liveCardIdentityContext.delete(id);
+        this.identityContext.delete(id);
       }
 
-      // if there are no more subscribers to this realm them unsubscribe from realm
+      // if there are no more subscribers to this realm then unsubscribe from realm
       let subscription = this.subscriptions.get(realm);
       if (
         subscription &&
@@ -98,9 +98,9 @@ export default class RealmSubscriptionService extends Service {
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
       this.loaderService.reset();
-      // the code changes have destabilized our live card identity context so we
+      // the code changes have destabilized our identity context so we
       // need to rebuild it
-      this.liveCardIdentityContext.reset();
+      this.identityContext.reset();
     }
 
     for (let invalidation of invalidations) {
@@ -111,7 +111,7 @@ export default class RealmSubscriptionService extends Service {
       let subscriber = this.subscribers.get(invalidation);
       if (subscriber) {
         let { resources } = subscriber;
-        let liveCard = this.liveCardIdentityContext.get(invalidation);
+        let liveCard = this.identityContext.get(invalidation);
         if (liveCard) {
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
@@ -122,9 +122,7 @@ export default class RealmSubscriptionService extends Service {
               resource.reload.perform(liveCard);
             }
           }
-        } else if (!this.liveCardIdentityContext.get(invalidation)) {
-          // we've already established a subscription--we're in it, just
-          // load the updated instance
+        } else if (!this.identityContext.get(invalidation)) {
           for (let resource of resources) {
             // load the card using just the ID because we don't have a running card on hand
             resource.loadModel.perform(invalidation);

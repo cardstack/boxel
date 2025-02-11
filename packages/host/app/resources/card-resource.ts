@@ -146,7 +146,7 @@ export class CardResource extends Resource<Args> {
 
   private async getCard(urlOrDoc: string | LooseSingleCardDocument) {
     let url = asURL(urlOrDoc);
-    let identityContext = this.realmSubscription.liveCardIdentityContext;
+    let identityContext = this.realmSubscription.identityContext;
     try {
       if (!url) {
         // this is a new card so instantiate it and save it
@@ -215,7 +215,7 @@ export class CardResource extends Resource<Args> {
       this.setCardOrError(card);
     } catch (err: any) {
       if (err.status !== 404) {
-        this.realmSubscription.liveCardIdentityContext.set(card.id, undefined);
+        this.realmSubscription.identityContext.set(card.id, undefined);
         let errorResponse = processCardError(new URL(card.id), err);
         this.setCardOrError(errorResponse.errors[0]);
         return;
