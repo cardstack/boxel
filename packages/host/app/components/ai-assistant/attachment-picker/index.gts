@@ -7,11 +7,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import {
-  AddButton,
-  Tooltip,
-  Pill as BoxelPill,
-} from '@cardstack/boxel-ui/components';
+import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
 import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -106,13 +102,13 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
           (not this.areAllItemsDisplayed)
         )
       }}
-        <BoxelPill
+        <Pill
           @kind='button'
           {{on 'click' this.toggleViewAllAttachedCards}}
           data-test-view-all
         >
           View All ({{this.items.length}})
-        </BoxelPill>
+        </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
         {{#if (and (eq @submode 'code') isAttachingFilesEnabled)}}
