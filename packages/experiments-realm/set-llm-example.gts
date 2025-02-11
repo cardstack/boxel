@@ -16,7 +16,7 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) return;
 
-    let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+    let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
       commandContext,
     );
     let { roomId } = await createAIAssistantRoomCommand.execute({
