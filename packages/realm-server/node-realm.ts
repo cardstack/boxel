@@ -189,6 +189,13 @@ export class NodeAdapter implements RealmAdapter {
     event: ServerEvents,
     matrixClient: MatrixClient,
   ): Promise<void> {
+    console.log('sending server event', event);
+
+    if (!matrixClient.isLoggedIn()) {
+      console.log('not logged in, skipping server event');
+      return;
+    }
+
     let dmRooms =
       (await matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
