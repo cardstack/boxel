@@ -201,7 +201,8 @@ export class NodeAdapter implements RealmAdapter {
         'boxel.session-rooms',
       )) ?? {};
 
-    for (let roomId of Object.keys(dmRooms)) {
+    for (let userId of Object.keys(dmRooms)) {
+      let roomId = dmRooms[userId];
       try {
         await matrixClient.sendEvent(roomId, 'm.room.message', {
           body: JSON.stringify({
@@ -212,7 +213,11 @@ export class NodeAdapter implements RealmAdapter {
           format: 'app.boxel.sse-format',
         });
       } catch (e) {
-        console.log(`Unable to send event in room ${roomId}`, event, e);
+        console.log(
+          `Unable to send event in room ${roomId} for user ${userId}`,
+          event,
+          e,
+        );
       }
     }
   }
