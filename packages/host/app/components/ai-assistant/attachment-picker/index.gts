@@ -21,8 +21,8 @@ import {
   chooseFile,
 } from '@cardstack/runtime-common';
 
-import Pill from '@cardstack/host/components/pill';
-
+import CardPill from '@cardstack/host/components/card-pill';
+import FilePill from '@cardstack/host/components/file-pill';
 import ENV from '@cardstack/host/config/environment';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -34,8 +34,8 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     autoAttachedCards?: TrackedSet<CardDef>;
-    autoAttachedFiles?: FileDef[];
     cardsToAttach: CardDef[] | undefined;
+    autoAttachedFile?: FileDef;
     filesToAttach: FileDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
@@ -53,30 +53,51 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
     <div class='item-picker'>
       {{#each this.itemsToDisplay as |item|}}
-        {{#if (this.isAutoAttached item)}}
-          <Tooltip @placement='top'>
-            <:trigger>
-              <Pill
-                @item={{item}}
-                @isAutoAttached={{true}}
-                @remove={{this.removeItem}}
-              />
-            </:trigger>
+        {{#if (this.isCard item)}}
+          {{#if (this.isAutoAttachedCard item)}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <CardPill
+                  @card={{item}}
+                  @isAutoAttachedCard={{true}}
+                  @removeCard={{@removeCard}}
+                />
+              </:trigger>
 
-            <:content>
-              {{#if (this.isAutoAttached item)}}
-                Topmost
-                {{if (this.isCard item) 'card' 'file'}}
-                is shared automatically
-              {{/if}}
-            </:content>
-          </Tooltip>
+              <:content>
+                {{#if (this.isAutoAttachedCard item)}}
+                  Topmost card is shared automatically
+                {{/if}}
+              </:content>
+            </Tooltip>
+          {{else}}
+            <CardPill
+              @card={{item}}
+              @isAutoAttachedCard={{false}}
+              @removeCard={{@removeCard}}
+            />
+          {{/if}}
         {{else}}
-          <Pill
-            @item={{item}}
-            @isAutoAttached={{false}}
-            @remove={{this.removeItem}}
-          />
+          {{#if (this.isAutoAttachedFile item)}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <FilePill
+                  @file={{item}}
+                  @isAutoAttachedFile={{true}}
+                  @removeFile={{@removeFile}}
+                />
+              </:trigger>
+              <:content>
+                Currently opened file is shared automatically
+              </:content>
+            </Tooltip>
+          {{else}}
+            <FilePill
+              @file={{item}}
+              @isAutoAttachedFile={{false}}
+              @removeFile={{@removeFile}}
+            />
+          {{/if}}
         {{/if}}
       {{/each}}
       {{#if
@@ -170,37 +191,29 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   };
 
   private isAutoAttachedCard = (card: CardDef) => {
-    if (this.args.autoAttachedCards === undefined) {
-      return false;
-    }
-    return this.args.autoAttachedCards.has(card);
+    return this.args.autoAttachedCards?.has(card);
   };
 
   private isAutoAttachedFile = (file: FileDef) => {
-    if (this.args.autoAttachedFiles === undefined) {
-      return false;
-    }
-    return this.args.autoAttachedFiles.includes(file);
-  };
-
-  private isAutoAttached = (item: CardDef | FileDef) => {
-    return this.isCard(item)
-      ? this.isAutoAttachedCard(item)
-      : this.isAutoAttachedFile(item);
+    return this.args.autoAttachedFile?.sourceUrl === file.sourceUrl;
   };
 
   private get items() {
     let cards = this.args.cardsToAttach ?? [];
-    let files = this.args.filesToAttach ?? [];
+
     if (this.args.autoAttachedCards) {
       cards = [...new Set([...this.args.autoAttachedCards, ...cards])];
     }
 
     cards = cards.filter((card) => card.id); // Dont show new unsaved cards
-
-    if (this.args.autoAttachedFiles) {
-      files = [...new Set([...this.args.autoAttachedFiles, ...files])];
+    let files: FileDef[] = [];
+    if (this.args.autoAttachedFile) {
+      files = [...new Set([this.args.autoAttachedFile])];
     }
+    if (this.args.filesToAttach) {
+      files = [...files, ...this.args.filesToAttach];
+    }
+
     return [...cards, ...files];
   }
 
@@ -244,13 +257,4 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     let chosenFile: FileDef | undefined = await chooseFile();
     return chosenFile;
   });
-
-  @action
-  private removeItem(item: CardDef | FileDef) {
-    if (isCardInstance(item)) {
-      this.args.removeCard(item);
-    } else {
-      this.args.removeFile(item);
-    }
-  }
 }

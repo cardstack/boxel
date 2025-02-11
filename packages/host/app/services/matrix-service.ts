@@ -90,10 +90,10 @@ import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
-
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
@@ -115,6 +115,7 @@ export default class MatrixService extends Service {
   @service private declare realmServer: RealmServerService;
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
+  @service private declare network: NetworkService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
@@ -643,10 +644,42 @@ export default class MatrixService extends Service {
     return eventIds;
   }
 
+  async uploadFiles(files: FileDef[]) {
+    let uploadedFiles = await Promise.all(
+      files.map(async (file) => {
+        if (!file.sourceUrl) {
+          throw new Error('File needs a realm server source URL to upload');
+        }
+        let response = await this.network.authedFetch(file.sourceUrl, {
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+        });
+
+        let blob = await response.blob();
+        let type = response.headers.get('content-type');
+        if (!type) {
+          throw new Error(`File has no content type: ${file.sourceUrl}`);
+        }
+        let uploadResponse = await this.client.uploadContent(blob, {
+          type,
+        });
+
+        file.url = this.client.mxcUrlToHttp(uploadResponse.content_uri);
+        file.type = type;
+
+        return file;
+      }),
+    );
+    console.log('uploadedFiles', uploadedFiles);
+    return uploadedFiles;
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
@@ -687,6 +720,7 @@ export default class MatrixService extends Service {
       formatted_body: html,
       clientGeneratedId,
       data: {
+        attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
         attachedCardsEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),

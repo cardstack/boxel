@@ -5,80 +5,56 @@ import Component from '@glimmer/component';
 
 import {
   IconButton,
-  Pill as BoxelPill,
+  Pill,
   RealmIcon,
   Switch,
 } from '@cardstack/boxel-ui/components';
-import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
-import { IconX, CodeFile } from '@cardstack/boxel-ui/icons';
-
-import { isCardInstance } from '@cardstack/runtime-common';
+import { cn } from '@cardstack/boxel-ui/helpers';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
-
 import RealmService from '../services/realm';
 
-interface PillSignature {
+interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
-    item: CardDef | FileDef;
-    isAutoAttached?: boolean;
-    remove?: (item: CardDef | FileDef) => void;
+    card: CardDef;
+    isAutoAttachedCard?: boolean;
+    removeCard?: (card: CardDef) => void;
     onToggle?: () => void;
     isEnabled?: boolean;
   };
 }
 
-export default class Pill extends Component<PillSignature> {
+export default class CardPill extends Component<CardPillSignature> {
   @service declare realm: RealmService;
 
   get component() {
-    return this.args.item.constructor.getComponent(this.args.item);
+    return this.args.card.constructor.getComponent(this.args.card);
   }
 
   get hideIconRight() {
-    return !this.args.onToggle && !this.args.remove;
-  }
-
-  get id() {
-    return isCardInstance(this.args.item)
-      ? this.args.item.id
-      : this.args.item.sourceUrl;
-  }
-
-  get title() {
-    return isCardInstance(this.args.item)
-      ? this.args.item.title
-      : this.args.item.name;
+    return !this.args.onToggle && !this.args.removeCard;
   }
 
   <template>
-    <BoxelPill
+    <Pill
       class={{cn
-        'pill'
-        is-autoattached=@isAutoAttached
+        'card-pill'
+        is-autoattached=@isAutoAttachedCard
         hide-icon-right=this.hideIconRight
       }}
-      data-test-attached-item={{this.id}}
-      data-test-autoattached-item={{@isAutoAttached}}
+      data-test-attached-card={{@card.id}}
+      data-test-autoattached-card={{@isAutoAttachedCard}}
       ...attributes
     >
       <:iconLeft>
-        {{#if (isCardInstance @item)}}
-          <RealmIcon @realmInfo={{this.realm.info this.id}} />
-        {{else}}
-          <CodeFile
-            width='16px'
-            height='16px'
-            style={{cssVar icon-color='#0031ff'}}
-          />
-        {{/if}}
+        <RealmIcon @realmInfo={{this.realm.info @card.id}} />
       </:iconLeft>
       <:default>
-        <div class='pill-content' title={{this.title}}>
-          {{this.title}}
+        <div class='card-content' title={{@card.title}}>
+          {{@card.title}}
         </div>
       </:default>
       <:iconRight>
@@ -86,24 +62,28 @@ export default class Pill extends Component<PillSignature> {
           <Switch
             @isEnabled={{@isEnabled}}
             @onChange={{@onToggle}}
-            @label={{this.title}}
-            data-test-pill-toggle='{{this.id}}-{{if @isEnabled "on" "off"}}'
+            @label={{@card.title}}
+            data-test-card-pill-toggle='{{@card.id}}-{{if
+              @isEnabled
+              "on"
+              "off"
+            }}'
           />
         {{/if}}
-        {{#if @remove}}
+        {{#if @removeCard}}
           <IconButton
             class='remove-button'
             @icon={{IconX}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @remove @item)}}
-            data-test-remove-item-btn
+            {{on 'click' (fn @removeCard @card)}}
+            data-test-remove-card-btn
           />
         {{/if}}
       </:iconRight>
-    </BoxelPill>
+    </Pill>
     <style scoped>
-      .pill {
+      .card-pill {
         --pill-gap: var(--boxel-sp-xxxs);
         --pill-icon-size: 18px;
         --boxel-realm-icon-size: var(--pill-icon-size);
@@ -117,7 +97,7 @@ export default class Pill extends Component<PillSignature> {
       .hide-icon-right :deep(figure.icon):last-child {
         display: none;
       }
-      .pill-content {
+      .card-content {
         max-width: 100px;
         max-height: 100%;
         white-space: nowrap;

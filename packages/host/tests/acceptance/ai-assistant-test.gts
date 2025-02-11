@@ -68,7 +68,7 @@ async function assertMessages(
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
         .exists({ count: 1 });
       assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-attached-item]`)
+        .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
       cards.map(async (card) => {
         if (card.title) {
@@ -80,7 +80,7 @@ async function assertMessages(
           // note: attached cards are in atom format (which display the title by default)
           assert
             .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-item="${card.id}"]`,
+              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
             )
             .containsText(card.title);
         }
@@ -88,7 +88,7 @@ async function assertMessages(
         if (card.realmIconUrl) {
           assert
             .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-item="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
+              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
             )
             .exists({ count: 1 });
         }
@@ -387,24 +387,24 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Add attachment item
     await click('[data-test-file="person.gts"]');
     await click('[data-test-attach-file-modal-add-button]');
-    assert.dom('[data-test-attached-item]').exists({ count: 1 });
-    assert.dom('[data-test-attached-item]').hasText('person.gts');
+    assert.dom('[data-test-attached-file]').exists({ count: 1 });
+    assert.dom('[data-test-attached-file]').hasText('person.gts');
     // Add attachment item
     await click('[data-test-choose-file-btn]');
     await click('[data-test-file="pet.gts"]');
     await click('[data-test-attach-file-modal-add-button]');
-    assert.dom('[data-test-attached-item]').exists({ count: 2 });
+    assert.dom('[data-test-attached-file]').exists({ count: 2 });
     assert
-      .dom(`[data-test-attached-item="${testRealmURL}person.gts"]`)
+      .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
       .hasText('person.gts');
     assert
-      .dom(`[data-test-attached-item="${testRealmURL}pet.gts"]`)
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
       .hasText('pet.gts');
 
     // Add remove attachment item
     await click(
-      `[data-test-attached-item="${testRealmURL}person.gts"] [data-test-remove-item-btn]`,
+      `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
     );
-    assert.dom('[data-test-attached-item]').hasText('pet.gts');
+    assert.dom('[data-test-attached-file]').hasText('pet.gts');
   });
 });

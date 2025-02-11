@@ -16,7 +16,7 @@ import {
   type CardCatalogQuery,
 } from '@cardstack/runtime-common';
 
-import Pill from '@cardstack/host/components/pill';
+import CardPill from '@cardstack/host/components/card-pill';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -86,8 +86,8 @@ export default class PillMenu extends Component<Signature> {
               <ul class='pill-list'>
                 {{#each @items as |item|}}
                   <li>
-                    <Pill
-                      @item={{item.card}}
+                    <CardPill
+                      @card={{item.card}}
                       @onToggle={{fn this.toggleActive item}}
                       @isEnabled={{item.isActive}}
                       data-test-pill-menu-item={{item.card.id}}
