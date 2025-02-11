@@ -36,6 +36,7 @@ import {
   StringField,
   field,
 } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -50,6 +51,8 @@ module('Integration | realm', function (hooks) {
     loader = lookupLoaderService().loader;
   });
 
+  // FIXME maybe this needs to happen in every test now? And setupServerSentEvents is obsolete
+  setupMockMatrix(hooks);
   setupServerSentEvents(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
