@@ -1632,6 +1632,39 @@ test('Tools calls are connected to their results', () => {
   );
 });
 
+test('Tools on enabled skills are available in prompt', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/enabled-skill-with-commands.json'),
+    ),
+  );
+
+  const { tools } = getPromptParts(eventList, '@aibot:localhost');
+  assert.true(tools.length > 0, 'Should have tools available');
+
+  // Verify that the tools array contains the command from the skill
+  const switchSubmodeTool = tools.find(
+    (tool) => tool.function?.name === 'SwitchSubmodeCommand_4661',
+  );
+  assert.ok(
+    switchSubmodeTool,
+    'Should have SwitchSubmodeCommand function available',
+  );
+});
+
+test('No tools are available if skill is not enabled', () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/disabled-skill-with-commands.json'),
+    ),
+  );
+
+  const { tools } = getPromptParts(eventList, '@aibot:localhost');
+  console.log(tools);
+  // we should not have any tools available
+  assert.true(tools.length == 0, 'Should not have tools available');
+});
+
 module('set model in prompt', () => {
   test('default active LLM must be equal to `DEFAULT_LLM`', () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
