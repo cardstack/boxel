@@ -18,7 +18,7 @@ interface Signature {
 
 export default class BasicFitted extends Component<Signature> {
   <template>
-    <div class='fitted-template' data-test-basic-fitted ...attributes>
+    <div class='fitted-template' ...attributes>
       {{#if @isEmpty}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
@@ -95,6 +95,7 @@ export default class BasicFitted extends Component<Signature> {
           width: 100%;
           display: flex;
           flex-direction: column;
+          gap: var(--boxel-sp-4xs);
           overflow: hidden;
         }
         .card-title {
@@ -109,8 +110,7 @@ export default class BasicFitted extends Component<Signature> {
           text-overflow: ellipsis;
         }
         .card-display-name {
-          margin-top: auto;
-          margin-bottom: 0;
+          margin-block: 0;
           color: var(--boxel-450);
           font: 500 var(--boxel-font-xs);
           letter-spacing: var(--boxel-lsp-xs);
