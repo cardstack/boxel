@@ -847,7 +847,7 @@ module('Acceptance | Commands tests', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'SwitchSubmodeCommand_4661',
+          name: 'SwitchSubmodeCommand_e82a',
           arguments: {
             attributes: {
               submode: 'code',

@@ -12,6 +12,16 @@ import {
 } from './card-api';
 import RobotIcon from '@cardstack/boxel-icons/robot';
 
+function djb2_xor(str: string) {
+  let len = str.length;
+  let h = 5381;
+
+  for (let i = 0; i < len; i++) {
+    h = (h * 33) ^ str.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16);
+}
+
 export class CommandField extends FieldDef {
   static displayName = 'CommandField';
   @field codeRef = contains(CodeRefField, {
@@ -29,19 +39,8 @@ export class CommandField extends FieldDef {
         return '';
       }
 
-      // Simple hash function that works in all environments
-      const djb2 = (str: string): string => {
-        let hash = 5381;
-        for (let i = 0; i < str.length; i++) {
-          const char = str.charCodeAt(i);
-          hash = (hash << 5) - hash + char;
-          hash = hash & hash; // Convert to 32-bit integer
-        }
-        return Math.abs(hash).toString(16).slice(0, 4);
-      };
-
-      const input = `${this.codeRef.module}#${this.codeRef.name}`;
-      return `${this.codeRef.name}_${djb2(input)}`;
+      const hashed = djb2_xor(`${this.codeRef.module}#${this.codeRef.name}`);
+      return `${this.codeRef.name}_${hashed.slice(0, 4)}`;
     },
   });
 }
