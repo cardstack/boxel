@@ -23,6 +23,8 @@ import {
 
 import Pill from '@cardstack/host/components/pill';
 
+import ENV from '@cardstack/host/config/environment';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -44,36 +46,37 @@ interface Signature {
   };
 }
 
+const isAttachingFilesEnabled = ENV.featureFlags?.ENABLE_ATTACHING_FILES;
 const MAX_ITEMS_TO_DISPLAY = 4;
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
     <div class='item-picker'>
       {{#each this.itemsToDisplay as |item|}}
-        {{#if (this.isCard item)}}
-          {{#if (this.isAutoAttachedCard item)}}
-            <Tooltip @placement='top'>
-              <:trigger>
-                <Pill
-                  @item={{item}}
-                  @isAutoAttached={{true}}
-                  @remove={{this.removeItem}}
-                />
-              </:trigger>
+        {{#if (this.isAutoAttached item)}}
+          <Tooltip @placement='top'>
+            <:trigger>
+              <Pill
+                @item={{item}}
+                @isAutoAttached={{true}}
+                @remove={{this.removeItem}}
+              />
+            </:trigger>
 
-              <:content>
-                {{#if (this.isAutoAttachedCard item)}}
-                  Topmost card is shared automatically
-                {{/if}}
-              </:content>
-            </Tooltip>
-          {{else}}
-            <Pill
-              @item={{item}}
-              @isAutoAttached={{false}}
-              @remove={{this.removeItem}}
-            />
-          {{/if}}
+            <:content>
+              {{#if (this.isAutoAttached item)}}
+                Topmost
+                {{if (this.isCard item) 'Card' 'File'}}
+                is shared automatically
+              {{/if}}
+            </:content>
+          </Tooltip>
+        {{else}}
+          <Pill
+            @item={{item}}
+            @isAutoAttached={{false}}
+            @remove={{this.removeItem}}
+          />
         {{/if}}
       {{/each}}
       {{#if
@@ -91,7 +94,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         </BoxelPill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
-        {{#if (eq @submode 'code')}}
+        {{#if (and (eq @submode 'code') isAttachingFilesEnabled)}}
           <AddButton
             class={{cn 'attach-button' icon-only=this.itemsToDisplay.length}}
             @variant='pill'
@@ -162,15 +165,28 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
   }
 
-  isCard = (item: CardDef | FileDef): item is CardDef => {
+  private isCard = (item: CardDef | FileDef): item is CardDef => {
     return isCardInstance(item);
   };
 
-  isAutoAttachedCard = (card: CardDef) => {
+  private isAutoAttachedCard = (card: CardDef) => {
     if (this.args.autoAttachedCards === undefined) {
       return false;
     }
     return this.args.autoAttachedCards.has(card);
+  };
+
+  private isAutoAttachedFile = (file: FileDef) => {
+    if (this.args.autoAttachedFiles === undefined) {
+      return false;
+    }
+    return this.args.autoAttachedFiles.includes(file);
+  };
+
+  private isAutoAttached = (item: CardDef | FileDef) => {
+    return this.isCard(item)
+      ? this.isAutoAttachedCard(item)
+      : this.isAutoAttachedFile(item);
   };
 
   private get items() {
@@ -231,7 +247,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
 
   @action
   private removeItem(item: CardDef | FileDef) {
-    if (cardApi(item)) {
+    if (isCardInstance(item)) {
       this.args.removeCard(item);
     } else {
       this.args.removeFile(item);

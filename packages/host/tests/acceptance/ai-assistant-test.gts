@@ -368,12 +368,43 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
-    assert.dom('[data-test-choose-card-btn]').hasText('Attach File');
+    assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 
-    await click('[data-test-choose-card-btn]');
+    await click('[data-test-choose-file-btn]');
     assert.dom('[data-test-attach-file-modal]').exists();
+    assert.dom('[data-test-file="pet.gts"]').exists();
+
+    // Change realm
+    await click('[data-test-attach-file-modal-realm-chooser]');
+    await click('[data-test-attach-file-modal-realm-option="Base Workspace"]');
+    assert.dom('[data-test-file="boolean.gts"]').exists();
 
     await click('[data-test-attach-file-modal-realm-chooser]');
-    assert.dom(`[data-test-file="${testRealmURL}index"]`).exists();
+    await click(
+      '[data-test-attach-file-modal-realm-option="Test Workspace B"]',
+    );
+
+    // Add attachment item
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-attach-file-modal-add-button]');
+    assert.dom('[data-test-attached-item]').exists({ count: 1 });
+    assert.dom('[data-test-attached-item]').hasText('person.gts');
+    // Add attachment item
+    await click('[data-test-choose-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-attach-file-modal-add-button]');
+    assert.dom('[data-test-attached-item]').exists({ count: 2 });
+    assert
+      .dom(`[data-test-attached-item="${testRealmURL}person.gts"]`)
+      .hasText('person.gts');
+    assert
+      .dom(`[data-test-attached-item="${testRealmURL}pet.gts"]`)
+      .hasText('pet.gts');
+
+    // Add remove attachment item
+    await click(
+      `[data-test-attached-item="${testRealmURL}person.gts"] [data-test-remove-item-btn]`,
+    );
+    assert.dom('[data-test-attached-item]').hasText('pet.gts');
   });
 });

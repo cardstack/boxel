@@ -16,10 +16,15 @@ import {
   BoxelSelect,
 } from '@cardstack/boxel-ui/components';
 
-import { Deferred, type LocalPath } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  RealmPaths,
+  type LocalPath,
+} from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -27,7 +32,6 @@ import type RealmService from '@cardstack/host/services/realm';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import FileTree from '../editor/file-tree';
-import MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {};
@@ -51,7 +55,7 @@ export default class AttachFileModal extends Component<Signature> {
   }
 
   // public API
-  async chooseFile<T>(): Promise<undefined | T> {
+  async chooseFile<T extends FileDef>(): Promise<undefined | T> {
     this.deferred = new Deferred();
     let defaultRealm = this.knownRealms.find(
       (r) =>
@@ -69,11 +73,12 @@ export default class AttachFileModal extends Component<Signature> {
 
   @action
   private pick(path: LocalPath | undefined) {
-    if (this.deferred && path) {
+    if (this.deferred && this.selectedRealm && path) {
+      let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
       let file = this.matrixService.fileAPI.createFileDef({
-        url: path,
-        sourceUrl: path,
-        name: path.split('/').pop()!,
+        url: fileURL.toString(),
+        sourceUrl: fileURL.toString(),
+        name: fileURL.toString().split('/').pop()!,
       });
       this.deferred.fulfill(file);
     }
@@ -200,7 +205,10 @@ export default class AttachFileModal extends Component<Signature> {
               data-test-attach-file-modal-realm-chooser
               as |item|
             >
-              <div class='realm-chooser__options'>
+              <div
+                class='realm-chooser__options'
+                data-test-attach-file-modal-realm-option={{item.info.name}}
+              >
                 <img src={{item.info.iconURL}} alt='realm icon' />
                 <span>{{item.info.name}}</span>
               </div>

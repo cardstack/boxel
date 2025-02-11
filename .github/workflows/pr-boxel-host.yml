@@ -65,6 +65,7 @@ jobs:
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
           ENABLE_PLAYGROUND: true
+          ENABLE_ATTACHING_FILES: true
         with:
           package: boxel-host
           environment: staging
@@ -96,6 +97,7 @@ jobs:
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
           ENABLE_PLAYGROUND: true
+          ENABLE_ATTACHING_FILES: true
         with:
           package: boxel-host
           environment: production

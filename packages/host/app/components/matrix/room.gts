@@ -635,7 +635,7 @@ export default class Room extends Component<Signature> {
       // );
     } else {
       const fileIndex = this.filesToAttach?.findIndex(
-        (f) => f.sourceUrl === f.sourceUrl,
+        (f) => f.sourceUrl === file.sourceUrl,
       );
       if (fileIndex != undefined && fileIndex !== -1) {
         if (this.filesToAttach !== undefined) {

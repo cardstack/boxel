@@ -9,8 +9,10 @@ import {
   RealmIcon,
   Switch,
 } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
+import { IconX, CodeFile } from '@cardstack/boxel-ui/icons';
+
+import { isCardInstance } from '@cardstack/runtime-common';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -41,13 +43,13 @@ export default class Pill extends Component<PillSignature> {
   }
 
   get id() {
-    return 'id' in this.args.item
+    return isCardInstance(this.args.item)
       ? this.args.item.id
       : this.args.item.sourceUrl;
   }
 
   get title() {
-    return 'title' in this.args.item
+    return isCardInstance(this.args.item)
       ? this.args.item.title
       : this.args.item.name;
   }
@@ -64,7 +66,15 @@ export default class Pill extends Component<PillSignature> {
       ...attributes
     >
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info this.id}} />
+        {{#if (isCardInstance @item)}}
+          <RealmIcon @realmInfo={{this.realm.info this.id}} />
+        {{else}}
+          <CodeFile
+            width='16px'
+            height='16px'
+            style={{cssVar icon-color='#0031ff'}}
+          />
+        {{/if}}
       </:iconLeft>
       <:default>
         <div class='pill-content' title={{this.title}}>

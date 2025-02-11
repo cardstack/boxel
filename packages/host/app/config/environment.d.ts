@@ -30,5 +30,6 @@ declare const config: {
   stripePaymentLink: string;
   featureFlags?: {
     ENABLE_PLAYGROUND: boolean;
+    ENABLE_ATTACHING_FILES: boolean;
   };
 };
