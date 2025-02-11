@@ -66,7 +66,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
             <:content>
               {{#if (this.isAutoAttached item)}}
                 Topmost
-                {{if (this.isCard item) 'Card' 'File'}}
+                {{if (this.isCard item) 'card' 'file'}}
                 is shared automatically
               {{/if}}
             </:content>
