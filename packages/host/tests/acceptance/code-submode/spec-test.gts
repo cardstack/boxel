@@ -330,7 +330,10 @@ module('Spec preview', function (hooks) {
         await click('[data-test-create-spec-button]');
       },
     });
+    assert.dom('[data-test-title]').hasText('NewSkill');
     assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('NewSkill');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
   test('title does not default to "default"', async function (assert) {
     await visitOperatorMode({
