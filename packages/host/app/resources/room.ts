@@ -2,7 +2,7 @@ import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout, waitForProperty } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -53,7 +53,6 @@ interface SkillId {
   skillCardId: string;
   skillEventId: string;
   isActive: boolean;
-  loadingPromise?: Promise<void>;
 }
 
 interface Args {
@@ -66,6 +65,8 @@ interface Args {
 export class RoomResource extends Resource<Args> {
   private _previousRoomId: string | undefined;
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
+  private _skillEventIdToCardIdCache: TrackedMap<string, string> =
+    new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -105,6 +106,7 @@ export class RoomResource extends Resource<Args> {
     this._fragmentCache = new TrackedMap();
     this._nameEventsCache = new TrackedMap();
     this._skillCardsCache = new TrackedMap();
+    this._skillEventIdToCardIdCache = new TrackedMap();
     this._isDisplayingViewCodeMap = new TrackedMap();
     this._createEvent = undefined;
   }
@@ -148,66 +150,39 @@ export class RoomResource extends Resource<Args> {
     return this.events.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   }
 
-  get skillIds(): SkillId[] {
+  get allSkillEventIds(): Set<string> {
+    let skillsConfig = this.matrixRoom?.skillsConfig;
+    if (!skillsConfig) {
+      return new Set();
+    }
+    return new Set([
+      ...skillsConfig.enabledEventIds,
+      ...skillsConfig.disabledEventIds,
+    ]);
+  }
+
+  get skills(): Skill[] {
     let skillsConfig = this.matrixRoom?.skillsConfig;
     if (!skillsConfig) {
       return [];
     }
-    let result: SkillId[] = [];
-    for (let eventId of [
-      ...skillsConfig.enabledEventIds,
-      ...skillsConfig.disabledEventIds,
-    ]) {
-      let cardDoc;
-      try {
-        cardDoc = this.serializedCardFromFragments(eventId);
-      } catch {
-        // the skill card fragments might not be loaded yet
+    let result: Skill[] = [];
+    for (let skillEventId of this.allSkillEventIds) {
+      let cardId = this._skillEventIdToCardIdCache.get(skillEventId);
+      if (!cardId) {
         continue;
       }
-      if (!cardDoc.data.id) {
+      let skillCard = this._skillCardsCache.get(cardId);
+      if (!skillCard) {
         continue;
-      }
-      let cardId = cardDoc.data.id;
-      let loadingPromise;
-      if (!this._skillCardsCache.has(cardId)) {
-        loadingPromise = this.cardService
-          .createFromSerialized(cardDoc.data, cardDoc)
-          .then((skillsCard) => {
-            this._skillCardsCache.set(cardId, skillsCard as SkillCard);
-          });
       }
       result.push({
-        skillCardId: cardDoc.data.id,
-        skillEventId: eventId,
-        isActive: skillsConfig.enabledEventIds.includes(eventId),
-        loadingPromise,
+        card: skillCard,
+        skillEventId,
+        isActive: skillsConfig.enabledEventIds.includes(skillEventId),
       });
     }
     return result;
-  }
-
-  get skills(): Skill[] {
-    return this.skillIds
-      .map(({ skillCardId, skillEventId, isActive }) => {
-        let card = this._skillCardsCache.get(skillCardId);
-        if (card) {
-          return {
-            card,
-            skillEventId,
-            isActive,
-          };
-        }
-        return null;
-      })
-      .filter(Boolean) as Skill[];
-  }
-
-  async waitForAllSkills() {
-    let skillCardLoadingPromises = this.skillIds
-      .map(({ loadingPromise }) => loadingPromise)
-      .filter(Boolean);
-    await Promise.all(skillCardLoadingPromises);
   }
 
   get commands() {
@@ -285,14 +260,20 @@ export class RoomResource extends Resource<Args> {
 
   private async loadFromEvents(roomId: string) {
     let index = this._messageCache.size;
-
+    // we know skill event ids
     for (let event of this.sortedEvents) {
       switch (event.type) {
         case 'm.room.member':
           await this.loadRoomMemberEvent(roomId, event);
           break;
         case 'm.room.message':
-          this.loadRoomMessage({ roomId, event, index });
+          if (this.isCardFragmentEvent(event)) {
+            await this.loadCardFragment(event);
+          } else if (this.isCommandDefinitionsEvent(event)) {
+            break;
+          } else {
+            await this.loadRoomMessage({ roomId, event, index });
+          }
           break;
         case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
           this.updateMessageCommandResult({ roomId, event, index });
@@ -335,7 +316,53 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   }
 
-  private loadRoomMessage({
+  private isCardFragmentEvent(
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
+  ): event is CardMessageEvent & {
+    content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+  } {
+    return event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE;
+  }
+
+  private async loadSkillCardIntoCache(eventId: string) {
+    let cardDoc = this.serializedCardFromFragments(eventId);
+    if (!cardDoc.data.id) {
+      console.warn(
+        `No card id found for skill event id ${eventId}, this should not happen, this can happen if you add a skill card to a room without saving it, and without giving it an ID`,
+      );
+      return;
+    }
+    let cardId = cardDoc.data.id;
+    let skillCard = (await this.cardService.createFromSerialized(
+      cardDoc.data,
+      cardDoc,
+    )) as SkillCard;
+
+    this._skillCardsCache.set(cardId, skillCard);
+    this._skillEventIdToCardIdCache.set(eventId, cardId);
+  }
+
+  private async loadCardFragment(
+    event: CardMessageEvent & {
+      content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+    },
+  ) {
+    let eventId = event.event_id;
+    this._fragmentCache.set(eventId, event.content);
+    if (
+      !this.allSkillEventIds.has(eventId) ||
+      this._skillEventIdToCardIdCache.has(eventId)
+    ) {
+      return;
+    }
+    await this.loadSkillCardIntoCache(eventId);
+  }
+
+  private async loadRoomMessage({
     roomId,
     event,
     index,
@@ -348,19 +375,15 @@ export class RoomResource extends Resource<Args> {
       | CommandDefinitionsEvent;
     index: number;
   }) {
-    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      this._fragmentCache.set(event.event_id, event.content);
-      return;
-    }
     if (this.isCommandDefinitionsEvent(event)) {
       // We don't want to show this to the user
       return;
     }
 
-    this.upsertMessage({ roomId, event, index });
+    await this.upsertMessage({ roomId, event, index });
   }
 
-  private upsertMessage({
+  private async upsertMessage({
     roomId,
     event,
     index,
