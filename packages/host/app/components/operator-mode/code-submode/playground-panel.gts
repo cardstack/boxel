@@ -12,7 +12,7 @@ import {
   CardContainer,
   CardHeader,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -32,6 +32,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import Preview from '../../preview';
+
+import FormatChooser from './format-chooser';
 
 const getItemTitle = (item: CardDef, displayName?: string) => {
   if (!item) {
@@ -77,47 +79,79 @@ interface PlaygroundContentSignature {
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
-    <div class='instance-chooser-container'>
-      <BoxelSelect
-        class='instance-chooser'
-        @options={{this.options.instances}}
-        @selected={{this.card}}
-        @selectedItemComponent={{if
-          this.card
-          (component SelectedItem title=(getItemTitle this.card @displayName))
-        }}
-        @onChange={{this.onSelect}}
-        @placeholder='Please Select'
-        data-test-instance-chooser
-        as |item|
-      >
-        {{getItemTitle item @displayName}}
-      </BoxelSelect>
-    </div>
-    <div class='preview-area'>
-      {{#if this.card}}
-        {{#if (eq this.format 'isolated')}}
-          <CardContainer class='isolated-preview-container'>
-            {{#let (this.realm.info this.card.id) as |realmInfo|}}
-              <CardHeader
-                class='isolated-preview-header'
-                @cardTypeDisplayName={{cardTypeDisplayName this.card}}
-                @cardTypeIcon={{cardTypeIcon this.card}}
-                @realmInfo={{realmInfo}}
-                @isTopCard={{true}}
-                @moreOptionsMenuItems={{this.contextMenuItems}}
+    <div class='playground-panel-content'>
+      <div class='instance-chooser-container'>
+        <BoxelSelect
+          class='instance-chooser'
+          @options={{this.options.instances}}
+          @selected={{this.card}}
+          @selectedItemComponent={{if
+            this.card
+            (component SelectedItem title=(getItemTitle this.card @displayName))
+          }}
+          @onChange={{this.onSelect}}
+          @placeholder='Please Select'
+          data-test-instance-chooser
+          as |item|
+        >
+          {{getItemTitle item @displayName}}
+        </BoxelSelect>
+      </div>
+      <div class='preview-area'>
+        {{#if this.card}}
+          {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
+            <CardContainer class='preview-container'>
+              {{#let (this.realm.info this.card.id) as |realmInfo|}}
+                <CardHeader
+                  class='preview-header'
+                  @cardTypeDisplayName={{cardTypeDisplayName this.card}}
+                  @cardTypeIcon={{cardTypeIcon this.card}}
+                  @realmInfo={{realmInfo}}
+                  @isTopCard={{true}}
+                  @moreOptionsMenuItems={{this.contextMenuItems}}
+                />
+              {{/let}}
+              <Preview
+                class='preview'
+                @card={{this.card}}
+                @format={{this.format}}
               />
-            {{/let}}
-            <Preview
-              class='isolated-preview'
-              @card={{this.card}}
-              @format={{this.format}}
-            />
-          </CardContainer>
+            </CardContainer>
+          {{else if (eq this.format 'embedded')}}
+            <CardContainer class='preview-container'>
+              <Preview
+                class='preview'
+                @card={{this.card}}
+                @format={{this.format}}
+              />
+            </CardContainer>
+          {{else if (eq this.format 'atom')}}
+            <div class='atom-preview-container' data-test-atom-preview>Lorem
+              ipsum dolor sit amet, consectetur adipiscing elit, sed do
+              <Preview
+                class='atom-preview'
+                @card={{this.card}}
+                @format={{this.format}}
+                @displayContainer={{false}}
+              />
+              tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+              minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+              aliquip ex ea commodo consequat.</div>
+          {{/if}}
         {{/if}}
-      {{/if}}
+      </div>
+      <FormatChooser
+        class='format-chooser'
+        @format={{this.format}}
+        @setFormat={{this.setFormat}}
+      />
     </div>
     <style scoped>
+      .playground-panel-content {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+      }
       .instance-chooser-container {
         position: sticky;
         z-index: 1;
@@ -131,20 +165,50 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
       }
-      .isolated-preview-container {
+      .preview-container {
         height: auto;
-        margin-top: var(--boxel-sp-sm);
         color: var(--boxel-dark);
         z-index: 0;
       }
-      .isolated-preview-header {
+      .preview-header {
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
         z-index: 1;
       }
-      .isolated-preview {
+      .preview {
         box-shadow: none;
         border-radius: 0;
+      }
+      .playground-panel-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        min-height: 100%;
+      }
+      .format-chooser {
+        position: sticky;
+        bottom: 0;
+        margin-top: auto;
+
+        --boxel-format-chooser-button-bg-color: var(--boxel-light);
+        --boxel-format-chooser-button-width: 80px;
+        --boxel-format-chooser-button-min-width: 80px;
+      }
+      .atom-preview-container {
+        color: #c7c7c7;
+        font: 500 var(--boxel-font-sm);
+        line-height: 2.15;
+        letter-spacing: 0.13px;
+      }
+      .atom-preview :deep(.atom-default-template) {
+        color: var(--boxel-dark);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-4xs);
+        background-color: var(--boxel-light);
+        margin: 0 var(--boxel-sp-xxxs);
+        font: 600 var(--boxel-font-xs);
+        line-height: 1.27;
+        letter-spacing: 0.17px;
       }
     </style>
   </template>
@@ -167,8 +231,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = task(async (id: string) => {
-    await this.operatorModeStateService.openCardInInteractMode(new URL(id));
+  private openInInteractMode = task(async (id: string, format: Format) => {
+    await this.operatorModeStateService.openCardInInteractMode(
+      new URL(id),
+      format,
+    );
   });
 
   private get contextMenuItems() {
@@ -187,7 +254,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode.perform(cardId),
+        action: () => this.openInInteractMode.perform(cardId, this.format),
         icon: Eye,
       }),
     ];
@@ -196,6 +263,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   @action private onSelect(card: CardDef) {
     this.card = card;
+  }
+
+  @action
+  private setFormat(format: Format) {
+    this.format = format;
   }
 }
 
@@ -219,6 +291,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               @codeRef={{codeRef}}
               @displayName={{@cardType.type.displayName}}
             />
+
           {{else}}
             Error: Playground could not be loaded.
           {{/if}}
@@ -239,10 +312,10 @@ export default class PlaygroundPanel extends Component<Signature> {
         width: 100%;
         padding: var(--boxel-sp);
         background-color: var(--boxel-dark);
-        color: var(--boxel-light);
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
+        position: relative;
       }
       .loading-icon {
         display: inline-block;

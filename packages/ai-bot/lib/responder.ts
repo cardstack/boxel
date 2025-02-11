@@ -20,33 +20,29 @@ let log = logger('ai-bot');
 export class Responder {
   // internally has a debounced function that will send the text messages
 
-  initialMessageId: string | undefined;
-  initialMessageReplaced = false;
   client: MatrixClient;
   roomId: string;
   messagePromises: Promise<ISendEventResponse | void>[] = [];
-  sendMessageEventWithDebouncing: (
-    content: string,
-    eventToUpdate: string | undefined,
-    isStreamingFinished?: boolean,
-  ) => Promise<void>;
+
+  responseEventId: string | undefined;
+  initialMessageReplaced = false;
+  latestContent = '';
+  isStreamingFinished = false;
+
+  sendMessageEventWithDebouncing: () => Promise<void>;
 
   constructor(client: MatrixClient, roomId: string) {
     this.roomId = roomId;
     this.client = client;
     this.sendMessageEventWithDebouncing = debounce(
-      async (
-        content: string,
-        eventToUpdate: string | undefined,
-        isStreamingFinished = false,
-      ) => {
+      async () => {
         const messagePromise = sendMessageEvent(
           this.client,
           this.roomId,
-          content,
-          eventToUpdate,
+          this.latestContent,
+          this.responseEventId,
           {
-            isStreamingFinished: isStreamingFinished,
+            isStreamingFinished: this.isStreamingFinished,
           },
         );
         this.messagePromises.push(messagePromise);
@@ -65,7 +61,7 @@ export class Responder {
       undefined,
       { isStreamingFinished: false },
     );
-    this.initialMessageId = initialMessage.event_id;
+    this.responseEventId = initialMessage.event_id;
   }
 
   async onChunk(chunk: {
@@ -81,10 +77,8 @@ export class Responder {
   }
 
   async onContent(snapshot: string) {
-    await this.sendMessageEventWithDebouncing(
-      cleanContent(snapshot),
-      this.initialMessageId,
-    );
+    this.latestContent = cleanContent(snapshot);
+    await this.sendMessageEventWithDebouncing();
     this.initialMessageReplaced = true;
   }
 
@@ -116,14 +110,14 @@ export class Responder {
     for (const toolCall of msg.tool_calls || []) {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
-        let optionPromise = sendCommandEvent(
+        let commandEventPromise = sendCommandEvent(
           this.client,
           this.roomId,
           this.deserializeToolCall(toolCall),
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.initialMessageReplaced ? undefined : this.responseEventId,
         );
-        this.messagePromises.push(optionPromise);
-        await optionPromise;
+        this.messagePromises.push(commandEventPromise);
+        await commandEventPromise;
         this.initialMessageReplaced = true;
       } catch (error) {
         Sentry.captureException(error);
@@ -132,7 +126,7 @@ export class Responder {
           this.client,
           this.roomId,
           error,
-          this.initialMessageReplaced ? undefined : this.initialMessageId,
+          this.responseEventId,
         );
         this.messagePromises.push(errorPromise);
         await errorPromise;
@@ -146,18 +140,15 @@ export class Responder {
       this.client,
       this.roomId,
       error,
-      this.initialMessageId,
+      this.responseEventId,
     );
   }
 
   async finalize(finalContent: string | void | null | undefined) {
     if (finalContent) {
-      finalContent = cleanContent(finalContent);
-      await this.sendMessageEventWithDebouncing(
-        finalContent,
-        this.initialMessageId,
-        true,
-      );
+      this.latestContent = cleanContent(finalContent);
+      this.isStreamingFinished = true;
+      await this.sendMessageEventWithDebouncing();
     }
     await Promise.all(this.messagePromises);
   }

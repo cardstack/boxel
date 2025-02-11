@@ -1,11 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, array } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
+import { array } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
@@ -38,6 +34,8 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
+import FormatChooser from '../code-submode/format-chooser';
+
 import EmbeddedPreview from './embedded-preview';
 import FittedFormatGallery from './fitted-format-gallery';
 
@@ -53,7 +51,6 @@ interface Signature {
 }
 
 export default class CardPreviewPanel extends Component<Signature> {
-  @tracked footerWidthPx = 0;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
 
@@ -78,18 +75,6 @@ export default class CardPreviewPanel extends Component<Signature> {
   @provide(RealmURLContextName)
   get realmURL() {
     return this.args.realmURL;
-  }
-
-  @action setFooterWidthPx(footerWidthPx: number) {
-    this.footerWidthPx = footerWidthPx;
-  }
-
-  get footerButtonsClass() {
-    if (this.footerWidthPx < 380) {
-      // Adjust this as needed - it's where the buttons in single line start to get too squished
-      return 'collapsed';
-    }
-    return null;
   }
 
   openInInteractMode = task(async () => {
@@ -174,42 +159,9 @@ export default class CardPreviewPanel extends Component<Signature> {
         {{/if}}
       </div>
     </div>
-    <div
-      class='preview-footer'
-      {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
-      data-test-code-mode-card-preview-footer
-    >
+    <div class='preview-footer' data-test-code-mode-card-preview-footer>
       <div class='preview-footer-title'>Preview as</div>
-      <div class='footer-buttons {{this.footerButtonsClass}}'>
-        <button
-          class='footer-button {{if (eq this.format "isolated") "active"}}'
-          {{on 'click' (fn @setFormat 'isolated')}}
-          data-test-preview-card-footer-button-isolated
-        >Isolated</button>
-        <button
-          class='footer-button {{if (eq this.format "embedded") "active"}}'
-          {{on 'click' (fn @setFormat 'embedded')}}
-          data-test-preview-card-footer-button-embedded
-        >
-          Embedded</button>
-        <button
-          class='footer-button {{if (eq this.format "fitted") "active"}}'
-          {{on 'click' (fn @setFormat 'fitted')}}
-          data-test-preview-card-footer-button-fitted
-        >
-          Fitted</button>
-        <button
-          class='footer-button {{if (eq this.format "atom") "active"}}'
-          {{on 'click' (fn @setFormat 'atom')}}
-          data-test-preview-card-footer-button-atom
-        >
-          Atom</button>
-        <button
-          class='footer-button {{if (eq this.format "edit") "active"}}'
-          {{on 'click' (fn @setFormat 'edit')}}
-          data-test-preview-card-footer-button-edit
-        >Edit</button>
-      </div>
+      <FormatChooser @format={{this.format}} @setFormat={{@setFormat}} />
     </div>
 
     <style scoped>
@@ -260,52 +212,20 @@ export default class CardPreviewPanel extends Component<Signature> {
         letter-spacing: 0.6px;
       }
 
-      .footer-buttons {
+      :deep(.format-chooser__buttons) {
+        --boxel-format-chooser-border-color: var(--boxel-400);
         margin: auto var(--boxel-sp-sm);
-        display: flex;
-        width: 100% - calc(2 * var(--boxel-sp));
+        width: 100%;
+        box-shadow: none;
       }
 
-      .footer-buttons.collapsed {
-        display: block;
-        gap: var(--boxel-sp-sm);
-        width: 100% - calc(2 * var(--boxel-sp));
-      }
-
-      .footer-button {
+      :deep(.format-chooser__button) {
         padding: var(--boxel-sp-xxxs) 0;
         flex-grow: 1;
         flex-basis: 0;
-        font-weight: 600;
+        font: 600 var(--boxel-font-sm);
         background: transparent;
         color: var(--boxel-dark);
-        border: 1px solid var(--boxel-400);
-      }
-
-      .footer-buttons.collapsed .footer-button {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        border-radius: 6px;
-        margin-top: var(--boxel-sp-xxxs);
-        margin-right: var(--boxel-sp-xxs);
-      }
-
-      .footer-button:first-child {
-        border-top-left-radius: var(--boxel-border-radius);
-        border-bottom-left-radius: var(--boxel-border-radius);
-      }
-
-      .footer-button:last-child {
-        border-top-right-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-      }
-
-      .footer-button + .footer-button {
-        margin-left: -1px;
-      }
-
-      .footer-button.active {
-        background: #27232f;
-        color: var(--boxel-teal);
       }
 
       .icon-button {
@@ -357,34 +277,5 @@ class ScrollModifier extends Modifier<ScrollSignature> {
         element.removeEventListener('scroll', onScroll);
       });
     }
-  }
-}
-
-interface ResizeSignature {
-  Args: {
-    Named: {
-      setFooterWidthPx: (footerWidthPx: number) => void;
-    };
-  };
-}
-
-class ResizeModifier extends Modifier<ResizeSignature> {
-  modify(
-    element: HTMLElement,
-    _positional: [],
-    { setFooterWidthPx }: ResizeSignature['Args']['Named'],
-  ) {
-    let resizeObserver = new ResizeObserver(() => {
-      // setTimeout prevents the "ResizeObserver loop completed with undelivered notifications" error that happens in tests
-      setTimeout(() => {
-        setFooterWidthPx(element.clientWidth);
-      }, 1);
-    });
-
-    resizeObserver.observe(element);
-
-    registerDestructor(this, () => {
-      resizeObserver.disconnect();
-    });
   }
 }
