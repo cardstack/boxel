@@ -11,6 +11,7 @@ import DotIcon from '@cardstack/boxel-icons/dot';
 
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
+import { restartableTask } from 'ember-concurrency';
 
 import {
   BoxelButton,
@@ -23,30 +24,29 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import {
   type ResolvedCodeRef,
+  type Query,
+  type LooseSingleCardDocument,
   specRef,
   getCards,
-  type Query,
   isCardDef,
   isFieldDef,
 } from '@cardstack/runtime-common';
+import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import {
   CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import CardService from '@cardstack/host/services/card-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService, {
   EnhancedRealmInfo,
 } from '@cardstack/host/services/realm';
-
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
-
-import { type FileType } from '../create-file-modal';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -54,16 +54,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
-    createFile: (
-      fileType: FileType,
-      definitionClass?: {
-        displayName: string;
-        ref: ResolvedCodeRef;
-        specType?: SpecType;
-      },
-      sourceInstance?: CardDef,
-    ) => Promise<void>;
-    isCreateModalShown: boolean;
+    isCreateSpecInstanceRunning: boolean;
   };
   Blocks: {
     default: [
@@ -73,7 +64,7 @@ interface Signature {
         | 'specInstances'
         | 'selectedInstance'
         | 'createSpec'
-        | 'isCreateModalShown'
+        | 'isCreateSpecInstanceRunning'
       >,
       WithBoundArgs<
         typeof SpecPreviewContent,
@@ -92,8 +83,8 @@ interface TitleSignature {
     specInstances: Spec[];
     selectedInstance: Spec | null;
     showCreateSpecIntent: boolean;
-    createSpec: () => void;
-    isCreateModalShown: boolean;
+    createSpec: (event: MouseEvent) => void;
+    isCreateSpecInstanceRunning: boolean;
   };
 }
 
@@ -114,7 +105,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
         <BoxelButton
           @kind='primary'
           @size='small'
-          @disabled={{@isCreateModalShown}}
+          @loading={{@isCreateSpecInstanceRunning}}
           {{on 'click' @createSpec}}
           data-test-create-spec-button
         >
@@ -265,6 +256,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         gap: var(--boxel-sp-sm);
         height: 100%;
         width: 100%;
+      }
+      .spec-preview {
         padding: var(--boxel-sp-sm);
       }
       .create-spec-intent-message {
@@ -307,11 +300,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
+  @service private declare cardService: CardService;
   @tracked _selectedInstance?: Spec;
-
-  get realms() {
-    return this.realmServer.availableRealmURLs;
-  }
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -327,6 +317,44 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         '',
       )}`,
     };
+  }
+
+  private createSpecInstance = restartableTask(
+    async (ref: ResolvedCodeRef, specType: SpecType) => {
+      let relativeTo = new URL(ref.module);
+      let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+      let realmURL = this.operatorModeStateService.realmURL;
+      if ('name' in maybeRef && 'module' in maybeRef) {
+        ref = maybeRef;
+      }
+      let doc: LooseSingleCardDocument = {
+        data: {
+          attributes: {
+            specType,
+            ref,
+          },
+          meta: {
+            adoptsFrom: specRef,
+            realmURL: realmURL.href,
+          },
+        },
+      };
+      try {
+        let card = await this.cardService.createFromSerialized(doc.data, doc);
+        if (!card) {
+          throw new Error(
+            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+          );
+        }
+        await this.cardService.saveModel(card);
+      } catch (e: any) {
+        console.log('Error saving', e);
+      }
+    },
+  );
+
+  get realms() {
+    return this.realmServer.availableRealmURLs;
   }
 
   private get specQuery(): Query {
@@ -415,7 +443,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     throw new Error('Unidentified spec');
   }
 
-  @action private createSpec() {
+  @action createSpec(event: MouseEvent) {
+    event.stopPropagation();
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
     }
@@ -423,17 +452,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       throw new Error('bug: no code ref');
     }
     let specType = this.guessSpecType(this.args.selectedDeclaration);
-    let displayName = this.getSelectedDeclarationAsCodeRef.name;
-    this.args.createFile(
-      {
-        id: 'spec-instance',
-        displayName: 'Boxel Specification', //display name in modal
-      },
-      {
-        displayName: displayName,
-        ref: this.getSelectedDeclarationAsCodeRef,
-        specType,
-      },
+    this.createSpecInstance.perform(
+      this.getSelectedDeclarationAsCodeRef,
+      specType,
     );
   }
 
@@ -456,7 +477,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         specInstances=this.specInstances
         selectedInstance=this.selectedInstance
         createSpec=this.createSpec
-        isCreateModalShown=@isCreateModalShown
+        isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
       )
       (component
         SpecPreviewContent
