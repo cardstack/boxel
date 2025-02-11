@@ -1015,8 +1015,6 @@ export default class CodeSubmode extends Component<Signature> {
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
-                          @createFile={{perform this.createFile}}
-                          @isCreateModalShown={{bool this.isCreateModalOpen}}
                           as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item

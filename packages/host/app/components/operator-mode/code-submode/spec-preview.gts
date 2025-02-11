@@ -57,7 +57,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
-    isCreateSpecInstanceRunning: boolean;
   };
   Blocks: {
     default: [
