@@ -48,25 +48,6 @@ const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;
 
-function stripRealmUserId(card: any) {
-  let strippedCard = { ...card };
-  delete strippedCard?.data?.meta?.realmInfo?.realmUserId;
-  delete strippedCard?.meta?.realmInfo?.realmUserId;
-
-  if (strippedCard?.included) {
-    strippedCard.included = strippedCard.included.map((card: any) => {
-      delete card.meta.realmInfo.realmUserId;
-      return card;
-    });
-  }
-
-  return strippedCard;
-}
-
-function stripRealmUserIds(cards: any[]) {
-  return cards.map((card) => stripRealmUserId(card));
-}
-
 module(`Integration | realm indexing and querying`, function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -110,7 +91,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
     let queryEngine = realm.realmIndexQueryEngine;
     let { data: cards } = await queryEngine.search({});
-    assert.deepEqual(stripRealmUserIds(cards), [
+    assert.deepEqual(cards, [
       {
         id: `${testRealmURL}empty`,
         type: 'card',
@@ -279,7 +260,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         new URL(`${testRealmURL}Pet/mango`),
       );
       if (mango?.type === 'doc') {
-        assert.deepEqual(stripRealmUserId(mango.doc.data), {
+        assert.deepEqual(mango.doc.data, {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
           links: {
@@ -367,7 +348,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       // we see the "production" version of this card while it is being indexed
       delete entry.doc.data.meta.lastModified;
       delete entry.doc.data.meta.resourceCreatedAt;
-      assert.deepEqual(stripRealmUserId(entry.doc.data), {
+      assert.deepEqual(entry.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
         links: {
@@ -411,7 +392,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         // we see the "production" version of this card while it is being indexed
         delete entry.doc.data.meta.lastModified;
         delete entry.doc.data.meta.resourceCreatedAt;
-        assert.deepEqual(stripRealmUserId(entry.doc.data), {
+        assert.deepEqual(entry.doc.data, {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
           links: {
@@ -494,7 +475,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}Pet/mango`),
     );
     if (mango?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(mango.doc.data), {
+      assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
         links: {
@@ -580,7 +561,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     let indexer = realm.realmIndexQueryEngine;
     let mango = await indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(mango.doc.data), {
+      assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
         links: {
@@ -657,7 +638,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}person-spec`),
     );
     if (entry?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(entry.doc.data), {
+      assert.deepEqual(entry.doc.data, {
         id: `${testRealmURL}person-spec`,
         type: 'card',
         links: {
@@ -1621,7 +1602,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     );
     if (vendor?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(vendor.doc), {
+      assert.deepEqual(vendor.doc, {
         data: {
           id: `${testRealmURL}Vendor/vendor1`,
           type: 'card',
@@ -2120,7 +2101,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
 
     if (hassan?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(hassan.doc.data), {
+      assert.deepEqual(hassan.doc.data, {
         id: `${testRealmURL}PetPerson/hassan`,
         type: 'card',
         links: { self: `${testRealmURL}PetPerson/hassan` },
@@ -2160,7 +2141,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           realmURL: 'http://test-realm/test/',
         },
       });
-      assert.deepEqual(stripRealmUserIds(hassan.doc.included), [
+      assert.deepEqual(hassan.doc.included, [
         {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
@@ -2220,7 +2201,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(stripRealmUserId(hassanEntry.searchDoc), {
+      assert.deepEqual(hassanEntry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/hassan`,
         firstName: 'Hassan',
@@ -2282,7 +2263,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
 
     if (card?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(card.doc), {
+      assert.deepEqual(card.doc, {
         data: {
           id: `${testRealmURL}PetPerson/burcu`,
           type: 'card',
@@ -2325,7 +2306,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/burcu`),
     );
     if (entry) {
-      assert.deepEqual(stripRealmUserId(entry.searchDoc), {
+      assert.deepEqual(entry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
@@ -2399,7 +2380,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
 
     if (spec?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(spec.doc.data), {
+      assert.deepEqual(spec.doc.data, {
         id: `${testRealmURL}pet-person-spec`,
         type: 'card',
         links: { self: `${testRealmURL}pet-person-spec` },
@@ -2552,7 +2533,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassan?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(hassan.doc.data), {
+      assert.deepEqual(hassan.doc.data, {
         id: `${testRealmURL}Friend/hassan`,
         type: 'card',
         links: {
@@ -2598,7 +2579,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(stripRealmUserId(hassanEntry.searchDoc), {
+      assert.deepEqual(hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -2685,7 +2666,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     );
     if (hassan?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(hassan.doc), {
+      assert.deepEqual(hassan.doc, {
         data: {
           id: `${testRealmURL}Friend/hassan`,
           type: 'card',
@@ -2803,7 +2784,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     );
     if (mango?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(mango.doc), {
+      assert.deepEqual(mango.doc, {
         data: {
           id: `${testRealmURL}Friend/mango`,
           type: 'card',
@@ -2951,7 +2932,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     );
     if (hassan?.type === 'doc') {
-      assert.deepEqual(stripRealmUserId(hassan.doc), {
+      assert.deepEqual(hassan.doc, {
         data: {
           id: `${testRealmURL}Friend/hassan`,
           type: 'card',
@@ -3075,7 +3056,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
     if (hassan?.type === 'doc') {
       assert.deepEqual(
-        stripRealmUserId(hassan.doc.data),
+        hassan.doc.data,
         {
           id: hassanID,
           type: 'card',
@@ -3110,7 +3091,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       );
 
       assert.deepEqual(
-        stripRealmUserIds(hassan.doc.included),
+        hassan.doc.included,
         [
           {
             id: mangoID,
@@ -3209,7 +3190,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
     if (mango?.type === 'doc') {
       assert.deepEqual(
-        stripRealmUserId(mango.doc.data),
+        mango.doc.data,
         {
           id: mangoID,
           type: 'card',
@@ -3239,7 +3220,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'mango doc.data is correct',
       );
       assert.deepEqual(
-        stripRealmUserIds(mango.doc.included),
+        mango.doc.included,
         [
           {
             id: hassanID,
@@ -3348,7 +3329,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     });
     if (vanGogh?.type === 'doc') {
       assert.deepEqual(
-        stripRealmUserId(vanGogh.doc.data),
+        vanGogh.doc.data,
         {
           id: vanGoghID,
           type: 'card',
@@ -3378,7 +3359,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'vanGogh doc.data is correct',
       );
       assert.deepEqual(
-        stripRealmUserIds(vanGogh.doc.included),
+        vanGogh.doc.included,
         [
           {
             id: hassanID,
