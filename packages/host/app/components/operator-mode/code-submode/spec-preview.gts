@@ -11,7 +11,7 @@ import DotIcon from '@cardstack/boxel-icons/dot';
 
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
-import { restartableTask } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import {
   BoxelButton,
@@ -319,7 +319,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  private createSpecInstance = restartableTask(
+  private createSpecInstance = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
       let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
