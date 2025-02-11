@@ -362,28 +362,7 @@ export class RoomResource extends Resource<Args> {
     await this.loadSkillCardIntoCache(eventId);
   }
 
-  private async loadRoomMessage({
-    roomId,
-    event,
-    index,
-  }: {
-    roomId: string;
-    event:
-      | MessageEvent
-      | CommandEvent
-      | CardMessageEvent
-      | CommandDefinitionsEvent;
-    index: number;
-  }) {
-    if (this.isCommandDefinitionsEvent(event)) {
-      // We don't want to show this to the user
-      return;
-    }
-
-    await this.upsertMessage({ roomId, event, index });
-  }
-
-  private async upsertMessage({
+  private loadRoomMessage({
     roomId,
     event,
     index,
