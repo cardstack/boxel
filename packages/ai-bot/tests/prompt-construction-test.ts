@@ -1660,7 +1660,6 @@ test('No tools are available if skill is not enabled', () => {
   );
 
   const { tools } = getPromptParts(eventList, '@aibot:localhost');
-  console.log(tools);
   // we should not have any tools available
   assert.true(tools.length == 0, 'Should not have tools available');
 });

@@ -619,11 +619,6 @@ export default class MatrixService extends Service {
         },
       });
     }
-    console.log(
-      'Sending command definitions to room',
-      roomId,
-      APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-    );
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
       body: 'Command Definitions',
