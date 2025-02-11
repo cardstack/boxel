@@ -6,7 +6,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { baseCardRef, isField } from './constants';
+import { isField } from './constants';
 import { CardError } from './error';
 import { trimExecutableExtension } from './index';
 
@@ -228,43 +228,15 @@ function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
 }
 
-function refEquals(ref1: CodeRef, ref2: CodeRef): boolean {
-  // For now, let's only handle for resolved code refs
-  if (!isResolvedCodeRef(ref1) || !isResolvedCodeRef(ref2)) {
-    return false;
-  }
-  return ref1.name === ref2.name && ref1.module === ref2.module;
-}
-
-async function getAncestorRef(codeRef: CodeRef, loader: Loader) {
-  let card = await loadCard(codeRef, { loader: loader });
-  let ancestor = getAncestor(card);
-  return identifyCard(ancestor);
-}
-
-//This function identifies the code ref identity of the card and verifies
-//that it is a child of the ancestor
-async function isInsideAncestorChain(
+async function isInsideAncestorChainOfCardDef(
   codeRef: CodeRef,
-  codeRefAncestor: CodeRef,
   loader: Loader,
 ): Promise<boolean | undefined> {
-  if (
-    refEquals(codeRef, baseCardRef) &&
-    !refEquals(codeRefAncestor, baseCardRef)
-  ) {
-    return false;
-  }
-  if (refEquals(codeRef, codeRefAncestor)) {
+  let card = await loadCard(codeRef, { loader: loader });
+  if (isCardDef(card)) {
     return true;
-  } else {
-    let newAncestorRef = await getAncestorRef(codeRef, loader);
-    if (newAncestorRef) {
-      return isInsideAncestorChain(newAncestorRef, codeRefAncestor, loader);
-    } else {
-      return false;
-    }
   }
+  return false;
 }
 
 // utility to return subclassType when it exists and is part of the ancestor chain of type
@@ -275,7 +247,7 @@ export async function getNarrowestType(
 ) {
   let narrowTypeExists = false;
   narrowTypeExists =
-    (await isInsideAncestorChain(subclassType, type, loader)) ?? false;
+    (await isInsideAncestorChainOfCardDef(subclassType, loader)) ?? false;
   let narrowestType = narrowTypeExists && subclassType ? subclassType : type;
   return narrowestType;
 }
