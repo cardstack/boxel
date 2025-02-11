@@ -31,7 +31,10 @@ import {
   isCardDef,
   isFieldDef,
 } from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
+import {
+  codeRefWithAbsoluteURL,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common/code-ref';
 
 import {
   CardOrFieldDeclaration,
@@ -324,7 +327,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       let relativeTo = new URL(ref.module);
       let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
       let realmURL = this.operatorModeStateService.realmURL;
-      if ('name' in maybeRef && 'module' in maybeRef) {
+      if (isResolvedCodeRef(maybeRef)) {
         ref = maybeRef;
       }
       let doc: LooseSingleCardDocument = {
