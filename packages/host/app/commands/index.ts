@@ -3,7 +3,7 @@ import { VirtualNetwork } from '@cardstack/runtime-common';
 import { AddFieldToCardDefinitionCommand } from './add-field-to-card-definition';
 import { AddSkillsToRoomCommand } from './add-skills-to-room';
 import { CopyCardCommand } from './copy-card';
-import { CreateAiAssistantRoomCommand } from './create-ai-assistant-room';
+import { CreateAIAssistantRoomCommand } from './create-ai-assistant-room';
 import { OpenAiAssistantRoomCommand } from './open-ai-assistant-room';
 import { PatchCardCommand } from './patch-card';
 import { ReloadCardCommand } from './reload-card';
@@ -33,7 +33,7 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   });
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',
-    { CreateAiAssistantRoomCommand },
+    { CreateAIAssistantRoomCommand },
   );
   virtualNetwork.shimModule('@cardstack/boxel-host/commands/patch-card', {
     PatchCardCommand,
