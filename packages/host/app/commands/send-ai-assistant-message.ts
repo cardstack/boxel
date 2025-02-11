@@ -102,5 +102,3 @@ export class SendAiAssistantMessageCommand extends HostBaseCommand<
     return new SendAiAssistantMessageResult({ eventId: event_id });
   }
 }
-
-export default SendAiAssistantMessageCommand;

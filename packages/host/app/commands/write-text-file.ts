@@ -47,5 +47,3 @@ export class WriteTextFileCommand extends HostBaseCommand<
     }
   }
 }
-
-export default WriteTextFileCommand;

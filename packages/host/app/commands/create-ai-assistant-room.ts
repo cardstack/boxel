@@ -64,5 +64,3 @@ export class CreateAIAssistantRoomCommand extends HostBaseCommand<
     return new CreateAIAssistantRoomResult({ roomId });
   }
 }
-
-export default CreateAIAssistantRoomCommand;

@@ -26,5 +26,3 @@ export class OpenAiAssistantRoomCommand extends HostBaseCommand<
     this.matrixService.currentRoomId = input.roomId;
   }
 }
-
-export default OpenAiAssistantRoomCommand;

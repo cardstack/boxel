@@ -25,5 +25,3 @@ export class GetBoxelUIStateCommand extends HostBaseCommand<
     });
   }
 }
-
-export default GetBoxelUIStateCommand;

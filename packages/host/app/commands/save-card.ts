@@ -24,5 +24,3 @@ export class SaveCardCommand extends HostBaseCommand<
     await this.cardService.saveModel(input.card, input.realm);
   }
 }
-
-export default SaveCardCommand;

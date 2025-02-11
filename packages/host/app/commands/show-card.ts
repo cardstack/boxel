@@ -37,5 +37,3 @@ export class ShowCardCommand extends HostBaseCommand<
     this.operatorModeStateService.addItemToStack(newStackItem);
   }
 }
-
-export default ShowCardCommand;

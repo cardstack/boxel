@@ -26,5 +26,3 @@ export class ReloadCardCommand extends HostBaseCommand<typeof CardDef> {
     await this.cardService.reloadCard(input);
   }
 }
-
-export default ReloadCardCommand;

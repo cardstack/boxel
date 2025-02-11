@@ -49,5 +49,3 @@ export class UpdateSkillActivationCommand extends HostBaseCommand<
     );
   }
 }
-
-export default UpdateSkillActivationCommand;

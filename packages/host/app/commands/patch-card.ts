@@ -88,5 +88,3 @@ export class PatchCardCommand extends HostBaseCommand<
     return inputTypeCardSchema;
   }
 }
-
-export default PatchCardCommand;

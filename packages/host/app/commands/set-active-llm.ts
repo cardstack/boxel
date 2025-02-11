@@ -25,5 +25,3 @@ export class SetActiveLLMCommand extends HostBaseCommand<
     return undefined;
   }
 }
-
-export default SetActiveLLMCommand;

@@ -8,7 +8,7 @@ import type CardService from '../services/card-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 
-export default class CopyCardCommand extends HostBaseCommand<
+export class CopyCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.CopyCardInput,
   typeof BaseCommandModule.CopyCardResult
 > {

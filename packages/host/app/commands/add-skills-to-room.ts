@@ -47,5 +47,3 @@ export class AddSkillsToRoomCommand extends HostBaseCommand<
     );
   }
 }
-
-export default AddSkillsToRoomCommand;
