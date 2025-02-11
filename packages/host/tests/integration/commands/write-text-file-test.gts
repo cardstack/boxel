@@ -5,7 +5,7 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
-import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
+import { WriteTextFileCommand } from '@cardstack/host/commands/write-text-file';
 import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
 

@@ -17,10 +17,10 @@ import { tracked } from '@glimmer/tracking';
 import { AppCard } from './app-card';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 
-import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import { CreateAIAssistantRoomCommand } from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
-import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
+import { WriteTextFileCommand } from '@cardstack/boxel-host/commands/write-text-file';
 
 import GenerateCodeCommand from './AiAppGenerator/generate-code-command';
 import { restartableTask } from 'ember-concurrency';

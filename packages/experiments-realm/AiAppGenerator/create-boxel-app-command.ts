@@ -4,7 +4,7 @@ import CreateProductRequirementsInstance, {
   CreateProductRequirementsInput,
 } from './create-product-requirements-command';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
-import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
+import { WriteTextFileCommand } from '@cardstack/boxel-host/commands/write-text-file';
 import GenerateCodeCommand from './generate-code-command';
 import { AppCard } from '../app-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';

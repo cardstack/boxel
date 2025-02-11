@@ -22,7 +22,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import { CreateAIAssistantRoomCommand } from '@cardstack/host/commands/create-ai-assistant-room';
 import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';

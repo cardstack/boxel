@@ -11,7 +11,7 @@ import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
 import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
-import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import { CreateAIAssistantRoomCommand } from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
