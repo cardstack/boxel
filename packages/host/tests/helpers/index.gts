@@ -32,6 +32,7 @@ import {
 import {
   testRealmInfo,
   testRealmURL,
+  testRealmURLToUsername,
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -74,8 +75,6 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-
-let testMatrixCount = 0;
 
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
@@ -576,9 +575,8 @@ async function setupTestRealm({
 
   let iteratedTestMatrix = {
     ...baseTestMatrix,
-    username: `@${baseTestMatrix.username}-${testMatrixCount}:localhost`,
+    username: testRealmURLToUsername(realmURL),
   };
-  testMatrixCount++;
 
   realm = new Realm({
     url: realmURL,
