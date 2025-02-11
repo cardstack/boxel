@@ -4,6 +4,7 @@ import { AddFieldToCardDefinitionCommand } from './add-field-to-card-definition'
 import { AddSkillsToRoomCommand } from './add-skills-to-room';
 import { CopyCardCommand } from './copy-card';
 import { CreateAIAssistantRoomCommand } from './create-ai-assistant-room';
+import { GetBoxelUIStateCommand } from './get-boxel-ui-state';
 import { OpenAiAssistantRoomCommand } from './open-ai-assistant-room';
 import { PatchCardCommand } from './patch-card';
 import { ReloadCardCommand } from './reload-card';
@@ -51,6 +52,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-ai-assistant-room',
     { OpenAiAssistantRoomCommand },
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-boxel-ui-state',
+    { GetBoxelUIStateCommand },
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-ai-assistant-message',

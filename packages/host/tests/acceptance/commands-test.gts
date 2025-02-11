@@ -23,7 +23,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { CreateAIAssistantRoomCommand } from '@cardstack/host/commands/create-ai-assistant-room';
-import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
+import { GetBoxelUIStateCommand } from '@cardstack/host/commands/get-boxel-ui-state';
 import { OpenAiAssistantRoomCommand } from '@cardstack/host/commands/open-ai-assistant-room';
 import { PatchCardCommand } from '@cardstack/host/commands/patch-card';
 import { SaveCardCommand } from '@cardstack/host/commands/save-card';
