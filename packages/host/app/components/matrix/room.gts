@@ -42,11 +42,13 @@ import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
@@ -139,8 +141,9 @@ export default class Room extends Component<Signature> {
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
-                @autoAttachedFiles={{this.autoAttachedFiles}}
+                @autoAttachedFile={{this.autoAttachedFile}}
                 @filesToAttach={{this.filesToAttach}}
+                @removeFile={{this.excludeFile}}
               />
               <LLMSelect
                 @selected={{this.roomResource.activeLLM}}
@@ -209,6 +212,9 @@ export default class Room extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
+  @tracked private fileAPI: typeof FileAPI | undefined;
+  @tracked private filesToExclude: FileAPI.FileDef[] = [];
 
   private roomResource = getRoom(
     this,
@@ -238,6 +244,7 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    this.doLoadFileAPI.perform();
     registerDestructor(this, () => {
       this.scrollState().messageVisibilityObserver.disconnect();
     });
@@ -274,12 +281,46 @@ export default class Room extends Component<Signature> {
     return state;
   }
 
-  private get autoAttachedFiles() {
-    return []; // TODO: implement
+  private get autoAttachedFileUrl() {
+    if (!this.fileAPI) {
+      return undefined;
+    }
+    return this.operatorModeStateService.state.codePath?.href;
+  }
+
+  private get autoAttachedFile() {
+    if (!this.autoAttachedFileUrl) {
+      return undefined;
+    }
+
+    if (!this.fileAPI) {
+      return undefined;
+    }
+
+    if (
+      this.filesToExclude.some(
+        (file) => file.sourceUrl === this.autoAttachedFileUrl,
+      )
+    ) {
+      return undefined;
+    }
+
+    return new this.fileAPI.FileDef({
+      sourceUrl: this.autoAttachedFileUrl,
+      name: this.autoAttachedFileUrl.split('/').pop(),
+    });
   }
 
   private get filesToAttach() {
-    return []; // TODO: implement
+    if (!this.fileAPI) {
+      return [];
+    }
+    // User will be eventually able to attach files manually (from the realm file system, or uploaded from the device),
+    // but for now we only support auto-attaching files from the operator mode code path
+    if (!this.autoAttachedFile) {
+      return [];
+    }
+    return [this.autoAttachedFile];
   }
 
   private get isScrolledToBottom() {
@@ -478,6 +519,10 @@ export default class Room extends Component<Signature> {
     this.roomResource.toggleViewCode(message);
   };
 
+  private excludeFile = (file: FileAPI.FileDef) => {
+    this.filesToExclude = [...this.filesToExclude, file];
+  };
+
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
@@ -630,10 +675,13 @@ export default class Room extends Component<Signature> {
           .map((stackItem) => stackItem.card.id),
       };
       try {
+        let files = await this.matrixService.uploadFiles(this.filesToAttach);
+
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
+          files,
           clientGeneratedId,
           context,
         );
@@ -697,6 +745,14 @@ export default class Room extends Component<Signature> {
       roomId: this.args.roomId,
       skills: [card],
     });
+  });
+
+  private doLoadFileAPI = restartableTask(async () => {
+    let fileAPI = await this.loaderService.loader.import<typeof FileAPI>(
+      'https://cardstack.com/base/file-api',
+    );
+
+    this.fileAPI = fileAPI;
   });
 }
 
