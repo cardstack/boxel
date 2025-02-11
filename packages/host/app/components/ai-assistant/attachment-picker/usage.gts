@@ -20,7 +20,7 @@ export default class AiAssistantCardPickerUsage extends Component {
   cards: TrackedArray<CardDef> = new TrackedArray([]);
   @tracked maxNumberOfCards: number | undefined = undefined;
   @tracked autoAttachedCards?: TrackedSet<CardDef> = new TrackedSet();
-  @tracked autoAttachedFiles: TrackedArray<FileDef> = new TrackedArray([]);
+  @tracked autoAttachedFile?: FileDef | undefined;
   @tracked filesToAttach: TrackedArray<FileDef> = new TrackedArray([]);
 
   @action chooseCard(card: CardDef) {
@@ -32,6 +32,13 @@ export default class AiAssistantCardPickerUsage extends Component {
   @action removeCard(card: CardDef) {
     let index = this.cards.findIndex((c) => c.id === card.id);
     this.cards.splice(index, 1);
+  }
+
+  @action removeFile(file: FileDef) {
+    let index = this.filesToAttach.findIndex(
+      (f) => f.sourceUrl === file.sourceUrl,
+    );
+    this.filesToAttach.splice(index, 1);
   }
 
   <template>
@@ -48,8 +55,9 @@ export default class AiAssistantCardPickerUsage extends Component {
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
           @maxNumberOfItemsToAttach={{this.maxNumberOfCards}}
-          @autoAttachedFiles={{this.autoAttachedFiles}}
+          @autoAttachedFile={{this.autoAttachedFile}}
           @filesToAttach={{this.filesToAttach}}
+          @removeFile={{this.removeFile}}
         />
         <CardCatalogModal />
       </:example>
@@ -65,9 +73,9 @@ export default class AiAssistantCardPickerUsage extends Component {
           @value={{this.autoAttachedCards}}
         />
         <Args.Object
-          @name='autoAttachedFiles'
-          @description='An array of files automatically attached to the message.'
-          @value={{this.autoAttachedFiles}}
+          @name='autoAttachedFile'
+          @description='A file automatically attached to the message.'
+          @value={{this.autoAttachedFile}}
         />
         <Args.Object
           @name='filesToAttach'
@@ -83,6 +91,11 @@ export default class AiAssistantCardPickerUsage extends Component {
           @name='removeCard'
           @description='Action to be taken when a card is removed'
           @value={{this.removeCard}}
+        />
+        <Args.Action
+          @name='removeFile'
+          @description='Action to be taken when a file is removed'
+          @value={{this.removeFile}}
         />
         <Args.Number
           @name='maxNumberOfCards'
