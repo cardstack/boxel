@@ -18,6 +18,8 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 
+import FilePill from '@cardstack/host/components/file-pill';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -25,11 +27,12 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     autoAttachedCards?: TrackedSet<CardDef>;
-    autoAttachedFiles?: FileDef[];
     cardsToAttach: CardDef[] | undefined;
+    autoAttachedFile?: FileDef;
     filesToAttach: FileDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
+    removeFile: (file: FileDef) => void;
     maxNumberOfItemsToAttach?: number;
   };
 }
@@ -62,6 +65,27 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               @card={{item}}
               @isAutoAttachedCard={{false}}
               @removeCard={{@removeCard}}
+            />
+          {{/if}}
+        {{else}}
+          {{#if (this.isAutoAttachedFile item)}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <FilePill
+                  @file={{item}}
+                  @isAutoAttachedFile={{true}}
+                  @removeFile={{@removeFile}}
+                />
+              </:trigger>
+              <:content>
+                Currently opened file is shared automatically
+              </:content>
+            </Tooltip>
+          {{else}}
+            <FilePill
+              @file={{item}}
+              @isAutoAttachedFile={{false}}
+              @removeFile={{@removeFile}}
             />
           {{/if}}
         {{/if}}
@@ -141,23 +165,24 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   };
 
   isAutoAttachedCard = (card: CardDef) => {
-    if (this.args.autoAttachedCards === undefined) {
-      return false;
-    }
-    return this.args.autoAttachedCards.has(card);
+    return this.args.autoAttachedCards?.has(card);
+  };
+
+  isAutoAttachedFile = (file: FileDef) => {
+    return this.args.autoAttachedFile?.sourceUrl === file.sourceUrl;
   };
 
   private get items() {
     let cards = this.args.cardsToAttach ?? [];
-    let files = this.args.filesToAttach ?? [];
+
     if (this.args.autoAttachedCards) {
       cards = [...new Set([...this.args.autoAttachedCards, ...cards])];
     }
 
     cards = cards.filter((card) => card.id); // Dont show new unsaved cards
-
-    if (this.args.autoAttachedFiles) {
-      files = [...new Set([...this.args.autoAttachedFiles, ...files])];
+    let files: FileDef[] = [];
+    if (this.args.autoAttachedFile) {
+      files = [...new Set([this.args.autoAttachedFile])];
     }
     return [...cards, ...files];
   }
