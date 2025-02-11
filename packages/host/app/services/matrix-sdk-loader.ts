@@ -113,6 +113,11 @@ export type ExtendedClient = Pick<
   ): Promise<MatrixSDK.LoginResponse>;
   createRealmSession(realmURL: URL): Promise<string>;
   hashMessageWithSecret(message: string): Promise<string>;
+  uploadContent(
+    file: MatrixSDK.FileType,
+    opts: MatrixSDK.UploadOpts,
+  ): Promise<MatrixSDK.UploadResponse>;
+  mxcUrlToHttp(mxcUrl: string): string;
 };
 
 async function hashMessageWithSecret(
