@@ -3,7 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { SetActiveLLMCommand } from '@cardstack/boxel-host/commands/set-active-llm';
-import { CreateAiAssistantRoomCommand } from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import { CreateAIAssistantRoomCommand } from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import { OpenAiAssistantRoomCommand } from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 import { Button } from '@cardstack/boxel-ui/components';
 
