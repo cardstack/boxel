@@ -2,7 +2,7 @@ import { click, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { Realm, baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -12,6 +12,7 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
+  type TestContextWithSSE,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -110,6 +111,7 @@ const newSkillCardSource = `
 
 let matrixRoomId: string;
 module('Spec preview', function (hooks) {
+  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
@@ -124,7 +126,7 @@ module('Spec preview', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
+    ({ realm } = await setupAcceptanceTestRealm({
       contents: {
         'person.gts': personCardSource,
         'pet.gts': petCardSource,
@@ -269,7 +271,7 @@ module('Spec preview', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    });
+    }));
     setActiveRealms([testRealmURL]);
   });
   test('view when there is a single spec instance', async function (assert) {
@@ -313,17 +315,21 @@ module('Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
   });
-  test('have ability to create new spec instances', async function (assert) {
+  test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-create-spec-button]');
-    assert.dom('[data-test-create-file-modal]').exists();
-    await waitFor('[data-test-create-spec-instance]');
-    assert.dom('[data-test-selected-type="NewSkill"]').exists();
-    await click('[data-test-create-spec-instance]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedNumberOfEvents: 2,
+      callback: async () => {
+        await click('[data-test-create-spec-button]');
+      },
+    });
     assert.dom('[data-test-exported-type]').hasText('card');
   });
   test('title does not default to "default"', async function (assert) {
