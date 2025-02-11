@@ -635,21 +635,22 @@ export default class MatrixService extends Service {
         });
 
         let blob = await response.blob();
-        let type = response.headers.get('content-type');
-        if (!type) {
+        let contentType = response.headers.get('content-type');
+
+        if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
         let uploadResponse = await this.client.uploadContent(blob, {
-          type,
+          type: contentType,
         });
 
         file.url = this.client.mxcUrlToHttp(uploadResponse.content_uri);
-        file.type = type;
+        file.contentType = contentType;
 
         return file;
       }),
     );
-    console.log('uploadedFiles', uploadedFiles);
+
     return uploadedFiles;
   }
 
