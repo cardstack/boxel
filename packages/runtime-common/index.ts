@@ -196,9 +196,7 @@ export interface CardChooser {
 }
 
 export interface FileChooser {
-  chooseFile<T>(
-    defaultRealmURL?: URL
-  ): Promise<undefined | T>;
+  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends BaseDef>(
@@ -226,7 +224,9 @@ export async function chooseCard<T extends BaseDef>(
   return await chooser.chooseCard<T>(query, opts);
 }
 
-export async function chooseFile<T extends FieldDef>(): Promise<undefined | any> {
+export async function chooseFile<T extends FieldDef>(): Promise<
+  undefined | any
+> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
