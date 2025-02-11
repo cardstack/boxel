@@ -208,11 +208,10 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  private roomResource = getRoom(
-    this,
-    () => this.args.roomId,
-    () => this.matrixService.getRoomData(this.args.roomId)?.events,
-  );
+  private get roomResource() {
+    return this.matrixService.roomResources.get(this.args.roomId);
+  }
+
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
