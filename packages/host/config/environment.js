@@ -78,6 +78,7 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       ENABLE_PLAYGROUND: true,
+      ENABLE_ATTACHING_FILES: true,
     };
   }
 
