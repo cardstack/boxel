@@ -3,20 +3,20 @@
     "type": "card",
     "attributes": {
       "status": {
-        "index": 2,
-        "label": "Done",
-        "color": "#66BB6A",
-        "completed": true
+        "index": 0,
+        "label": "Not Started",
+        "color": null,
+        "completed": false
       },
       "dateRange": {
-        "start": "2025-01-22",
-        "end": "2025-02-04"
+        "start": "2025-01-21",
+        "end": "2025-01-22"
       },
       "priority": {
-        "index": 3,
-        "label": "High"
+        "index": null,
+        "label": null
       },
-      "name": "Meet Prospect Customer",
+      "name": "Today",
       "details": null,
       "description": null,
       "thumbnailURL": null
@@ -34,7 +34,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../Representative/e0b16307-04bd-4e48-bdf8-517bb35b8119"
+          "self": null
         }
       },
       "contact": {
@@ -44,7 +44,7 @@
       },
       "account": {
         "links": {
-          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
+          "self": null
         }
       },
       "deal": {

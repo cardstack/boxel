@@ -68,6 +68,11 @@
           "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
         }
       },
+      "event": {
+        "links": {
+          "self": "../DealEvent/60cf6fcf-10ec-4d04-b6a8-e409679ccc0a"
+        }
+      },
       "primaryStakeholder": {
         "links": {
           "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"

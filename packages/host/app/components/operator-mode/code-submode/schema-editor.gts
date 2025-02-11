@@ -4,8 +4,6 @@ import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-
 import { getPlural } from '@cardstack/runtime-common';
 import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
@@ -46,6 +44,7 @@ interface Signature {
         | 'cardInheritanceChain'
         | 'goToDefinition'
         | 'isReadOnly'
+        | 'isLoading'
       >,
     ];
   };
@@ -84,6 +83,11 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
       letter-spacing: var(--boxel-lsp-xl);
       text-transform: uppercase;
     }
+    .loading-icon {
+      display: inline-block;
+      margin-right: var(--boxel-sp-xxxs);
+      vertical-align: middle;
+    }
   </style>
 </template>;
 
@@ -120,35 +124,29 @@ export default class SchemaEditor extends Component<Signature> {
     return !!this.args?.moduleContentsResource?.moduleError?.message;
   }
 
-  <template>
-    <style scoped>
-      .loading {
-        display: flex;
-        justify-content: center;
-        padding: var(--boxel-sp-xl);
-      }
-    </style>
-    {{#if @moduleContentsResource.isLoadingNewModule}}
-      <div class='loading'>
-        <LoadingIndicator />
-      </div>
-    {{else}}
+  get isLoading() {
+    return (
+      this.args.moduleContentsResource.isLoadingNewModule ||
+      this.cardInheritanceChain.isLoading
+    );
+  }
 
-      {{yield
-        (component
-          SchemaEditorTitle
-          totalFields=this.totalFields
-          hasModuleError=this.hasModuleError
-        )
-        (component
-          CardAdoptionChain
-          file=@file
-          isReadOnly=@isReadOnly
-          moduleSyntax=this.moduleSyntax
-          cardInheritanceChain=this.cardInheritanceChain.value
-          goToDefinition=@goToDefinition
-        )
-      }}
-    {{/if}}
+  <template>
+    {{yield
+      (component
+        SchemaEditorTitle
+        totalFields=this.totalFields
+        hasModuleError=this.hasModuleError
+      )
+      (component
+        CardAdoptionChain
+        file=@file
+        isReadOnly=@isReadOnly
+        moduleSyntax=this.moduleSyntax
+        cardInheritanceChain=this.cardInheritanceChain.value
+        goToDefinition=@goToDefinition
+        isLoading=this.isLoading
+      )
+    }}
   </template>
 }
