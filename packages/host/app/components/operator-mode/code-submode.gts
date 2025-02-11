@@ -501,11 +501,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (!isPlaygroundEnabled) {
       return false;
     }
-    let declaration = this.selectedDeclaration;
-    if (!declaration || !('cardOrField' in declaration)) {
-      return false;
-    }
-    return isCardDef(declaration.cardOrField);
+    return isCardDef(this.selectedCardOrField?.cardOrField);
   }
 
   get showSpecPreview() {
