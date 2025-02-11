@@ -132,7 +132,6 @@ export {
   CardbotLg,
   CaretDown,
   CheckMark,
-  CodeFile,
   Copy,
   DiagonalArrowLeftUp,
   Download,
