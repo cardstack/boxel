@@ -11,7 +11,6 @@ import Card from './icons/card.gts';
 import CardbotLg from './icons/cardbot-lg.gts';
 import CaretDown from './icons/caret-down.gts';
 import CheckMark from './icons/check-mark.gts';
-import CodeFile from './icons/code-file.gts';
 import Copy from './icons/copy.gts';
 import DiagonalArrowLeftUp from './icons/diagonal-arrow-left-up.gts';
 import Download from './icons/download.gts';
@@ -72,7 +71,6 @@ export const ALL_ICON_COMPONENTS = [
   CardbotLg,
   CaretDown,
   CheckMark,
-  CodeFile,
   Copy,
   DiagonalArrowLeftUp,
   Download,
