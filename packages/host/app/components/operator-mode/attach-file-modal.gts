@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -56,16 +55,15 @@ export default class AttachFileModal extends Component<Signature> {
     this.request = {
       deferred: new Deferred(),
     };
-    if (defaultRealmURL) {
-      let defaultRealm = this.knownRealms.find(
-        (r) => r.url.toString() === defaultRealmURL?.toString(),
-      );
-      this.selectedRealm = defaultRealm ?? this.selectedRealm;
-    }
+    let defaultRealm = this.knownRealms.find(
+      (r) =>
+        r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
+    );
+    this.selectedRealm = defaultRealm ?? this.selectedRealm;
 
-    let entry = await this.request.deferred.promise;
-    if (entry) {
-      return entry as T;
+    let file = await this.request.deferred.promise;
+    if (file) {
+      return file as T;
     } else {
       return undefined;
     }

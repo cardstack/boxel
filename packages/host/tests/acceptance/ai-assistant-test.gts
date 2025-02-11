@@ -354,4 +354,26 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-enter-room="mock_room_2"]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
+
+  test('can open attach file modal', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-choose-card-btn]').hasText('Attach File');
+
+    await click('[data-test-choose-card-btn]');
+    assert.dom('[data-test-attach-file-modal]').exists();
+
+    await click('[data-test-attach-file-modal-realm-chooser]');
+    assert.dom(`[data-test-file="${testRealmURL}index"]`).exists();
+  });
 });

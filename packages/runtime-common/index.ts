@@ -227,9 +227,7 @@ export async function chooseCard<T extends BaseDef>(
 }
 
 //TODO: When FileDef is implemented, please change to T extends FileDef
-export async function chooseFile<T>(
-  defaultRealmURL?: URL
-): Promise<undefined | any> {
+export async function chooseFile<T>(): Promise<undefined | any> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
@@ -238,7 +236,7 @@ export async function chooseFile<T>(
   }
   let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
 
-  return await chooser.chooseFile<T>(defaultRealmURL);
+  return await chooser.chooseFile<T>();
 }
 
 export interface CardSearch {
