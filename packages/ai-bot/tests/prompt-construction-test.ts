@@ -1644,7 +1644,7 @@ test('Tools on enabled skills are available in prompt', () => {
 
   // Verify that the tools array contains the command from the skill
   const switchSubmodeTool = tools.find(
-    (tool) => tool.function?.name === 'SwitchSubmodeCommand_4661',
+    (tool) => tool.function?.name === 'SwitchSubmodeCommand_e82a',
   );
   assert.ok(
     switchSubmodeTool,
