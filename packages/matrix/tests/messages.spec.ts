@@ -352,7 +352,7 @@ test.describe('Room messages', () => {
 
     await page
       .locator(
-        `[data-test-attached-card="${testCard}"] [data-test-remove-item-btn]`,
+        `[data-test-attached-card="${testCard}"] [data-test-remove-card-btn]`,
       )
       .click();
     await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
@@ -366,7 +366,7 @@ test.describe('Room messages', () => {
     ).toContainText('Hassan');
     await page
       .locator(
-        `[data-test-attached-card="${testCard}"] [data-test-remove-item-btn]`,
+        `[data-test-attached-card="${testCard}"] [data-test-remove-card-btn]`,
       )
       .click();
     await expect(
@@ -664,7 +664,7 @@ test.describe('Room messages', () => {
       );
       await page
         .locator(
-          `[data-test-attached-card='${testCard1}'] [data-test-remove-item-btn]`,
+          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
         )
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
@@ -689,7 +689,7 @@ test.describe('Room messages', () => {
       );
       await page
         .locator(
-          `[data-test-attached-card='${testCard1}'] [data-test-remove-item-btn]`,
+          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
         )
         .click();
       await page
