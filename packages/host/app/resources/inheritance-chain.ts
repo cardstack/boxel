@@ -41,6 +41,10 @@ export class InheritanceChainResource extends Resource<Args> {
     return this._value;
   }
 
+  get isLoading() {
+    return this.load.isRunning;
+  }
+
   private load = task(
     async (
       url: string,
