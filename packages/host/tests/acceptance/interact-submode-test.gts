@@ -1024,7 +1024,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert.dom(`[data-test-stack-card="${indexCardId}"]`).exists();
       await click('[data-test-open-ai-assistant]');
-      assert.dom('[data-test-attached-card]').doesNotExist();
+      assert.dom('[data-test-attached-item]').doesNotExist();
       // Press the + button to create a new card instance
       await click('[data-test-create-new-card-button]');
       // Select a card from catalog entries

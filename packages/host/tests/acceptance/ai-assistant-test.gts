@@ -68,7 +68,7 @@ async function assertMessages(
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
         .exists({ count: 1 });
       assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
+        .dom(`[data-test-message-idx="${index}"] [data-test-attached-item]`)
         .exists({ count: cards.length });
       cards.map(async (card) => {
         if (card.title) {
@@ -80,7 +80,7 @@ async function assertMessages(
           // note: attached cards are in atom format (which display the title by default)
           assert
             .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
+              `[data-test-message-idx="${index}"] [data-test-attached-item="${card.id}"]`,
             )
             .containsText(card.title);
         }
@@ -88,7 +88,7 @@ async function assertMessages(
         if (card.realmIconUrl) {
           assert
             .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
+              `[data-test-message-idx="${index}"] [data-test-attached-item="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
             )
             .exists({ count: 1 });
         }

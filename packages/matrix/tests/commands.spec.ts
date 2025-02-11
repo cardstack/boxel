@@ -142,7 +142,7 @@ test.describe('Commands', () => {
     ).toHaveCount(1);
     await page
       .locator(
-        `[data-test-attached-card="${appURL}/mango"] [data-test-remove-card-btn]`,
+        `[data-test-attached-item="${appURL}/mango"] [data-test-remove-item-btn]`,
       )
       .click();
     await sendMessage(page, room1, 'please change this card');

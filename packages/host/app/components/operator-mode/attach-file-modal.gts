@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -23,24 +24,23 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import type RealmService from '@cardstack/host/services/realm';
 
+import { type FileDef } from 'https://cardstack.com/base/file-api';
+
 import FileTree from '../editor/file-tree';
-import { fn } from '@ember/helper';
+import MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Signature {
   Args: {};
 }
 
-type Request = {
-  deferred: Deferred<LocalPath | undefined>;
-};
-
 export default class AttachFileModal extends Component<Signature> {
-  @tracked request?: Request;
+  @tracked deferred?: Deferred<FileDef>;
   @tracked selectedRealm = this.knownRealms[0];
   @tracked selectedFile?: LocalPath;
 
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare matrixService: MatrixService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -51,17 +51,15 @@ export default class AttachFileModal extends Component<Signature> {
   }
 
   // public API
-  async chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T> {
-    this.request = {
-      deferred: new Deferred(),
-    };
+  async chooseFile<T>(): Promise<undefined | T> {
+    this.deferred = new Deferred();
     let defaultRealm = this.knownRealms.find(
       (r) =>
         r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
     );
     this.selectedRealm = defaultRealm ?? this.selectedRealm;
 
-    let file = await this.request.deferred.promise;
+    let file = await this.deferred.promise;
     if (file) {
       return file as T;
     } else {
@@ -70,14 +68,19 @@ export default class AttachFileModal extends Component<Signature> {
   }
 
   @action
-  private pick(file: LocalPath | undefined) {
-    if (this.request) {
-      this.request.deferred.fulfill(file);
+  private pick(path: LocalPath | undefined) {
+    if (this.deferred && path) {
+      let file = this.matrixService.fileAPI.createFileDef({
+        url: path,
+        sourceUrl: path,
+        name: path.split('/').pop()!,
+      });
+      this.deferred.fulfill(file);
     }
 
     this.selectedRealm = this.knownRealms[0];
     this.selectedFile = undefined;
-    this.request = undefined;
+    this.deferred = undefined;
   }
 
   private get knownRealms() {
@@ -176,7 +179,7 @@ export default class AttachFileModal extends Component<Signature> {
         padding: 0 var(--boxel-sp) 40px var(--boxel-sp);
       }
     </style>
-    {{#if this.request}}
+    {{#if this.deferred}}
       <ModalContainer
         @title='Attach File'
         @onClose={{(fn this.pick undefined)}}

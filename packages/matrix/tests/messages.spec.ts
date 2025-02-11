@@ -193,7 +193,7 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
-      page.locator(`[data-test-attached-card="${testCard}"]`),
+      page.locator(`[data-test-attached-item="${testCard}"]`),
     ).toContainText('Hassan');
 
     await page.locator('[data-test-message-field]').fill('This is _my_ card');
@@ -232,7 +232,7 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
-      page.locator(`[data-test-attached-card="${testCard}"]`),
+      page.locator(`[data-test-attached-item="${testCard}"]`),
     ).toContainText('Big Card');
 
     await page.locator('[data-test-message-field]').fill('This is a big card');
@@ -283,7 +283,7 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
-      page.locator(`[data-test-attached-card="${testCard}"]`),
+      page.locator(`[data-test-attached-item="${testCard}"]`),
     ).toContainText('Mango the Puppy');
 
     await page
@@ -344,33 +344,33 @@ test.describe('Room messages', () => {
     await selectCardFromCatalog(page, testCard);
     await selectCardFromCatalog(page, testCard2);
     await expect(
-      page.locator(`[data-test-attached-card="${testCard}"]`),
+      page.locator(`[data-test-attached-item="${testCard}"]`),
     ).toContainText('Hassan');
     await expect(
-      page.locator(`[data-test-attached-card="${testCard2}"]`),
+      page.locator(`[data-test-attached-item="${testCard2}"]`),
     ).toContainText('Mango');
 
     await page
       .locator(
-        `[data-test-attached-card="${testCard}"] [data-test-remove-card-btn]`,
+        `[data-test-attached-item="${testCard}"] [data-test-remove-item-btn]`,
       )
       .click();
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
 
     await page.locator('[data-test-message-field]').fill('1 card');
     await page.locator('[data-test-send-message-btn]').click();
 
     await selectCardFromCatalog(page, testCard);
     await expect(
-      page.locator(`[data-test-attached-card="${testCard}"]`),
+      page.locator(`[data-test-attached-item="${testCard}"]`),
     ).toContainText('Hassan');
     await page
       .locator(
-        `[data-test-attached-card="${testCard}"] [data-test-remove-card-btn]`,
+        `[data-test-attached-item="${testCard}"] [data-test-remove-item-btn]`,
       )
       .click();
     await expect(
-      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+      page.locator(`[data-test-chat-input-area] [data-test-attached-item]`),
     ).toHaveCount(0);
 
     await page.locator('[data-test-message-field]').fill('no card');
@@ -468,7 +468,7 @@ test.describe('Room messages', () => {
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
     await selectCardFromCatalog(page, testCard3);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(3);
+    await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(3);
 
     await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
@@ -483,7 +483,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 4', async ({
+  test('displays "view all" pill when there are more than 4 attached cards', async ({
     page,
   }) => {
     const testCard1 = `${appURL}/hassan`;
@@ -498,19 +498,19 @@ test.describe('Room messages', () => {
     await selectCardFromCatalog(page, testCard1);
     await selectCardFromCatalog(page, testCard2);
     await selectCardFromCatalog(page, testCard3);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(3);
+    await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(3);
 
     await selectCardFromCatalog(page, testCard4);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(4);
+    await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(4);
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(0);
 
     await selectCardFromCatalog(page, testCard5);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(3);
+    await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(4); // current value of MAX_ITEMS_TO_DISPLAY in attachment-picker.gts
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(1);
 
     await page.locator('[data-test-view-all]').click();
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(0);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(5);
+    await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(5);
   });
 
   test.describe('auto-attachment of cards in matrix room', () => {
@@ -527,8 +527,8 @@ test.describe('Room messages', () => {
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
@@ -543,8 +543,8 @@ test.describe('Room messages', () => {
     test('manually attached card is not auto-attached', async ({ page }) => {
       const testCard1 = `${appURL}/hassan`;
       await selectCardFromCatalog(page, testCard1);
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
@@ -564,13 +564,13 @@ test.describe('Room messages', () => {
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
       await selectCardFromCatalog(page, testCard1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveCount(0);
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
@@ -585,7 +585,7 @@ test.describe('Room messages', () => {
       await expect(
         page.locator(`[data-test-stack-card="${indexCard}"]`),
       ).toHaveCount(1); // The index card appears by default, we verify it exists here
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(0);
     });
 
     test('replaces auto-attached card when drilling down (1 stack)', async ({
@@ -604,9 +604,9 @@ test.describe('Room messages', () => {
           `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
       await expect(
-        page.locator(`[data-test-attached-card="${testCard1}"]`),
+        page.locator(`[data-test-attached-item="${testCard1}"]`),
       ).toHaveCount(1);
 
       await page
@@ -614,9 +614,9 @@ test.describe('Room messages', () => {
           `[data-test-stack-card='${testCard1}'] [data-test-card-format="fitted"]`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
       await expect(
-        page.locator(`[data-test-attached-card="${embeddedCard}"]`),
+        page.locator(`[data-test-attached-item="${embeddedCard}"]`),
       ).toHaveCount(1);
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
@@ -636,8 +636,8 @@ test.describe('Room messages', () => {
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
@@ -647,7 +647,7 @@ test.describe('Room messages', () => {
         )
         .click();
 
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(0);
     });
 
     test('can manually remove auto-attached card', async ({ page }) => {
@@ -657,17 +657,17 @@ test.describe('Room messages', () => {
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
       await page
         .locator(
-          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
+          `[data-test-attached-item='${testCard1}'] [data-test-remove-item-btn]`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(0);
       await expect(
         page.locator(`[data-test-stack-card='${testCard1}']`),
       ).toHaveCount(1); //card still on stack
@@ -682,14 +682,14 @@ test.describe('Room messages', () => {
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
       await page
         .locator(
-          `[data-test-attached-card='${testCard1}'] [data-test-remove-card-btn]`,
+          `[data-test-attached-item='${testCard1}'] [data-test-remove-item-btn]`,
         )
         .click();
       await page
@@ -697,14 +697,14 @@ test.describe('Room messages', () => {
           `[data-test-stack-card='${testCard1}'] [data-test-close-button]`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(0);
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
         )
         .click();
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
-      await page.locator(`[data-test-attached-card]`).hover();
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
+      await page.locator(`[data-test-attached-item]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
@@ -723,18 +723,18 @@ test.describe('Room messages', () => {
       const testCard1 = `${appURL}/hassan`;
       const testCard2 = `${appURL}/mango`;
       await setupTwoStackItems(page, testCard1, testCard2);
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(2);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(2);
       await expect(
-        page.locator(`[data-test-attached-card="${testCard1}"]`),
+        page.locator(`[data-test-attached-item="${testCard1}"]`),
       ).toHaveCount(1);
       await expect(
-        page.locator(`[data-test-attached-card="${testCard2}"]`),
+        page.locator(`[data-test-attached-item="${testCard2}"]`),
       ).toHaveCount(1);
-      await page.locator(`[data-test-attached-card="${testCard1}"]`).hover();
+      await page.locator(`[data-test-attached-item="${testCard1}"]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
-      await page.locator(`[data-test-attached-card="${testCard2}"]`).hover();
+      await page.locator(`[data-test-attached-item="${testCard2}"]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
@@ -755,11 +755,11 @@ test.describe('Room messages', () => {
     }) => {
       const testCard1 = `${appURL}/hassan`;
       await setupTwoStackItems(page, testCard1, testCard1);
-      await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
+      await expect(page.locator(`[data-test-attached-item]`)).toHaveCount(1);
       await expect(
-        page.locator(`[data-test-attached-card="${testCard1}"]`),
+        page.locator(`[data-test-attached-item="${testCard1}"]`),
       ).toHaveCount(1);
-      await page.locator(`[data-test-attached-card="${testCard1}"]`).hover();
+      await page.locator(`[data-test-attached-item="${testCard1}"]`).hover();
       await expect(page.locator(`[data-test-tooltip-content]`)).toHaveText(
         'Topmost card is shared automatically',
       );
@@ -813,7 +813,7 @@ test.describe('Room messages', () => {
       'Change title to Mango',
     );
     await expect(
-      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+      page.locator(`[data-test-chat-input-area] [data-test-attached-item]`),
     ).toHaveCount(2);
 
     await page.locator(`[data-test-prompt="0"]`).click();
@@ -829,7 +829,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1]);
 
     await expect(
-      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+      page.locator(`[data-test-chat-input-area] [data-test-attached-item]`),
     ).toHaveCount(2); // attached cards remain
     await expect(page.locator(`[data-test-message-field]`)).toHaveValue(
       'Change title to Mango',
@@ -848,7 +848,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1, message2]);
 
     await expect(
-      page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
+      page.locator(`[data-test-chat-input-area] [data-test-attached-item]`),
     ).toHaveCount(1); // only auto-attached card remains
     await expect(page.locator(`[data-test-message-field]`)).toBeEmpty(); // message field is empty
 

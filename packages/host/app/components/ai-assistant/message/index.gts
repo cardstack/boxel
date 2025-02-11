@@ -14,7 +14,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import CardPill from '@cardstack/host/components/card-pill';
+import Pill from '@cardstack/host/components/pill';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -210,7 +210,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{#if @resources.cards.length}}
             <div class='cards' data-test-message-cards>
               {{#each @resources.cards as |card|}}
-                <CardPill @card={{card}} />
+                <Pill @item={{card}} />
               {{/each}}
             </div>
           {{/if}}

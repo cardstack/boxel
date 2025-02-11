@@ -12,12 +12,16 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import AiAssistantCardPicker from './index';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
+
+import AiAssistantAttachmentPicker from './index';
 
 export default class AiAssistantCardPickerUsage extends Component {
   cards: TrackedArray<CardDef> = new TrackedArray([]);
   @tracked maxNumberOfCards: number | undefined = undefined;
   @tracked autoAttachedCards?: TrackedSet<CardDef> = new TrackedSet();
+  @tracked autoAttachedFiles: TrackedArray<FileDef> = new TrackedArray([]);
+  @tracked filesToAttach: TrackedArray<FileDef> = new TrackedArray([]);
 
   @action chooseCard(card: CardDef) {
     if (!this.cards?.find((c) => c.id === card.id)) {
@@ -30,21 +34,38 @@ export default class AiAssistantCardPickerUsage extends Component {
     this.cards.splice(index, 1);
   }
 
+  @action chooseFile(file: FileDef) {
+    if (!this.filesToAttach?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      this.filesToAttach.push(file);
+    }
+  }
+
+  @action removeFile(file: FileDef) {
+    let index = this.filesToAttach.findIndex(
+      (f) => f.sourceUrl === file.sourceUrl,
+    );
+    this.filesToAttach.splice(index, 1);
+  }
+
   <template>
-    <FreestyleUsage @name='AiAssistant::CardPicker'>
+    <FreestyleUsage @name='AiAssistant::AttachmentPicker'>
       <:description>
         Card picker for AI Assistant chat input. It allows to pick a card from
-        the card catalog. Selected card is attached to the message in atom
-        format.
+        the card catalog, or a file. Selected card is attached to the message in
+        atom format.
       </:description>
       <:example>
-        <AiAssistantCardPicker
+        <AiAssistantAttachmentPicker
           @autoAttachedCards={{this.autoAttachedCards}}
           @cardsToAttach={{this.cards}}
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
-          @maxNumberOfCards={{this.maxNumberOfCards}}
+          @chooseFile={{this.chooseFile}}
+          @removeFile={{this.removeFile}}
           @submode={{'interact'}}
+          @maxNumberOfItemsToAttach={{this.maxNumberOfCards}}
+          @autoAttachedFiles={{this.autoAttachedFiles}}
+          @filesToAttach={{this.filesToAttach}}
         />
         <CardCatalogModal />
       </:example>
@@ -58,6 +79,16 @@ export default class AiAssistantCardPickerUsage extends Component {
           @name='autoAttachedCard'
           @description='A card automatically attached to the message from the top of the stack.'
           @value={{this.autoAttachedCards}}
+        />
+        <Args.Object
+          @name='autoAttachedFiles'
+          @description='An array of files automatically attached to the message.'
+          @value={{this.autoAttachedFiles}}
+        />
+        <Args.Object
+          @name='filesToAttach'
+          @description='An array of files to attach to the message.'
+          @value={{this.filesToAttach}}
         />
         <Args.Action
           @name='chooseCard'

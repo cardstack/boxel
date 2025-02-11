@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import {
   IconButton,
-  Pill,
+  Pill as BoxelPill,
   RealmIcon,
   Switch,
 } from '@cardstack/boxel-ui/components';
@@ -14,47 +14,61 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import { type FileDef } from 'https://cardstack.com/base/file-api';
+
 import RealmService from '../services/realm';
 
-interface CardPillSignature {
+interface PillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
-    card: CardDef;
-    isAutoAttachedCard?: boolean;
-    removeCard?: (card: CardDef) => void;
+    item: CardDef | FileDef;
+    isAutoAttached?: boolean;
+    remove?: (item: CardDef | FileDef) => void;
     onToggle?: () => void;
     isEnabled?: boolean;
   };
 }
 
-export default class CardPill extends Component<CardPillSignature> {
+export default class Pill extends Component<PillSignature> {
   @service declare realm: RealmService;
 
   get component() {
-    return this.args.card.constructor.getComponent(this.args.card);
+    return this.args.item.constructor.getComponent(this.args.item);
   }
 
   get hideIconRight() {
-    return !this.args.onToggle && !this.args.removeCard;
+    return !this.args.onToggle && !this.args.remove;
+  }
+
+  get id() {
+    return 'id' in this.args.item
+      ? this.args.item.id
+      : this.args.item.sourceUrl;
+  }
+
+  get title() {
+    return 'title' in this.args.item
+      ? this.args.item.title
+      : this.args.item.name;
   }
 
   <template>
-    <Pill
+    <BoxelPill
       class={{cn
-        'card-pill'
-        is-autoattached=@isAutoAttachedCard
+        'pill'
+        is-autoattached=@isAutoAttached
         hide-icon-right=this.hideIconRight
       }}
-      data-test-attached-card={{@card.id}}
-      data-test-autoattached-card={{@isAutoAttachedCard}}
+      data-test-attached-item={{this.id}}
+      data-test-autoattached-item={{@isAutoAttached}}
       ...attributes
     >
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @card.id}} />
+        <RealmIcon @realmInfo={{this.realm.info this.id}} />
       </:iconLeft>
       <:default>
-        <div class='card-content' title={{@card.title}}>
-          {{@card.title}}
+        <div class='pill-content' title={{this.title}}>
+          {{this.title}}
         </div>
       </:default>
       <:iconRight>
@@ -62,28 +76,24 @@ export default class CardPill extends Component<CardPillSignature> {
           <Switch
             @isEnabled={{@isEnabled}}
             @onChange={{@onToggle}}
-            @label={{@card.title}}
-            data-test-card-pill-toggle='{{@card.id}}-{{if
-              @isEnabled
-              "on"
-              "off"
-            }}'
+            @label={{this.title}}
+            data-test-pill-toggle='{{this.id}}-{{if @isEnabled "on" "off"}}'
           />
         {{/if}}
-        {{#if @removeCard}}
+        {{#if @remove}}
           <IconButton
             class='remove-button'
             @icon={{IconX}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @removeCard @card)}}
-            data-test-remove-card-btn
+            {{on 'click' (fn @remove @item)}}
+            data-test-remove-item-btn
           />
         {{/if}}
       </:iconRight>
-    </Pill>
+    </BoxelPill>
     <style scoped>
-      .card-pill {
+      .pill {
         --pill-gap: var(--boxel-sp-xxxs);
         --pill-icon-size: 18px;
         --boxel-realm-icon-size: var(--pill-icon-size);
@@ -97,7 +107,7 @@ export default class CardPill extends Component<CardPillSignature> {
       .hide-icon-right :deep(figure.icon):last-child {
         display: none;
       }
-      .card-content {
+      .pill-content {
         max-width: 100px;
         max-height: 100%;
         white-space: nowrap;

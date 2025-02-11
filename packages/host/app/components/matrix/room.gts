@@ -47,9 +47,10 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import AiAssistantCardPicker from '../ai-assistant/card-picker';
+import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
@@ -134,12 +135,16 @@ export default class Room extends Component<Signature> {
               data-test-message-field={{@roomId}}
             />
             <div class='chat-input-area__bottom-section'>
-              <AiAssistantCardPicker
+              <AiAssistantAttachmentPicker
                 @autoAttachedCards={{this.autoAttachedCards}}
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
+                @chooseFile={{this.chooseFile}}
+                @removeFile={{this.removeFile}}
                 @submode={{this.operatorModeStateService.state.submode}}
+                @autoAttachedFiles={{this.autoAttachedFiles}}
+                @filesToAttach={{this.filesToAttach}}
               />
               <LLMSelect
                 @selected={{this.roomResource.activeLLM}}
@@ -271,6 +276,14 @@ export default class Room extends Component<Signature> {
       this.roomScrollState.set(this.room, state);
     }
     return state;
+  }
+
+  private get autoAttachedFiles() {
+    return [] as FileDef[]; // TODO: implement
+  }
+
+  private get filesToAttach() {
+    return this.matrixService.filesToSend.get(this.args.roomId);
   }
 
   private get isScrolledToBottom() {
@@ -599,6 +612,47 @@ export default class Room extends Component<Signature> {
       this.cardsToAttach?.length ? this.cardsToAttach : undefined,
     );
   }
+
+  @action
+  private chooseFile(file: FileDef) {
+    let files = this.filesToAttach ?? [];
+    if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
+    }
+  }
+
+  @action
+  private isAutoAttachedFile(file: FileDef) {
+    return this.autoAttachedFiles.includes(file);
+  }
+
+  @action
+  private removeFile(file: FileDef) {
+    if (this.isAutoAttachedFile(file)) {
+      //TODO: implement auto attached file removal
+      // this.autoAttachmentResource.onFileRemoval(
+      //   this.cardsToAttach[cardIndex],
+      // );
+    } else {
+      const fileIndex = this.filesToAttach?.findIndex(
+        (f) => f.sourceUrl === f.sourceUrl,
+      );
+      if (fileIndex != undefined && fileIndex !== -1) {
+        if (this.filesToAttach !== undefined) {
+          //TODO: implement auto attached file removal
+          // this.autoAttachmentResource.onFileRemoval(
+          //   this.cardsToAttach[cardIndex],
+          // );
+          this.filesToAttach.splice(fileIndex, 1);
+        }
+      }
+    }
+    this.matrixService.cardsToSend.set(
+      this.args.roomId,
+      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+    );
+  }
+
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
