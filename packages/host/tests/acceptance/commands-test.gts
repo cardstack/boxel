@@ -24,12 +24,12 @@ import {
 
 import { CreateAIAssistantRoomCommand } from '@cardstack/host/commands/create-ai-assistant-room';
 import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import PatchCardCommand from '@cardstack/host/commands/patch-card';
-import SaveCardCommand from '@cardstack/host/commands/save-card';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import ShowCardCommand from '@cardstack/host/commands/show-card';
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
+import { OpenAiAssistantRoomCommand } from '@cardstack/host/commands/open-ai-assistant-room';
+import { PatchCardCommand } from '@cardstack/host/commands/patch-card';
+import { SaveCardCommand } from '@cardstack/host/commands/save-card';
+import { SendAiAssistantMessageCommand } from '@cardstack/host/commands/send-ai-assistant-message';
+import { ShowCardCommand } from '@cardstack/host/commands/show-card';
+import { SwitchSubmodeCommand } from '@cardstack/host/commands/switch-submode';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';

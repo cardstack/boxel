@@ -33,7 +33,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import { CopyCardCommand } from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 

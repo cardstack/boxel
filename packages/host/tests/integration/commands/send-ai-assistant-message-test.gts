@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 import { Loader } from '@cardstack/runtime-common';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
+import { SendAiAssistantMessageCommand } from '@cardstack/host/commands/send-ai-assistant-message';
+import { SwitchSubmodeCommand } from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
 
 import RealmService from '@cardstack/host/services/realm';

@@ -26,7 +26,7 @@ import ENV from '@cardstack/host/config/environment';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import AddSkillsToRoomCommand from '../../commands/add-skills-to-room';
+import { AddSkillsToRoomCommand } from '../../commands/add-skills-to-room';
 import { CreateAIAssistantRoomCommand } from '../../commands/create-ai-assistant-room';
 import { Message } from '../../lib/matrix-classes/message';
 import { isMatrixError, eventDebounceMs } from '../../lib/matrix-utils';
