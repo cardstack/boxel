@@ -269,15 +269,13 @@ async function isInsideAncestorChain(
 
 // utility to return subclassType when it exists and is part of the ancestor chain of type
 export async function getNarrowestType(
-  subclassType: CodeRef | undefined,
+  subclassType: CodeRef,
   type: CodeRef,
   loader: Loader,
 ) {
   let narrowTypeExists = false;
-  if (subclassType) {
-    narrowTypeExists =
-      (await isInsideAncestorChain(subclassType, type, loader)) ?? false;
-  }
+  narrowTypeExists =
+    (await isInsideAncestorChain(subclassType, type, loader)) ?? false;
   let narrowestType = narrowTypeExists && subclassType ? subclassType : type;
   return narrowestType;
 }

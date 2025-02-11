@@ -99,7 +99,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    type = await getNarrowestType(this.args.subclassType, type, myLoader());
+    if (this.args.subclassType) {
+      type = await getNarrowestType(this.args.subclassType, type, myLoader());
+    }
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
     };
