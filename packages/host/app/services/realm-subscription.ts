@@ -79,6 +79,7 @@ export default class RealmSubscriptionService extends Service {
         ![...this.subscribers.values()].find((s) => s.realm === realm)
       ) {
         subscription.unsubscribe();
+        this.subscriptions.delete(realm);
       }
     }
   }
