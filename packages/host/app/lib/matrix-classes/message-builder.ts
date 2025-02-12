@@ -75,7 +75,7 @@ export default class MessageBuilder {
       status: this.event.status,
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
-      attachedFile: this.attachedFiles,
+      attachedFiles: this.attachedFiles,
     });
   }
 
