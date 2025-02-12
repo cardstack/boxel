@@ -76,7 +76,6 @@ export default class AttachFileModal extends Component<Signature> {
     if (this.deferred && this.selectedRealm && path) {
       let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
       let file = this.matrixService.fileAPI.createFileDef({
-        url: fileURL.toString(),
         sourceUrl: fileURL.toString(),
         name: fileURL.toString().split('/').pop()!,
       });

@@ -14,6 +14,13 @@ class View extends Component<typeof FileDef> {
   </template>
 }
 
+export type SerializedFile = {
+  sourceUrl: string;
+  url: string;
+  name: string;
+  contentType: string;
+};
+
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static icon = FileIcon;
@@ -42,10 +49,12 @@ export function createFileDef({
   url,
   sourceUrl,
   name,
+  contentType,
 }: {
-  url: string;
+  url?: string;
   sourceUrl: string;
   name: string;
+  contentType?: string;
 }) {
-  return new FileDef({ url, sourceUrl, name });
+  return new FileDef({ url, sourceUrl, name, contentType });
 }
