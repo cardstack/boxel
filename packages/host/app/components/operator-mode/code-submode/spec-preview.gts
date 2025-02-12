@@ -18,9 +18,9 @@ import {
   Pill,
   BoxelSelect,
   RealmIcon,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -75,6 +75,7 @@ interface Signature {
         | 'selectedInstance'
         | 'selectSpec'
         | 'isLoading'
+        | 'canWrite'
       >,
     ];
   };
@@ -162,6 +163,7 @@ interface ContentSignature {
     selectSpec: (spec: Spec) => void;
     showCreateSpecIntent: boolean;
     isLoading: boolean;
+    canWrite: boolean;
   };
 }
 
@@ -211,11 +213,12 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
           Loading...
         </div>
       {{else if @showCreateSpecIntent}}
-        <div
-          class='create-spec-intent-message'
-          data-test-create-spec-intent-message
-        >
+        <div class='spec-intent-message' data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
+        </div>
+      {{else if (not @canWrite)}}
+        <div class='spec-intent-message' data-test-cannot-write-intent-message>
+          Cannot create Boxel Specification inside this realm
         </div>
       {{else}}
         <div class='spec-preview'>
@@ -262,7 +265,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       .spec-preview {
         padding: var(--boxel-sp-sm);
       }
-      .create-spec-intent-message {
+      .spec-intent-message {
         background-color: var(--boxel-200);
         color: var(--boxel-450);
         font-weight: 500;
@@ -389,7 +392,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private get showCreateSpecIntent() {
-    return !this.specSearch.isLoading && this.specInstances.length === 0;
+    return (
+      !this.specSearch.isLoading &&
+      this.specInstances.length === 0 &&
+      this.canWrite
+    );
   }
 
   //TODO: Improve identification of isApp and isSkill
@@ -471,6 +478,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
+  get canWrite() {
+    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
+  }
+
   <template>
     {{yield
       (component
@@ -488,6 +499,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         selectedInstance=this.selectedInstance
         selectSpec=this.selectSpec
         isLoading=this.specSearch.isLoading
+        canWrite=this.canWrite
       )
     }}
   </template>
