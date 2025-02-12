@@ -2596,4 +2596,39 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
   });
+
+  // WARNING DUE TO CHROME SECURITY CONSTRAINTS THIS TEST
+  // ONLY WORKS WHEN THE DEV CONSOLE IS CLOSED AND THE
+  // WINDOW RUNNING THE TESTS IS FOCUSED!!
+  test('it can copy code blocks to the clipboard (make sure window is focused and dev console is closed)', async function (assert) {
+    await navigator.clipboard.writeText(''); // pardon this troll, clearing the clipboard for the test
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        formatted_body:
+          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+
+    assert
+      .dom('button.code-copy-button')
+      .exists('the copy code to clipboard button exists');
+    await click('button.code-copy-button');
+    let clipboard = await navigator.clipboard.readText();
+    assert.strictEqual(
+      clipboard,
+      `console.log("hello world");`,
+      'the clipboard was updated with the code',
+    );
+  });
 });
