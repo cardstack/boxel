@@ -572,7 +572,9 @@ export default class Room extends Component<Signature> {
     this.doSendMessage.perform(
       myLastMessage.message,
       attachedCards,
-      myLastMessage.attachedFiles,
+      myLastMessage.attachedFiles?.length
+        ? myLastMessage.attachedFiles
+        : undefined,
       true,
       myLastMessage.clientGeneratedId,
     );
