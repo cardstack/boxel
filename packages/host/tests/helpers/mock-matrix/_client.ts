@@ -590,14 +590,14 @@ export class MockClient implements ExtendedClient {
     return this.loggedInAs ?? null;
   }
 
-  uploadContent(
-    _file: MatrixSDK.FileType,
-    _opts: MatrixSDK.UploadOpts,
-  ): Promise<MatrixSDK.UploadResponse> {
-    throw new Error('Method not implemented');
+  async uploadContent(
+    _content: ArrayBuffer,
+    _opts?: { type?: string; name?: string },
+  ): Promise<{ content_uri: string }> {
+    return { content_uri: `mxc://mock-server/${Math.random()}` };
   }
 
-  mxcUrlToHttp(_mxcUrl: string): string {
-    throw new Error('Method not implemented');
+  mxcUrlToHttp(mxcUrl: string): string {
+    return mxcUrl.replace('mxc://', 'http://mock-server/');
   }
 }

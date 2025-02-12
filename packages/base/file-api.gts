@@ -21,7 +21,7 @@ export class FileDef extends BaseDef {
   @field sourceUrl = contains(StringField);
   @field url = contains(StringField);
   @field name = contains(StringField);
-  @field type = contains(StringField);
+  @field contentType = contains(StringField);
 
   static embedded: BaseDefComponent = View;
   static fitted: BaseDefComponent = View;
@@ -33,7 +33,7 @@ export class FileDef extends BaseDef {
       sourceUrl: this.sourceUrl,
       url: this.url,
       name: this.name,
-      type: this.type,
+      contentType: this.contentType,
     };
   }
 }
