@@ -8,7 +8,7 @@ import {
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { MatrixEvent } from 'matrix-js-sdk';
+import { IEvent } from 'matrix-js-sdk';
 import ms from 'ms';
 
 import {
@@ -329,7 +329,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         });
       }
 
-      let roomEvents: MatrixEvent[] = [];
+      let roomEvents: IEvent[] = [];
 
       let timeout = setTimeout(
         () =>

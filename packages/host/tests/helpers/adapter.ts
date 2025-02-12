@@ -102,7 +102,7 @@ export class TestRealmAdapter implements RealmAdapter {
       return;
     }
 
-    let mockLoader = this.owner.lookup('service:matrix-mock-utils');
+    let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
 
     if (!mockLoader) {
       console.log('mockLoader not found, skipping');

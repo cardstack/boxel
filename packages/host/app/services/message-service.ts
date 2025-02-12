@@ -8,6 +8,8 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
+import type { ServerEvents } from '@cardstack/runtime-common/realm';
+
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';

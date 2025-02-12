@@ -1317,7 +1317,8 @@ export default class MatrixService extends Service {
       await this.realmServer.handleEvent(event);
     } else if (
       event.type === 'm.room.message' &&
-      event.content?.msgtype === 'app.boxel.sse'
+      event.content?.msgtype === 'app.boxel.sse' &&
+      event.sender
     ) {
       // FIXME provenance should be checked
       console.log('received sse event', event);
