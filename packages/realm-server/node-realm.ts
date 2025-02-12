@@ -196,10 +196,18 @@ export class NodeAdapter implements RealmAdapter {
       return;
     }
 
-    let dmRooms =
-      (await matrixClient.getAccountData<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
+    let dmRooms;
+
+    try {
+      dmRooms =
+        (await matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+    } catch (e) {
+      // FIXME this is happening in CI, Matrix has been shut down presumably
+      console.log('error getting account data', e);
+      return;
+    }
 
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];
