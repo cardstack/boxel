@@ -1,11 +1,12 @@
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 
-import { DefaultFormatsContextName } from '@cardstack/runtime-common';
-
 import { cn } from '@cardstack/boxel-ui/helpers';
+
+import { DefaultFormatsContextName } from '@cardstack/runtime-common';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -114,6 +115,16 @@ const fittedFormats = [
   },
 ];
 
+const setContainerSize = ({
+  width,
+  height,
+}: {
+  width: number;
+  height: number;
+}) => {
+  return htmlSafe(`width: ${width}px; height: ${height}px`);
+};
+
 export default class FittedFormatGallery extends Component<Signature> {
   @provide(DefaultFormatsContextName)
   get defaultFormat() {
@@ -138,11 +149,10 @@ export default class FittedFormatGallery extends Component<Signature> {
                   -
                   {{spec.width}}x{{spec.height}}
                 </div>
-                {{! template-lint-disable no-inline-styles }}
                 <this.renderedCard
                   class='item'
                   @displayContainer={{true}}
-                  style='width: {{spec.width}}px; height: {{spec.height}}px'
+                  style={{setContainerSize spec}}
                 />
               </li>
             {{/each}}
