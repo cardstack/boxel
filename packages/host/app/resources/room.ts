@@ -117,9 +117,9 @@ export class RoomResource extends Resource<Args> {
         let index = this._messageCache.size;
         let members = this.matrixRoom?.members;
         // If the AI bot is not in the room, don't process the events
-        //if (members && !(this.matrixService.aiBotUserId in members)) {
-        //  return;
-        //}
+        if (members && !(this.matrixService.aiBotUserId in members)) {
+          return;
+        }
         // This is brought up to this level so if the
         // load task is rerun we can stop processing
         for (let event of this.sortedEvents) {
