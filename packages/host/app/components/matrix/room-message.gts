@@ -166,11 +166,7 @@ export default class RoomMessage extends Component<Signature> {
         justify-content: center;
         height: min-content;
         align-items: center;
-        border-radius: 100px;
         white-space: nowrap;
-        transition:
-          background-color var(--boxel-transition),
-          border var(--boxel-transition);
         min-height: var(--boxel-button-min-height);
         min-width: var(--boxel-button-min-width, 5rem);
       }
