@@ -689,15 +689,22 @@ export default class Room extends Component<Signature> {
           .map((stackItem) => stackItem.card.id),
       };
       try {
-        let file = this.filesToAttach
-          ? await this.matrixService.uploadFiles(this.filesToAttach)
-          : undefined;
+        let files = [];
+        if (this.autoAttachedFile) {
+          files.push(this.autoAttachedFile);
+        }
+
+        if (this.filesToAttach) {
+          files.push(...this.filesToAttach);
+        }
+
+        let uploadedFiles = await this.matrixService.uploadFiles(files);
 
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
-          file,
+          uploadedFiles,
           clientGeneratedId,
           context,
         );
