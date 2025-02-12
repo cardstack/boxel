@@ -45,7 +45,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  writeToStream,
   waitForClose,
   type TextFileRef,
 } from './stream';
@@ -163,6 +162,11 @@ export interface RealmAdapter {
   unsubscribe(): void;
 
   setLoader?(loader: Loader): void;
+
+  sendServerEvent(
+    event: ServerEvents,
+    matrixClient: MatrixClient,
+  ): Promise<void>;
 }
 
 interface Options {
@@ -175,7 +179,7 @@ interface UpdateItem {
   url: URL;
 }
 
-type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
+export type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
 
 interface UpdateEvent {
   type: 'update';
@@ -311,6 +315,16 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
+
+    // @ts-expect-error
+    if (!globalThis.realmUrlToSecretSeed) {
+      // @ts-expect-error
+      globalThis.realmUrlToSecretSeed = new Map();
+    }
+
+    // @ts-expect-error
+    globalThis.realmUrlToSecretSeed.set(this.url, secretSeed);
+
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
@@ -487,6 +501,11 @@ export class Realm {
 
   async flushUpdateEvents() {
     return this.#flushUpdateEvents;
+  }
+
+  // FIXME this is for tests only…?
+  get matrixUsername() {
+    return this.#matrixClient.username;
   }
 
   createJWT(claims: TokenClaims, expiration: string): string {
@@ -1837,13 +1856,17 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
+    console.log('parse realm info realmUserId', this.#matrixClient.getUserId());
+    console.log(`OR ${this.#matrixClient.username}`);
     let realmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      realmUserId: this.#matrixClient.getUserId()!,
+      // FIXME can the latter replace the former?
+      realmUserId:
+        this.#matrixClient.getUserId()! || this.#matrixClient.username,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1858,6 +1881,10 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        // FIXME can the latter replace the former?
+        realmInfo.realmUserId =
+          realmConfigJson.realmUserId ??
+          (this.#matrixClient.getUserId()! || this.#matrixClient.username);
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -1961,7 +1988,9 @@ export class Realm {
       });
     }
 
+    // FIXME listeningClients should go away
     this.listeningClients.push(writable);
+
     this.sendServerEvent({
       type: 'message',
       data: { count: `${this.listeningClients.length} clients` },
@@ -2015,18 +2044,7 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#log.debug(
-      `sending updates to ${this.listeningClients.length} clients`,
-    );
-    let { type, data, id } = event;
-    let chunkArr = [];
-    for (let item in data) {
-      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
-    }
-    let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.allSettled(
-      this.listeningClients.map((client) => writeToStream(client, chunk)),
-    );
+    this.#adapter.sendServerEvent(event, this.#matrixClient);
   }
 
   private async createRequestContext(): Promise<RequestContext> {
@@ -2126,14 +2144,6 @@ export interface CardDefinitionResource {
       };
     };
   };
-}
-
-function sseToChunkData(type: string, data: string, id?: string): string {
-  let info = [`event: ${type}`, `data: ${data}`];
-  if (id) {
-    info.push(`id: ${id}`);
-  }
-  return info.join('\n') + '\n\n';
 }
 
 function assertRealmPermissions(

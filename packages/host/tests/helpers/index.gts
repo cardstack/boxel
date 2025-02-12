@@ -8,6 +8,7 @@ import {
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { IEvent } from 'matrix-js-sdk';
 import ms from 'ms';
 
 import {
@@ -31,6 +32,7 @@ import {
 import {
   testRealmInfo,
   testRealmURL,
+  testRealmURLToUsername,
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -61,6 +63,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
+import { MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
@@ -72,7 +75,8 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-const testMatrix = {
+
+const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
   username: 'test_realm',
   password: 'password',
@@ -269,13 +273,6 @@ export function setupLocalIndexing(hooks: NestedHooks) {
   });
 }
 
-class MockMessageService extends Service {
-  subscribe() {
-    return () => {};
-  }
-  register() {}
-}
-
 export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSave>(function () {
     let cardService = this.owner.lookup('service:card-service') as CardService;
@@ -285,28 +282,11 @@ export function setupOnSave(hooks: NestedHooks) {
   });
 }
 
-export function setupMockMessageService(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
-    this.owner.register('service:message-service', MockMessageService);
-  });
-}
-
 export function setupServerSentEvents(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSSE>(function () {
     this.subscribers = [];
-    let self = this;
     testOnlyResetLiveCardState();
 
-    class MockMessageService extends Service {
-      register() {
-        (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
-      }
-      subscribe(_: never, cb: (e: { type: string; data: string }) => void) {
-        self.subscribers.push(cb);
-        return () => {};
-      }
-    }
-    this.owner.register('service:message-service', MockMessageService);
     let messageService = this.owner.lookup(
       'service:message-service',
     ) as MessageService;
@@ -332,94 +312,152 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       opts?: { timeout?: number };
     }): Promise<T> => {
       let defer = new Deferred();
-      let events: { type: string; data: Record<string, any> }[] = [];
+
+      let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
+      let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
+
+      // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
+      let realmSessionRoomId = `session-room-for-testuser`;
+
+      let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
+
+      if (!getRoomIds().includes(realmSessionRoomId)) {
+        createAndJoinRoom({
+          sender: realm.matrixUsername,
+          name: realmSessionRoomId,
+          id: realmSessionRoomId,
+        });
+      }
+
+      let roomEvents: IEvent[] = [];
+
+      let timeout = setTimeout(
+        () =>
+          defer.reject(
+            new Error(
+              `expectEvent timed out, saw events ${JSON.stringify(roomEvents)}`,
+            ),
+          ),
+        opts?.timeout ?? 10000,
+      );
+
+      let result = await callback();
+
       let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
       if (numOfEvents == null) {
         throw new Error(
           `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
         );
       }
-      let response = await realm.handle(
-        new Request(`${realm.url}_message`, {
-          method: 'GET',
-          headers: {
-            Accept: 'text/event-stream',
-          },
-        }),
+
+      roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
+      let sseRoomEvents = roomEvents.filter(
+        (e) => e.content?.msgtype === 'app.boxel.sse',
       );
-      if (!response?.ok) {
-        throw new Error(`failed to connect to realm: ${response?.status}`);
-      }
-      let reader = response.body!.getReader();
-      let timeout = setTimeout(
-        () =>
-          defer.reject(
-            new Error(
-              `expectEvent timed out, saw events ${JSON.stringify(events)}`,
-            ),
-          ),
-        opts?.timeout ?? 10000,
-      );
-      let result = await callback();
-      let decoder = new TextDecoder();
-      while (events.length < numOfEvents) {
-        let { done, value } = await Promise.race([
-          reader.read(),
-          defer.promise as any, // this one always throws so type is not important
-        ]);
-        if (done) {
-          throw new Error(
-            `expected ${numOfEvents} events, saw ${events.length} events`,
-          );
-        }
-        if (value) {
-          let ev = getEventData(decoder.decode(value, { stream: true }));
-          if (ev) {
-            events.push(ev);
-            for (let subscriber of this.subscribers) {
-              let evWireFormat = {
-                type: ev.type,
-                data: JSON.stringify(ev.data),
-              };
-              subscriber(evWireFormat);
-            }
-          }
-        }
-      }
+
       if (expectedEvents) {
-        let eventsWithoutClientRequestId = events.map((e) => {
-          delete e.data.clientRequestId;
-          return e;
-        });
         assert.deepEqual(
-          eventsWithoutClientRequestId.forEach((e) =>
-            e.data.invalidations?.sort(),
-          ),
+          sseRoomEvents.forEach((e) => e.content.invalidations?.sort()),
           expectedEvents.forEach((e) => e.data.invalidations?.sort()),
           'sse response is correct',
         );
+      } else {
+        if (expectedNumberOfEvents !== sseRoomEvents.length) {
+          throw new Error(
+            `expected ${expectedNumberOfEvents} events, saw ${sseRoomEvents.length} events`,
+          );
+        }
       }
+
       if (onEvents) {
-        onEvents(events);
+        onEvents(sseRoomEvents.map((e) => JSON.parse(e.content.body)));
       }
+
       clearTimeout(timeout);
-      realm.unsubscribe();
+
       await settled();
       return result;
+
+      // FIXME is everything here covered?
+
+      // let defer = new Deferred();
+      // let events: { type: string; data: Record<string, any> }[] = [];
+      // let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+      // if (numOfEvents == null) {
+      //   throw new Error(
+      //     `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
+      //   );
+      // }
+      // let response = await realm.handle(
+      //   new Request(`${realm.url}_message`, {
+      //     method: 'GET',
+      //     headers: {
+      //       Accept: 'text/event-stream',
+      //     },
+      //   }),
+      // );
+      // if (!response?.ok) {
+      //   throw new Error(`failed to connect to realm: ${response?.status}`);
+      // }
+      // let reader = response.body!.getReader();
+      // let timeout = setTimeout(
+      //   () =>
+      //     defer.reject(
+      //       new Error(
+      //         `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+      //       ),
+      //     ),
+      //   opts?.timeout ?? 10000,
+      // );
+      // let result = await callback();
+      // let decoder = new TextDecoder();
+      // while (events.length < numOfEvents) {
+      //   let { done, value } = await Promise.race([
+      //     reader.read(),
+      //     defer.promise as any, // this one always throws so type is not important
+      //   ]);
+      //   if (done) {
+      //     throw new Error(
+      //       `expected ${numOfEvents} events, saw ${events.length} events`,
+      //     );
+      //   }
+      //   if (value) {
+      //     let ev = getEventData(decoder.decode(value, { stream: true }));
+      //     console.log('got event', ev);
+      //     if (ev) {
+      //       events.push(ev);
+      //       for (let subscriber of this.subscribers) {
+      //         let evWireFormat = {
+      //           type: ev.type,
+      //           data: JSON.stringify(ev.data),
+      //         };
+      //         subscriber(evWireFormat);
+      //       }
+      //     }
+      //   }
+      // }
+      // if (expectedEvents) {
+      //   let eventsWithoutClientRequestId = events.map((e) => {
+      //     delete e.data.clientRequestId;
+      //     return e;
+      //   });
+      //   assert.deepEqual(
+      //     eventsWithoutClientRequestId.forEach((e) =>
+      //       e.data.invalidations?.sort(),
+      //     ),
+      //     expectedEvents.forEach((e) => e.data.invalidations?.sort()),
+      //     'sse response is correct',
+      //   );
+      // }
+      // if (onEvents) {
+      //   onEvents(events);
+      // }
+      // clearTimeout(timeout);
+      // realm.unsubscribe();
+      // await settled();
+      // return result;
     };
   });
-}
-
-function getEventData(message: string) {
-  let [rawType, data] = message.split('\n');
-  let type = rawType.trim().split(':')[1].trim();
-  if (['index', 'update'].includes(type)) {
-    return {
-      type,
-      data: JSON.parse(data.split('data:')[1].trim()),
-    };
-  }
-  return;
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();
@@ -517,7 +555,7 @@ async function setupTestRealm({
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
 
-  let adapter = new TestRealmAdapter(contents, new URL(realmURL));
+  let adapter = new TestRealmAdapter(contents, new URL(realmURL), owner);
   let indexRunner: IndexRunner = async (optsId) => {
     let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
     await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
@@ -531,13 +569,19 @@ async function setupTestRealm({
     runnerOptsManager: runnerOptsMgr,
     indexRunner,
     virtualNetwork,
-    matrixURL: testMatrix.url,
+    matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
   });
+
+  let iteratedTestMatrix = {
+    ...baseTestMatrix,
+    username: testRealmURLToUsername(realmURL),
+  };
+
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: testMatrix,
+    matrix: iteratedTestMatrix,
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,

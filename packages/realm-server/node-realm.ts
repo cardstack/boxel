@@ -7,6 +7,7 @@ import {
   type ResponseWithNodeStream,
   type TokenClaims,
 } from '@cardstack/runtime-common';
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
@@ -26,6 +27,7 @@ import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {
   RequestContext,
+  ServerEvents,
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
@@ -181,6 +183,51 @@ export class NodeAdapter implements RealmAdapter {
       iat: number;
       exp: number;
     };
+  }
+
+  async sendServerEvent(
+    event: ServerEvents,
+    matrixClient: MatrixClient,
+  ): Promise<void> {
+    console.log('sending server event', event);
+
+    if (!matrixClient.isLoggedIn()) {
+      console.log('not logged in, skipping server event');
+      return;
+    }
+
+    let dmRooms;
+
+    try {
+      dmRooms =
+        (await matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+    } catch (e) {
+      // FIXME this is happening in CI, Matrix has been shut down presumably
+      console.log('error getting account data', e);
+      return;
+    }
+
+    for (let userId of Object.keys(dmRooms)) {
+      let roomId = dmRooms[userId];
+      try {
+        await matrixClient.sendEvent(roomId, 'm.room.message', {
+          body: JSON.stringify({
+            type: event.type,
+            data: event.data,
+          }),
+          msgtype: 'app.boxel.sse',
+          format: 'app.boxel.sse-format',
+        });
+      } catch (e) {
+        console.log(
+          `Unable to send event in room ${roomId} for user ${userId}`,
+          event,
+          e,
+        );
+      }
+    }
   }
 }
 
