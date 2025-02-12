@@ -75,10 +75,10 @@ export class HistoryConstructionError extends Error {
   }
 }
 
-export function getPromptParts(
+export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): PromptParts {
+): Promise<PromptParts> {
   let cardFragments: Map<string, CardFragmentContent> =
     extractCardFragmentsFromEvents(eventList);
   let history: DiscreteMatrixEvent[] = constructHistory(
@@ -88,7 +88,7 @@ export function getPromptParts(
   let skills = getEnabledSkills(eventList, cardFragments);
   let tools = getTools(history, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
-  let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
+  let messages = await getModifyPrompt(history, aiBotUserId, tools, skills);
   let model = getModel(eventList);
   return {
     tools,
@@ -320,6 +320,92 @@ export function getRelevantCards(
   };
 }
 
+export async function getCurrentlyAttachedFiles(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): Promise<
+  {
+    url: string;
+    name: string;
+    contentType?: string;
+    content: string | undefined;
+    error: string | undefined;
+  }[]
+> {
+  let lastMessageEventByUser = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+  if (!lastMessageEventByUser?.content.data.attachedFiles) {
+    return [];
+  }
+  let attachedFiles = lastMessageEventByUser.content.data.attachedFiles;
+
+  return Promise.all(
+    attachedFiles.map(
+      async (attachedFile: {
+        url: string;
+        name: string;
+        contentType?: string;
+      }) => {
+        try {
+          let response = await fetch(attachedFile.url);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          let content: string;
+          const contentType = attachedFile.contentType;
+
+          if (contentType?.startsWith('text/')) {
+            content = await response.text();
+          } else {
+            const buffer = await response.arrayBuffer();
+            content = Buffer.from(buffer).toString('base64');
+          }
+          return {
+            url: attachedFile.url,
+            name: attachedFile.name,
+            contentType,
+            content,
+            error: undefined,
+          };
+        } catch (error) {
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          Sentry.captureException(error, {
+            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+          });
+          return {
+            url: attachedFile.url,
+            name: attachedFile.name,
+            contentType: attachedFile.contentType,
+            content: undefined,
+            error: `Error loading file: ${(error as Error).message}`,
+          };
+        }
+      },
+    ),
+  );
+}
+
+export function attachedFilesToPrompt(
+  attachedFiles: {
+    url: string;
+    content: string | undefined;
+    error: string | undefined;
+  }[],
+): string {
+  if (!attachedFiles.length) {
+    return 'No attached files';
+  }
+  return attachedFiles
+    .map((f) => {
+      if (f.error) {
+        return `${f.url}: ${f.error}`;
+      }
+      return `${f.url}: ${f.content || 'Content loading skipped'}`; // We didn't load the file because this wasn't the last message
+    })
+    .join('\n');
+}
+
 export function getTools(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -430,7 +516,7 @@ function toPromptMessageWithToolResult(
   };
 }
 
-export function getModifyPrompt(
+export async function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
@@ -500,11 +586,16 @@ export function getModifyPrompt(
     history,
     aiBotUserId,
   );
+
+  let attachedFiles = await getCurrentlyAttachedFiles(history, aiBotUserId);
+
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
-  The user currently has given you the following data to work with:
-  Cards:\n`;
+  The user currently has given you the following data to work with: \n
+  Attached code files:\n
+  ${attachedFilesToPrompt(attachedFiles)}
+  \n Cards:\n`;
   systemMessage += attachedCardsToMessage(
     mostRecentlyAttachedCard,
     attachedCards,
