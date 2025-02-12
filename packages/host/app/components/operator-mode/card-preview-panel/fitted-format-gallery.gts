@@ -138,6 +138,7 @@ export default class FittedFormatGallery extends Component<Signature> {
                   -
                   {{spec.width}}x{{spec.height}}
                 </div>
+                {{! template-lint-disable no-inline-styles }}
                 <this.renderedCard
                   class='item'
                   @displayContainer={{true}}

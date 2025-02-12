@@ -487,6 +487,13 @@ export class BlogPost extends CardDef {
       .hasText(
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do Jane Doe tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       );
+
+    await click('[data-test-format-chooser-fitted]');
+    assert.dom('[data-test-format-chooser-atom]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-fitted]').hasClass('active');
+    assert
+      .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
+      .exists({ count: 15 });
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
