@@ -589,4 +589,15 @@ export class MockClient implements ExtendedClient {
   getUserId(): string | null {
     return this.loggedInAs ?? null;
   }
+
+  uploadContent(
+    _file: MatrixSDK.FileType,
+    _opts: MatrixSDK.UploadOpts,
+  ): Promise<MatrixSDK.UploadResponse> {
+    throw new Error('Method not implemented');
+  }
+
+  mxcUrlToHttp(_mxcUrl: string): string {
+    throw new Error('Method not implemented');
+  }
 }
