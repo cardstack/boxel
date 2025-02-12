@@ -119,7 +119,7 @@ export class CardResource extends Resource<Args> {
   }
 
   get card() {
-    if (this.loadModel.isRunning || this.loadModel.isRunning) {
+    if (this.loadModel.isRunning) {
       return this.staleCard;
     }
     return this._card;
