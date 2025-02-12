@@ -31,14 +31,8 @@ export class CreateAIAssistantRoomCommand extends HostBaseCommand<
     input: BaseCommandModule.CreateAIAssistantRoomInput,
   ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
     let { matrixService } = this;
-    let { userId } = matrixService;
-    if (!userId) {
-      throw new Error(
-        `bug: there is no userId associated with the matrix client`,
-      );
-    }
-    let server = userId!.split(':')[1];
-    let aiBotFullId = `@${aiBotUsername}:${server}`;
+    let userId = matrixService.userId;
+    let aiBotFullId = matrixService.aiBotUserId;
     let { room_id: roomId } = await matrixService.createRoom({
       preset: matrixService.privateChatPreset,
       invite: [aiBotFullId],

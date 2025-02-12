@@ -135,7 +135,7 @@ export default class CommandService extends Service {
       // one in the skills we can construct
       if (!commandToRun) {
         // here we can get the coderef from the messagecommand
-        let commandCodeRef = await command.getCommandCodeRef();
+        let commandCodeRef = command.codeRef;
         if (commandCodeRef) {
           let CommandConstructor = (await getClass(
             commandCodeRef,

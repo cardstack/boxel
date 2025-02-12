@@ -7,7 +7,10 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  aiBotUsername,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
@@ -48,12 +51,6 @@ import type Room from '../lib/matrix-classes/room';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
-
-interface SkillId {
-  skillCardId: string;
-  skillEventId: string;
-  isActive: boolean;
-}
 
 interface Args {
   named: {
@@ -117,7 +114,39 @@ export class RoomResource extends Resource<Args> {
         ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
       if (this.matrixRoom) {
-        await this.loadFromEvents(roomId);
+        let index = this._messageCache.size;
+        let members = this.matrixRoom?.members;
+        // If the AI bot is not in the room, don't process the events
+        if (members && !(this.matrixService.aiBotUserId in members)) {
+          return;
+        }
+        // This is brought up to this level so if the
+        // load task is rerun we can stop processing
+        for (let event of this.sortedEvents) {
+          switch (event.type) {
+            case 'm.room.member':
+              await this.loadRoomMemberEvent(roomId, event);
+              break;
+            case 'm.room.message':
+              if (this.isCardFragmentEvent(event)) {
+                await this.loadCardFragment(event);
+              } else if (this.isCommandDefinitionsEvent(event)) {
+                break;
+              } else {
+                await this.loadRoomMessage({ roomId, event, index });
+              }
+              break;
+            case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+              this.updateMessageCommandResult({ roomId, event, index });
+              break;
+            case 'm.room.create':
+              await this.loadRoomCreateEvent(event);
+              break;
+            case 'm.room.name':
+              await this.loadRoomNameEvent(event);
+              break;
+          }
+        }
       }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
@@ -258,36 +287,6 @@ export class RoomResource extends Resource<Args> {
     }
   });
 
-  private async loadFromEvents(roomId: string) {
-    let index = this._messageCache.size;
-    // we know skill event ids
-    for (let event of this.sortedEvents) {
-      switch (event.type) {
-        case 'm.room.member':
-          await this.loadRoomMemberEvent(roomId, event);
-          break;
-        case 'm.room.message':
-          if (this.isCardFragmentEvent(event)) {
-            await this.loadCardFragment(event);
-          } else if (this.isCommandDefinitionsEvent(event)) {
-            break;
-          } else {
-            await this.loadRoomMessage({ roomId, event, index });
-          }
-          break;
-        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-          this.updateMessageCommandResult({ roomId, event, index });
-          break;
-        case 'm.room.create':
-          await this.loadRoomCreateEvent(event);
-          break;
-        case 'm.room.name':
-          await this.loadRoomNameEvent(event);
-          break;
-      }
-    }
-  }
-
   private async loadRoomMemberEvent(
     roomId: string,
     event: InviteEvent | JoinEvent | LeaveEvent,
@@ -341,7 +340,6 @@ export class RoomResource extends Resource<Args> {
       cardDoc.data,
       cardDoc,
     )) as SkillCard;
-
     this._skillCardsCache.set(cardId, skillCard);
     this._skillEventIdToCardIdCache.set(eventId, cardId);
   }
@@ -385,6 +383,7 @@ export class RoomResource extends Resource<Args> {
       index,
       serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
+      skills: this.skills,
     });
 
     if (!message) {
@@ -430,6 +429,7 @@ export class RoomResource extends Resource<Args> {
       index,
       serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
+      skills: this.skills,
       commandResultEvent: event,
     });
     messageBuilder.updateMessageCommandResult(message);

@@ -11,6 +11,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Message } from './message';
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -25,6 +26,7 @@ export default class MessageCommand {
     public toolCallId: string,
     name: string,
     payload: any, //arguments of toolCall. Its not called arguments due to lint
+    public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     commandStatus: CommandStatus,
     commandResultCardEventId: string | undefined,
@@ -71,21 +73,6 @@ export default class MessageCommand {
       // the command result card fragments might not be loaded yet
       return undefined;
     }
-  }
-
-  async getCommandCodeRef() {
-    let roomResource = this.matrixService.roomResources.get(
-      this.message.roomId,
-    );
-    if (!roomResource) {
-      return undefined;
-    }
-    // We need to wait for the skills to actually be loaded
-    await roomResource.waitForAllSkills();
-    let commandDefinition = roomResource.commands.find(
-      (command) => command.functionName === this.name,
-    );
-    return commandDefinition?.codeRef;
   }
 
   async getCommandResultCard(): Promise<CardDef | undefined> {

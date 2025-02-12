@@ -27,7 +27,9 @@ import {
   LooseCardResource,
   ResolvedCodeRef,
   getClass,
+  aiBotUsername,
 } from '@cardstack/runtime-common';
+
 import {
   basicMappings,
   generateJsonSchemaForCardType,
@@ -225,6 +227,11 @@ export default class MatrixService extends Service {
 
   get userId() {
     return this.client.getUserId();
+  }
+
+  get aiBotUserId() {
+    let server = this.userId!.split(':')[1];
+    return `@${aiBotUsername}:${server}`;
   }
 
   get userName() {
