@@ -18,6 +18,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+const testRealm2URL = `http://test-realm/test2/`;
+
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
@@ -115,10 +117,11 @@ module('Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
-  });
+  let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL, testRealm2URL],
+    });
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
@@ -127,6 +130,7 @@ module('Spec preview', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({
+      realmURL: testRealmURL,
       contents: {
         'person.gts': personCardSource,
         'pet.gts': petCardSource,
@@ -272,7 +276,17 @@ module('Spec preview', function (hooks) {
         },
       },
     }));
+    await setupAcceptanceTestRealm({
+      realmURL: testRealm2URL,
+      contents: {
+        'new-skill.gts': newSkillCardSource,
+      },
+    });
     setActiveRealms([testRealmURL]);
+    setRealmPermissions({
+      [testRealmURL]: ['read', 'write'],
+      [testRealm2URL]: ['read'],
+    });
   });
   test('view when there is a single spec instance', async function (assert) {
     await visitOperatorMode({
@@ -314,6 +328,18 @@ module('Spec preview', function (hooks) {
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
+  });
+  test('view when users cannot write', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealm2URL}new-skill.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
+    assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    assert.dom('[data-test-cannot-write-intent-message]').exists();
   });
   test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
