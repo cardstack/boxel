@@ -17,6 +17,7 @@ import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
+import { CrmApp } from '../crm-app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
 import { ContactPhoneNumber } from '../phone-number';
@@ -683,7 +684,8 @@ export class Contact extends CardDef {
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
   @field position = contains(StringField);
-  @field company = linksTo(Company);
+  @field crmApp = linksTo(() => CrmApp);
+  @field company = linksTo(() => Company);
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);
   @field secondaryEmail = contains(EmailField);

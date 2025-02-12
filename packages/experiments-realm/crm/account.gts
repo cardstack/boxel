@@ -14,6 +14,7 @@ import {
 import { Address as AddressField } from '../address';
 import { Company } from './company';
 import { Contact } from './contact';
+import { CrmApp } from '../crm-app';
 import { StatusTagField } from './contact-status-tag';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -1253,9 +1254,10 @@ class FittedTemplate extends Component<typeof Account> {
 
 export class Account extends CardDef {
   static displayName = 'CRM Account';
-  @field company = linksTo(Company);
-  @field primaryContact = linksTo(Contact);
-  @field contacts = linksToMany(Contact);
+  @field crmApp = linksTo(() => CrmApp);
+  @field company = linksTo(() => Company);
+  @field primaryContact = linksTo(() => Contact);
+  @field contacts = linksToMany(() => Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
   @field urgencyTag = contains(UrgencyTag);
