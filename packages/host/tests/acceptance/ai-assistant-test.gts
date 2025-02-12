@@ -407,4 +407,38 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     assert.dom('[data-test-attached-file]').hasText('pet.gts');
   });
+
+  test('can display and remove auto attached card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
+
+    await click('[data-test-file="person.gts"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+
+    await click('[data-test-file-browser-toggle]');
+    await click(`[data-test-autoattached-file] [data-test-remove-file-btn]`);
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="pet.gts"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom(`[data-test-autoattached-file]`).hasText('pet.gts');
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="person.gts"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+  });
 });

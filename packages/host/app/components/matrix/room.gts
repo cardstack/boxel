@@ -17,6 +17,7 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { resource, use } from 'ember-resources';
 import max from 'lodash/max';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -280,31 +281,47 @@ export default class Room extends Component<Signature> {
     return state;
   }
 
-  private get autoAttachedFileUrl() {
-    if (!this.matrixService.fileAPI) {
-      return undefined;
+  // Using a resource for automatically attached files,
+  // so the file can be reattached after being removed
+  // when the user opens a different file and then returns to this one.
+  @use private autoAttachedFileResource = resource(() => {
+    let state = new TrackedObject<{
+      value: FileDef | undefined;
+      remove: () => void;
+    }>({
+      value: undefined,
+      remove: () => {
+        state.value = undefined;
+      },
+    });
+
+    if (!this.autoAttachedFileUrl) {
+      state.value = undefined;
+    } else {
+      state.value = this.matrixService.fileAPI.createFileDef({
+        sourceUrl: this.autoAttachedFileUrl,
+        name:
+          this.autoAttachedFileUrl.split('/').pop() ?? this.autoAttachedFileUrl,
+      });
     }
+
+    return state;
+  });
+
+  private get autoAttachedFileUrl() {
     return this.operatorModeStateService.state.codePath?.href;
   }
 
   private get autoAttachedFile() {
-    if (!this.autoAttachedFileUrl) {
-      return undefined;
-    }
+    return this.autoAttachedFileResource.value;
+  }
 
-    if (!this.matrixService.fileAPI) {
-      return undefined;
-    }
-
-    return this.matrixService.fileAPI.createFileDef({
-      sourceUrl: this.autoAttachedFileUrl,
-      name:
-        this.autoAttachedFileUrl.split('/').pop() ?? this.autoAttachedFileUrl,
-    });
+  private get removeAutoAttachedFile() {
+    return this.autoAttachedFileResource.remove;
   }
 
   private get filesToAttach() {
-    return this.matrixService.filesToSend.get(this.args.roomId);
+    return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
   }
 
   private get isScrolledToBottom() {
@@ -572,9 +589,7 @@ export default class Room extends Component<Signature> {
     this.doSendMessage.perform(
       myLastMessage.message,
       attachedCards,
-      myLastMessage.attachedFiles?.length
-        ? myLastMessage.attachedFiles
-        : undefined,
+      myLastMessage.attachedFiles,
       true,
       myLastMessage.clientGeneratedId,
     );
@@ -587,8 +602,22 @@ export default class Room extends Component<Signature> {
 
   @action
   private sendMessage(prompt?: string) {
+    this.doSendMessage.perform(
+      prompt ?? this.messageToSend,
+      this.operatorModeStateService.state.submode === 'interact' &&
+        this.allCardsToAttach.length
+        ? this.allCardsToAttach
+        : undefined,
+      this.operatorModeStateService.state.submode === 'code' &&
+        this.allFilesToAttach.length
+        ? this.allFilesToAttach
+        : undefined,
+      Boolean(prompt),
+    );
+  }
+
+  private get allCardsToAttach() {
     let cards = [];
-    let files = [];
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
     }
@@ -598,19 +627,17 @@ export default class Room extends Component<Signature> {
       });
     }
 
+    return cards;
+  }
+
+  private get allFilesToAttach() {
+    let files = [];
     if (this.autoAttachedFile) {
       files.push(this.autoAttachedFile);
     }
-    if (this.filesToAttach) {
-      files.push(...this.filesToAttach);
-    }
+    files.push(...this.filesToAttach);
 
-    this.doSendMessage.perform(
-      prompt ?? this.messageToSend,
-      cards.length ? cards : undefined,
-      files.length ? files : undefined,
-      Boolean(prompt),
-    );
+    return files;
   }
 
   @action
@@ -649,7 +676,7 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseFile(file: FileDef) {
-    let files = this.filesToAttach ?? [];
+    let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
       this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
     }
@@ -663,24 +690,19 @@ export default class Room extends Component<Signature> {
   @action
   private removeFile(file: FileDef) {
     if (this.isAutoAttachedFile(file)) {
-      //TODO: implement auto attached file resource
-      // this.autoAttachedFileResource.onFileRemoval(
-      //   this.filesToAttach[fileIndex],
-      // );
-    } else {
-      const fileIndex = this.filesToAttach?.findIndex(
-        (f) => f.sourceUrl === file.sourceUrl,
-      );
-      if (fileIndex != undefined && fileIndex !== -1) {
-        if (this.filesToAttach !== undefined) {
-          //TODO: implement auto attached file resource
-          // this.autoAttachedFileResource.onFileRemoval(
-          //   this.filesToAttach[fileIndex],
-          // );
-          this.filesToAttach.splice(fileIndex, 1);
-        }
+      this.removeAutoAttachedFile();
+      return;
+    }
+
+    const fileIndex = this.filesToAttach?.findIndex(
+      (f) => f.sourceUrl === file.sourceUrl,
+    );
+    if (fileIndex != undefined && fileIndex !== -1) {
+      if (this.filesToAttach !== undefined) {
+        this.filesToAttach.splice(fileIndex, 1);
       }
     }
+
     this.matrixService.cardsToSend.set(
       this.args.roomId,
       this.cardsToAttach?.length ? this.cardsToAttach : undefined,
@@ -710,9 +732,10 @@ export default class Room extends Component<Signature> {
           .map((stackItem) => stackItem.card.id),
       };
       try {
-        if (files && !files[0].url) {
+        if (files) {
           files = await this.matrixService.uploadFiles(files);
         }
+
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,

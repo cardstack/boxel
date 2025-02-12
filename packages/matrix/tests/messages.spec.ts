@@ -369,11 +369,17 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass', { url: appURL });
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
+    await expect(
+      page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
+    ).toHaveCount(1);
     await page
       .locator(`[data-test-submode-switcher] > [data-test-boxel-button]`)
       .click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
+    await expect(
+      page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
+    ).toHaveCount(0);
     await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
@@ -405,6 +411,9 @@ test.describe('Room messages', () => {
 
     let messages = await getRoomEvents();
     let lastMessage = messages[messages.length - 1];
+
+    let attachedCards = JSON.parse(lastMessage.content.data).attachedCards;
+    expect(attachedCards).toBeUndefined;
     let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(2);
     expect(attachedFiles[1].name).toStrictEqual('pet.gts');

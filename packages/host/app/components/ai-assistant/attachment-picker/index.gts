@@ -49,7 +49,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
     <div class='item-picker'>
       {{#each this.itemsToDisplay as |item|}}
-        {{#if (this.isCard item)}}
+        {{#if (this.displayCardItem item)}}
           {{#if (this.isAutoAttachedCard item)}}
             <Tooltip @placement='top'>
               <:trigger>
@@ -73,7 +73,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               @removeCard={{@removeCard}}
             />
           {{/if}}
-        {{else}}
+        {{else if (this.displayFileItem item)}}
           {{#if (this.isAutoAttachedFile item)}}
             <Tooltip @placement='top'>
               <:trigger>
@@ -113,7 +113,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
       {{#if this.canDisplayAddButton}}
         {{#if (and (eq @submode 'code') isAttachingFilesEnabled)}}
           <AddButton
-            class={{cn 'attach-button' icon-only=this.itemsToDisplay.length}}
+            class={{cn 'attach-button' icon-only=this.files.length}}
             @variant='pill'
             @iconWidth='14'
             @iconHeight='14'
@@ -121,13 +121,13 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
             @disabled={{this.doChooseFile.isRunning}}
             data-test-choose-file-btn
           >
-            <span class={{if this.itemsToDisplay.length 'boxel-sr-only'}}>
+            <span class={{if this.files.length 'boxel-sr-only'}}>
               Attach File
             </span>
           </AddButton>
         {{else}}
           <AddButton
-            class={{cn 'attach-button' icon-only=this.itemsToDisplay.length}}
+            class={{cn 'attach-button' icon-only=this.cards.length}}
             @variant='pill'
             @iconWidth='14'
             @iconHeight='14'
@@ -135,7 +135,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
             @disabled={{this.doChooseCard.isRunning}}
             data-test-choose-card-btn
           >
-            <span class={{if this.itemsToDisplay.length 'boxel-sr-only'}}>
+            <span class={{if this.cards.length 'boxel-sr-only'}}>
               Add Card
             </span>
           </AddButton>
@@ -182,8 +182,16 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
   }
 
-  private isCard = (item: CardDef | FileDef): item is CardDef => {
-    return isCardInstance(item);
+  private displayFileItem = (item: CardDef | FileDef): item is FileDef => {
+    return (
+      !isCardInstance(item) &&
+      this.args.submode === 'code' &&
+      !!isAttachingFilesEnabled
+    );
+  };
+
+  private displayCardItem = (item: CardDef | FileDef): item is CardDef => {
+    return isCardInstance(item) && this.args.submode === 'interact';
   };
 
   private isAutoAttachedCard = (card: CardDef) => {
@@ -195,6 +203,10 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   };
 
   private get items() {
+    return [...this.cards, ...this.files];
+  }
+
+  private get cards() {
     let cards = this.args.cardsToAttach ?? [];
 
     if (this.args.autoAttachedCards) {
@@ -202,6 +214,10 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     }
 
     cards = cards.filter((card) => card.id); // Dont show new unsaved cards
+    return cards;
+  }
+
+  private get files() {
     let files: FileDef[] = [];
     if (this.args.autoAttachedFile) {
       files = [...new Set([this.args.autoAttachedFile])];
@@ -209,8 +225,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     if (this.args.filesToAttach) {
       files = [...files, ...this.args.filesToAttach];
     }
-
-    return [...cards, ...files];
+    return files;
   }
 
   private get itemsToDisplay() {
