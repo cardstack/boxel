@@ -483,7 +483,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays view all pill if attached card more than 4', async ({
+  test('displays "view all" pill when there are more than 4 attached cards', async ({
     page,
   }) => {
     const testCard1 = `${appURL}/hassan`;
@@ -505,7 +505,7 @@ test.describe('Room messages', () => {
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(0);
 
     await selectCardFromCatalog(page, testCard5);
-    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(3);
+    await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(4); // current value of MAX_ITEMS_TO_DISPLAY in attachment-picker.gts
     await expect(page.locator(`[data-test-view-all]`)).toHaveCount(1);
 
     await page.locator('[data-test-view-all]').click();
