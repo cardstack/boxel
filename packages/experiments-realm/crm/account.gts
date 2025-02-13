@@ -312,6 +312,10 @@ class IsolatedTemplate extends Component<typeof Account> {
     return `${formattedValue} in ${currentYear}`;
   }
 
+  removeFileExtension(cardUrl: string) {
+    return cardUrl.replace(/\.[^/.]+$/, '');
+  }
+
   <template>
     <AccountPageLayout>
       <:header>
@@ -508,6 +512,10 @@ class IsolatedTemplate extends Component<typeof Account> {
                         fieldType=undefined
                         fieldName=undefined
                       }}
+                      data-test-cards-grid-item={{this.removeFileExtension
+                        task.id
+                      }}
+                      data-cards-grid-item={{this.removeFileExtension task.id}}
                     >
                       <Component
                         @format='embedded'

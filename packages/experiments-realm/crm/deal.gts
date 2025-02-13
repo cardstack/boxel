@@ -231,6 +231,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return null;
   }
 
+  removeFileExtension(cardUrl: string) {
+    return cardUrl.replace(/\.[^/.]+$/, '');
+  }
+
   <template>
     <DealPageLayout>
       <:header>
@@ -480,6 +484,12 @@ class IsolatedTemplate extends Component<typeof Deal> {
                           format='data'
                           fieldType=undefined
                           fieldName=undefined
+                        }}
+                        data-test-cards-grid-item={{this.removeFileExtension
+                          task.id
+                        }}
+                        data-cards-grid-item={{this.removeFileExtension
+                          task.id
                         }}
                       >
                         <Component
