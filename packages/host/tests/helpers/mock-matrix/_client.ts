@@ -589,4 +589,15 @@ export class MockClient implements ExtendedClient {
   getUserId(): string | null {
     return this.loggedInAs ?? null;
   }
+
+  async uploadContent(
+    _content: ArrayBuffer,
+    _opts?: { type?: string; name?: string },
+  ): Promise<{ content_uri: string }> {
+    return { content_uri: `mxc://mock-server/${Math.random()}` };
+  }
+
+  mxcUrlToHttp(mxcUrl: string): string {
+    return mxcUrl.replace('mxc://', 'http://mock-server/');
+  }
 }
