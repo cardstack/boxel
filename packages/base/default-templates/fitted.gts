@@ -1,7 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
 import type { CardContext, BaseDef, CardDef } from '../card-api';
-// @ts-ignore no types
-import cssUrl from 'ember-css-url';
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 import { BasicFitted } from '@cardstack/boxel-ui/components';
 

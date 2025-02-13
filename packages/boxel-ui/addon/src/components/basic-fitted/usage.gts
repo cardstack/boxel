@@ -36,7 +36,7 @@ export default class BasicFittedUsage extends Component {
     {{! template-lint-disable no-inline-styles }}
     <FreestyleUsage
       @name='BasicFitted'
-      @description='Designed to render well inside a CSS container with container-name: fitted, container-type: size'
+      @description='Designed to render well inside a CSS container with container-name: fitted-card, container-type: size'
     >
       <:example>
         <div class='scroller' tabindex='0'>
