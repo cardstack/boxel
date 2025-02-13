@@ -42,7 +42,8 @@ interface Signature {
   };
 }
 
-const isAttachingFilesEnabled = ENV.featureFlags?.ENABLE_ATTACHING_FILES;
+const isAttachingFilesEnabled =
+  ENV.featureFlags?.AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED;
 const MAX_ITEMS_TO_DISPLAY = 4;
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
