@@ -13,10 +13,10 @@ import {
 } from '../helpers';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   DEFAULT_LLM,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -739,7 +739,6 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              // @ts-expect-error purposefully using old format
               openCards: [
                 {
                   data: {
@@ -1021,7 +1020,10 @@ module('getModifyPrompt', () => {
 
   test('should include instructions in system prompt for skill cards', () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(path.join(__dirname, 'resources/chats/added-skill.json')),
+      readFileSync(
+        path.join(__dirname, 'resources/chats/added-skill.json'),
+        'utf-8',
+      ),
     );
 
     const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
@@ -1048,6 +1050,7 @@ module('getModifyPrompt', () => {
           __dirname,
           'resources/chats/added-skill-and-attached-card.json',
         ),
+        'utf-8',
       ),
     );
 
@@ -1080,6 +1083,7 @@ module('getModifyPrompt', () => {
           __dirname,
           'resources/chats/added-two-skills-removed-one-skill.json',
         ),
+        'utf-8',
       ),
     );
     const { messages } = getPromptParts(eventList, '@aibot:localhost');
@@ -1098,6 +1102,7 @@ module('getModifyPrompt', () => {
           __dirname,
           'resources/chats/added-two-skills-removed-two-skills.json',
         ),
+        'utf-8',
       ),
     );
     const { messages } = getPromptParts(eventList, '@aibot:localhost');
@@ -1115,7 +1120,10 @@ test('should support skill cards without ids', () => {
   // lies with the host application, the AI bot should not need to
   // handle that.
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
-    readFileSync(path.join(__dirname, 'resources/chats/skill-card-no-id.json')),
+    readFileSync(
+      path.join(__dirname, 'resources/chats/skill-card-no-id.json'),
+      'utf-8',
+    ),
   );
   const { messages } = getPromptParts(eventList, '@aibot:localhost');
   assert.equal(messages.length, 2);
@@ -1131,6 +1139,7 @@ test('Has the skill card specified by the last state update, even if there are o
         __dirname,
         'resources/chats/two-messages-with-same-skill-card.json',
       ),
+      'utf-8',
     ),
   );
   const { messages } = getPromptParts(eventList, '@aibot:localhost');
@@ -1146,6 +1155,7 @@ test('if tool calls are required, ensure they are set', () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/forced-function-call.json'),
+      'utf-8',
     ),
   );
 
@@ -1466,13 +1476,11 @@ test('Return host result of tool call back to open ai', () => {
       sender: '@ai-bot:localhost',
       content: {
         body: "Search for card instances of type 'Author'",
-        msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: "Search for card instances of type 'Author'",
         format: 'org.matrix.custom.html',
-        data: {
-          eventId: 'command-event-id-1',
-          toolCall: {
-            type: 'function',
+        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          {
             id: 'tool-call-id-1',
             name: 'searchCardsByTypeAndTitle',
             arguments: {
@@ -1485,11 +1493,7 @@ test('Return host result of tool call back to open ai', () => {
               },
             },
           },
-        },
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'command-event-id-1',
-        },
+        ],
       },
       origin_server_ts: 1722242849094,
       unsigned: {
@@ -1511,6 +1515,7 @@ test('Return host result of tool call back to open ai', () => {
         },
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         data: {
+          commandRequestId: 'tool-call-id-1',
           card: JSON.stringify({
             data: {
               type: 'card',
@@ -1564,6 +1569,7 @@ test('Tools remain available in prompt parts even when not in last message', () 
         __dirname,
         'resources/chats/required-tools-multiple-messages.json',
       ),
+      'utf-8',
     ),
   );
 
@@ -1585,6 +1591,7 @@ test('Tools are not required unless they are in the last message', () => {
         __dirname,
         'resources/chats/required-tools-multiple-messages.json',
       ),
+      'utf-8',
     ),
   );
 
@@ -1599,6 +1606,7 @@ test('Tools can be required to be called if done so in the last message', () => 
         __dirname,
         'resources/chats/required-tool-call-in-last-message.json',
       ),
+      'utf-8',
     ),
   );
 
@@ -1618,6 +1626,7 @@ test('Tools calls are connected to their results', () => {
         __dirname,
         'resources/chats/connect-tool-calls-to-results.json',
       ),
+      'utf-8',
     ),
   );
 
@@ -1640,6 +1649,7 @@ module('set model in prompt', () => {
           __dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
+        'utf-8',
       ),
     );
 
@@ -1649,7 +1659,10 @@ module('set model in prompt', () => {
 
   test('use latest active llm', () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(path.join(__dirname, 'resources/chats/set-active-llm.json')),
+      readFileSync(
+        path.join(__dirname, 'resources/chats/set-active-llm.json'),
+        'utf-8',
+      ),
     );
 
     const { model } = getPromptParts(eventList, '@aibot:localhost');

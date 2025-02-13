@@ -3,14 +3,17 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
+import {
+  CommandRequestContent,
+  ToolChoice,
+} from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
-  CommandEvent,
   Tool,
   SkillsConfigEvent,
   ActiveLLMEvent,
+  CardMessageEvent,
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
@@ -18,13 +21,13 @@ import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '../runtime-common/matrix-constants';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
@@ -169,8 +172,8 @@ export function constructHistory(
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       let { attachedCardsEventIds } = event.content.data;
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
-        event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
-          serializedCardFromFragments(id, cardFragments),
+        event.content.data.attachedCards = attachedCardsEventIds.map(
+          (id: string) => serializedCardFromFragments(id, cardFragments),
         );
       }
     }
@@ -377,57 +380,69 @@ export function getToolChoice(
   return 'auto';
 }
 
-function getCommandResult(
-  commandEvent: CommandEvent,
+function getCommandResults(
+  cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
 ) {
-  let commandResultEvent = history.find((e) => {
+  let commandResultEvents = history.filter((e) => {
     if (
       isCommandResultEvent(e) &&
-      e.content['m.relates_to']?.event_id === commandEvent.event_id
+      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
     ) {
       return true;
     }
     return false;
-  }) as CommandResultEvent | undefined;
-  return commandResultEvent;
+  }) as CommandResultEvent[];
+  return commandResultEvents;
 }
 
-function toToolCall(event: CommandEvent): ChatCompletionMessageToolCall {
-  return {
-    id: event.content.data.toolCall.id,
-    function: {
-      name: event.content.data.toolCall.name,
-      arguments: JSON.stringify(event.content.data.toolCall.arguments),
+function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
+  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: CommandRequestContent) => {
+      return {
+        id: commandRequest.id,
+        function: {
+          name: commandRequest.name,
+          arguments: JSON.stringify(commandRequest.arguments),
+        },
+        type: 'function',
+      };
     },
-    type: 'function',
-  };
+  );
 }
 
-function toPromptMessageWithToolResult(
-  event: CommandEvent,
+function toPromptMessageWithToolResults(
+  event: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-): OpenAIPromptMessage {
-  let commandResult = getCommandResult(event, history);
-  let content = 'pending';
-  if (commandResult) {
-    let status = commandResult.content['m.relates_to']?.key;
-    if (
-      commandResult.content.msgtype ===
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-    ) {
-      content = `Command ${status}, with result card: ${JSON.stringify(
-        commandResult.content.data.card,
-      )}.\n`;
-    } else {
-      content = `Command ${status}.\n`;
-    }
-  }
-  return {
-    role: 'tool',
-    content,
-    tool_call_id: event.content.data.toolCall.id,
-  };
+): OpenAIPromptMessage[] {
+  let commandResults = getCommandResults(event, history);
+  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: CommandRequestContent) => {
+      let content = 'pending';
+      let commandResult = commandResults.find(
+        (commandResult) =>
+          commandResult.content.data.commandRequestId === commandRequest.id,
+      );
+      if (commandResult) {
+        let status = commandResult.content['m.relates_to']?.key;
+        if (
+          commandResult.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ) {
+          content = `Command ${status}, with result card: ${JSON.stringify(
+            commandResult.content.data.card,
+          )}.\n`;
+        } else {
+          content = `Command ${status}.\n`;
+        }
+      }
+      return {
+        role: 'tool',
+        tool_call_id: commandRequest.id,
+        content,
+      };
+    },
+  );
 }
 
 export function getModifyPrompt(
@@ -460,20 +475,19 @@ export function getModifyPrompt(
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
-        if (isCommandEvent(event)) {
-          historicalMessages.push({
-            role: 'assistant',
-            content: body,
-            tool_calls: [toToolCall(event)],
-          });
-          historicalMessages.push(
-            toPromptMessageWithToolResult(event, history),
+        let toolCalls = toToolCalls(event);
+        let historicalMessage: OpenAIPromptMessage = {
+          role: 'assistant',
+          content: body,
+        };
+        if (toolCalls.length) {
+          historicalMessage.tool_calls = toolCalls;
+        }
+        historicalMessages.push(historicalMessage);
+        if (toolCalls.length) {
+          toPromptMessageWithToolResults(event, history).forEach((message) =>
+            historicalMessages.push(message),
           );
-        } else {
-          historicalMessages.push({
-            role: 'assistant',
-            content: body,
-          });
         }
       } else {
         if (
@@ -569,19 +583,6 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
-
-export function isCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-    event.content.format === 'org.matrix.custom.html' &&
-    typeof event.content.data === 'object' &&
-    typeof event.content.data.toolCall === 'object'
-  );
-}
 
 function getModel(eventlist: DiscreteMatrixEvent[]): string {
   let activeLLMEvent = eventlist.findLast(

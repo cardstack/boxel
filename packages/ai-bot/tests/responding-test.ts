@@ -4,6 +4,9 @@ import { IContent } from 'matrix-js-sdk';
 import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
+import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
+import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -42,10 +45,71 @@ class FakeMatrixClient implements MatrixClient {
     return this.sentEvents;
   }
 
+  sendStateEvent(
+    _roomId: string,
+    _eventType: string,
+    _content: IContent,
+    _stateKey: string,
+  ): Promise<{ event_id: string }> {
+    throw new Error('Method not implemented.');
+  }
+
   resetSentEvents() {
     this.sentEvents = [];
     this.eventId = 0;
   }
+}
+
+function snapshotWithContent(content: string): ChatCompletionSnapshot {
+  return {
+    choices: [
+      {
+        message: {
+          content: content,
+        },
+        finish_reason: null,
+        logprobs: null,
+        index: 0,
+      },
+    ],
+    id: '',
+    created: 0,
+    model: 'llm',
+  };
+}
+
+function snapshotWithToolCall(
+  commandRequest: Partial<CommandRequestContent>,
+): ChatCompletionSnapshot {
+  let toolCall = {
+    type: 'function',
+  } as any;
+  if (commandRequest.arguments) {
+    toolCall.function = (toolCall.function ?? {}) as any;
+    toolCall.function.arguments = JSON.stringify(commandRequest.arguments);
+  }
+  if (commandRequest.name) {
+    toolCall.function = (toolCall.function ?? {}) as any;
+    toolCall.function.name = JSON.stringify(commandRequest.name);
+  }
+  if (commandRequest.id) {
+    toolCall.id = commandRequest.id;
+  }
+  return {
+    choices: [
+      {
+        message: {
+          tool_calls: [toolCall],
+        },
+        finish_reason: null,
+        logprobs: null,
+        index: 0,
+      },
+    ],
+    id: '',
+    created: 0,
+    model: 'llm',
+  };
 }
 
 module('Responding', (hooks) => {
@@ -93,7 +157,7 @@ module('Responding', (hooks) => {
 
     // Send several messages
     for (let i = 0; i < 10; i++) {
-      await responder.onContent('content ' + i);
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
     }
 
     let sentEvents = fakeMatrixClient.getSentEvents();
@@ -128,7 +192,7 @@ module('Responding', (hooks) => {
 
     // Send several messages
     for (let i = 0; i < 10; i++) {
-      await responder.onContent('content ' + i);
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
     }
 
     let sentEvents = fakeMatrixClient.getSentEvents();
@@ -198,19 +262,14 @@ module('Responding', (hooks) => {
 
     await responder.initialize();
 
-    await responder.onMessage({
-      role: 'assistant',
-      tool_calls: [
-        {
-          id: 'some-tool-call-id',
-          function: {
-            name: 'patchCard',
-            arguments: JSON.stringify(patchArgs),
-          },
-          type: 'function',
-        },
-      ],
-    });
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        id: 'some-tool-call-id',
+        name: 'patchCard',
+        arguments: patchArgs,
+      }),
+    );
 
     let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(
@@ -275,21 +334,16 @@ module('Responding', (hooks) => {
     };
     await responder.initialize();
 
-    await responder.onContent('some content');
+    await responder.onChunk({} as any, snapshotWithContent('some content'));
 
-    await responder.onMessage({
-      role: 'assistant',
-      tool_calls: [
-        {
-          id: 'some-tool-call-id',
-          function: {
-            name: 'patchCard',
-            arguments: JSON.stringify(patchArgs),
-          },
-          type: 'function',
-        },
-      ],
-    });
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        id: 'some-tool-call-id',
+        name: 'patchCard',
+        arguments: patchArgs,
+      }),
+    );
 
     let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(
@@ -330,9 +384,14 @@ module('Responding', (hooks) => {
     );
 
     assert.equal(
-      sentEvents[1].content.body,
-      'some content',
-      'Content event should be sent',
+      sentEvents[0].content.body,
+      thinkingMessage,
+      'Thinking message should be sent first',
+    );
+    assert.deepEqual(
+      sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY].length,
+      1,
+      'The message type should reflect that the model is preparing a tool call',
     );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
