@@ -335,6 +335,9 @@ export async function loadCurrentlyAttachedFiles(
   let lastMessageEventByUser = history.findLast(
     (event) => event.sender !== aiBotUserId,
   );
+
+  // We are only interested in downloading the most recently attached files -
+  // downloading older ones is not needed since the new prompt should operate on fresh data
   if (!lastMessageEventByUser?.content.data.attachedFiles) {
     return [];
   }
@@ -400,7 +403,9 @@ export function attachedFilesToPrompt(
       if (f.error) {
         return `${f.url}: ${f.error}`;
       }
-      return `${f.url}: ${f.content || 'Content loading skipped'}`; // We didn't load the file because this wasn't the last message
+      // When no error and no content is available, it means we didn't download the file
+      // since it doesn't belong to the most recent message sent by the user
+      return `${f.url}: ${f.content || 'Content loading skipped'}`;
     })
     .join('\n');
 }
