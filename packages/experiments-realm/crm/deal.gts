@@ -231,6 +231,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return null;
   }
 
+  removeFileExtension(cardUrl: string) {
+    return cardUrl.replace(/\.[^/.]+$/, '');
+  }
+
   <template>
     <DealPageLayout>
       <:header>
@@ -474,10 +478,25 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 {{#if this.hasActiveTasks}}
                   {{#each this.activeTasks.instances as |task|}}
                     {{#let (getComponent task) as |Component|}}
-                      <Component
-                        @format='embedded'
-                        @displayContainer={{false}}
-                      />
+                      <div
+                        {{@context.cardComponentModifier
+                          cardId=task.id
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                        data-test-cards-grid-item={{this.removeFileExtension
+                          task.id
+                        }}
+                        data-cards-grid-item={{this.removeFileExtension
+                          task.id
+                        }}
+                      >
+                        <Component
+                          @format='embedded'
+                          @displayContainer={{false}}
+                        />
+                      </div>
                     {{/let}}
                   {{/each}}
                 {{else}}

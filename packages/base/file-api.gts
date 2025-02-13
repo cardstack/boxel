@@ -14,6 +14,13 @@ class View extends Component<typeof FileDef> {
   </template>
 }
 
+export type SerializedFile = {
+  sourceUrl: string;
+  url: string;
+  name: string;
+  contentType: string;
+};
+
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static icon = FileIcon;
@@ -21,7 +28,7 @@ export class FileDef extends BaseDef {
   @field sourceUrl = contains(StringField);
   @field url = contains(StringField);
   @field name = contains(StringField);
-  @field type = contains(StringField);
+  @field contentType = contains(StringField);
 
   static embedded: BaseDefComponent = View;
   static fitted: BaseDefComponent = View;
@@ -33,7 +40,21 @@ export class FileDef extends BaseDef {
       sourceUrl: this.sourceUrl,
       url: this.url,
       name: this.name,
-      type: this.type,
+      contentType: this.contentType,
     };
   }
+}
+
+export function createFileDef({
+  url,
+  sourceUrl,
+  name,
+  contentType,
+}: {
+  url?: string;
+  sourceUrl: string;
+  name?: string;
+  contentType?: string;
+}) {
+  return new FileDef({ url, sourceUrl, name, contentType });
 }

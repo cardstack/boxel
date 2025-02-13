@@ -195,6 +195,10 @@ export interface CardChooser {
   ): Promise<undefined | T>;
 }
 
+export interface FileChooser {
+  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
+}
+
 export async function chooseCard<T extends BaseDef>(
   query: CardCatalogQuery,
   opts?: {
@@ -218,6 +222,20 @@ export async function chooseCard<T extends BaseDef>(
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
   return await chooser.chooseCard<T>(query, opts);
+}
+
+export async function chooseFile<T extends FieldDef>(): Promise<
+  undefined | any
+> {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_FILE_CHOOSER) {
+    throw new Error(
+      `no cardstack file chooser is available in this environment`,
+    );
+  }
+  let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
+
+  return await chooser.chooseFile<T>();
 }
 
 export interface CardSearch {
