@@ -337,6 +337,9 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         );
       }
 
+      // FIXME how should the username be known? … duplicated from setupTestRealm
+      let realmSessionRoomId = `session-room-for-testuser`;
+
       roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
       let sseRoomEvents = roomEvents.filter(
         (e) => e.content?.msgtype === 'app.boxel.sse',
