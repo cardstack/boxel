@@ -619,9 +619,7 @@ export default class Room extends Component<Signature> {
 
     this.doSendMessage.perform(
       prompt ?? this.messageToSend,
-      this.operatorModeStateService.state.submode === 'interact' && cards.length
-        ? cards
-        : undefined,
+      cards.length ? cards : undefined,
       files.length ? files : undefined,
       Boolean(prompt),
     );
