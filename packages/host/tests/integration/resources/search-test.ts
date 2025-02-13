@@ -27,6 +27,7 @@ import {
   type TestContextWithSSE,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 class StubRealmService extends RealmService {
@@ -50,6 +51,7 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {

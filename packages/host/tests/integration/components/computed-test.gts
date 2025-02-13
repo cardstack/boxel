@@ -32,6 +32,7 @@ import {
   linksTo,
   linksToMany,
 } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -39,6 +40,7 @@ let loader: Loader;
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
+  setupMockMatrix(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {

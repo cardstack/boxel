@@ -33,6 +33,7 @@ import {
   Component,
   // realmURL,
 } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -87,6 +88,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
 

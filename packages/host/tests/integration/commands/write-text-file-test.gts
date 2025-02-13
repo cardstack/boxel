@@ -20,6 +20,7 @@ import {
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
@@ -37,6 +38,7 @@ class StubRealmService extends RealmService {
 module('Integration | commands | write-text-file', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);

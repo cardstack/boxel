@@ -7,6 +7,7 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
   testRealmURL,
   setupCardLogs,
@@ -29,6 +30,7 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),

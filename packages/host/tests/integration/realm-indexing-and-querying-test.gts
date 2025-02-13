@@ -18,6 +18,8 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+
 import {
   testRealmURL,
   testRealmInfo,
@@ -57,6 +59,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
