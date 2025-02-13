@@ -115,15 +115,19 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let realmMatrixUsername = matrixClient.username;
 
+    console.log('room ids', getRoomIds());
+
     for (let roomId of getRoomIds()) {
-      simulateRemoteMessage(roomId, realmMatrixUsername, {
-        msgtype: 'app.boxel.sse', // FIXME extract/constant
-        format: 'app.boxel.sse-format', // FIXME does this matter?
-        body: JSON.stringify({
-          type: event.type,
-          data: event.data,
-        }),
-      });
+      if (roomId.startsWith('session-room-for-')) {
+        simulateRemoteMessage(roomId, realmMatrixUsername, {
+          msgtype: 'app.boxel.sse', // FIXME extract/constant
+          format: 'app.boxel.sse-format', // FIXME does this matter?
+          body: JSON.stringify({
+            type: event.type,
+            data: event.data,
+          }),
+        });
+      }
     }
   }
 

@@ -316,19 +316,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
       let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
 
-      // FIXME shouldn’t the room be created elsewhere? and how should the username be known?
-      let realmSessionRoomId = `session-room-for-testuser`;
-
-      let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
-
-      if (!getRoomIds().includes(realmSessionRoomId)) {
-        createAndJoinRoom({
-          sender: realm.matrixUsername,
-          name: realmSessionRoomId,
-          id: realmSessionRoomId,
-        });
-      }
-
       let roomEvents: IEvent[] = [];
 
       let timeout = setTimeout(
@@ -587,6 +574,23 @@ async function setupTestRealm({
     dbAdapter,
     queue,
   });
+
+  let mockLoader = owner.lookup('service:matrix-mock-utils') as any;
+  let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
+
+  // FIXME how should the username be known?
+  let realmSessionRoomId = `session-room-for-testuser`;
+
+  let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
+
+  if (!getRoomIds().includes(realmSessionRoomId)) {
+    createAndJoinRoom({
+      sender: realm.matrixUsername,
+      name: realmSessionRoomId,
+      id: realmSessionRoomId,
+    });
+  }
+
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await adapter.ready;
