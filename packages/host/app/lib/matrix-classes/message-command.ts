@@ -11,6 +11,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Message } from './message';
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -25,6 +26,7 @@ export default class MessageCommand {
     public toolCallId: string,
     name: string,
     payload: any, //arguments of toolCall. Its not called arguments due to lint
+    public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     commandStatus: CommandStatus,
     commandResultCardEventId: string | undefined,
