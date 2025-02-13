@@ -2596,4 +2596,32 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
   });
+
+  test('it shows the copy code to clipboard button', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        formatted_body:
+          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+
+    assert
+      .dom('button.code-copy-button')
+      .exists('the copy code to clipboard button exists');
+
+    // the chrome security model prevents the clipboard API
+    // from working when tests are run in a headless mode, so we are unable to
+    // assert the button actually copies contents to the clipboard
+  });
 });

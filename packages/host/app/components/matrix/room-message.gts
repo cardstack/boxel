@@ -1,3 +1,4 @@
+import { hash } from '@ember/helper';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -15,6 +16,7 @@ import { bool } from '@cardstack/boxel-ui/helpers';
 import { markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import interactiveMarkdown from '@cardstack/host/modifiers/interactive-markdown';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -99,10 +101,13 @@ export default class RoomMessage extends Component<Signature> {
     }}
     {{#if this.resources}}
       <AiAssistantMessage
+        {{interactiveMarkdown}}
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe
-          (markdownToHtml @message.formattedMessage)
+          (markdownToHtml
+            @message.formattedMessage (hash includeCodeCopyButton=true)
+          )
         }}
         @datetime={{@message.created}}
         @index={{@index}}
@@ -144,6 +149,35 @@ export default class RoomMessage extends Component<Signature> {
     <style scoped>
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
+      }
+
+      /* we are cribbing the boxel-ui style here as we have a rather 
+      awkward way that we insert the copy button */
+      :deep(.code-copy-button) {
+        --spacing: calc(1rem / 1.333);
+
+        color: var(--boxel-highlight);
+        background: none;
+        border: none;
+        font: 600 var(--boxel-font-xs);
+        padding: 0;
+        margin-bottom: var(--spacing);
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--spacing);
+        letter-spacing: var(--boxel-lsp-xs);
+        justify-content: center;
+        height: min-content;
+        align-items: center;
+        white-space: nowrap;
+        min-height: var(--boxel-button-min-height);
+        min-width: var(--boxel-button-min-width, 5rem);
+      }
+      :deep(.code-copy-button .copy-text) {
+        color: transparent;
+      }
+      :deep(.code-copy-button .copy-text:hover) {
+        color: var(--boxel-highlight);
       }
     </style>
   </template>
