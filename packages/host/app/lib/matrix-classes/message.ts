@@ -7,6 +7,8 @@ import { getCard } from '@cardstack/runtime-common';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
+import { type FileDef } from 'https://cardstack.com/base/file-api';
+
 import { RoomMember } from './member';
 import MessageCommand from './message-command';
 
@@ -36,6 +38,7 @@ interface RoomMessageRequired {
 interface RoomMessageOptional {
   transactionId?: string | null;
   attachedCardIds?: string[] | null;
+  attachedFiles?: FileDef[];
   isStreamingFinished?: boolean;
   index?: number;
   errorMessage?: string;
@@ -50,6 +53,7 @@ export class Message implements RoomMessageInterface {
   @tracked isStreamingFinished?: boolean;
 
   attachedCardIds?: string[] | null;
+  attachedFiles?: FileDef[];
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
@@ -76,6 +80,7 @@ export class Message implements RoomMessageInterface {
     this.updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
+    this.attachedFiles = init.attachedFiles;
     this.instanceId = guidFor(this);
   }
   get isRetryable() {

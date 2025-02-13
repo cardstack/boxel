@@ -43,6 +43,8 @@ module.exports = function (environment) {
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     featureFlags: {
       ENABLE_PLAYGROUND: process.env.ENABLE_PLAYGROUND || false,
+      AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED:
+        process.env.AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED || false,
     },
   };
 
@@ -54,6 +56,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
     ENV.featureFlags = {
       ENABLE_PLAYGROUND: true,
+      AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED: true,
     };
   }
 
@@ -76,6 +79,7 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       ENABLE_PLAYGROUND: true,
+      AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED: true,
     };
   }
 
