@@ -34,6 +34,12 @@ export default class AiAssistantCardPickerUsage extends Component {
     this.cards.splice(index, 1);
   }
 
+  @action chooseFile(file: FileDef) {
+    if (!this.filesToAttach?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      this.filesToAttach.push(file);
+    }
+  }
+
   @action removeFile(file: FileDef) {
     let index = this.filesToAttach.findIndex(
       (f) => f.sourceUrl === file.sourceUrl,
@@ -54,10 +60,12 @@ export default class AiAssistantCardPickerUsage extends Component {
           @cardsToAttach={{this.cards}}
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
+          @chooseFile={{this.chooseFile}}
+          @removeFile={{this.removeFile}}
           @maxNumberOfItemsToAttach={{this.maxNumberOfCards}}
           @autoAttachedFile={{this.autoAttachedFile}}
           @filesToAttach={{this.filesToAttach}}
-          @removeFile={{this.removeFile}}
+          @submode={{'interact'}}
         />
         <CardCatalogModal />
       </:example>

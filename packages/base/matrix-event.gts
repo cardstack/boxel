@@ -16,6 +16,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
+import { type SerializedFile } from './file-api';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -186,6 +187,7 @@ export interface CardMessageContent {
   data: {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
+    attachedFiles?: SerializedFile[];
     attachedCardsEventIds?: string[];
     attachedSkillEventIds?: string[];
     // we materialize this field on the server from the card

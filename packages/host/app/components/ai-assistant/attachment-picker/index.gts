@@ -8,20 +8,23 @@ import { restartableTask } from 'ember-concurrency';
 import { TrackedSet } from 'tracked-built-ins';
 
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
-import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   chooseCard,
   baseCardRef,
   isCardInstance,
+  chooseFile,
 } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
-
 import FilePill from '@cardstack/host/components/file-pill';
+import ENV from '@cardstack/host/config/environment';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
+
+import { Submode } from '../../submode-switcher';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -32,11 +35,15 @@ interface Signature {
     filesToAttach: FileDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
+    chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
+    submode: Submode;
     maxNumberOfItemsToAttach?: number;
   };
 }
 
+const isAttachingFilesEnabled =
+  ENV.featureFlags?.AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED;
 const MAX_ITEMS_TO_DISPLAY = 4;
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
@@ -67,7 +74,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               @removeCard={{@removeCard}}
             />
           {{/if}}
-        {{else}}
+        {{else if isAttachingFilesEnabled}}
           {{#if (this.isAutoAttachedFile item)}}
             <Tooltip @placement='top'>
               <:trigger>
@@ -105,19 +112,35 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
-        <AddButton
-          class={{cn 'attach-button' icon-only=this.itemsToDisplay.length}}
-          @variant='pill'
-          @iconWidth='14'
-          @iconHeight='14'
-          {{on 'click' this.chooseCard}}
-          @disabled={{this.doChooseCard.isRunning}}
-          data-test-choose-card-btn
-        >
-          <span class={{if this.itemsToDisplay.length 'boxel-sr-only'}}>
-            Add Card
-          </span>
-        </AddButton>
+        {{#if (and (eq @submode 'code') isAttachingFilesEnabled)}}
+          <AddButton
+            class={{cn 'attach-button' icon-only=this.files.length}}
+            @variant='pill'
+            @iconWidth='14'
+            @iconHeight='14'
+            {{on 'click' this.chooseFile}}
+            @disabled={{this.doChooseFile.isRunning}}
+            data-test-choose-file-btn
+          >
+            <span class={{if this.files.length 'boxel-sr-only'}}>
+              Attach File
+            </span>
+          </AddButton>
+        {{else}}
+          <AddButton
+            class={{cn 'attach-button' icon-only=this.cards.length}}
+            @variant='pill'
+            @iconWidth='14'
+            @iconHeight='14'
+            {{on 'click' this.chooseCard}}
+            @disabled={{this.doChooseCard.isRunning}}
+            data-test-choose-card-btn
+          >
+            <span class={{if this.cards.length 'boxel-sr-only'}}>
+              Add Card
+            </span>
+          </AddButton>
+        {{/if}}
       {{/if}}
     </div>
     <style scoped>
@@ -160,19 +183,23 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
   }
 
-  isCard = (item: CardDef | FileDef): item is CardDef => {
+  private isCard = (item: CardDef | FileDef): item is CardDef => {
     return isCardInstance(item);
   };
 
-  isAutoAttachedCard = (card: CardDef) => {
+  private isAutoAttachedCard = (card: CardDef) => {
     return this.args.autoAttachedCards?.has(card);
   };
 
-  isAutoAttachedFile = (file: FileDef) => {
+  private isAutoAttachedFile = (file: FileDef) => {
     return this.args.autoAttachedFile?.sourceUrl === file.sourceUrl;
   };
 
   private get items() {
+    return [...this.cards, ...this.files];
+  }
+
+  private get cards() {
     let cards = this.args.cardsToAttach ?? [];
 
     if (this.args.autoAttachedCards) {
@@ -180,11 +207,17 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     }
 
     cards = cards.filter((card) => card.id); // Dont show new unsaved cards
-    let files: FileDef[] = [];
+    return cards;
+  }
+
+  private get files() {
+    let files = this.args.filesToAttach ?? [];
+
     if (this.args.autoAttachedFile) {
-      files = [...new Set([this.args.autoAttachedFile])];
+      files = [...new Set([this.args.autoAttachedFile, ...files])];
     }
-    return [...cards, ...files];
+
+    return files;
   }
 
   private get itemsToDisplay() {
@@ -213,5 +246,18 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
       filter: { type: baseCardRef },
     });
     return chosenCard;
+  });
+
+  @action
+  private async chooseFile() {
+    let file = await this.doChooseFile.perform();
+    if (file) {
+      this.args.chooseFile(file);
+    }
+  }
+
+  private doChooseFile = restartableTask(async () => {
+    let chosenFile: FileDef | undefined = await chooseFile();
+    return chosenFile;
   });
 }

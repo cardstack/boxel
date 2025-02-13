@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import FileCode from '@cardstack/boxel-icons/file-code';
 
 import { IconButton, Pill } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -33,7 +33,7 @@ export default class FilePill extends Component<FilePillSignature> {
       ...attributes
     >
       <:iconLeft>
-        <FileCode />
+        <FileCode style={{cssVar icon-color='#0031ff'}} />
       </:iconLeft>
       <:default>
         <div class='file-content' title={{@file.name}}>
