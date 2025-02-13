@@ -11,40 +11,45 @@ import DotIcon from '@cardstack/boxel-icons/dot';
 
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
+import { task } from 'ember-concurrency';
 
 import {
   BoxelButton,
   Pill,
   BoxelSelect,
   RealmIcon,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
+  type Query,
+  type LooseSingleCardDocument,
   specRef,
   getCards,
-  type Query,
   isCardDef,
   isFieldDef,
 } from '@cardstack/runtime-common';
+import {
+  codeRefWithAbsoluteURL,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common/code-ref';
 
 import {
   CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
+
+import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import RealmService from '@cardstack/host/services/realm';
-
+import RealmService, {
+  EnhancedRealmInfo,
+} from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
-
-import { type FileType } from '../create-file-modal';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -52,16 +57,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
-    createFile: (
-      fileType: FileType,
-      definitionClass?: {
-        displayName: string;
-        ref: ResolvedCodeRef;
-        specType?: SpecType;
-      },
-      sourceInstance?: CardDef,
-    ) => Promise<void>;
-    isCreateModalShown: boolean;
   };
   Blocks: {
     default: [
@@ -71,7 +66,7 @@ interface Signature {
         | 'specInstances'
         | 'selectedInstance'
         | 'createSpec'
-        | 'isCreateModalShown'
+        | 'isCreateSpecInstanceRunning'
       >,
       WithBoundArgs<
         typeof SpecPreviewContent,
@@ -79,6 +74,8 @@ interface Signature {
         | 'specInstances'
         | 'selectedInstance'
         | 'selectSpec'
+        | 'isLoading'
+        | 'canWrite'
       >,
     ];
   };
@@ -89,8 +86,8 @@ interface TitleSignature {
     specInstances: Spec[];
     selectedInstance: Spec | null;
     showCreateSpecIntent: boolean;
-    createSpec: () => void;
-    isCreateModalShown: boolean;
+    createSpec: (event: MouseEvent) => void;
+    isCreateSpecInstanceRunning: boolean;
   };
 }
 
@@ -111,7 +108,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
         <BoxelButton
           @kind='primary'
           @size='small'
-          @disabled={{@isCreateModalShown}}
+          @loading={{@isCreateSpecInstanceRunning}}
           {{on 'click' @createSpec}}
           data-test-create-spec-button
         >
@@ -165,6 +162,8 @@ interface ContentSignature {
     selectedInstance: Spec | null;
     selectSpec: (spec: Spec) => void;
     showCreateSpecIntent: boolean;
+    isLoading: boolean;
+    canWrite: boolean;
   };
 }
 
@@ -175,73 +174,105 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.specInstances.length === 1;
   }
 
-  @action realmInfo(card: Spec) {
-    return this.realm.info(card.id);
+  get dropdownData() {
+    return this.args.specInstances.map((spec) => {
+      let realmInfo = this.realm.info(spec.id);
+      let realmURL = this.realm.realmOfURL(new URL(spec.id));
+      if (!realmURL) {
+        throw new Error('bug: no realm URL');
+      }
+      return {
+        id: spec.id,
+        realmInfo,
+        localPath: getRelativePath(realmURL.href, spec.id),
+      };
+    });
   }
 
-  @action getLocalPath(card: Spec) {
-    let realmURL = this.realm.realmOfURL(new URL(card.id));
-    if (!realmURL) {
-      throw new Error('bug: no realm URL');
+  get selectedDropdownData() {
+    return this.dropdownData.find(
+      ({ id }) => id === this.args.selectedInstance?.id,
+    );
+  }
+
+  @action selectDropdownData(data: DropdownData) {
+    let selectedSpec = this.args.specInstances.find(
+      (spec) => spec.id === data.id,
+    );
+    if (!selectedSpec) {
+      throw new Error('No spec selected');
     }
-    return getRelativePath(realmURL.href, card.id);
+    this.args.selectSpec(selectedSpec);
   }
 
   <template>
-    {{#if @showCreateSpecIntent}}
-      <div
-        class='create-spec-intent-message'
-        data-test-create-spec-intent-message
-      >
-        Create a Boxel Specification to be able to create new instances
-      </div>
-    {{else}}
-      <div class='spec-preview'>
-        <div class='spec-selector' data-test-spec-selector>
-          <BoxelSelect
-            @options={{@specInstances}}
-            @selected={{@selectedInstance}}
-            @onChange={{@selectSpec}}
-            @matchTriggerWidth={{true}}
-            @disabled={{this.onlyOneInstance}}
-            as |card|
-          >
-            {{#let (this.getLocalPath card) as |localPath|}}
-              {{#let (this.realmInfo card) as |realmInfo|}}
-                <div class='spec-selector-item'>
-                  <RealmIcon class='url-realm-icon' @realmInfo={{realmInfo}} />
-                  {{localPath}}
-                </div>
-              {{/let}}
-            {{/let}}
-          </BoxelSelect>
+    <div class='container'>
+      {{#if @isLoading}}
+        <div class='loading'>
+          <LoadingIndicator class='loading-icon' />
+          Loading...
         </div>
-        {{#if @selectedInstance}}
-          {{#let (getComponent @selectedInstance) as |CardComponent|}}
-            <CardComponent />
-          {{/let}}
-        {{/if}}
-      </div>
-    {{/if}}
+      {{else if @showCreateSpecIntent}}
+        <div class='spec-intent-message' data-test-create-spec-intent-message>
+          Create a Boxel Specification to be able to create new instances
+        </div>
+      {{else if (not @canWrite)}}
+        <div class='spec-intent-message' data-test-cannot-write-intent-message>
+          Cannot create Boxel Specification inside this realm
+        </div>
+      {{else}}
+        <div class='spec-preview'>
+          <div class='spec-selector' data-test-spec-selector>
+            <BoxelSelect
+              @options={{this.dropdownData}}
+              @selected={{this.selectedDropdownData}}
+              @onChange={{this.selectDropdownData}}
+              @matchTriggerWidth={{true}}
+              @disabled={{this.onlyOneInstance}}
+              as |d|
+            >
+              <div class='spec-selector-item'>
+                <RealmIcon class='url-realm-icon' @realmInfo={{d.realmInfo}} />
+                {{d.localPath}}
+              </div>
+            </BoxelSelect>
+          </div>
+          {{#if @selectedInstance}}
+            {{#let (getComponent @selectedInstance) as |CardComponent|}}
+              <CardComponent />
+            {{/let}}
+          {{/if}}
+        </div>
+      {{/if}}
+    </div>
 
     <style scoped>
-      .create-spec-intent-message {
-        align-content: center;
-        text-align: center;
-        background-color: var(--boxel-200);
-        color: var(--boxel-450);
-        font-weight: 500;
-        padding: var(--boxel-sp-xl);
+      .container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
         height: 100%;
         width: 100%;
       }
       .spec-preview {
         display: flex;
-        align-items: center;
-        justify-content: center;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
+        height: 100%;
+        width: 100%;
+      }
+      .spec-preview {
         padding: var(--boxel-sp-sm);
+      }
+      .spec-intent-message {
+        background-color: var(--boxel-200);
+        color: var(--boxel-450);
+        font-weight: 500;
+        height: 100%;
+        width: 100%;
+        align-content: center;
+        text-align: center;
       }
       .spec-selector {
         min-width: 40%;
@@ -252,19 +283,30 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
+      .loading {
+        display: inline-flex;
+      }
+      .loading-icon {
+        display: inline-block;
+        margin-right: var(--boxel-sp-xxxs);
+        vertical-align: middle;
+      }
     </style>
   </template>
+}
+
+interface DropdownData {
+  id: string;
+  realmInfo: EnhancedRealmInfo;
+  localPath: string;
 }
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @tracked selectedInstance?: Spec = this.specInstances[0];
-
-  get realms() {
-    return this.realmServer.availableRealmURLs;
-  }
+  @service private declare cardService: CardService;
+  @tracked _selectedInstance?: Spec;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -280,6 +322,44 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         '',
       )}`,
     };
+  }
+
+  private createSpecInstance = task(
+    async (ref: ResolvedCodeRef, specType: SpecType) => {
+      let relativeTo = new URL(ref.module);
+      let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+      let realmURL = this.operatorModeStateService.realmURL;
+      if (isResolvedCodeRef(maybeRef)) {
+        ref = maybeRef;
+      }
+      let doc: LooseSingleCardDocument = {
+        data: {
+          attributes: {
+            specType,
+            ref,
+          },
+          meta: {
+            adoptsFrom: specRef,
+            realmURL: realmURL.href,
+          },
+        },
+      };
+      try {
+        let card = await this.cardService.createFromSerialized(doc.data, doc);
+        if (!card) {
+          throw new Error(
+            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+          );
+        }
+        await this.cardService.saveModel(card);
+      } catch (e: any) {
+        console.log('Error saving', e);
+      }
+    },
+  );
+
+  get realms() {
+    return this.realmServer.availableRealmURLs;
   }
 
   private get specQuery(): Query {
@@ -312,7 +392,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private get showCreateSpecIntent() {
-    return !this.specSearch.isLoading && this.specInstances.length === 0;
+    return (
+      !this.specSearch.isLoading &&
+      this.specInstances.length === 0 &&
+      this.canWrite
+    );
   }
 
   //TODO: Improve identification of isApp and isSkill
@@ -368,7 +452,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     throw new Error('Unidentified spec');
   }
 
-  @action private createSpec() {
+  @action createSpec(event: MouseEvent) {
+    event.stopPropagation();
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
     }
@@ -376,44 +461,47 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       throw new Error('bug: no code ref');
     }
     let specType = this.guessSpecType(this.args.selectedDeclaration);
-    let displayName = this.getSelectedDeclarationAsCodeRef.name;
-    this.args.createFile(
-      {
-        id: 'spec-instance',
-        displayName: 'Boxel Specification', //display name in modal
-      },
-      {
-        displayName: displayName,
-        ref: this.getSelectedDeclarationAsCodeRef,
-        specType,
-      },
+    this.createSpecInstance.perform(
+      this.getSelectedDeclarationAsCodeRef,
+      specType,
     );
   }
 
   @action selectSpec(spec: Spec): void {
-    this.selectedInstance = spec;
+    this._selectedInstance = spec;
+  }
+
+  get selectedInstance() {
+    return (
+      this._selectedInstance ??
+      (this.specInstances.length ? this.specInstances[0] : null)
+    );
+  }
+
+  get canWrite() {
+    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
   <template>
-    {{#if (not this.specSearch.isLoading)}}
-      {{yield
-        (component
-          SpecPreviewTitle
-          showCreateSpecIntent=this.showCreateSpecIntent
-          specInstances=this.specInstances
-          selectedInstance=this.selectedInstance
-          createSpec=this.createSpec
-          isCreateModalShown=@isCreateModalShown
-        )
-        (component
-          SpecPreviewContent
-          showCreateSpecIntent=this.showCreateSpecIntent
-          specInstances=this.specInstances
-          selectedInstance=this.selectedInstance
-          selectSpec=this.selectSpec
-        )
-      }}
-    {{/if}}
+    {{yield
+      (component
+        SpecPreviewTitle
+        showCreateSpecIntent=this.showCreateSpecIntent
+        specInstances=this.specInstances
+        selectedInstance=this.selectedInstance
+        createSpec=this.createSpec
+        isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+      )
+      (component
+        SpecPreviewContent
+        showCreateSpecIntent=this.showCreateSpecIntent
+        specInstances=this.specInstances
+        selectedInstance=this.selectedInstance
+        selectSpec=this.selectSpec
+        isLoading=this.specSearch.isLoading
+        canWrite=this.canWrite
+      )
+    }}
   </template>
 }
 

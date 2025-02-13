@@ -49,7 +49,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import AiAssistantCardPicker from '../ai-assistant/card-picker';
+import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
@@ -134,11 +134,13 @@ export default class Room extends Component<Signature> {
               data-test-message-field={{@roomId}}
             />
             <div class='chat-input-area__bottom-section'>
-              <AiAssistantCardPicker
+              <AiAssistantAttachmentPicker
                 @autoAttachedCards={{this.autoAttachedCards}}
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
+                @autoAttachedFiles={{this.autoAttachedFiles}}
+                @filesToAttach={{this.filesToAttach}}
               />
               <LLMSelect
                 @selected={{this.roomResource.activeLLM}}
@@ -270,6 +272,14 @@ export default class Room extends Component<Signature> {
       this.roomScrollState.set(this.room, state);
     }
     return state;
+  }
+
+  private get autoAttachedFiles() {
+    return []; // TODO: implement
+  }
+
+  private get filesToAttach() {
+    return []; // TODO: implement
   }
 
   private get isScrolledToBottom() {

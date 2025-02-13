@@ -64,6 +64,7 @@ jobs:
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
+          ENABLE_PLAYGROUND: true
         with:
           package: boxel-host
           environment: staging
@@ -94,6 +95,7 @@ jobs:
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
+          ENABLE_PLAYGROUND: true
         with:
           package: boxel-host
           environment: production
