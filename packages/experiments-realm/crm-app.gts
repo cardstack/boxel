@@ -47,6 +47,7 @@ import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
 import { DEAL_STATUS_VALUES } from './crm/deal-status';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
@@ -291,8 +292,24 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       return;
     }
     let currentRealm = this.realms[0];
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        relationships: {
+          crmApp: {
+            links: {
+              self: this.args.model.id ?? null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: ref,
+        },
+      },
+    };
     await this.args.context?.actions?.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
+      doc,
     });
   });
 
@@ -309,9 +326,17 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
     if (!loadAllFilters.isIdle || !activeFilter?.query) return;
 
-    const defaultFilter = {
-      type: activeFilter.cardRef,
-    };
+    const defaultFilter = [
+      {
+        type: activeFilter.cardRef,
+      },
+      {
+        on: activeFilter.cardRef,
+        eq: {
+          'crmApp.id': this.args.model.id,
+        },
+      },
+    ];
 
     // filter field value by CRM Account
     const accountFilter =
@@ -343,7 +368,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       filter: {
         on: activeFilter.cardRef,
         every: [
-          defaultFilter,
+          ...defaultFilter,
           ...accountFilter,
           ...dealFilter,
           ...this.searchFilter,
