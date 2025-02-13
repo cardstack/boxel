@@ -23,14 +23,23 @@ export default class LoaderService extends Service {
   @service declare network: NetworkService;
 
   @tracked loader = this.makeInstance();
+  private resetTime: number | undefined;
 
   public isIndexing = false;
 
   reset() {
-    if (this.loader) {
-      this.loader = Loader.cloneLoader(this.loader);
-    } else {
-      this.loader = this.makeInstance();
+    // This method is called in both the FileResource and in RealmSubscription,
+    // oftentimes for the same update. It is very difficult to coordinate
+    // between these two, as a CardResource is not always present (e.g. schema
+    // editor). In order to prevent this from doubling up (and causing
+    // unnecessary screen flashes) we add a simple leading edge debounce.
+    if (this.resetTime == null || Date.now() - this.resetTime > 250) {
+      this.resetTime = Date.now();
+      if (this.loader) {
+        this.loader = Loader.cloneLoader(this.loader);
+      } else {
+        this.loader = this.makeInstance();
+      }
     }
   }
 
