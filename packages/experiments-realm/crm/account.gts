@@ -501,7 +501,19 @@ class IsolatedTemplate extends Component<typeof Account> {
               {{#if this.hasActiveTasks}}
                 {{#each this.activeTasks.instances as |task|}}
                   {{#let (getComponent task) as |Component|}}
-                    <Component @format='embedded' @displayContainer={{false}} />
+                    <div
+                      {{@context.cardComponentModifier
+                        cardId=task.id
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                    >
+                      <Component
+                        @format='embedded'
+                        @displayContainer={{false}}
+                      />
+                    </div>
                   {{/let}}
                 {{/each}}
               {{else}}
