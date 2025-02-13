@@ -82,6 +82,11 @@ const fittedFormats = [
         height: 170,
       },
       {
+        title: 'CardsGrid Tile',
+        width: 170,
+        height: 250,
+      },
+      {
         title: 'Tall Tile',
         width: 150,
         height: 275,

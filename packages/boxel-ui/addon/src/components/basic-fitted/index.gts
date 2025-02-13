@@ -13,7 +13,7 @@ interface Signature {
     secondary?: string;
     thumbnailURL?: string;
   };
-  Element: HTMLElement;
+  Element: HTMLDivElement;
 }
 
 export default class BasicFitted extends Component<Signature> {
@@ -67,35 +67,29 @@ export default class BasicFitted extends Component<Signature> {
           display: flex;
           justify-content: center;
           align-items: center;
-          border: var(--boxel-border);
-          border-radius: var(--boxel-border-radius-sm);
           overflow: hidden;
         }
         .card-thumbnail {
           display: flex;
-          aspect-ratio: 1 / 1;
           align-items: center;
           justify-content: center;
           background-color: var(--boxel-teal);
           background-position: center;
           background-size: cover;
           background-repeat: no-repeat;
+          border-radius: var(--boxel-border-radius-sm);
           width: 100%;
           height: 100%;
         }
         .card-type-icon {
           aspect-ratio: 1 / 1;
-          width: 20%;
-          min-width: 24px;
-          max-width: 50px;
-          height: auto;
+          width: 52px;
+          height: 52px;
+          max-width: 100%;
           max-height: 100%;
         }
         .info-section {
           width: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-4xs);
           overflow: hidden;
         }
         .card-title {
@@ -104,13 +98,14 @@ export default class BasicFitted extends Component<Signature> {
           -webkit-line-clamp: 2;
           overflow: hidden;
           margin-block: 0;
-          font: 600 var(--boxel-font-xs);
+          font: 600 var(--boxel-font-sm);
           letter-spacing: var(--boxel-lsp-sm);
           line-height: 1.25;
           text-overflow: ellipsis;
         }
         .card-display-name {
-          margin-block: 0;
+          margin-top: var(--boxel-sp-4xs);
+          margin-bottom: 0;
           color: var(--boxel-450);
           font: 500 var(--boxel-font-xs);
           letter-spacing: var(--boxel-lsp-xs);
@@ -129,8 +124,7 @@ export default class BasicFitted extends Component<Signature> {
         }
       }
 
-      /* Aspect Ratio <= 1.0 */
-
+      /* Aspect Ratio <= 1.0 (Vertical) */
       @container fitted-card (aspect-ratio <= 1.0) {
         .fitted-template {
           flex-direction: column;
@@ -143,19 +137,17 @@ export default class BasicFitted extends Component<Signature> {
           height: 50cqmin;
         }
         .info-section {
-          flex-grow: 1;
+          text-align: center;
         }
       }
-      @container fitted-card (aspect-ratio <= 1.0) and (118px < height) {
-        .thumbnail-section {
-          display: flex;
-        }
-      }
+
       @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
         .thumbnail-section {
           display: none;
         }
       }
+      /* Vertical Tiles*/
+      /* Small Tile (150 x 170) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
         .thumbnail-section {
           min-height: 70px;
@@ -164,6 +156,17 @@ export default class BasicFitted extends Component<Signature> {
           -webkit-line-clamp: 3;
         }
       }
+      /* CardsGrid Tile (170 x 250) */
+      @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
+        .thumbnail-section {
+          height: auto;
+          aspect-ratio: 1 / 1;
+        }
+        .card-title {
+          -webkit-line-clamp: 2;
+        }
+      }
+      /* Tall Tile (150 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
         .thumbnail-section {
           min-height: 85px;
@@ -173,6 +176,7 @@ export default class BasicFitted extends Component<Signature> {
           -webkit-line-clamp: 4;
         }
       }
+      /* Large Tile (250 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
         .thumbnail-section {
           min-height: 150px;
@@ -182,6 +186,7 @@ export default class BasicFitted extends Component<Signature> {
           -webkit-line-clamp: 3;
         }
       }
+      /* Vertical Cards */
       @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
         .fitted-template {
           padding: var(--boxel-sp);
@@ -195,14 +200,9 @@ export default class BasicFitted extends Component<Signature> {
           -webkit-line-clamp: 4;
         }
       }
-      @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) and (445px <= height) {
-        .thumbnail-section {
-          min-height: 236px;
-        }
-      }
+      /* Expanded Card (400 x 445) */
 
-      /* 1.0 < Aspect Ratio */
-
+      /* 1.0 < Aspect Ratio (Horizontal) */
       @container fitted-card (1.0 < aspect-ratio) {
         .card-description {
           display: none;
@@ -211,38 +211,57 @@ export default class BasicFitted extends Component<Signature> {
           aspect-ratio: 1;
         }
       }
-      @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
+      @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
+        .info-section {
+          align-self: center;
+        }
+      }
+      /* Badges */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
         .fitted-template {
           padding: var(--boxel-sp-xxxs);
         }
-        .info-section {
-          justify-content: center;
-        }
-        .card-title {
-          -webkit-line-clamp: 1;
-        }
-        .thumbnail-section,
-        .card-display-name {
-          display: none;
-        }
-      }
-      @container fitted-card (1.0 < aspect-ratio) and (105px <= height) {
-        .card-title {
-          -webkit-line-clamp: 3;
-        }
-      }
-      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
         .thumbnail-section {
           display: none;
         }
       }
-      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (105px <= height) {
+      /* Small Badge (150 x 40) */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
         .card-title {
-          font-size: var(--boxel-font-size-sm);
-          line-height: calc(17 / 13);
+          -webkit-line-clamp: 1;
+          font: 600 var(--boxel-font-xs);
+        }
+        .card-display-name {
+          margin-top: 0;
         }
       }
-      @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (170px <= height) {
+      /* Medium Badge (150 x 65) */
+
+      /* Large Badge (150 x 105) */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
+        .card-title {
+          -webkit-line-clamp: 3;
+        }
+      }
+
+      /* Strips */
+      /* Single Strip (250 x 40) */
+      @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
+        .fitted-template {
+          padding: var(--boxel-sp-xxxs);
+        }
+        .card-display-name {
+          display: none;
+        }
+      }
+      /* Double Strip (250 x 65) */
+      /* Triple Strip (250 x 105) */
+      /* Double Wide Strip (400 x 65) */
+      /* Triple Wide Strip (400 x 105) */
+
+      /* Horizontal Tiles */
+      /* Regular Tile (250 x 170) */
+      @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
         .thumbnail-section {
           height: 40%;
         }
@@ -251,11 +270,15 @@ export default class BasicFitted extends Component<Signature> {
           font-size: var(--boxel-font-size);
         }
       }
+
+      /* Horizontal Cards */
+      /* Compact Card (400 x 170) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
         .thumbnail-section {
           height: 100%;
         }
       }
+      /* Full Card (400 x 275) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
         .fitted-template {
           padding: var(--boxel-sp);

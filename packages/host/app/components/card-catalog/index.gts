@@ -95,11 +95,12 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
   {{/if}}
   <style scoped>
     .catalog-item {
+      box-sizing: content-box; /* we want 65px height for the card inside this button */
+      height: 65px;
       border: 1px solid var(--boxel-200);
       border-radius: var(--boxel-border-radius-xl);
       background-color: var(--boxel-light);
       width: 100%;
-      height: 63px;
       overflow: hidden;
       cursor: pointer;
       container-name: fitted-card;
