@@ -336,12 +336,24 @@ export async function loadCurrentlyAttachedFiles(
     (event) => event.sender !== aiBotUserId,
   );
 
-  // We are only interested in downloading the most recently attached files -
-  // downloading older ones is not needed since the new prompt should operate on fresh data
-  if (!lastMessageEventByUser?.content.data.attachedFiles) {
+  let content = lastMessageEventByUser?.content as {
+    msgtype?: string;
+    data?: {
+      attachedFiles?: { url: string; name: string; contentType?: string }[];
+    };
+  };
+
+  if (!content || content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE) {
     return [];
   }
-  let attachedFiles = lastMessageEventByUser.content.data.attachedFiles;
+
+  // We are only interested in downloading the most recently attached files -
+  // downloading older ones is not needed since the new prompt should operate on fresh data
+  if (!content.data?.attachedFiles?.length) {
+    return [];
+  }
+
+  let attachedFiles = content.data.attachedFiles;
 
   return Promise.all(
     attachedFiles.map(
