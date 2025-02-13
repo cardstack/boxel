@@ -320,7 +320,7 @@ export function getRelevantCards(
   };
 }
 
-export async function getCurrentlyAttachedFiles(
+export async function loadCurrentlyAttachedFiles(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Promise<
@@ -353,9 +353,8 @@ export async function getCurrentlyAttachedFiles(
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           let content: string;
-          const contentType = attachedFile.contentType;
 
-          if (contentType?.startsWith('text/')) {
+          if (attachedFile.contentType?.startsWith('text/')) {
             content = await response.text();
           } else {
             const buffer = await response.arrayBuffer();
@@ -364,7 +363,7 @@ export async function getCurrentlyAttachedFiles(
           return {
             url: attachedFile.url,
             name: attachedFile.name,
-            contentType,
+            contentType: attachedFile.contentType,
             content,
             error: undefined,
           };
@@ -378,7 +377,7 @@ export async function getCurrentlyAttachedFiles(
             name: attachedFile.name,
             contentType: attachedFile.contentType,
             content: undefined,
-            error: `Error loading file: ${(error as Error).message}`,
+            error: `Error loading attached file: ${(error as Error).message}`,
           };
         }
       },
@@ -587,7 +586,7 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
-  let attachedFiles = await getCurrentlyAttachedFiles(history, aiBotUserId);
+  let attachedFiles = await loadCurrentlyAttachedFiles(history, aiBotUserId);
 
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
