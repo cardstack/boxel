@@ -1,18 +1,11 @@
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import { WebsiteField } from '../website';
-import { Address } from '../address';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
 
-import {
-  Component,
-  CardDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 
-class ViewCompanyTemplate extends Component<typeof Company> {
+import type { Company } from './shared';
+
+export class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
     <div class='company-group'>
       <EntityDisplayWithIcon @title={{@model.name}} @underline={{true}}>
@@ -22,23 +15,4 @@ class ViewCompanyTemplate extends Component<typeof Company> {
       </EntityDisplayWithIcon>
     </div>
   </template>
-}
-
-export class Company extends CardDef {
-  static displayName = 'Company';
-  @field name = contains(StringField);
-  @field industry = contains(StringField);
-  @field headquartersAddress = contains(Address);
-  @field phone = contains(NumberField);
-  @field website = contains(WebsiteField);
-  @field stockSymbol = contains(StringField);
-
-  @field title = contains(StringField, {
-    computeVia: function (this: Company) {
-      return this.name;
-    },
-  });
-
-  static embedded = ViewCompanyTemplate;
-  static atom = ViewCompanyTemplate;
 }

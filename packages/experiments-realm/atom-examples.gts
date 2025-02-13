@@ -18,8 +18,7 @@ import { Author } from './author';
 import { Pet } from './pet';
 import { Country } from './country';
 import { TeamMember } from './sprint-task';
-import { Company } from './crm/company';
-import { Contact } from './crm/contact';
+import { Company, Contact } from './crm/shared';
 import { ContactLinkField } from './fields/contact-link';
 
 class Isolated extends Component<typeof AtomExamples> {

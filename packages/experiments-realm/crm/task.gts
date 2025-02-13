@@ -14,17 +14,14 @@ import {
 } from '@cardstack/boxel-ui/components';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
-import { Contact } from './contact';
-import { Representative } from './representative';
-import { Account } from './account';
-import { Deal } from './deal';
+import { Contact, Account, CrmApp, Deal, Representative } from './shared';
+
 import {
   Task,
   TaskStatusField,
   getDueDateStatus,
   TaskCompletionStatus,
 } from '../task';
-import { CrmApp } from '../crm-app';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 export class Issues extends CardDef {
@@ -545,9 +542,9 @@ export class CRMTask extends Task {
   });
 
   @field assignee = linksTo(() => Representative);
-  @field contact = linksTo(Contact);
-  @field account = linksTo(Account);
-  @field deal = linksTo(Deal);
+  @field contact = linksTo(() => Contact);
+  @field account = linksTo(() => Account);
+  @field deal = linksTo(() => Deal);
 
   @field shortId = contains(StringField, {
     computeVia: function (this: CRMTask) {

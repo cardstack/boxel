@@ -14,14 +14,11 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
 import { format, startOfWeek } from 'date-fns';
+import { CrmApp } from './crm/shared';
 
 const dateFormat = `yyyy-MM-dd`;
 
-import {
-  Component,
-  realmURL,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
+import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import {
@@ -35,7 +32,6 @@ import {
   CardError,
   SupportedMimeType,
   Filter,
-  getCards,
 } from '@cardstack/runtime-common';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
@@ -43,10 +39,9 @@ import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
 import ListDetails from '@cardstack/boxel-icons/list-details';
-import { taskStatusValues } from './crm/shared';
+
 import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
 import { DEAL_STATUS_VALUES } from './crm/deal-status';
-import type { Deal } from './crm/deal';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
 
@@ -57,6 +52,12 @@ import {
   Rows4 as StripIcon,
 } from '@cardstack/boxel-ui/icons';
 
+import AlertHexagon from '@cardstack/boxel-icons/alert-hexagon';
+import CalendarStar from '@cardstack/boxel-icons/calendar-star';
+import CalendarMonth from '@cardstack/boxel-icons/calendar-month';
+import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
+import UserQuestion from '@cardstack/boxel-icons/user-question';
+
 type ViewOption = 'card' | 'strip' | 'grid';
 
 interface ViewItem {
@@ -65,6 +66,39 @@ interface ViewItem {
   }>;
   id: ViewOption;
 }
+
+const taskStatusValues = [
+  {
+    index: 0,
+    icon: AlertHexagon,
+    label: 'Overdue',
+    value: 'overdue',
+  },
+  {
+    index: 1,
+    icon: CalendarStar,
+    label: 'Due Today',
+    value: 'due-today',
+  },
+  {
+    index: 2,
+    icon: CalendarMonth,
+    label: 'Due this week',
+    value: 'due-this-week',
+  },
+  {
+    index: 3,
+    icon: ChevronsUp,
+    label: 'High Priority',
+    value: 'high-priority',
+  },
+  {
+    index: 4,
+    icon: UserQuestion,
+    label: 'Unassigned',
+    value: 'unassigned',
+  },
+];
 
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
@@ -163,7 +197,7 @@ const TABS = [
 ];
 
 // need to use as typeof AppCard rather than CrmApp otherwise tons of lint errors
-class CrmAppTemplate extends Component<typeof CrmApp> {
+export class CrmAppTemplate extends Component<typeof CrmApp> {
   //filters
   filterMap: TrackedMap<string, LayoutFilter[]> = new TrackedMap([
     ['Contact', CONTACT_FILTERS],
@@ -248,18 +282,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     }
   });
 
-  get deals() {
-    return this.dealSearch.instances as Deal[];
-  }
-
-  dealSearch = getCards(
-    () => this.query,
-    () => this.realmHrefs,
-    {
-      isLive: true,
-    },
-  );
-
   get filters() {
     return this.filterMap.get(this.activeTabId!)!;
   }
@@ -323,9 +345,17 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
     if (!loadAllFilters.isIdle || !activeFilter?.query) return;
 
-    const defaultFilter = {
-      type: activeFilter.cardRef,
-    };
+    const defaultFilter = [
+      {
+        type: activeFilter.cardRef,
+      },
+      {
+        on: activeFilter.cardRef,
+        eq: {
+          'crmApp.id': this.args.model.id,
+        },
+      },
+    ];
 
     // filter field value by CRM Account
     const accountFilter =
@@ -357,7 +387,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       filter: {
         on: activeFilter.cardRef,
         every: [
-          defaultFilter,
+          ...defaultFilter,
           ...accountFilter,
           ...dealFilter,
           ...this.searchFilter,
@@ -496,9 +526,14 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           </BoxelButton>
         {{/if}}
         {{#if (eq this.activeTabId 'Deal')}}
-          <div class='content-header-deal-summary'>
-            <DealSummary @deals={{this.deals}} />
-          </div>
+          {{#if this.query}}
+            <div class='content-header-deal-summary'>
+              <DealSummary
+                @query={{this.query}}
+                @realmHrefs={{this.realmHrefs}}
+              />
+            </div>
+          {{/if}}
         {{/if}}
         <div class='search-bar content-header-row-2'>
           <SearchInput
@@ -649,11 +684,4 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       }
     </style>
   </template>
-}
-
-export class CrmApp extends CardDef {
-  static displayName = 'CRM App';
-  static prefersWideFormat = true;
-  static headerColor = '#4D3FE8';
-  static isolated = CrmAppTemplate;
 }
