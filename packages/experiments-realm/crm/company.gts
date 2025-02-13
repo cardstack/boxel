@@ -3,12 +3,14 @@ import NumberField from 'https://cardstack.com/base/number';
 import { WebsiteField } from '../website';
 import { Address } from '../address';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
+import { CrmApp } from '../crm-app';
 
 import {
   Component,
   CardDef,
   field,
   contains,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 
@@ -26,6 +28,7 @@ class ViewCompanyTemplate extends Component<typeof Company> {
 
 export class Company extends CardDef {
   static displayName = 'Company';
+  @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field industry = contains(StringField);
   @field headquartersAddress = contains(Address);

@@ -36,6 +36,11 @@
       "thumbnailURL": null
     },
     "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
       "company": {
         "links": {
           "self": "../Company/eb6a7c2d-6c94-4e42-aa01-c5823fb5af9a"

@@ -545,9 +545,9 @@ export class CRMTask extends Task {
   });
 
   @field assignee = linksTo(() => Representative);
-  @field contact = linksTo(Contact);
-  @field account = linksTo(Account);
-  @field deal = linksTo(Deal);
+  @field contact = linksTo(() => Contact);
+  @field account = linksTo(() => Account);
+  @field deal = linksTo(() => Deal);
 
   @field shortId = contains(StringField, {
     computeVia: function (this: CRMTask) {
