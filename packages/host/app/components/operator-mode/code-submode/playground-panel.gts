@@ -388,7 +388,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             type: this.args.codeRef,
           },
           {
-            any: this.recentCardIds.map((id) => ({ eq: { id } })).slice(0, 3),
+            any: this.recentCardIds.map((id) => ({ eq: { id } })).slice(0, 20),
           },
         ],
       },
