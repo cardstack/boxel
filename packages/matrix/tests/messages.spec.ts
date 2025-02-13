@@ -376,8 +376,6 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-message-field]').fill('no card');
     await page.locator('[data-test-send-message-btn]').click();
 
-    await page.pause();
-
     await assertMessages(page, [
       {
         from: 'user1',
