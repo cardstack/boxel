@@ -4,6 +4,8 @@ import { inject as service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -15,16 +17,13 @@ import { Message } from './message';
 type CommandStatus = 'applied' | 'ready' | 'applying';
 
 export default class MessageCommand {
-  @tracked name: string;
-  @tracked payload: any;
+  @tracked commandRequest: Partial<CommandRequestContent>;
   @tracked commandStatus?: CommandStatus;
   @tracked commandResultCardEventId?: string;
 
   constructor(
     public message: Message,
-    public toolCallId: string,
-    name: string,
-    payload: any, //arguments of toolCall. Its not called arguments due to lint
+    commandRequest: Partial<CommandRequestContent>,
     public eventId: string,
     commandStatus: CommandStatus,
     commandResultCardEventId: string | undefined,
@@ -32,8 +31,7 @@ export default class MessageCommand {
   ) {
     setOwner(this, owner);
 
-    this.name = name;
-    this.payload = payload;
+    this.commandRequest = commandRequest;
     this.commandStatus = commandStatus;
     this.commandResultCardEventId = commandResultCardEventId;
   }
@@ -41,6 +39,18 @@ export default class MessageCommand {
   @service declare commandService: CommandService;
   @service declare matrixService: MatrixService;
   @service declare cardService: CardService;
+
+  get id() {
+    return this.commandRequest.id;
+  }
+
+  get name() {
+    return this.commandRequest.name;
+  }
+
+  get arguments() {
+    return this.commandRequest.arguments;
+  }
 
   get status() {
     if (

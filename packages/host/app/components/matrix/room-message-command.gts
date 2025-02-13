@@ -74,7 +74,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   };
 
   private get previewCommandCode() {
-    let { name, payload } = this.args.messageCommand;
+    let { name, arguments: payload } = this.args.messageCommand;
     return JSON.stringify({ name, payload }, null, 2);
   }
 

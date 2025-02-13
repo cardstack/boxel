@@ -11,14 +11,13 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   CardFragmentContent,
-  CommandEvent,
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
@@ -294,7 +293,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CommandEvent | CardMessageEvent;
+    event: MessageEvent | CardMessageEvent;
     index: number;
   }) {
     if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
@@ -311,7 +310,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CommandEvent | CardMessageEvent;
+    event: MessageEvent | CardMessageEvent;
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
@@ -351,14 +350,14 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
-    let commandEvent = this.events.find(
+    let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
+        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
         e.content['m.relates_to']?.event_id === effectiveEventId,
-    )! as CommandEvent | undefined;
+    )! as CardMessageEvent | undefined;
     let message = this._messageCache.get(effectiveEventId);
-    if (!message || !commandEvent) {
+    if (!message || !messageEventWithCommand) {
       return;
     }
 
@@ -366,20 +365,24 @@ export class RoomResource extends Resource<Args> {
       roomId,
       userId: event.sender,
     });
-    let messageBuilder = new MessageBuilder(commandEvent, getOwner(this)!, {
-      roomId,
-      effectiveEventId,
-      author,
-      index,
-      serializedCardFromFragments: this.serializedCardFromFragments,
-      events: this.events,
-      commandResultEvent: event,
-    });
+    let messageBuilder = new MessageBuilder(
+      messageEventWithCommand,
+      getOwner(this)!,
+      {
+        roomId,
+        effectiveEventId,
+        author,
+        index,
+        serializedCardFromFragments: this.serializedCardFromFragments,
+        events: this.events,
+        commandResultEvent: event,
+      },
+    );
     messageBuilder.updateMessageCommandResult(message);
   }
 
   private getEffectiveEventId(
-    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
+    event: MessageEvent | CardMessageEvent | CommandResultEvent,
   ) {
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
       event.content['m.relates_to']?.rel_type === 'm.annotation'

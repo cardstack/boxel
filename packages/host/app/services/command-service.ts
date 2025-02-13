@@ -32,6 +32,7 @@ import CardService from './card-service';
 import RealmServerService from './realm-server';
 
 import type LoaderService from './loader-service';
+import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -74,12 +75,12 @@ export default class CommandService extends Service {
       );
     }
     // examine the tool_call and see if it's a command that we know how to run
-    let toolCall = event?.content?.data?.toolCall;
-    if (!toolCall) {
+    let commandRequest = event?.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.[0];
+    if (!commandRequest) {
       return;
     }
     // TODO: check whether this toolCall was already executed and exit if so
-    let { name } = toolCall;
+    let { name } = commandRequest;
     let { command, autoExecute } = this.commands.get(name) ?? {};
     if (!command || !autoExecute) {
       return;
@@ -94,8 +95,8 @@ export default class CommandService extends Service {
       let typedInput;
       if (InputType) {
         typedInput = new InputType({
-          ...toolCall.arguments.attributes,
-          ...toolCall.arguments.relationships,
+          ...commandRequest.arguments.attributes,
+          ...commandRequest.arguments.relationships,
         });
       } else {
         typedInput = undefined;
@@ -104,6 +105,7 @@ export default class CommandService extends Service {
       await this.matrixService.sendCommandResultEvent(
         event.room_id!,
         eventId,
+        commandRequest.id,
         resultCard,
       );
     } finally {
@@ -122,14 +124,14 @@ export default class CommandService extends Service {
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
-    let { payload, eventId } = command;
+    let { arguments: payload, eventId, id: toolCallId } = command;
     let resultCard: CardDef | undefined;
     try {
       this.matrixService.failedCommandState.delete(eventId);
       this.currentlyExecutingCommandEventIds.add(eventId);
 
       // lookup command
-      let { command: commandToRun } = this.commands.get(command.name) ?? {};
+      let { command: commandToRun } = this.commands.get(command.name!) ?? {};
 
       if (commandToRun) {
         // Get the input type and validate/construct the payload
@@ -139,8 +141,8 @@ export default class CommandService extends Service {
         let typedInput;
         if (InputType) {
           typedInput = new InputType({
-            ...payload.attributes,
-            ...payload.relationships,
+            ...payload!.attributes,
+            ...payload!.relationships,
           });
         } else {
           typedInput = undefined;
@@ -183,6 +185,7 @@ export default class CommandService extends Service {
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
+        toolCallId!,
         resultCard,
       );
     } catch (e) {
