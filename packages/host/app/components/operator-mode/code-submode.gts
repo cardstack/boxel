@@ -65,6 +65,7 @@ import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
+import AttachFileModal from './attach-file-modal';
 import CardError from './card-error';
 import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
@@ -790,6 +791,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
+    <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
         class='code-mode-background'
@@ -860,7 +862,14 @@ export default class CodeSubmode extends Component<Signature> {
                       {{/if}}
                     </:inspector>
                     <:browser>
-                      <FileTree @realmURL={{this.realmURL}} />
+                      <FileTree
+                        @realmURL={{this.realmURL}}
+                        @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
+                        @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                        @onFileSelected={{this.operatorModeStateService.onFileSelected}}
+                        @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                        @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                      />
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
