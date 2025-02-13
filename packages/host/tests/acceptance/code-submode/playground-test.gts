@@ -493,7 +493,7 @@ export class BlogPost extends CardDef {
     assert.dom('[data-test-format-chooser-fitted]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
-      .exists({ count: 15 });
+      .exists({ count: 16 });
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
