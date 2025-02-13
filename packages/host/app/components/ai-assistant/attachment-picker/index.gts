@@ -49,7 +49,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
     <div class='item-picker'>
       {{#each this.itemsToDisplay as |item|}}
-        {{#if (this.displayCardItem item)}}
+        {{#if (this.isCard item)}}
           {{#if (this.isAutoAttachedCard item)}}
             <Tooltip @placement='top'>
               <:trigger>
@@ -73,7 +73,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               @removeCard={{@removeCard}}
             />
           {{/if}}
-        {{else if (this.displayFileItem item)}}
+        {{else if isAttachingFilesEnabled}}
           {{#if (this.isAutoAttachedFile item)}}
             <Tooltip @placement='top'>
               <:trigger>
@@ -182,16 +182,8 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
   }
 
-  private displayFileItem = (item: CardDef | FileDef): item is FileDef => {
-    return (
-      !isCardInstance(item) &&
-      this.args.submode === 'code' &&
-      !!isAttachingFilesEnabled
-    );
-  };
-
-  private displayCardItem = (item: CardDef | FileDef): item is CardDef => {
-    return isCardInstance(item) && this.args.submode === 'interact';
+  private isCard = (item: CardDef | FileDef): item is CardDef => {
+    return isCardInstance(item);
   };
 
   private isAutoAttachedCard = (card: CardDef) => {
@@ -218,13 +210,12 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   }
 
   private get files() {
-    let files: FileDef[] = [];
+    let files = this.args.filesToAttach ?? [];
+
     if (this.args.autoAttachedFile) {
-      files = [...new Set([this.args.autoAttachedFile])];
+      files = [...new Set([this.args.autoAttachedFile, ...files])];
     }
-    if (this.args.filesToAttach) {
-      files = [...files, ...this.args.filesToAttach];
-    }
+
     return files;
   }
 

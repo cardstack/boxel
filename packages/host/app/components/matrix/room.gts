@@ -300,8 +300,7 @@ export default class Room extends Component<Signature> {
     } else {
       state.value = this.matrixService.fileAPI.createFileDef({
         sourceUrl: this.autoAttachedFileUrl,
-        name:
-          this.autoAttachedFileUrl.split('/').pop() ?? this.autoAttachedFileUrl,
+        name: this.autoAttachedFileUrl.split('/').pop(),
       });
     }
 
@@ -602,21 +601,6 @@ export default class Room extends Component<Signature> {
 
   @action
   private sendMessage(prompt?: string) {
-    this.doSendMessage.perform(
-      prompt ?? this.messageToSend,
-      this.operatorModeStateService.state.submode === 'interact' &&
-        this.allCardsToAttach.length
-        ? this.allCardsToAttach
-        : undefined,
-      this.operatorModeStateService.state.submode === 'code' &&
-        this.allFilesToAttach.length
-        ? this.allFilesToAttach
-        : undefined,
-      Boolean(prompt),
-    );
-  }
-
-  private get allCardsToAttach() {
     let cards = [];
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
@@ -627,17 +611,20 @@ export default class Room extends Component<Signature> {
       });
     }
 
-    return cards;
-  }
-
-  private get allFilesToAttach() {
     let files = [];
     if (this.autoAttachedFile) {
       files.push(this.autoAttachedFile);
     }
     files.push(...this.filesToAttach);
 
-    return files;
+    this.doSendMessage.perform(
+      prompt ?? this.messageToSend,
+      this.operatorModeStateService.state.submode === 'interact' && cards.length
+        ? cards
+        : undefined,
+      files.length ? files : undefined,
+      Boolean(prompt),
+    );
   }
 
   @action

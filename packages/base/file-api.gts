@@ -53,7 +53,7 @@ export function createFileDef({
 }: {
   url?: string;
   sourceUrl: string;
-  name: string;
+  name?: string;
   contentType?: string;
 }) {
   return new FileDef({ url, sourceUrl, name, contentType });
