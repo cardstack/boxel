@@ -1019,12 +1019,13 @@ module('getModifyPrompt', () => {
     }
   });
 
-  test('should include instructions in system prompt for skill cards', () => {
+  test('should include instructions in system prompt for skill cards', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(path.join(__dirname, 'resources/chats/added-skill.json')),
     );
 
-    const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
+    const result = (await getPromptParts(eventList, '@ai-bot:localhost'))
+      .messages;
     assert.equal(result.length, 1);
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
@@ -1041,7 +1042,7 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('can include both skill cards and attached cards', () => {
+  test('can include both skill cards and attached cards', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1051,7 +1052,8 @@ module('getModifyPrompt', () => {
       ),
     );
 
-    const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
+    const result = (await getPromptParts(eventList, '@ai-bot:localhost'))
+      .messages;
 
     const { attachedCards } = getRelevantCards(eventList, '@ai-bot:localhost');
     assert.equal(attachedCards.length, 1);
@@ -1073,7 +1075,7 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('should update system prompt with only active skills', () => {
+  test('should update system prompt with only active skills', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1082,7 +1084,7 @@ module('getModifyPrompt', () => {
         ),
       ),
     );
-    const { messages } = getPromptParts(eventList, '@aibot:localhost');
+    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
     assert.true(messages.length > 0);
     assert.true(messages[0].role === 'system');
     let systemPrompt = messages[0].content;
@@ -1091,7 +1093,7 @@ module('getModifyPrompt', () => {
     assert.true(systemPrompt?.includes('SKILL_2'));
   });
 
-  test('If there are no skill cards active in the latest matrix room state, remove from system prompt', () => {
+  test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1100,7 +1102,7 @@ module('getModifyPrompt', () => {
         ),
       ),
     );
-    const { messages } = getPromptParts(eventList, '@aibot:localhost');
+    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
     assert.true(messages.length > 0);
     assert.true(messages[0].role === 'system');
     let systemPrompt = messages[0].content;
@@ -1110,21 +1112,21 @@ module('getModifyPrompt', () => {
   });
 });
 
-test('should support skill cards without ids', () => {
+test('should support skill cards without ids', async () => {
   // The responsibility of handling deduplication/etc of skill cards
   // lies with the host application, the AI bot should not need to
   // handle that.
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(path.join(__dirname, 'resources/chats/skill-card-no-id.json')),
   );
-  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   assert.equal(messages.length, 2);
   assert.equal(messages[0].role, 'system');
   assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
   assert.true(messages[0].content?.includes('Skill Instructions'));
 });
 
-test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', () => {
+test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1133,7 +1135,7 @@ test('Has the skill card specified by the last state update, even if there are o
       ),
     ),
   );
-  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   assert.true(messages.length > 0);
   assert.equal(messages[0].role, 'system');
   console.log(messages[0].content);
@@ -1270,7 +1272,7 @@ test('Return host result of tool call back to open ai', () => {
                   firstName: 'Alice',
                   lastName: 'Enwunder',
                   photo: null,
-                  body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                  body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
                   description: null,
                   thumbnailURL: null,
                 },
@@ -1553,11 +1555,11 @@ test('Return host result of tool call back to open ai', () => {
   const result = getModifyPrompt(history, '@ai-bot:localhost', tools);
   assert.equal(result[5].role, 'tool');
   assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-  const expected = `Command applied, with result card: "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"title\\":\\"Search Results\\",\\"description\\":\\"Here are the search results\\",\\"results\\":[{\\"data\\":{\\"type\\":\\"card\\",\\"id\\":\\"http://localhost:4201/drafts/Author/1\\",\\"attributes\\":{\\"firstName\\":\\"Alice\\",\\"lastName\\":\\"Enwunder\\",\\"photo\\":null,\\"body\\":\\"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../author\\",\\"name\\":\\"Author\\"}}}}]}}}".\n`;
+  const expected = `Command applied, with result card: "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"title\\":\\"Search Results\\",\\"description\\":\\"Here are the search results\\",\\"results\\":[{\\"data\\":{\\"type\\":\\"card\\",\\"id\\":\\"http://localhost:4201/drafts/Author/1\\",\\"attributes\\":{\\"firstName\\":\\"Alice\\",\\"lastName\\":\\"Enwunder\\",\\"photo\\":null,\\"body\\":\\"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../author\\",\\"name\\":\\"Author\\"}}}}]}}}".\n`;
   assert.equal(result[5].content, expected);
 });
 
-test('Tools remain available in prompt parts even when not in last message', () => {
+test('Tools remain available in prompt parts even when not in last message', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1567,7 +1569,10 @@ test('Tools remain available in prompt parts even when not in last message', () 
     ),
   );
 
-  const { messages, tools } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages, tools } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+  );
   assert.true(tools.length > 0, 'Should have tools available');
   assert.true(messages.length > 0, 'Should have messages');
 
@@ -1578,7 +1583,7 @@ test('Tools remain available in prompt parts even when not in last message', () 
   assert.ok(alertTool, 'Should have AlertTheUser function available');
 });
 
-test('Tools are not required unless they are in the last message', () => {
+test('Tools are not required unless they are in the last message', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1588,11 +1593,11 @@ test('Tools are not required unless they are in the last message', () => {
     ),
   );
 
-  const { toolChoice } = getPromptParts(eventList, '@aibot:localhost');
+  const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
   assert.equal(toolChoice, 'auto');
 });
 
-test('Tools can be required to be called if done so in the last message', () => {
+test('Tools can be required to be called if done so in the last message', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1602,7 +1607,7 @@ test('Tools can be required to be called if done so in the last message', () => 
     ),
   );
 
-  const { toolChoice } = getPromptParts(eventList, '@aibot:localhost');
+  const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
   assert.deepEqual(toolChoice, {
     type: 'function',
     function: {
@@ -1611,7 +1616,7 @@ test('Tools can be required to be called if done so in the last message', () => 
   });
 });
 
-test('Tools calls are connected to their results', () => {
+test('Tools calls are connected to their results', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1621,7 +1626,7 @@ test('Tools calls are connected to their results', () => {
     ),
   );
 
-  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   // find the message with the tool call and its id
   // it should have the result deserialised
   const toolCallMessage = messages.find((message) => message.role === 'tool');
@@ -1633,7 +1638,7 @@ test('Tools calls are connected to their results', () => {
 });
 
 module('set model in prompt', () => {
-  test('default active LLM must be equal to `DEFAULT_LLM`', () => {
+  test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1643,16 +1648,16 @@ module('set model in prompt', () => {
       ),
     );
 
-    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    const { model } = await getPromptParts(eventList, '@aibot:localhost');
     assert.strictEqual(model, DEFAULT_LLM);
   });
 
-  test('use latest active llm', () => {
+  test('use latest active llm', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(path.join(__dirname, 'resources/chats/set-active-llm.json')),
     );
 
-    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    const { model } = await getPromptParts(eventList, '@aibot:localhost');
     assert.strictEqual(model, 'google/gemini-pro-1.5');
   });
 });
