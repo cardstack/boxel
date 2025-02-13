@@ -1,3 +1,4 @@
+import { hash } from '@ember/helper';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -104,7 +105,9 @@ export default class RoomMessage extends Component<Signature> {
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe
-          (markdownToHtml @message.formattedMessage)
+          (markdownToHtml
+            @message.formattedMessage (hash includeCodeCopyButton=true)
+          )
         }}
         @datetime={{@message.created}}
         @index={{@index}}
