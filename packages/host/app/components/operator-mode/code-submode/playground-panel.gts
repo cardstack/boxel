@@ -96,7 +96,7 @@ const BeforeOptions: TemplateOnlyComponent<{ Args: {} }> = <template>
       width: 100%;
       background-color: var(--boxel-light);
       padding: var(--boxel-sp-xs) calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs))
-        var(--boxel-sp-xxxs) calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs));
+        0 calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs));
     }
     .title {
       font: 600 var(--boxel-font-sm);
@@ -129,14 +129,13 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       flex-direction: column;
       border-top: var(--boxel-border);
       background-color: var(--boxel-light);
-      padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
-      margin-top: var(--boxel-sp-xs);
+      padding: var(--boxel-sp-xs);
+      margin-top: var(--boxel-sp-xxs);
       gap: var(--boxel-sp-xxs);
     }
     .title {
       font: 600 var(--boxel-font-sm);
-      padding: var(--boxel-sp-xs) var(--boxel-sp-xxs) var(--boxel-sp-xxxs)
-        var(--boxel-sp-xxs);
+      padding: 0 var(--boxel-sp-xxs);
     }
     .action {
       display: flex;
