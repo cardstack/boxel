@@ -99,10 +99,7 @@ export class ModuleContentsResource extends Resource<Args> {
   // it has to know this to distinguish the act of editing of a file and switching between definitions
   // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
   get isLoadingNewModule() {
-    return (
-      (this.load.isRunning && this.executableFile?.url !== this.state?.url) ??
-      false
-    );
+    return this.executableFile?.url !== this.state?.url ?? false;
   }
 
   get declarations() {

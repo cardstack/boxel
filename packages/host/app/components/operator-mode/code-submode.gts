@@ -65,6 +65,7 @@ import { htmlComponent } from '../../lib/html-component';
 import { CodeModePanelWidths } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
+import AttachFileModal from './attach-file-modal';
 import CardError from './card-error';
 import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
@@ -501,11 +502,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (!isPlaygroundEnabled) {
       return false;
     }
-    let declaration = this.selectedDeclaration;
-    if (!declaration || !('cardOrField' in declaration)) {
-      return false;
-    }
-    return isCardDef(declaration.cardOrField);
+    return isCardDef(this.selectedCardOrField?.cardOrField);
   }
 
   get showSpecPreview() {
@@ -794,6 +791,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
+    <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
         class='code-mode-background'
@@ -864,7 +862,14 @@ export default class CodeSubmode extends Component<Signature> {
                       {{/if}}
                     </:inspector>
                     <:browser>
-                      <FileTree @realmURL={{this.realmURL}} />
+                      <FileTree
+                        @realmURL={{this.realmURL}}
+                        @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
+                        @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                        @onFileSelected={{this.operatorModeStateService.onFileSelected}}
+                        @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                        @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                      />
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
@@ -1015,8 +1020,6 @@ export default class CodeSubmode extends Component<Signature> {
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
-                          @createFile={{perform this.createFile}}
-                          @isCreateModalShown={{bool this.isCreateModalOpen}}
                           as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item

@@ -28,6 +28,7 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
         --boxel-loading-indicator-size,
         var(--boxel-icon-sm)
       );
+      display: inline-block;
       width: var(--loading-indicator-size);
       height: var(--loading-indicator-size);
       flex-shrink: 0;
