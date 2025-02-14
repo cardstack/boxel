@@ -18,8 +18,11 @@ import {
 
 import type CommandService from '@cardstack/host/services/command-service';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
+
 import type { CommandStatus } from 'https://cardstack.com/base/command';
 
+import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
@@ -54,7 +57,8 @@ export default class MessageBuilder {
     setOwner(this, owner);
   }
 
-  @service declare commandService: CommandService;
+  @service private declare commandService: CommandService;
+  @service private declare matrixService: MatrixService;
 
   private get coreMessageArgs() {
     return new Message({
@@ -71,6 +75,7 @@ export default class MessageBuilder {
       status: this.event.status,
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
+      attachedFiles: this.attachedFiles,
     });
   }
 
@@ -96,6 +101,16 @@ export default class MessageBuilder {
       throw new Error(`cannot handle cards in room without an ID`);
     }
     return attachedCardIds;
+  }
+
+  get attachedFiles() {
+    let content = this.event.content as CardMessageContent;
+    // Safely skip over cases that don't have attached cards or a data type
+    return content.data?.attachedFiles
+      ? content.data?.attachedFiles.map((attachedFile: SerializedFile) =>
+          this.matrixService.fileAPI.createFileDef(attachedFile),
+        )
+      : undefined;
   }
 
   get errorMessage() {
