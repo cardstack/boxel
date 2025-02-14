@@ -10,6 +10,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 
 class CompanyEditTemplate extends Component<typeof Company> {
