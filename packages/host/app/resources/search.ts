@@ -21,7 +21,9 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { type CardResource, getCard, asURL } from './card-resource';
+import { asURL } from '../services/store';
+
+import { type CardResource, getCard } from './card-resource';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
