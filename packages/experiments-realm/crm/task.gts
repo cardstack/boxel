@@ -14,17 +14,15 @@ import {
 } from '@cardstack/boxel-ui/components';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
+
+import { CrmApp } from '../crm-app';
 import { Contact } from './contact';
-import { Representative } from './representative';
 import { Account } from './account';
 import { Deal } from './deal';
-import {
-  Task,
-  TaskStatusField,
-  getDueDateStatus,
-  TaskCompletionStatus,
-} from '../task';
-import { CrmApp } from '../crm-app';
+import { Representative } from './representative';
+
+import { Task, getDueDateStatus, TaskCompletionStatus } from '../task';
+import { CRMTaskStatusField } from './shared';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 export class Issues extends CardDef {
@@ -511,24 +509,6 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
       }
     </style>
   </template>
-}
-
-export class CRMTaskStatusField extends TaskStatusField {
-  static values = [
-    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
-    {
-      index: 1,
-      label: 'In Progress',
-      color: '#FFB74D',
-      completed: false,
-    },
-    {
-      index: 2,
-      label: 'Done',
-      color: '#66BB6A',
-      completed: true,
-    },
-  ];
 }
 
 export class CRMTask extends Task {
