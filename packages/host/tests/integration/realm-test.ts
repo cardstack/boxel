@@ -36,6 +36,7 @@ import {
   StringField,
   field,
 } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -50,6 +51,8 @@ module('Integration | realm', function (hooks) {
     loader = lookupLoaderService().loader;
   });
 
+  // FIXME maybe this needs to happen in every test now? And setupServerSentEvents is obsolete
+  setupMockMatrix(hooks);
   setupServerSentEvents(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
@@ -360,6 +363,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+              realmUserId: 'test_realm',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -3080,6 +3084,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+              realmUserId: 'test_realm',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -3255,6 +3260,7 @@ posts/ignore-me.gts
             name: 'Example Workspace',
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
+            realmUserId: '@realm/test-realm-test:localhost',
             showAsCatalog: null,
             visibility: 'public',
           },

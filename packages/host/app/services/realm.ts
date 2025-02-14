@@ -504,6 +504,19 @@ export default class RealmService extends Service {
     return undefined;
   }
 
+  realmOfMatrixUsername(username: string) {
+    console.log(
+      'all realm usernames ',
+      Array.from(this.realms.values()).map((r) => r.info?.realmUserId),
+    );
+    let realm = Array.from(this.realms.values()).find(
+      (r) => r.info?.realmUserId === username,
+    );
+    console.log('realm', realm);
+    console.log('username looked for: ', username);
+    return realm;
+  }
+
   @cached
   get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let maybePersonalRealm = `${this.realmServer.url.href}${this.matrixService.userName}/personal/`;
