@@ -213,9 +213,9 @@ class Isolated extends Component<typeof CardsGrid> {
         letter-spacing: 0.21px;
       }
       .cards-grid {
-        --grid-card-min-width: 11.125rem;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: 15.125rem;
+        --grid-card-min-width: 10.625rem; /* 170px */
+        --grid-card-max-width: 10.625rem; /* 170px */
+        --grid-card-height: 15.625rem; /* 250px */
 
         padding: var(--cards-grid-padding-top) 0 0 var(--boxel-sp-sm);
 
