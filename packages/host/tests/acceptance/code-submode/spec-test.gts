@@ -300,8 +300,10 @@ module('Spec preview', function (hooks) {
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     await percySnapshot(assert);
-    assert.dom('[data-test-title]').containsText('Person');
-    assert.dom('[data-test-description]').containsText('Spec');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
+    assert
+      .dom('[data-test-description] [data-test-boxel-input]')
+      .hasValue('Spec');
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
@@ -356,7 +358,9 @@ module('Spec preview', function (hooks) {
         await click('[data-test-create-spec-button]');
       },
     });
-    assert.dom('[data-test-title]').hasText('NewSkill');
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('NewSkill');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
@@ -369,7 +373,7 @@ module('Spec preview', function (hooks) {
     await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    assert.dom('[data-test-title]').doesNotContainText('default');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
   });
 });
