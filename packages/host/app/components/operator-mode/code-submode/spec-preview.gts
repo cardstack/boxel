@@ -72,6 +72,7 @@ interface Signature {
         | 'createSpec'
         | 'isCreateSpecInstanceRunning'
         | 'numberOfInstances'
+        | 'specType'
       >,
       WithBoundArgs<
         typeof SpecPreviewContent,
@@ -90,7 +91,7 @@ interface Signature {
 interface TitleSignature {
   Args: {
     numberOfInstances: number;
-    specType: SpecType;
+    specType?: SpecType;
     showCreateSpecIntent: boolean;
     createSpec: (event: MouseEvent) => void;
     isCreateSpecInstanceRunning: boolean;
@@ -501,6 +502,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     await all([this.cardService.saveModel(card), timeout(500)]);
   });
 
+  get specType() {
+    return this.card.specType as SpecType;
+  }
+
   <template>
     <PrerenderedCardSearch
       @query={{this.specQuery}}
@@ -515,7 +520,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             showCreateSpecIntent=this.showCreateSpecIntent
             createSpec=this.createSpec
             isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=this.card.specType
+            specType=this.specType
             numberOfInstances=this.ids.length
           )
           (component
@@ -527,6 +532,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             ids=this.ids
             selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
             spec=this.card
+            isLoading=false
           )
         }}
       </:response>
@@ -537,7 +543,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             showCreateSpecIntent=this.showCreateSpecIntent
             createSpec=this.createSpec
             isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=null
             numberOfInstances=this.ids.length
           )
           (component
@@ -563,7 +568,7 @@ function getComponent(cardOrField: Spec) {
 interface SpecTagSignature {
   Element: HTMLDivElement;
   Args: {
-    specType: string;
+    specType: SpecType;
   };
 }
 
