@@ -8,15 +8,13 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
-import type { ServerEvents } from '@cardstack/runtime-common/realm';
-
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
-  @tracked listenerCallbacks: Map<string, ((ev: ServerEvents) => void)[]> =
+  @tracked listenerCallbacks: Map<string, ((ev: MessageEvent) => void)[]> =
     new Map();
   @service private declare network: NetworkService;
 
@@ -74,7 +72,7 @@ export default class MessageService extends Service {
       let eventWithStringData = {
         type: event.type,
         data: JSON.stringify(event.data),
-      };
+      } as MessageEvent;
       cb(eventWithStringData);
     });
   }
