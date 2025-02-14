@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, waitFor, fillIn } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -13,6 +13,8 @@ import {
   setupUserSubscription,
   percySnapshot,
   type TestContextWithSSE,
+  type TestContextWithSave,
+  setupOnSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -117,6 +119,8 @@ module('Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupOnSave(hooks);
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
       loggedInAs: '@testuser:staging',
@@ -375,5 +379,22 @@ module('Spec preview', function (hooks) {
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
+  });
+
+  test<TestContextWithSave>('spec auto saved', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    let readMeInput = 'This is a spec for a person';
+    this.onSave((_, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.readMe, readMeInput);
+    });
+    await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
   });
 });
