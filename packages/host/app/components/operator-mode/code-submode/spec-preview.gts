@@ -72,18 +72,19 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof SpecPreviewTitle,
-        | 'numberOfInstances'
         | 'showCreateSpecIntent'
         | 'createSpec'
         | 'isCreateSpecInstanceRunning'
+        | 'numberOfInstances'
       >,
       WithBoundArgs<
         typeof SpecPreviewContent,
         | 'showCreateSpecIntent'
-        | 'selectId'
-        | 'ids'
         | 'canWrite'
+        | 'ids'
+        | 'selectId'
         | 'selectedDeclarationAsCodeRef'
+        | 'isLoading'
       >,
     ];
   };
@@ -257,10 +258,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     await all([this.cardService.saveModel(card), timeout(500)]);
   });
 
-  getIds(cards: PrerenderedCard[]) {
-    return cards.map((card) => card.url);
-  }
-
   <template>
     <div class='container'>
       {{#if @isLoading}}
@@ -366,12 +363,15 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
-  @tracked _selectedId?: string = this._ids[0];
-  @tracked _ids: string[] = [];
+  @tracked _selectedId?: string;
 
-  @action setIds(cards: PrerenderedCard[]) {
-    this._ids = cards.map((card) => card.url);
-  }
+  ids = (cards: PrerenderedCard[]) => {
+    return cards.map((card) => card.url);
+  };
+
+  selectedId = (cards: PrerenderedCard[]) => {
+    return this._selectedId ?? cards[0].url;
+  };
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -445,7 +445,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private get showCreateSpecIntent() {
-    return this._ids.length === 0 && this.canWrite;
+    return this.ids.length === 0 && this.canWrite;
   }
 
   //TODO: Improve identification of isApp and isSkill
@@ -531,27 +531,53 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       @realms={{this.realms}}
     >
       <:response as |cards|>
-        {{this.setIds cards}}
+        {{#let (this.ids cards) as |ids|}}
+          {{#let (this.selectedId cards) as |selectedId|}}
+            {{yield
+              (component
+                SpecPreviewTitle
+                showCreateSpecIntent=this.showCreateSpecIntent
+                createSpec=this.createSpec
+                isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+                specType=null
+                numberOfInstances=ids.length
+              )
+              (component
+                SpecPreviewContent
+                showCreateSpecIntent=this.showCreateSpecIntent
+                canWrite=this.canWrite
+                selectId=this.selectId
+                selectedId=selectedId
+                ids=ids
+                selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
+              )
+            }}
+          {{/let}}
+        {{/let}}
       </:response>
+      <:loading>
+        {{yield
+          (component
+            SpecPreviewTitle
+            showCreateSpecIntent=this.showCreateSpecIntent
+            createSpec=this.createSpec
+            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+            specType=null
+            numberOfInstances=this.ids.length
+          )
+          (component
+            SpecPreviewContent
+            showCreateSpecIntent=this.showCreateSpecIntent
+            canWrite=this.canWrite
+            selectId=this.selectId
+            selectedId=this._selectedId
+            ids=this.ids
+            selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
+            isLoading=true
+          )
+        }}
+      </:loading>
     </PrerenderedCardSearch>
-    {{yield
-      (component
-        SpecPreviewTitle
-        numberOfInstances=this._ids.length
-        showCreateSpecIntent=this.showCreateSpecIntent
-        createSpec=this.createSpec
-        isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-      )
-      (component
-        SpecPreviewContent
-        showCreateSpecIntent=this.showCreateSpecIntent
-        selectedId=this._selectedId
-        selectId=this.selectId
-        ids=this._ids
-        canWrite=this.canWrite
-        selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
-      )
-    }}
   </template>
 }
 
