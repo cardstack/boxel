@@ -71,8 +71,8 @@ interface Signature {
         | 'showCreateSpecIntent'
         | 'createSpec'
         | 'isCreateSpecInstanceRunning'
-        | 'numberOfInstances'
         | 'specType'
+        | 'numberOfInstances'
       >,
       WithBoundArgs<
         typeof SpecPreviewContent,
@@ -80,9 +80,9 @@ interface Signature {
         | 'canWrite'
         | 'ids'
         | 'selectId'
-        | 'selectedDeclarationAsCodeRef'
-        | 'isLoading'
+        | 'selectedId'
         | 'spec'
+        | 'isLoading'
       >,
     ];
   };
@@ -161,17 +161,13 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
-    selectId: (id: string) => void;
-    ids: string[];
-    selectedId: string;
     showCreateSpecIntent: boolean;
-    isLoading: boolean;
     canWrite: boolean;
-    selectedDeclarationAsCodeRef: ResolvedCodeRef;
-    spec?: Spec;
-  };
-  Blocks: {
-    cards: [PrerenderedCard[]];
+    selectId: (id: string) => void;
+    selectedId: string;
+    ids: string[];
+    spec: Spec;
+    isLoading: boolean;
   };
 }
 
@@ -530,7 +526,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             selectId=this.selectId
             selectedId=this.selectedId
             ids=this.ids
-            selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
             spec=this.card
             isLoading=false
           )
@@ -543,6 +538,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             showCreateSpecIntent=this.showCreateSpecIntent
             createSpec=this.createSpec
             isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+            specType=this.specType
             numberOfInstances=this.ids.length
           )
           (component
@@ -552,7 +548,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             selectId=this.selectId
             selectedId=this._selectedId
             ids=this.ids
-            selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
+            spec=this.card
             isLoading=true
           )
         }}
