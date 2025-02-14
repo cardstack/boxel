@@ -46,6 +46,7 @@ import PrerenderedCardSearch, {
 } from '../../prerendered-card-search';
 
 import Preview from '../../preview';
+import FittedFormatGallery from '../card-preview-panel/fitted-format-gallery';
 
 import FormatChooser from './format-chooser';
 
@@ -242,6 +243,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
               minim veniam, quis nostrud exercitation ullamco laboris nisi ut
               aliquip ex ea commodo consequat.</div>
+          {{else if (eq this.format 'fitted')}}
+            <FittedFormatGallery @card={{this.card}} @isDarkMode={{true}} />
           {{/if}}
         {{/if}}
       </div>
