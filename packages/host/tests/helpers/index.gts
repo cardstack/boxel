@@ -342,7 +342,9 @@ export function setupServerSentEvents(hooks: NestedHooks) {
 
       roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
       let sseRoomEvents = roomEvents.filter(
-        (e) => e.content?.msgtype === 'app.boxel.sse',
+        (e) =>
+          e.content?.msgtype === 'app.boxel.sse' &&
+          e.sender === realm.matrixUsername,
       );
 
       if (expectedEvents) {
