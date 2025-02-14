@@ -7,7 +7,6 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
   testRealmURL,
   setupCardLogs,
@@ -16,6 +15,7 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;

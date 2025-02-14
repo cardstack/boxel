@@ -18,8 +18,6 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
-import { setupMockMatrix } from '../../helpers/mock-matrix';
-
 import {
   testRealmURL,
   testRealmInfo,
@@ -43,6 +41,7 @@ import {
   setupBaseRealm,
   StringField,
 } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 const paths = new RealmPaths(new URL(testRealmURL));
