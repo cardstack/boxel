@@ -27,7 +27,6 @@ import {
   type Query,
   type LooseSingleCardDocument,
   specRef,
-  getCards,
   isCardDef,
   isFieldDef,
 } from '@cardstack/runtime-common';
@@ -38,7 +37,6 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import PrerenderedCardSearch, {
-  PrerenderedCardData,
   PrerenderedCard,
 } from '@cardstack/host/components/prerendered-card-search';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -52,9 +50,7 @@ import {
 import CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService, {
-  EnhancedRealmInfo,
-} from '@cardstack/host/services/realm';
+import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -85,6 +81,7 @@ interface Signature {
         | 'selectId'
         | 'selectedDeclarationAsCodeRef'
         | 'isLoading'
+        | 'spec'
       >,
     ];
   };
@@ -170,6 +167,7 @@ interface ContentSignature {
     isLoading: boolean;
     canWrite: boolean;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
+    spec?: Spec;
   };
   Blocks: {
     cards: [PrerenderedCard[]];
@@ -178,33 +176,9 @@ interface ContentSignature {
 
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
-  @service private declare cardService: CardService;
-  @service private declare environmentService: EnvironmentService;
-  @service private declare realmServer: RealmServerService;
 
   get onlyOneInstance() {
     return this.args.ids.length === 1;
-  }
-
-  get realms() {
-    return this.realmServer.availableRealmURLs;
-  }
-
-  private get specQuery(): Query {
-    return {
-      filter: {
-        on: specRef,
-        eq: {
-          ref: this.args.selectedDeclarationAsCodeRef, //ref is primitive
-        },
-      },
-      sort: [
-        {
-          by: 'createdAt',
-          direction: 'desc',
-        },
-      ],
-    };
   }
 
   getDropdownData = (id: string) => {
@@ -219,44 +193,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       localPath: getRelativePath(realmURL.href, id),
     };
   };
-
-  private cardResource = getCard(this, () => this.args.selectedId, {
-    onCardInstanceChange: () => this.onCardLoaded,
-  });
-
-  get card() {
-    return this.cardResource.card as Spec;
-  }
-
-  private onCardLoaded = (
-    oldCard: CardDef | undefined,
-    newCard: CardDef | undefined,
-  ) => {
-    if (oldCard) {
-      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
-    }
-    if (newCard) {
-      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
-    }
-  };
-
-  private onCardChange = () => {
-    this.initiateAutoSaveTask.perform();
-  };
-
-  private initiateAutoSaveTask = restartableTask(async () => {
-    if (this.card) {
-      console.log(this.card.id);
-      await timeout(this.environmentService.autoSaveDelayMs);
-      await this.saveCard.perform(this.card);
-    }
-  });
-
-  private saveCard = restartableTask(async (card: Spec) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
 
   <template>
     <div class='container'>
@@ -300,8 +236,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             </BoxelSelect>
           </div>
 
-          {{#if this.card}}
-            {{#let (getComponent this.card) as |CardComponent|}}
+          {{#if @spec}}
+            {{#let (getComponent @spec) as |CardComponent|}}
               <CardComponent @format='edit' />
             {{/let}}
           {{/if}}
@@ -360,18 +296,21 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
   @tracked _selectedId?: string;
+  @tracked ids: string[] = [];
 
-  ids = (cards: PrerenderedCard[]) => {
-    return cards.map((card) => card.url);
-  };
+  // We must do this so cardIds are available in the root for usage with getCard
+  @action setCardIds(cards: PrerenderedCard[]) {
+    this.ids = cards.map((card) => card.url);
+  }
 
-  selectedId = (cards: PrerenderedCard[]) => {
-    return this._selectedId ?? cards[0].url;
-  };
+  get selectedId() {
+    return this._selectedId ?? this.ids[0];
+  }
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -389,7 +328,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  private createSpecInstance = restartableTask(
+  private createSpecInstance = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
       let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
@@ -524,6 +463,44 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
+  private cardResource = getCard(this, () => this.selectedId, {
+    onCardInstanceChange: () => this.onCardLoaded,
+  });
+
+  get card() {
+    return this.cardResource.card as Spec;
+  }
+
+  private onCardLoaded = (
+    oldCard: CardDef | undefined,
+    newCard: CardDef | undefined,
+  ) => {
+    if (oldCard) {
+      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
+    }
+    if (newCard) {
+      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
+    }
+  };
+
+  private onCardChange = () => {
+    this.initiateAutoSaveTask.perform();
+  };
+
+  private initiateAutoSaveTask = restartableTask(async () => {
+    if (this.card) {
+      console.log(this.card.id);
+      await timeout(this.environmentService.autoSaveDelayMs);
+      await this.saveCard.perform(this.card);
+    }
+  });
+
+  private saveCard = restartableTask(async (card: Spec) => {
+    // these saves can happen so fast that we'll make sure to wait at
+    // least 500ms for human consumption
+    await all([this.cardService.saveModel(card), timeout(500)]);
+  });
+
   <template>
     <PrerenderedCardSearch
       @query={{this.specQuery}}
@@ -531,29 +508,27 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       @realms={{this.realms}}
     >
       <:response as |cards|>
-        {{#let (this.ids cards) as |ids|}}
-          {{#let (this.selectedId cards) as |selectedId|}}
-            {{yield
-              (component
-                SpecPreviewTitle
-                showCreateSpecIntent=this.showCreateSpecIntent
-                createSpec=this.createSpec
-                isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-                specType=null
-                numberOfInstances=ids.length
-              )
-              (component
-                SpecPreviewContent
-                showCreateSpecIntent=this.showCreateSpecIntent
-                canWrite=this.canWrite
-                selectId=this.selectId
-                selectedId=selectedId
-                ids=ids
-                selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
-              )
-            }}
-          {{/let}}
-        {{/let}}
+        {{this.setCardIds cards}}
+        {{yield
+          (component
+            SpecPreviewTitle
+            showCreateSpecIntent=this.showCreateSpecIntent
+            createSpec=this.createSpec
+            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+            specType=this.card.specType
+            numberOfInstances=this.ids.length
+          )
+          (component
+            SpecPreviewContent
+            showCreateSpecIntent=this.showCreateSpecIntent
+            canWrite=this.canWrite
+            selectId=this.selectId
+            selectedId=this.selectedId
+            ids=this.ids
+            selectedDeclarationAsCodeRef=this.getSelectedDeclarationAsCodeRef
+            spec=this.card
+          )
+        }}
       </:response>
       <:loading>
         {{yield
