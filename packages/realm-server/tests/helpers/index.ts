@@ -55,6 +55,7 @@ export const testRealmInfo = {
   iconURL: null,
   showAsCatalog: null,
   visibility: 'public',
+  realmUserId: testMatrix.username,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
