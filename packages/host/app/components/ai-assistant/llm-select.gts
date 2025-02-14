@@ -42,6 +42,8 @@ const LLMSelect: TemplateOnlyComponent<Signature> = <template>
       border: none;
       padding: 0;
       width: auto;
+      min-width: 80px;
+      height: 43.5px;
       flex: 1;
       padding-right: var(--boxel-sp-xxs);
       cursor: pointer;
