@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "description": null,
+      "title": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../richard-example/project",
+        "name": "Project"
+      }
+    }
+  }
+}
