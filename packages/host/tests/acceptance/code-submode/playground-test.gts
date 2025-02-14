@@ -487,6 +487,13 @@ export class BlogPost extends CardDef {
       .hasText(
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do Jane Doe tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       );
+
+    await click('[data-test-format-chooser-fitted]');
+    assert.dom('[data-test-format-chooser-atom]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-fitted]').hasClass('active');
+    assert
+      .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
+      .exists({ count: 16 });
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
@@ -508,6 +515,49 @@ export class BlogPost extends CardDef {
     assert
       .dom(`[data-test-stack-item-content] [data-test-card-format="edit"]`)
       .exists();
+  });
+
+  test('can choose another instance to be opened in playground panel', async function (assert) {
+    window.localStorage.removeItem('recent-files');
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+
+    await click('[data-boxel-selector-item-text="BlogPost"]');
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-test-choose-another-instance]');
+    assert.dom('[data-test-card-catalog-modal]').exists();
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 3 });
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`)
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}BlogPost/urban-living"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}BlogPost/remote-work"]`,
+      )
+      .exists();
+
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${testRealmURL}BlogPost/mad-hatter"][data-test-card-format="isolated"]`,
+      )
+      .exists();
+    let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
+    assert.deepEqual(recentFiles[0], [
+      testRealmURL,
+      'BlogPost/mad-hatter.json',
+    ]);
   });
 
   test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {
