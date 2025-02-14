@@ -229,7 +229,7 @@ export default class StoreService extends Service {
       let cardOrError = await this.getCard(urlOrDoc);
       this.handleUpdatedCard(oldCard, cardOrError);
       if (url) {
-        this.notifyResources(url, cardOrError);
+        this.notifyLiveResources(url, cardOrError);
       }
     },
   );
@@ -254,7 +254,7 @@ export default class StoreService extends Service {
     if (isDelete) {
       this.identityContext.delete(card.id);
     }
-    this.notifyResources(card.id, maybeReloadedCard);
+    this.notifyLiveResources(card.id, maybeReloadedCard);
   });
 
   private handleUpdatedCard(
@@ -277,7 +277,7 @@ export default class StoreService extends Service {
     }
   }
 
-  private notifyResources(
+  private notifyLiveResources(
     url: string,
     maybeCard: CardDef | CardError | undefined,
   ) {
