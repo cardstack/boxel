@@ -15,7 +15,11 @@ import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import { Pill, BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  Pill,
+  BoxelButton,
+  FieldContainer,
+} from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
@@ -53,6 +57,57 @@ const taskSource = {
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
+
+class EditTemplate extends Component<typeof Deal> {
+  <template>
+    <div class='deal-form'>
+      <FieldContainer @label='Name'>
+        <@fields.name />
+      </FieldContainer>
+      <FieldContainer @label='Account'>
+        <@fields.account />
+      </FieldContainer>
+      <FieldContainer @label='Status'>
+        <@fields.status />
+      </FieldContainer>
+      <FieldContainer @label='Priority'>
+        <@fields.priority />
+      </FieldContainer>
+      <FieldContainer @label='Close Date'>
+        <@fields.closeDate />
+      </FieldContainer>
+      <FieldContainer @label='Current Value'>
+        <@fields.currentValue />
+      </FieldContainer>
+      <FieldContainer @label='Predicted Revenue'>
+        <@fields.predictedRevenue />
+      </FieldContainer>
+      <FieldContainer @label='Primary Stakeholder'>
+        <@fields.primaryStakeholder />
+      </FieldContainer>
+      <FieldContainer @label='Stakeholders'>
+        <@fields.stakeholders />
+      </FieldContainer>
+      <FieldContainer @label='Value Breakdown'>
+        <@fields.valueBreakdown />
+      </FieldContainer>
+      <FieldContainer @label='Health Score'>
+        <@fields.healthScore />
+      </FieldContainer>
+      <FieldContainer @label='Event'>
+        <@fields.event />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .deal-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
@@ -1161,6 +1216,7 @@ export class Deal extends CardDef {
     },
   });
 
+  static edit = EditTemplate;
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
 }

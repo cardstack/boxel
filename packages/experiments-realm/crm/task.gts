@@ -8,6 +8,7 @@ import {
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import {
+  FieldContainer,
   Pill,
   ProgressBar,
   ProgressRadial,
@@ -43,6 +44,57 @@ function shortenId(id: string): string {
   const shortUuid = id.slice(0, 8);
   const decimal = parseInt(shortUuid, 16);
   return decimal.toString(36).padStart(6, '0');
+}
+
+class TaskEdit extends Component<typeof CRMTask> {
+  <template>
+    <div class='task-form'>
+      <FieldContainer @label='Name'>
+        <@fields.name />
+      </FieldContainer>
+      <FieldContainer @label='Crm App'>
+        <@fields.crmApp />
+      </FieldContainer>
+      <FieldContainer @label='Assignee'>
+        <@fields.assignee />
+      </FieldContainer>
+      <FieldContainer @label='Contact'>
+        <@fields.contact />
+      </FieldContainer>
+      <FieldContainer @label='Account'>
+        <@fields.account />
+      </FieldContainer>
+      <FieldContainer @label='Deal'>
+        <@fields.deal />
+      </FieldContainer>
+      <FieldContainer @label='Status'>
+        <@fields.status />
+      </FieldContainer>
+      <FieldContainer @label='Date Range'>
+        <@fields.dateRange />
+      </FieldContainer>
+      <FieldContainer @label='Details'>
+        <@fields.details />
+      </FieldContainer>
+      <FieldContainer @label='Priority'>
+        <@fields.priority />
+      </FieldContainer>
+      <FieldContainer @label='Subtasks'>
+        <@fields.subtasks />
+      </FieldContainer>
+      <FieldContainer @label='Tags'>
+        <@fields.tags />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .task-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
 }
 
 class TaskIsolated extends Component<typeof CRMTask> {
@@ -561,6 +613,7 @@ export class CRMTask extends Task {
     },
   });
 
+  static edit = TaskEdit;
   static isolated = TaskIsolated;
   static embedded = TaskEmbedded;
 }
