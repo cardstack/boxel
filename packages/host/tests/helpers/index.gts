@@ -337,10 +337,11 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         );
       }
 
-      // FIXME how should the username be known? … duplicated from setupTestRealm
-      let realmSessionRoomId = `session-room-for-testuser`;
+      // FIXME duplicated from setupTestRealm, also this is the user’s username elsewher, not the realm’s username
+      let realmSessionRoomId = `session-room-for-${realm.matrixUsername}`;
 
       roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
+
       let sseRoomEvents = roomEvents.filter(
         (e) =>
           e.content?.msgtype === 'app.boxel.sse' &&
@@ -583,8 +584,7 @@ async function setupTestRealm({
   let mockLoader = owner.lookup('service:matrix-mock-utils') as any;
   let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
 
-  // FIXME how should the username be known?
-  let realmSessionRoomId = `session-room-for-testuser`;
+  let realmSessionRoomId = `session-room-for-${realm.matrixUsername}`;
 
   let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
 
