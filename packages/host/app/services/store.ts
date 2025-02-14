@@ -12,9 +12,9 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type {
-  CardDef,
-  IdentityContext,
+import {
+  type CardDef,
+  type IdentityContext,
 } from 'https://cardstack.com/base/card-api';
 
 import type CardService from './card-service';
@@ -121,17 +121,19 @@ export default class StoreService extends Service {
     urlOrDoc,
     setCard,
     setCardError,
+    relativeTo,
   }: {
     resource: CardResource;
     urlOrDoc: string | LooseSingleCardDocument;
     setCard: (card: CardDef | undefined) => void;
     setCardError: (error: CardError | undefined) => void;
+    relativeTo?: URL;
   }): Promise<{
     url: string | undefined;
     card: CardDef | undefined;
     error: CardError | undefined;
   }> {
-    let cardOrError = await this.getCard(urlOrDoc);
+    let cardOrError = await this.getCard(urlOrDoc, relativeTo);
     let card = isCardInstance(cardOrError) ? cardOrError : undefined;
     let error = !isCardInstance(cardOrError) ? cardOrError : undefined;
 
@@ -296,7 +298,10 @@ export default class StoreService extends Service {
     }
   }
 
-  private async getCard(urlOrDoc: string | LooseSingleCardDocument) {
+  private async getCard(
+    urlOrDoc: string | LooseSingleCardDocument,
+    relativeTo?: URL,
+  ) {
     let url = asURL(urlOrDoc);
     try {
       if (!url) {
@@ -305,7 +310,7 @@ export default class StoreService extends Service {
         let newCard = await this.cardService.createFromSerialized(
           doc.data,
           doc,
-          undefined,
+          relativeTo,
           {
             identityContext: this.identityContext,
           },

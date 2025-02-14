@@ -32,6 +32,7 @@ interface Args {
     // this is not always constructed within a container so we pass in our services
     storeService: StoreService;
     cardService: CardService;
+    relativeTo?: URL;
     onCardInstanceChange?: (
       oldCard: CardDef | undefined,
       newCard: CardDef | undefined,
@@ -61,8 +62,14 @@ export class CardResource extends Resource<Args> {
   ) => void;
 
   modify(_positional: never[], named: Args['named']) {
-    let { urlOrDoc, isLive, onCardInstanceChange, storeService, cardService } =
-      named;
+    let {
+      urlOrDoc,
+      isLive,
+      onCardInstanceChange,
+      storeService,
+      cardService,
+      relativeTo,
+    } = named;
     this.store = storeService;
     this.cardService = cardService;
     this.#url = urlOrDoc ? asURL(urlOrDoc) : undefined;
@@ -70,7 +77,7 @@ export class CardResource extends Resource<Args> {
     this.onCardInstanceChange = onCardInstanceChange;
 
     if (urlOrDoc) {
-      this._loaded = this.load.perform(urlOrDoc);
+      this._loaded = this.load.perform(urlOrDoc, relativeTo);
     }
 
     registerDestructor(this, () => {
@@ -105,11 +112,12 @@ export class CardResource extends Resource<Args> {
   }
 
   private load = restartableTask(
-    async (urlOrDoc: string | LooseSingleCardDocument) => {
+    async (urlOrDoc: string | LooseSingleCardDocument, relativeTo?: URL) => {
       this.#api = await this.cardService.getAPI();
       let { url, card, error } = await this.store.createSubscriber({
         resource: this,
         urlOrDoc,
+        relativeTo,
         setCard: (card) => {
           if (card !== this.card) {
             this._card = card;
@@ -152,6 +160,7 @@ export function getCard(
     named: {
       urlOrDoc: urlOrDoc(),
       isLive: opts?.isLive ? opts.isLive() : true,
+      relativeTo: opts?.relativeTo,
       onCardInstanceChange: opts?.onCardInstanceChange
         ? opts.onCardInstanceChange()
         : undefined,
