@@ -1,3 +1,4 @@
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -74,16 +75,19 @@ interface Signature {
         | 'specType'
         | 'numberOfInstances'
       >,
-      WithBoundArgs<
-        typeof SpecPreviewContent,
-        | 'showCreateSpecIntent'
-        | 'canWrite'
-        | 'ids'
-        | 'selectId'
-        | 'selectedId'
-        | 'spec'
-        | 'isLoading'
-      >,
+      (
+        | WithBoundArgs<
+            typeof SpecPreviewContent,
+            | 'showCreateSpecIntent'
+            | 'canWrite'
+            | 'ids'
+            | 'selectId'
+            | 'selectedId'
+            | 'spec'
+            | 'isLoading'
+          >
+        | WithBoundArgs<typeof SpecPreviewLoading, never>
+      ),
     ];
   };
 }
@@ -91,7 +95,7 @@ interface Signature {
 interface TitleSignature {
   Args: {
     numberOfInstances: number;
-    specType?: SpecType;
+    specType: SpecType;
     showCreateSpecIntent: boolean;
     createSpec: (event: MouseEvent) => void;
     isCreateSpecInstanceRunning: boolean;
@@ -166,7 +170,7 @@ interface ContentSignature {
     selectId: (id: string) => void;
     selectedId: string;
     ids: string[];
-    spec: Spec;
+    spec: Spec | undefined;
     isLoading: boolean;
   };
 }
@@ -290,6 +294,33 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     </style>
   </template>
 }
+
+const SpecPreviewLoading: TemplateOnlyComponent = <template>
+  <div class='container'>
+    <div class='loading'>
+      <LoadingIndicator class='loading-icon' />
+      Loading...
+    </div>
+  </div>
+  <style scoped>
+    .container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+    }
+    .loading {
+      display: inline-flex;
+    }
+    .loading-icon {
+      display: inline-block;
+      margin-right: var(--boxel-sp-xxxs);
+      vertical-align: middle;
+    }
+  </style>
+</template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -465,6 +496,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   });
 
   get card() {
+    if (!this.cardResource.card) {
+      return undefined;
+    }
     return this.cardResource.card as Spec;
   }
 
@@ -499,7 +533,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   });
 
   get specType() {
-    return this.card.specType as SpecType;
+    return this.card?.specType as SpecType;
   }
 
   <template>
@@ -541,16 +575,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             specType=this.specType
             numberOfInstances=this.ids.length
           )
-          (component
-            SpecPreviewContent
-            showCreateSpecIntent=this.showCreateSpecIntent
-            canWrite=this.canWrite
-            selectId=this.selectId
-            selectedId=this._selectedId
-            ids=this.ids
-            spec=this.card
-            isLoading=true
-          )
+          (component SpecPreviewLoading)
         }}
       </:loading>
     </PrerenderedCardSearch>
@@ -594,7 +619,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   </template>
 }
 
-function getIcon(specType: string) {
+function getIcon(specType: SpecType) {
   switch (specType) {
     case 'card':
       return StackIcon;
