@@ -245,7 +245,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         align-items: center;
         justify-content: center;
         flex-direction: column;
-        height: 100%;
+        height: auto;
         width: 100%;
       }
       .spec-preview {
