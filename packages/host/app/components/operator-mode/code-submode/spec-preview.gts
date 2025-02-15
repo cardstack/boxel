@@ -84,7 +84,6 @@ interface Signature {
             | 'selectId'
             | 'selectedId'
             | 'spec'
-            | 'isLoading'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -171,7 +170,6 @@ interface ContentSignature {
     selectedId: string;
     ids: string[];
     spec: Spec | undefined;
-    isLoading: boolean;
   };
 }
 
@@ -197,12 +195,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   <template>
     <div class='container'>
-      {{#if @isLoading}}
-        <div class='loading'>
-          <LoadingIndicator class='loading-icon' />
-          Loading...
-        </div>
-      {{else if @showCreateSpecIntent}}
+      {{#if @showCreateSpecIntent}}
         <div class='spec-intent-message' data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
@@ -283,6 +276,31 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
+    </style>
+  </template>
+}
+
+interface SpecPreviewLoadingSignature {
+  Element: HTMLDivElement;
+}
+
+const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
+  <template>
+    <div class='container'>
+      <div class='loading'>
+        <LoadingIndicator class='loading-icon' />
+        Loading...
+      </div>
+    </div>
+    <style scoped>
+      .container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+      }
       .loading {
         display: inline-flex;
       }
@@ -292,35 +310,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         vertical-align: middle;
       }
     </style>
-  </template>
-}
-
-const SpecPreviewLoading: TemplateOnlyComponent = <template>
-  <div class='container'>
-    <div class='loading'>
-      <LoadingIndicator class='loading-icon' />
-      Loading...
-    </div>
-  </div>
-  <style scoped>
-    .container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      height: 100%;
-      width: 100%;
-    }
-    .loading {
-      display: inline-flex;
-    }
-    .loading-icon {
-      display: inline-block;
-      margin-right: var(--boxel-sp-xxxs);
-      vertical-align: middle;
-    }
-  </style>
-</template>;
+  </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
