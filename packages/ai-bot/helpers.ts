@@ -609,9 +609,9 @@ export async function getModifyPrompt(
     MODIFY_SYSTEM_MESSAGE +
     `
   The user currently has given you the following data to work with: \n
-  Attached code files:\n
+  Attached code files:
   ${attachedFilesToPrompt(attachedFiles)}
-  \n Cards:\n`;
+  \n Cards:`;
   systemMessage += attachedCardsToMessage(
     mostRecentlyAttachedCard,
     attachedCards,
