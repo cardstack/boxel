@@ -186,8 +186,8 @@ module('getModifyPrompt', () => {
     ];
 
     // Assert raises an exception when we don't use a full id
-    assert.throws(() => {
-      getModifyPrompt(history, 'ai-bot');
+    assert.throws(async () => {
+      await getModifyPrompt(history, 'ai-bot');
     });
   });
 
@@ -1144,14 +1144,14 @@ test('Has the skill card specified by the last state update, even if there are o
   assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));
 });
 
-test('if tool calls are required, ensure they are set', () => {
+test('if tool calls are required, ensure they are set', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/forced-function-call.json'),
     ),
   );
 
-  const { messages, tools, toolChoice } = getPromptParts(
+  const { messages, tools, toolChoice } = await getPromptParts(
     eventList,
     '@ai-bot:localhost',
   );
