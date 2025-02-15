@@ -559,7 +559,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         {{yield
           (component
             SpecPreviewTitle
-            showCreateSpecIntent=this.showCreateSpecIntent
+            showCreateSpecIntent=false
             createSpec=this.createSpec
             isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
             specType=this.specType
