@@ -1,11 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import Folder from '@cardstack/boxel-icons/folder';
+import { restartableTask, task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -21,6 +24,7 @@ import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
+  chooseCard,
   type Query,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -82,6 +86,74 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
+const BeforeOptions: TemplateOnlyComponent<{ Args: {} }> = <template>
+  <div class='before-options'>
+    <span class='title'>
+      Recent
+    </span>
+  </div>
+  <style scoped>
+    .before-options {
+      width: 100%;
+      background-color: var(--boxel-light);
+      padding: var(--boxel-sp-xs) calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs))
+        0 calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs));
+    }
+    .title {
+      font: 600 var(--boxel-font-sm);
+    }
+  </style>
+</template>;
+
+interface AfterOptionsSignature {
+  Args: {
+    chooseCard: () => void;
+  };
+}
+const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
+  <div class='after-options'>
+    <span class='title'>
+      Action
+    </span>
+    <button
+      class='action'
+      {{on 'click' @chooseCard}}
+      data-test-choose-another-instance
+    >
+      <Folder width='16px' height='16px' />
+      Choose another instance
+    </button>
+  </div>
+  <style scoped>
+    .after-options {
+      display: flex;
+      flex-direction: column;
+      border-top: var(--boxel-border);
+      background-color: var(--boxel-light);
+      padding: var(--boxel-sp-xs);
+      margin-top: var(--boxel-sp-xxs);
+      gap: var(--boxel-sp-xxs);
+    }
+    .title {
+      font: 600 var(--boxel-font-sm);
+      padding: 0 var(--boxel-sp-xxs);
+    }
+    .action {
+      display: flex;
+      align-items: center;
+      font: 500 var(--boxel-font-sm);
+      border: none;
+      background-color: transparent;
+      gap: var(--boxel-sp-xs);
+      padding: var(--boxel-sp-xs);
+      border-radius: var(--boxel-border-radius);
+    }
+    .action:hover {
+      background-color: var(--boxel-100);
+    }
+  </style>
+</template>;
+
 interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -116,6 +188,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               @renderInPlace={{true}}
               @onChange={{this.onSelect}}
               @placeholder='Please Select'
+              @beforeOptionsComponent={{component BeforeOptions}}
+              @afterOptionsComponent={{component
+                AfterOptions
+                chooseCard=(perform this.chooseCard)
+              }}
               data-test-instance-chooser
               as |card|
             >
@@ -206,12 +283,23 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       :deep(.instances-dropdown-content > .ember-power-select-options) {
         max-height: 20rem;
       }
+      :deep(
+          .boxel-select__dropdown
+            .ember-power-select-option[aria-current='true']
+        ),
+      :deep(.instances-dropdown-content .ember-power-select-option) {
+        background-color: var(--boxel-light);
+      }
+      :deep(.ember-power-select-option:hover .card) {
+        background-color: var(--boxel-100);
+      }
       .card {
         height: 75px;
         width: 375px;
         max-width: 100%;
         container-name: fitted-card;
         container-type: size;
+        background-color: var(--boxel-light);
       }
       .preview-area {
         flex-grow: 1;
@@ -374,6 +462,17 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   private setFormat(format: Format) {
     this.format = format;
   }
+
+  private chooseCard = restartableTask(async () => {
+    let chosenCard: CardDef | undefined = await chooseCard({
+      filter: { type: this.args.codeRef },
+    });
+
+    if (chosenCard) {
+      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
+      this.persistSelections(chosenCard.id);
+    }
+  });
 }
 
 interface Signature {

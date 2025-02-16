@@ -283,7 +283,7 @@ First make sure to generate the host app's `dist/` output in order to support ca
 To run the `packages/realm-server/` workspace tests start:
 
 1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
-2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
+2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests. `TEST_MODULE=realm-endpoints-test.ts pnpm test-module` is an example of how to run a single test module.
 
 ### Boxel UI
 
