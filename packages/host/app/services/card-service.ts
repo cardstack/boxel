@@ -52,11 +52,11 @@ const { environment } = ENV;
 const waiter = buildWaiter('card-service:waiter');
 
 export default class CardService extends Service {
-  @service private declare loaderService: LoaderService;
-  @service private declare messageService: MessageService;
-  @service private declare network: NetworkService;
-  @service private declare realm: Realm;
-  @service private declare reset: ResetService;
+  @service declare private loaderService: LoaderService;
+  @service declare private messageService: MessageService;
+  @service declare private network: NetworkService;
+  @service declare private realm: Realm;
+  @service declare private reset: ResetService;
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
@@ -76,7 +76,7 @@ export default class CardService extends Service {
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
-  private declare loaderToCardAPILoadingCache: WeakMap<
+  declare private loaderToCardAPILoadingCache: WeakMap<
     Loader,
     Promise<typeof CardAPI>
   >;

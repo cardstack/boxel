@@ -11,7 +11,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type CardService from '../services/card-service';
 
 export default class ReloadCardCommand extends HostBaseCommand<typeof CardDef> {
-  @service private declare cardService: CardService;
+  @service declare private cardService: CardService;
 
   async getInputType() {
     let cardApiModule = await this.loaderService.loader.import<

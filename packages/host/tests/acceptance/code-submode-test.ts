@@ -1605,11 +1605,10 @@ module('Acceptance | code submode tests', function (_hooks) {
           );
         },
       });
-      await waitUntil(
-        () =>
-          document
-            .querySelector('[data-test-code-mode-card-preview-body]')
-            ?.textContent?.includes('FadhlanXXX'),
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-code-mode-card-preview-body]')
+          ?.textContent?.includes('FadhlanXXX'),
       );
       assert
         .dom('[data-test-code-mode-card-preview-body]')

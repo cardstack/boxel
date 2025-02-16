@@ -62,7 +62,7 @@ export interface Ready {
 export type FileResource = Loading | ServerError | NotFound | Ready;
 
 class _FileResource extends Resource<Args> {
-  private declare _url: string;
+  declare private _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
@@ -72,12 +72,12 @@ class _FileResource extends Resource<Args> {
     state: 'loading',
   };
 
-  @service private declare loaderService: LoaderService;
-  @service private declare network: NetworkService;
-  @service private declare messageService: MessageService;
-  @service private declare cardService: CardService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
+  @service declare private messageService: MessageService;
+  @service declare private cardService: CardService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner) {
     super(owner);

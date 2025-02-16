@@ -13,9 +13,8 @@ export default class RealmPermissionChecker {
   async for(username: string) {
     let doesMatrixUserProfileExist = false;
     if (this.realmPermissions['users']) {
-      doesMatrixUserProfileExist = !!(await this.matrixClient.getProfile(
-        username,
-      ));
+      doesMatrixUserProfileExist =
+        !!(await this.matrixClient.getProfile(username));
     }
     return Array.from(
       new Set([

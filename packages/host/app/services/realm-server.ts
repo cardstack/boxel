@@ -55,8 +55,8 @@ interface AvailableRealm {
 type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
 export default class RealmServerService extends Service {
-  @service private declare network: NetworkService;
-  @service private declare reset: ResetService;
+  @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([

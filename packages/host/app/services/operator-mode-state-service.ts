@@ -92,16 +92,16 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
-  @service private declare messageService: MessageService;
-  @service private declare realm: Realm;
-  @service private declare recentCardsService: RecentCardsService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare router: RouterService;
-  @service private declare reset: ResetService;
-  @service private declare network: NetworkService;
-  @service private declare matrixService: MatrixService;
+  @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
+  @service declare private messageService: MessageService;
+  @service declare private realm: Realm;
+  @service declare private recentCardsService: RecentCardsService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private router: RouterService;
+  @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
+  @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner) {
     super(owner);

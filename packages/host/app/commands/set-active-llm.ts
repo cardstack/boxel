@@ -10,7 +10,7 @@ export default class SetActiveLLMCommand extends HostBaseCommand<
   typeof BaseCommandModule.SetActiveLLMInput,
   undefined
 > {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

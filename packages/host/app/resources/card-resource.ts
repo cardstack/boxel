@@ -130,15 +130,15 @@ export class CardResource extends Resource<Args> {
   url: string | undefined;
   @tracked loaded: Promise<void> | undefined;
   @tracked cardError: CardError | undefined;
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
   @tracked private _card: CardDef | undefined;
   @tracked private _api: typeof CardAPI | undefined;
   @tracked private staleCard: CardDef | undefined;
   private relativeTo: URL | undefined;
-  private declare cardService: CardService;
-  private declare messageService: MessageService;
-  private declare loaderService: LoaderService;
-  private declare resetLoader: () => void;
+  declare private cardService: CardService;
+  declare private messageService: MessageService;
+  declare private loaderService: LoaderService;
+  declare private resetLoader: () => void;
   private onCardInstanceChange?: (
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
