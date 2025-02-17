@@ -642,10 +642,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
-    throw new Error(
-      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`,
-    );
+  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
+    return undefined;
   }
 
   component(model: Box<BaseDef>): BoxComponent {
@@ -799,10 +797,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return value;
   }
 
-  async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
-    throw new Error(
-      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`,
-    );
+  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
+    return undefined;
   }
 
   component(model: Box<BaseDef>): BoxComponent {
@@ -2888,7 +2884,10 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
     fieldName as string,
   );
-  if (isStaleValue(maybeStale)) {
+  if (
+    field.computeVia &&
+    (isStaleValue(maybeStale) || !deserialized.has(fieldName as string))
+  ) {
     if (!field) {
       throw new Error(
         `the field '${fieldName as string} does not exist in card ${
