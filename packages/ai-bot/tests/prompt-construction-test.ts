@@ -498,7 +498,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    // patch fetch so that when it asks for http://test.com/456 it retuns text content: "this is the contents of the spaghetti-recipe.gts"
+    // monkey patch fetch so that we can fake file downloads in getModifyPrompt
     const originalFetch = (globalThis as any).fetch;
     let fetchCount = 0;
     (globalThis as any).fetch = async (url: string) => {
