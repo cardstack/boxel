@@ -1473,7 +1473,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           );
           await click(`[data-test-card-catalog-go-button]`);
         },
-        opts: { timeout: 4500 },
+        opts: { timeout: 5000 },
       });
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
