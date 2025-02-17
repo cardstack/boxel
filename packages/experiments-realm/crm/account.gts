@@ -45,7 +45,7 @@ const taskSource = {
 class EditTemplate extends Component<typeof Account> {
   <template>
     <div class='account-form'>
-      <FieldContainer @label='Company Name'>
+      <FieldContainer @label='Company'>
         <@fields.company />
       </FieldContainer>
       <FieldContainer @label='Primary Contact'>
@@ -62,6 +62,9 @@ class EditTemplate extends Component<typeof Account> {
       </FieldContainer>
       <FieldContainer @label='Urgency Tag'>
         <@fields.urgencyTag />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
       </FieldContainer>
     </div>
     <style scoped>

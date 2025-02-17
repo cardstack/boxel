@@ -98,6 +98,9 @@ class EditTemplate extends Component<typeof Deal> {
       <FieldContainer @label='Event'>
         <@fields.event />
       </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
     </div>
     <style scoped>
       .deal-form {

@@ -36,6 +36,9 @@ class CompanyEditTemplate extends Component<typeof Company> {
       <FieldContainer @label='Stock Symbol'>
         <@fields.stockSymbol />
       </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
     </div>
     <style scoped>
       .company-form {

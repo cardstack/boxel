@@ -82,6 +82,9 @@ class EditTemplate extends Component<typeof Contact> {
       <FieldContainer @label='Social Links'>
         <@fields.socialLinks />
       </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
       <FieldContainer @label='Status'>
         <@fields.statusTag />
       </FieldContainer>

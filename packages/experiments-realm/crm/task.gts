@@ -50,9 +50,6 @@ class TaskEdit extends Component<typeof CRMTask> {
       <FieldContainer @label='Name'>
         <@fields.name />
       </FieldContainer>
-      <FieldContainer @label='Crm App'>
-        <@fields.crmApp />
-      </FieldContainer>
       <FieldContainer @label='Assignee'>
         <@fields.assignee />
       </FieldContainer>
@@ -82,6 +79,9 @@ class TaskEdit extends Component<typeof CRMTask> {
       </FieldContainer>
       <FieldContainer @label='Tags'>
         <@fields.tags />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
       </FieldContainer>
     </div>
     <style scoped>
