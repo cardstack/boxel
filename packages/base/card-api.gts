@@ -44,6 +44,7 @@ import {
   type CardResourceMeta,
   CodeRef,
   CommandContext,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -1092,7 +1093,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     }
     return class LinksToComponent extends GlimmerComponent<{
       Element: HTMLElement;
-      Args: { Named: { format?: Format; displayContainer?: boolean } };
+      Args: {
+        Named: {
+          format?: Format;
+          displayContainer?: boolean;
+          subclassType?: ResolvedCodeRef;
+        };
+      };
       Blocks: {};
     }> {
       <template>
@@ -1101,6 +1108,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
             <LinksToEditor
               @model={{(getInnerModel)}}
               @field={{linksToField}}
+              @subclassType={{@subclassType}}
               ...attributes
             />
           {{else}}
@@ -1816,6 +1824,7 @@ export type BaseDefComponent = ComponentLike<{
     fieldName: string | undefined;
     context?: CardContext;
     canEdit?: boolean;
+    subclassType?: ResolvedCodeRef;
   };
 }>;
 

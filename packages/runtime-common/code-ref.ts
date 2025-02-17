@@ -227,3 +227,27 @@ export function humanReadable(ref: CodeRef): string {
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
 }
+
+async function isInsideAncestorChainOfCardDef(
+  codeRef: CodeRef,
+  loader: Loader,
+): Promise<boolean | undefined> {
+  let card = await loadCard(codeRef, { loader: loader });
+  if (isCardDef(card)) {
+    return true;
+  }
+  return false;
+}
+
+// utility to return subclassType when it exists and is part of the ancestor chain of type
+export async function getNarrowestType(
+  subclassType: CodeRef,
+  type: CodeRef,
+  loader: Loader,
+) {
+  let narrowTypeExists = false;
+  narrowTypeExists =
+    (await isInsideAncestorChainOfCardDef(subclassType, loader)) ?? false;
+  let narrowestType = narrowTypeExists && subclassType ? subclassType : type;
+  return narrowestType;
+}
