@@ -193,8 +193,6 @@ export default class Room extends Component<Signature> {
       .chat-input-area__bottom-section {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
-        align-items: center;
         padding-right: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xxl);
       }
