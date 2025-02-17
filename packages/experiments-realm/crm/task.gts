@@ -8,23 +8,22 @@ import {
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import {
+  FieldContainer,
   Pill,
   ProgressBar,
   ProgressRadial,
 } from '@cardstack/boxel-ui/components';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
+
+import { CrmApp } from '../crm-app';
 import { Contact } from './contact';
-import { Representative } from './representative';
 import { Account } from './account';
 import { Deal } from './deal';
-import {
-  Task,
-  TaskStatusField,
-  getDueDateStatus,
-  TaskCompletionStatus,
-} from '../task';
-import { CrmApp } from '../crm-app';
+import { Representative } from './representative';
+
+import { Task, getDueDateStatus, TaskCompletionStatus } from '../task';
+import { CRMTaskStatusField } from './shared';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 export class Issues extends CardDef {
@@ -43,6 +42,57 @@ function shortenId(id: string): string {
   const shortUuid = id.slice(0, 8);
   const decimal = parseInt(shortUuid, 16);
   return decimal.toString(36).padStart(6, '0');
+}
+
+class TaskEdit extends Component<typeof CRMTask> {
+  <template>
+    <div class='task-form'>
+      <FieldContainer @label='Name'>
+        <@fields.name />
+      </FieldContainer>
+      <FieldContainer @label='Assignee'>
+        <@fields.assignee />
+      </FieldContainer>
+      <FieldContainer @label='Contact'>
+        <@fields.contact />
+      </FieldContainer>
+      <FieldContainer @label='Account'>
+        <@fields.account />
+      </FieldContainer>
+      <FieldContainer @label='Deal'>
+        <@fields.deal />
+      </FieldContainer>
+      <FieldContainer @label='Status'>
+        <@fields.status />
+      </FieldContainer>
+      <FieldContainer @label='Date Range'>
+        <@fields.dateRange />
+      </FieldContainer>
+      <FieldContainer @label='Details'>
+        <@fields.details />
+      </FieldContainer>
+      <FieldContainer @label='Priority'>
+        <@fields.priority />
+      </FieldContainer>
+      <FieldContainer @label='Subtasks'>
+        <@fields.subtasks />
+      </FieldContainer>
+      <FieldContainer @label='Tags'>
+        <@fields.tags />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .task-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
 }
 
 class TaskIsolated extends Component<typeof CRMTask> {
@@ -513,24 +563,6 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
   </template>
 }
 
-export class CRMTaskStatusField extends TaskStatusField {
-  static values = [
-    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
-    {
-      index: 1,
-      label: 'In Progress',
-      color: '#FFB74D',
-      completed: false,
-    },
-    {
-      index: 2,
-      label: 'Done',
-      color: '#66BB6A',
-      completed: true,
-    },
-  ];
-}
-
 export class CRMTask extends Task {
   static displayName = 'CRM Task';
   static icon = CheckboxIcon;
@@ -545,9 +577,9 @@ export class CRMTask extends Task {
   });
 
   @field assignee = linksTo(() => Representative);
-  @field contact = linksTo(Contact);
-  @field account = linksTo(Account);
-  @field deal = linksTo(Deal);
+  @field contact = linksTo(() => Contact);
+  @field account = linksTo(() => Account);
+  @field deal = linksTo(() => Deal);
 
   @field shortId = contains(StringField, {
     computeVia: function (this: CRMTask) {
@@ -561,6 +593,7 @@ export class CRMTask extends Task {
     },
   });
 
+  static edit = TaskEdit;
   static isolated = TaskIsolated;
   static embedded = TaskEmbedded;
 }

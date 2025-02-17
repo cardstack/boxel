@@ -22,6 +22,13 @@
       "description": "Garden center and nursery wanting to launch seasonal marketing campaigns and e-commerce platform.",
       "thumbnailURL": "https://example.com/green-thumb-logo.png"
     },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../crm/company",
