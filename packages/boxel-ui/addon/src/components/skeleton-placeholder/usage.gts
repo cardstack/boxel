@@ -6,8 +6,8 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-import { cssVar } from '../../helpers/css-var.ts';
 
+import { cssVar } from '../../helpers/css-var.ts';
 import SkeletonPlaceholder from './index.gts';
 
 export default class SkeletonPlaceholderUsage extends Component {
