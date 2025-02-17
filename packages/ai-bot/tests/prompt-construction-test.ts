@@ -389,6 +389,163 @@ module('getModifyPrompt', () => {
     assert.equal(attachedCards.length, 0);
   });
 
+  test('downloads attached files', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey I am attaching a couple of files',
+          formatted_body: 'Hey I am attaching a couple of files',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            attachedFiles: [
+              {
+                sourceUrl:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+                url: 'http://test.com/123',
+                name: 'spaghetti-recipe.gts',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
+                url: 'http://test.com/321',
+                name: 'best-friends.txt',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ai-bot:localhost',
+        content: {
+          body: 'Ok. What do you want me to do with these files?',
+          msgtype: 'm.text',
+          formatted_body: 'Ok. What do you want me to do with these files?',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: 2,
+        unsigned: {
+          age: 17305,
+          transaction_id: 'm1722242836705.8',
+        },
+        event_id: '2',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Nevermind, those files are now outdated, I am attaching new ones',
+          formatted_body:
+            'Nevermind, those files are now outdated, I am attaching new ones',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            attachedFiles: [
+              {
+                sourceUrl:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+                url: 'http://test.com/456',
+                name: 'spaghetti-recipe.gts',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
+                url: 'http://test.com/654',
+                name: 'best-friends.txt',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl:
+                  'http://test.com/my-realm/file-that-does-not-exist.txt',
+                url: 'http://test.com/789',
+                name: 'file-that-does-not-exist.txt',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    // patch fetch so that when it asks for http://test.com/456 it retuns text content: "this is the contents of the spaghetti-recipe.gts"
+    const originalFetch = (globalThis as any).fetch;
+    let fetchCount = 0;
+    (globalThis as any).fetch = async (url: string) => {
+      fetchCount++;
+      if (url === 'http://test.com/456') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            'this is the contents of the spaghetti-recipe.gts file',
+        };
+      } else if (url === 'http://test.com/654') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => 'this is the contents of the best-friends.txt file',
+        };
+      } else if (url === 'http://test.com/789') {
+        return {
+          ok: false,
+          status: 404,
+          text: async () => 'Not found',
+        };
+      }
+      return originalFetch(url);
+    };
+
+    let prompt = await getModifyPrompt(history, '@aibot:localhost');
+
+    assert.equal(
+      fetchCount,
+      3,
+      'downloads only recently attached files, not older ones',
+    );
+    assert.ok(
+      prompt[0].content?.includes(
+        `
+Attached files:
+http://test.com/456: this is the contents of the spaghetti-recipe.gts file
+http://test.com/654: this is the contents of the best-friends.txt file
+http://test.com/789: Error loading attached file: HTTP error! status: 404. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.
+      `.trim(),
+      ),
+    );
+    (globalThis as any).fetch = originalFetch; // restore the original fetch
+  });
+
   test('Gets uploaded cards if no shared context', () => {
     const history: DiscreteMatrixEvent[] = [
       {

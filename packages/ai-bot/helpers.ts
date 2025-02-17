@@ -30,8 +30,6 @@ import {
   APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
-const fetch = (globalThis as any).fetch;
-
 let log = logger('ai-bot');
 
 const MODIFY_SYSTEM_MESSAGE =
@@ -338,25 +336,28 @@ export async function loadCurrentlyAttachedFiles(
     (event) => event.sender !== aiBotUserId,
   );
 
-  let content = lastMessageEventByUser?.content as {
+  let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
     msgtype?: string;
     data?: {
       attachedFiles?: { url: string; name: string; contentType?: string }[];
     };
   };
 
-  if (!content || content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE) {
+  if (
+    !mostRecentUserMessageContent ||
+    mostRecentUserMessageContent.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
     return [];
   }
 
   // We are only interested in downloading the most recently attached files -
   // downloading older ones is not needed since the prompt that is being constructed
   // should operate on fresh data
-  if (!content.data?.attachedFiles?.length) {
+  if (!mostRecentUserMessageContent.data?.attachedFiles?.length) {
     return [];
   }
 
-  let attachedFiles = content.data.attachedFiles;
+  let attachedFiles = mostRecentUserMessageContent.data.attachedFiles;
 
   return Promise.all(
     attachedFiles.map(
@@ -366,7 +367,7 @@ export async function loadCurrentlyAttachedFiles(
         contentType?: string;
       }) => {
         try {
-          let response = await fetch(attachedFile.url);
+          let response = await globalThis.fetch(attachedFile.url);
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
@@ -386,7 +387,10 @@ export async function loadCurrentlyAttachedFiles(
             error: undefined,
           };
         } catch (error) {
-          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          log.error(
+            `Failed to globalThis.fetch file ${attachedFile.url}:`,
+            error,
+          );
           Sentry.captureException(error, {
             extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
           });
@@ -416,11 +420,10 @@ export function attachedFilesToPrompt(
   return attachedFiles
     .map((f) => {
       if (f.error) {
-        return `${f.url}: ${f.error}`;
+        return `${f.url}: ${f.error}. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.`;
       }
-      // When `error` is undefined and `content` is undefined, it means we intentionally skipped loading the file
-      // since it doesn't belong to the most recent message sent by the user (attached files from older messages are not downloaded)
-      return `${f.url}: ${f.content || 'Content loading skipped'}`;
+
+      return `${f.url}: ${f.content}`;
     })
     .join('\n');
 }
@@ -608,12 +611,14 @@ export async function getModifyPrompt(
 
   let attachedFiles = await loadCurrentlyAttachedFiles(history, aiBotUserId);
 
-  let systemMessage = [
-    MODIFY_SYSTEM_MESSAGE,
-    'The user currently has given you the following data to work with:',
-    'Cards: ' + attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards),
-    'Attached files: ' + attachedFilesToPrompt(attachedFiles),
-  ].join('\n');
+  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
+The user currently has given you the following data to work with:
+
+Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
+
+Attached files:
+${attachedFilesToPrompt(attachedFiles)}
+`;
 
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
