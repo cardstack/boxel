@@ -425,4 +425,112 @@ module('Responding', (hooks) => {
       'The replacement event with the tool call event should replace the original message',
     );
   });
+
+  test.only('Handles multiple tool calls', async () => {
+    const weatherCheck1Args = {
+      description: 'Check the weather in NYC',
+      attributes: {
+        zipCode: '10011',
+      },
+    };
+    const weatherCheck2Args = {
+      description: 'Check the weather in Beverly Hills',
+      attributes: {
+        zipCode: '90210',
+      },
+    };
+    await responder.initialize();
+
+    await responder.onChunk({} as any, snapshotWithContent('some content'));
+
+    let snapshot = {
+      choices: [
+        {
+          message: {
+            tool_calls: [
+              {
+                id: 'tool-call-1-id',
+                type: 'function' as 'function',
+                function: {
+                  name: 'checkWeather',
+                  arguments: JSON.stringify(weatherCheck1Args),
+                },
+              },
+              {
+                id: 'tool-call-2-id',
+                type: 'function' as 'function',
+                function: {
+                  name: 'checkWeather',
+                  arguments: JSON.stringify(weatherCheck2Args),
+                },
+              },
+            ],
+          },
+          finish_reason: null,
+          logprobs: null,
+          index: 0,
+        },
+      ],
+      id: '',
+      created: 0,
+      model: 'llm',
+    };
+    await responder.onChunk({} as any, snapshot);
+
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(
+      sentEvents.length,
+      3,
+      'Thinking message, and event with content, and event with two tool calls should be sent',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      thinkingMessage,
+      'Thinking message should be sent first',
+    );
+    assert.deepEqual(
+      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      [
+        {
+          id: 'tool-call-1-id',
+          name: 'checkWeather',
+          arguments: {
+            description: 'Check the weather in NYC',
+            attributes: {
+              zipCode: '10011',
+            },
+          },
+        },
+        {
+          id: 'tool-call-2-id',
+          name: 'checkWeather',
+          arguments: {
+            description: 'Check the weather in Beverly Hills',
+            attributes: {
+              zipCode: '90210',
+            },
+          },
+        },
+      ],
+      'Command requests should be sent with correct content',
+    );
+    assert.deepEqual(
+      sentEvents[1].content['m.relates_to'],
+      {
+        rel_type: 'm.replace',
+        event_id: '0',
+      },
+      'The replacement event with content should replace the original message',
+    );
+    assert.deepEqual(
+      sentEvents[2].content['m.relates_to'],
+      {
+        rel_type: 'm.replace',
+        event_id: '0',
+      },
+      'The replacement event with the tool calls should replace the original message',
+    );
+  });
 });
