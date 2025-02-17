@@ -411,6 +411,8 @@ export async function loadCurrentlyAttachedFiles(
 export function attachedFilesToPrompt(
   attachedFiles: {
     url: string;
+    name: string;
+    contentType?: string;
     content: string | undefined;
     error: string | undefined;
   }[],
@@ -421,10 +423,10 @@ export function attachedFilesToPrompt(
   return attachedFiles
     .map((f) => {
       if (f.error) {
-        return `${f.url}: ${f.error}. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.`;
+        return `${f.name}: ${f.error}. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.`;
       }
 
-      return `${f.url}: ${f.content}`;
+      return `${f.name}: ${f.content}`;
     })
     .join('\n');
 }

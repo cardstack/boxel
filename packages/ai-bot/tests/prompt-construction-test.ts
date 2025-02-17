@@ -409,13 +409,13 @@ module('getModifyPrompt', () => {
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/123',
+                url: 'http://test.com/spaghetti-recipe.gts',
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/321',
+                url: 'http://test.com/best-friends.txt',
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
@@ -468,20 +468,20 @@ module('getModifyPrompt', () => {
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/456',
+                url: 'http://test.com/spaghetti-recipe.gts',
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/654',
+                url: 'http://test.com/best-friends.txt',
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl:
                   'http://test.com/my-realm/file-that-does-not-exist.txt',
-                url: 'http://test.com/789',
+                url: 'http://test.com/file-that-does-not-exist.txt',
                 name: 'file-that-does-not-exist.txt',
                 contentType: 'text/plain',
               },
@@ -503,20 +503,20 @@ module('getModifyPrompt', () => {
     let fetchCount = 0;
     (globalThis as any).fetch = async (url: string) => {
       fetchCount++;
-      if (url === 'http://test.com/456') {
+      if (url === 'http://test.com/spaghetti-recipe.gts') {
         return {
           ok: true,
           status: 200,
           text: async () =>
             'this is the contents of the spaghetti-recipe.gts file',
         };
-      } else if (url === 'http://test.com/654') {
+      } else if (url === 'http://test.com/best-friends.txt') {
         return {
           ok: true,
           status: 200,
           text: async () => 'this is the contents of the best-friends.txt file',
         };
-      } else if (url === 'http://test.com/789') {
+      } else if (url === 'http://test.com/file-that-does-not-exist.txt') {
         return {
           ok: false,
           status: 404,
@@ -537,9 +537,9 @@ module('getModifyPrompt', () => {
       prompt[0].content?.includes(
         `
 Attached files:
-http://test.com/456: this is the contents of the spaghetti-recipe.gts file
-http://test.com/654: this is the contents of the best-friends.txt file
-http://test.com/789: Error loading attached file: HTTP error! status: 404. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.
+spaghetti-recipe.gts: this is the contents of the spaghetti-recipe.gts file
+best-friends.txt: this is the contents of the best-friends.txt file
+file-that-does-not-exist.txt: Error loading attached file: HTTP error! status: 404. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.
       `.trim(),
       ),
     );
