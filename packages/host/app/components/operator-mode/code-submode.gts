@@ -19,6 +19,8 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
@@ -129,6 +131,8 @@ const defaultPanelHeights: PanelHeights = {
   recentPanel: ApproximateRecentPanelDefaultPercentage,
 };
 
+const CodeModePanelSelections = 'code-mode-panel-selections';
+
 const waiter = buildWaiter('code-submode:waiter');
 
 function urlToFilename(url: URL) {
@@ -157,6 +161,7 @@ export default class CodeSubmode extends Component<Signature> {
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
   private updateCursorByName: ((name: string) => void) | undefined;
+  private panelSelections: Record<string, SelectedAccordionItem>;
   #currentCard: CardDef | undefined;
 
   private createFileModal: CreateFileModal | undefined;
@@ -186,6 +191,11 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
+
+    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -753,16 +763,23 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @tracked private selectedAccordionItem: SelectedAccordionItem =
-    'schema-editor';
+  private get selectedAccordionItem(): SelectedAccordionItem {
+    let selection = this.panelSelections[this.readyFile.url];
+    if (selection === null) {
+      return null;
+    }
+    return selection ?? 'schema-editor';
+  }
 
   @action private selectAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      this.selectedAccordionItem = null;
-      return;
-    }
+    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
+    this.panelSelections[this.readyFile.url] = selection;
 
-    this.selectedAccordionItem = item;
+    // persist in local storage
+    window.localStorage.setItem(
+      CodeModePanelSelections,
+      JSON.stringify(this.panelSelections),
+    );
   }
 
   get isReadOnly() {
