@@ -130,7 +130,9 @@ export class Spec extends CardDef {
             <BookOpenText width='20' height='20' role='presentation' />
             <h2 id='readme'>Read Me</h2>
           </header>
-          <@fields.readMe />
+          <div data-test-readme>
+            <@fields.readMe />
+          </div>
         </section>
         <section class='examples section'>
           <header class='row-header' aria-labelledby='examples'>
