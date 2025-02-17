@@ -64,7 +64,11 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import { htmlComponent } from '../../lib/html-component';
-import { CodeModePanelWidths } from '../../utils/local-storage-keys';
+import {
+  CodeModePanelWidths,
+  CodeModePanelHeights,
+  CodeModePanelSelections,
+} from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
 import AttachFileModal from './attach-file-modal';
@@ -123,15 +127,12 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: 100 - defaultLeftPanelWidth,
 };
 
-const CodeModePanelHeights = 'code-mode-panel-heights';
 const ApproximateRecentPanelDefaultPercentage =
   ((43 + 40 * 3.5) / (document.documentElement.clientHeight - 140)) * 100; // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
   filePanel: 100 - ApproximateRecentPanelDefaultPercentage,
   recentPanel: ApproximateRecentPanelDefaultPercentage,
 };
-
-const CodeModePanelSelections = 'code-mode-panel-selections';
 
 const waiter = buildWaiter('code-submode:waiter');
 
