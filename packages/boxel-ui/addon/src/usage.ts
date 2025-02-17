@@ -34,6 +34,7 @@ import RadioInputUsage from './components/radio-input/usage.gts';
 import RealmIconUsage from './components/realm-icon/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
+import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
@@ -75,6 +76,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['RealmIcon', RealmIconUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
