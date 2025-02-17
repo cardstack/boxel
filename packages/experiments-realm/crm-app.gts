@@ -5,6 +5,8 @@ import {
   SortMenu,
   type SortOption,
   sortByCardTitleAsc,
+  sortByDueDateDesc,
+  sortByPriorityDesc,
 } from './components/sort';
 import { SearchInput } from './components/search-input';
 import { action } from '@ember/object';
@@ -133,6 +135,18 @@ const TASK_FILTERS: LayoutFilter[] = [
     icon: ListDetails,
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
+    sortOptions: [
+      {
+        id: 'dueDateDesc',
+        displayName: 'Due Date',
+        sort: sortByDueDateDesc,
+      },
+      {
+        id: 'priorityDesc',
+        displayName: 'Priority',
+        sort: sortByPriorityDesc,
+      },
+    ],
   },
   ...taskStatusValues.map((status) => ({
     displayName: status.label,
@@ -523,24 +537,26 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @setSearchKey={{this.setSearchKey}}
           />
         </div>
-        {{#if (not (eq this.activeTabId 'Task'))}}
-          <ViewSelector
-            class='view-menu content-header-row-2'
-            @selectedId={{this.selectedView}}
-            @onChange={{this.onChangeView}}
-            @items={{this.tabViews}}
-          />
-        {{/if}}
-        {{#if this.activeFilter.sortOptions.length}}
-          {{#if this.selectedSort}}
-            <SortMenu
-              class='content-header-row-2'
-              @options={{this.activeFilter.sortOptions}}
-              @selected={{this.selectedSort}}
-              @onSort={{this.onSort}}
+        <div class='list-controls'>
+          {{#if (not (eq this.activeTabId 'Task'))}}
+            <ViewSelector
+              class='view-menu content-header-row-2'
+              @selectedId={{this.selectedView}}
+              @onChange={{this.onChangeView}}
+              @items={{this.tabViews}}
             />
           {{/if}}
-        {{/if}}
+          {{#if this.activeFilter.sortOptions.length}}
+            {{#if this.selectedSort}}
+              <SortMenu
+                class='content-header-row-2'
+                @options={{this.activeFilter.sortOptions}}
+                @selected={{this.selectedSort}}
+                @onSort={{this.onSort}}
+              />
+            {{/if}}
+          {{/if}}
+        </div>
       </:contentHeader>
       <:grid>
         {{#if (eq this.activeTabId 'Task')}}
@@ -655,7 +671,10 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
         flex-grow: 1;
         max-width: var(--search-bar-max-width);
       }
-      .view-menu {
+      .list-controls {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp);
         margin-left: auto;
       }
       /* Cards List & Grid Customization */
