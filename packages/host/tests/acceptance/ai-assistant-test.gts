@@ -49,10 +49,11 @@ async function assertMessages(
     from: string;
     message?: string;
     cards?: { id: string; title?: string; realmIconUrl?: string }[];
+    files?: { name: string; sourceUrl: string }[];
   }[],
 ) {
   assert.dom('[data-test-message-idx]').exists({ count: messages.length });
-  for (let [index, { from, message, cards }] of messages.entries()) {
+  for (let [index, { from, message, cards, files }] of messages.entries()) {
     assert
       .dom(
         `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
@@ -96,6 +97,25 @@ async function assertMessages(
     } else {
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
+        .doesNotExist();
+    }
+    if (files?.length) {
+      assert
+        .dom(`[data-test-message-idx="${index}"] [data-test-message-files]`)
+        .exists({ count: 1 });
+      assert
+        .dom(`[data-test-message-idx="${index}"] [data-test-attached-file]`)
+        .exists({ count: files.length });
+      files.map(async (file) => {
+        assert
+          .dom(
+            `[data-test-message-idx="${index}"] [data-test-attached-file="${file.sourceUrl}"]`,
+          )
+          .containsText(file.name);
+      });
+    } else {
+      assert
+        .dom(`[data-test-message-idx="${index}"] [data-test-message-files]`)
         .doesNotExist();
     }
   }
@@ -406,9 +426,20 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
     );
     assert.dom('[data-test-attached-file]').hasText('pet.gts');
+
+    await fillIn('[data-test-message-field]', `Message With File`);
+    await click('[data-test-send-message-btn]');
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message With File',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
   });
 
-  test('can display and remove auto attached card', async function (assert) {
+  test('can display and remove auto attached file', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       stacks: [

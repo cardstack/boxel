@@ -15,10 +15,12 @@ import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import CardPill from '@cardstack/host/components/card-pill';
+import FilePill from '@cardstack/host/components/file-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -59,6 +61,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     resources?: {
       cards: CardDef[] | undefined;
+      files: FileDef[] | undefined;
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
@@ -211,6 +214,14 @@ export default class AiAssistantMessage extends Component<Signature> {
             <div class='cards' data-test-message-cards>
               {{#each @resources.cards as |card|}}
                 <CardPill @card={{card}} />
+              {{/each}}
+            </div>
+          {{/if}}
+
+          {{#if @resources.files.length}}
+            <div class='cards' data-test-message-files>
+              {{#each @resources.files as |file|}}
+                <FilePill @file={{file}} />
               {{/each}}
             </div>
           {{/if}}
