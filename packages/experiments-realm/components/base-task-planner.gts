@@ -110,6 +110,7 @@ export interface CardOperations {
     targetColumn: DndColumn;
   }) => Promise<void>;
   hasColumnKey: (card: TaskCard, key: string) => boolean;
+  orderBy?: <T extends CardDef>(a: T, b: T) => number;
 }
 
 // Configuration for the task source
@@ -387,6 +388,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
     () => this.cardInstances,
     () => this.args.config.status.values.map((status) => status.label) ?? [],
     () => this.args.config.cardOperations.hasColumnKey,
+    () => this.args.config.cardOperations.orderBy,
   );
 
   @action async createNewTask(statusLabel: string) {
