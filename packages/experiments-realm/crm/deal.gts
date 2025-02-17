@@ -47,6 +47,7 @@ import { on } from '@ember/modifier';
 import { DealEvent } from './deal-event';
 import { DealStatus } from './deal-status';
 import { DealPriority } from './deal-priority';
+import { CrmApp } from '../crm-app';
 
 interface DealSizeSummary {
   summary: string;
@@ -97,6 +98,9 @@ class EditTemplate extends Component<typeof Deal> {
       </FieldContainer>
       <FieldContainer @label='Event'>
         <@fields.event />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
       </FieldContainer>
     </div>
     <style scoped>
@@ -1151,6 +1155,7 @@ export class ValueLineItem extends FieldDef {
 export class Deal extends CardDef {
   static displayName = 'CRM Deal';
   static headerColor = '#f8f7fa';
+  @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field account = linksTo(() => Account);
   @field status = contains(DealStatus);
@@ -1207,13 +1212,13 @@ export class Deal extends CardDef {
     },
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
-  @field primaryContact = linksTo(Contact, {
+  @field primaryContact = linksTo(() => Contact, {
     computeVia: function (this: Deal) {
       return this.account?.primaryContact;
     },
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
-  @field company = linksTo(Company, {
+  @field company = linksTo(() => Company, {
     computeVia: function (this: Deal) {
       return this.account?.company;
     },
