@@ -246,7 +246,7 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
-  get activeLLM() {
+  get activeLLM(): string {
     return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
 

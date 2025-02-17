@@ -147,12 +147,15 @@ export default class Room extends Component<Signature> {
                 @autoAttachedFile={{this.autoAttachedFile}}
                 @filesToAttach={{this.filesToAttach}}
               />
-              <LLMSelect
-                @selected={{this.roomResource.activeLLM}}
-                @onChange={{this.roomResource.activateLLM}}
-                @options={{this.supportedLLMs}}
-                @disabled={{this.roomResource.isActivatingLLM}}
-              />
+
+              {{#if this.roomResource}}
+                <LLMSelect
+                  @selected={{this.roomResource.activeLLM}}
+                  @onChange={{this.roomResource.activateLLM}}
+                  @options={{this.supportedLLMs}}
+                  @disabled={{this.roomResource.isActivatingLLM}}
+                />
+              {{/if}}
             </div>
           </div>
         </footer>
@@ -465,7 +468,10 @@ export default class Room extends Component<Signature> {
     )}`;
   }
 
-  private sendReadReceipt(message: Message) {
+  private sendReadReceipt(message?: Message) {
+    if (!message) {
+      return;
+    }
     if (this.matrixService.profile.userId === message.author.userId) {
       return;
     }
@@ -510,25 +516,25 @@ export default class Room extends Component<Signature> {
   };
 
   private isDisplayingCode = (message: Message) => {
-    return this.roomResource?.isDisplayingCode(message);
+    return !!this.roomResource?.isDisplayingCode(message);
   };
 
   private toggleViewCode = (message: Message) => {
-    this.roomResource.toggleViewCode(message);
+    this.roomResource?.toggleViewCode(message);
   };
 
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await this.roomResource.loading;
+    await this.roomResource?.loading;
   });
 
   private get messages() {
-    return this.roomResource.messages;
+    return this.roomResource?.messages ?? [];
   }
 
-  private get skills(): Skill[] {
-    return this.roomResource.skills;
+  private get skills() {
+    return this.roomResource?.skills ?? [];
   }
 
   private get supportedLLMs(): string[] {
@@ -546,7 +552,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.roomResource.matrixRoom;
+    let room = this.roomResource?.matrixRoom;
     return room;
   }
 

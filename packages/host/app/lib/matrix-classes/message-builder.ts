@@ -17,6 +17,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { Skill } from '@cardstack/host/components/ai-assistant/skill-menu';
 import type CommandService from '@cardstack/host/services/command-service';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -31,7 +32,6 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { RoomMember } from './member';
 import { Message } from './message';
