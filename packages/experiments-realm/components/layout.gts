@@ -50,7 +50,7 @@ interface TitleGroupSignature {
     title?: string;
     tagline?: string;
     thumbnailURL?: string;
-    icon?: CardorFieldTypeIcon;
+    icon?: CardOrFieldTypeIcon;
     element?: keyof HTMLElementTagNameMap;
   };
   Element: HTMLElement;
