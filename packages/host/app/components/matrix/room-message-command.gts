@@ -5,9 +5,8 @@ import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 
-import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
 import { resource, use } from 'ember-resources';
@@ -78,8 +77,19 @@ export default class RoomMessageCommand extends Component<Signature> {
     return JSON.stringify({ name, payload }, null, 2);
   }
 
-  private copyToClipboard = task(async () => {
+  private copyToClipboard = (event: MouseEvent) => {
+    this.copyClipboardTask.perform(event.currentTarget as HTMLElement);
+  };
+
+  private copyClipboardTask = task(async (buttonElement: HTMLElement) => {
     await navigator.clipboard.writeText(this.previewCommandCode);
+    let svg = buttonElement.children[0];
+    buttonElement.replaceChildren(svg, document.createTextNode('Copied'));
+    await timeout(2000);
+    buttonElement.replaceChildren(
+      svg,
+      document.createTextNode('Copy to clipboard'),
+    );
   });
 
   @cached
@@ -191,7 +201,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             class='copy-to-clipboard-button'
             @kind='text-only'
             @size='extra-small'
-            {{on 'click' (perform this.copyToClipboard)}}
+            {{on 'click' this.copyToClipboard}}
             data-test-copy-code
           >
             <CopyIcon

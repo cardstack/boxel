@@ -1,5 +1,5 @@
 import { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
-import { CRMTaskStatusField } from './task';
+import { CRMTaskStatusField } from './shared';
 import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from '../components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
