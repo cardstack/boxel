@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import format from 'date-fns/format';
 
-import { aiBotUsername } from '@cardstack/runtime-common';
-
 import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,

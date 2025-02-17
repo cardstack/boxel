@@ -7,10 +7,7 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import {
-  aiBotUsername,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
