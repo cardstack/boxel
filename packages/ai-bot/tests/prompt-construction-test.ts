@@ -1143,7 +1143,6 @@ test('Has the skill card specified by the last state update, even if there are o
   const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   assert.true(messages.length > 0);
   assert.equal(messages[0].role, 'system');
-  console.log(messages[0].content);
   assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
   assert.false(messages[0].content?.includes('SKILL_INSTRUCTIONS_V1'));
   assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));

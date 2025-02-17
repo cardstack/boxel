@@ -30,6 +30,8 @@ import {
   APP_BOXEL_ACTIVE_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
+const fetch = (globalThis as any).fetch;
+
 let log = logger('ai-bot');
 
 const MODIFY_SYSTEM_MESSAGE =
@@ -348,7 +350,8 @@ export async function loadCurrentlyAttachedFiles(
   }
 
   // We are only interested in downloading the most recently attached files -
-  // downloading older ones is not needed since the new prompt should operate on fresh data
+  // downloading older ones is not needed since the prompt that is being constructed
+  // should operate on fresh data
   if (!content.data?.attachedFiles?.length) {
     return [];
   }
@@ -415,8 +418,8 @@ export function attachedFilesToPrompt(
       if (f.error) {
         return `${f.url}: ${f.error}`;
       }
-      // When no error and no content is available, it means we didn't download the file
-      // since it doesn't belong to the most recent message sent by the user
+      // When `error` is undefined and `content` is undefined, it means we intentionally skipped loading the file
+      // since it doesn't belong to the most recent message sent by the user (attached files from older messages are not downloaded)
       return `${f.url}: ${f.content || 'Content loading skipped'}`;
     })
     .join('\n');
@@ -605,17 +608,13 @@ export async function getModifyPrompt(
 
   let attachedFiles = await loadCurrentlyAttachedFiles(history, aiBotUserId);
 
-  let systemMessage =
-    MODIFY_SYSTEM_MESSAGE +
-    `
-  The user currently has given you the following data to work with: \n
-  Attached code files:
-  ${attachedFilesToPrompt(attachedFiles)}
-  \n Cards:`;
-  systemMessage += attachedCardsToMessage(
-    mostRecentlyAttachedCard,
-    attachedCards,
-  );
+  let systemMessage = [
+    MODIFY_SYSTEM_MESSAGE,
+    'The user currently has given you the following data to work with:',
+    'Cards: ' + attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards),
+    'Attached files: ' + attachedFilesToPrompt(attachedFiles),
+  ].join('\n');
+
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
