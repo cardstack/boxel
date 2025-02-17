@@ -10,7 +10,41 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import BuildingIcon from '@cardstack/boxel-icons/building';
+
+class CompanyEditTemplate extends Component<typeof Company> {
+  <template>
+    <div class='company-form'>
+      <FieldContainer @label='Name'>
+        <@fields.name />
+      </FieldContainer>
+      <FieldContainer @label='Industry'>
+        <@fields.industry />
+      </FieldContainer>
+      <FieldContainer @label='Headquarters Address'>
+        <@fields.headquartersAddress />
+      </FieldContainer>
+      <FieldContainer @label='Phone Number'>
+        <@fields.phone />
+      </FieldContainer>
+      <FieldContainer @label='Website'>
+        <@fields.website />
+      </FieldContainer>
+      <FieldContainer @label='Stock Symbol'>
+        <@fields.stockSymbol />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .company-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
 
 class ViewCompanyTemplate extends Component<typeof Company> {
   <template>
@@ -39,6 +73,7 @@ export class Company extends CardDef {
     },
   });
 
+  static edit = CompanyEditTemplate;
   static embedded = ViewCompanyTemplate;
   static atom = ViewCompanyTemplate;
 }

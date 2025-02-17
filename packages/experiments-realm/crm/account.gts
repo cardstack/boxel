@@ -11,6 +11,7 @@ import {
   linksToMany,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
 import { Contact } from './contact';
@@ -42,6 +43,39 @@ const taskSource = {
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
+
+class EditTemplate extends Component<typeof Account> {
+  <template>
+    <div class='account-form'>
+      <FieldContainer @label='Company Name'>
+        <@fields.company />
+      </FieldContainer>
+      <FieldContainer @label='Primary Contact'>
+        <@fields.primaryContact />
+      </FieldContainer>
+      <FieldContainer @label='Contacts'>
+        <@fields.contacts />
+      </FieldContainer>
+      <FieldContainer @label='Shipping Address'>
+        <@fields.shippingAddress />
+      </FieldContainer>
+      <FieldContainer @label='Billing Address'>
+        <@fields.billingAddress />
+      </FieldContainer>
+      <FieldContainer @label='Urgency Tag'>
+        <@fields.urgencyTag />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .account-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
 
 class IsolatedTemplate extends Component<typeof Account> {
   get hasCompanyInfo() {
@@ -1270,6 +1304,7 @@ export class Account extends CardDef {
     },
   });
 
+  static edit = EditTemplate;
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;

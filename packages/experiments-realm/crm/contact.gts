@@ -8,7 +8,7 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 
-import { Avatar } from '@cardstack/boxel-ui/components';
+import { Avatar, FieldContainer } from '@cardstack/boxel-ui/components';
 import AvatarGroup from '../components/avatar-group';
 
 import ContactIcon from '@cardstack/boxel-icons/contact';
@@ -46,6 +46,54 @@ export class SocialLinkField extends ContactLinkField {
       cta: 'Contact',
     },
   ];
+}
+
+class EditTemplate extends Component<typeof Contact> {
+  <template>
+    <div class='contact-form'>
+      <FieldContainer @label='First Name'>
+        <@fields.firstName />
+      </FieldContainer>
+      <FieldContainer @label='Last Name'>
+        <@fields.lastName />
+      </FieldContainer>
+      <FieldContainer @label='Position'>
+        <@fields.position />
+      </FieldContainer>
+      <FieldContainer @label='Company'>
+        <@fields.company />
+      </FieldContainer>
+      <FieldContainer @label='Department'>
+        <@fields.department />
+      </FieldContainer>
+      <FieldContainer @label='Primary Email'>
+        <@fields.primaryEmail />
+      </FieldContainer>
+      <FieldContainer @label='Secondary Email'>
+        <@fields.secondaryEmail />
+      </FieldContainer>
+      <FieldContainer @label='Phone Number'>
+        <@fields.phoneMobile />
+      </FieldContainer>
+      <FieldContainer @label='Office Phone Number'>
+        <@fields.phoneOffice />
+      </FieldContainer>
+      <FieldContainer @label='Social Links'>
+        <@fields.socialLinks />
+      </FieldContainer>
+      <FieldContainer @label='Status'>
+        <@fields.statusTag />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .contact-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
 }
 
 class EmbeddedTemplate extends Component<typeof Contact> {
@@ -710,6 +758,7 @@ export class Contact extends CardDef {
     },
   });
 
+  static edit = EditTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
   static atom = AtomTemplate;
