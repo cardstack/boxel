@@ -980,7 +980,11 @@ export default class CodeSubmode extends Component<Signature> {
                       {{this.fileIncompatibilityMessage}}
                     </div>
                   {{else if this.selectedCardOrField.cardOrField}}
-                    <Accordion as |A|>
+                    <Accordion
+                      data-test-rhs-panel='card-or-field'
+                      data-test-selected-accordion-item={{this.selectedAccordionItem}}
+                      as |A|
+                    >
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
