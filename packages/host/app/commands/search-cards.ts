@@ -53,8 +53,8 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchCardsByQueryInput,
   typeof BaseCommandModule.SearchCardsResult
 > {
-  @service private declare cardService: CardService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private cardService: CardService;
+  @service declare private realmServer: RealmServerService;
 
   description =
     'Propose a query to search for a card instance filtered by type. \

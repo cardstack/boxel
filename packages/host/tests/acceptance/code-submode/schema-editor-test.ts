@@ -589,11 +589,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
     // card to load in the card resource, but I'm not too sure so using waitUntil instead
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-selected-type-display-name]')
-          ?.textContent?.includes('BigInteger'),
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-selected-type-display-name]')
+        ?.textContent?.includes('BigInteger'),
     );
 
     await assert
@@ -615,11 +614,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
     // card to load in the card resource, but I'm not too sure so using waitUntil instead
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-selected-type-display-name]')
-          ?.textContent?.includes('Date'),
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-selected-type-display-name]')
+        ?.textContent?.includes('Date'),
     );
 
     await assert.dom('[data-test-selected-type-display-name]').hasText('Date');

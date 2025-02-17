@@ -10,8 +10,8 @@ import OperatorModeStateService from '../services/operator-mode-state-service';
 export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.OpenAiAssistantRoomInput
 > {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

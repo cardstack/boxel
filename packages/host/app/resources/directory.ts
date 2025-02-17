@@ -36,9 +36,9 @@ export class DirectoryResource extends Resource<Args> {
   private directoryURL: URL | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
-  @service private declare loaderService: LoaderService;
-  @service private declare messageService: MessageService;
-  @service private declare network: NetworkService;
+  @service declare private loaderService: LoaderService;
+  @service declare private messageService: MessageService;
+  @service declare private network: NetworkService;
 
   constructor(owner: Owner) {
     super(owner);

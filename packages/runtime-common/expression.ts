@@ -280,7 +280,9 @@ export function asExpressions(
     Object.entries(values).map(([col, val]) => [
       col,
       param(
-        opts?.jsonFields?.includes(col) ? stringify(val ?? null) : val ?? null,
+        opts?.jsonFields?.includes(col)
+          ? stringify(val ?? null)
+          : (val ?? null),
       ),
     ]),
   );

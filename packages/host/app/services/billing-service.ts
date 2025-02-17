@@ -39,9 +39,9 @@ export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
   @tracked private _fetchingSubscriptionData = false;
 
-  @service private declare realmServer: RealmServerService;
-  @service private declare network: NetworkService;
-  @service private declare reset: ResetService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
 
   constructor(owner: Owner) {
     super(owner);

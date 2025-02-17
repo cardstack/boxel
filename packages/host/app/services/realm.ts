@@ -54,9 +54,9 @@ type AuthStatus =
   | { type: 'anonymous' };
 
 class RealmResource {
-  @service private declare matrixService: MatrixService;
-  @service private declare network: NetworkService;
-  @service private declare messageService: MessageService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private messageService: MessageService;
 
   @tracked info: EnhancedRealmInfo | undefined;
   @tracked private realmPermissions: RealmPermissions | null | undefined;
@@ -358,10 +358,10 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
-  @service private declare realmServer: RealmServerService;
-  @service private declare matrixService: MatrixService;
-  @service private declare network: NetworkService;
-  @service private declare reset: ResetService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking

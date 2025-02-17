@@ -39,7 +39,7 @@ export default class Monaco extends Modifier<Signature> {
   private lastContent: string | undefined;
   private lastModified = Date.now();
   private lastCursorPosition: MonacoSDK.Position | undefined;
-  @service private declare monacoService: MonacoService;
+  @service declare private monacoService: MonacoService;
 
   modify(
     element: HTMLElement,

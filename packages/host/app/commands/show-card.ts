@@ -9,7 +9,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 export default class ShowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.ShowCardInput
 > {
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   description = 'Show a card in the UI';
 

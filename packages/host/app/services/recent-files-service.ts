@@ -23,8 +23,8 @@ export interface RecentFile {
 export default class RecentFilesService extends Service {
   // we shouldn't be making assumptions about what realm the files are coming
   // from, the caller should just tell us
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare reset: ResetService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private reset: ResetService;
 
   @tracked declare recentFiles: TrackedArray<RecentFile>;
 

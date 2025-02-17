@@ -9,7 +9,7 @@ import type CardService from '../services/card-service';
 export default class SaveCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.SaveCardInput
 > {
-  @service private declare cardService: CardService;
+  @service declare private cardService: CardService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

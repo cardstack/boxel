@@ -14,7 +14,7 @@ import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
-  @service private declare network: NetworkService;
+  @service declare private network: NetworkService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;

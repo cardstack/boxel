@@ -20,7 +20,7 @@ export class MatrixProfileResource extends Resource<Args> {
   @tracked avatarUrl: string | undefined;
   @tracked displayName: string | undefined;
 
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
     let { userId } = named;

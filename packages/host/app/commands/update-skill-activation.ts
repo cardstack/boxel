@@ -11,7 +11,7 @@ import type MatrixService from '../services/matrix-service';
 export default class UpdateSkillActivationCommand extends HostBaseCommand<
   typeof BaseCommandModule.UpdateSkillActivationInput
 > {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

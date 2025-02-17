@@ -77,8 +77,8 @@ const LLMSelect: TemplateOnlyComponent<Signature> = <template>
     }
 
     :global(
-        .llm-select__dropdown .ember-power-select-option[aria-current='true']
-      ) {
+      .llm-select__dropdown .ember-power-select-option[aria-current='true']
+    ) {
       background-color: var(--boxel-teal) !important;
     }
   </style>

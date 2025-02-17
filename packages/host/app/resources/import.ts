@@ -19,7 +19,7 @@ interface Args {
 const log = logger('resource:import');
 
 export class ImportResource extends Resource<Args> {
-  @service private declare network: NetworkService;
+  @service declare private network: NetworkService;
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
   #loaded!: Promise<void>; // modifier runs at init so we will always have a value

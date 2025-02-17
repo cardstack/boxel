@@ -9,8 +9,8 @@ import { TrackedMap } from 'tracked-built-ins';
 import type ResetService from './reset';
 
 export default class ScrollPositionService extends Service {
-  @service private declare reset: ResetService;
-  @tracked private declare keyToScrollPosition: TrackedMap<
+  @service declare private reset: ResetService;
+  @tracked declare private keyToScrollPosition: TrackedMap<
     string,
     [string, number]
   >;

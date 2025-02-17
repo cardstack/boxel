@@ -19,7 +19,7 @@ export default class CreateAIAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,
   typeof BaseCommandModule.CreateAIAssistantRoomResult
 > {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

@@ -56,7 +56,7 @@ export { isInternalReference };
 export class ModuleSyntax {
   declare possibleCardsOrFields: PossibleCardOrFieldDeclaration[];
   declare declarations: Declaration[];
-  private declare ast: t.File;
+  declare private ast: t.File;
   private url: URL;
 
   constructor(src: string, url: URL) {

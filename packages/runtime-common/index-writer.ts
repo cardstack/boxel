@@ -102,7 +102,7 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   #log = logger('index-writer');
-  private declare realmVersion: number;
+  declare private realmVersion: number;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -274,26 +274,26 @@ export class Batch {
             error_doc: null,
           }
         : entry.type === 'module'
-        ? {
-            type: 'module',
-            deps: [...entry.deps],
-            source: entry.source,
-            last_modified: entry.lastModified,
-            resource_created_at: entry.resourceCreatedAt,
-            transpiled_code: transpileJS(
-              entry.source,
-              new RealmPaths(this.realmURL).local(url),
-            ),
-            error_doc: null,
-          }
-        : {
-            types: entry.types,
-            search_doc: entry.searchData,
-            // favor the last known good types over the types derived from the error state
-            ...((await this.getProductionVersion(url)) ?? {}),
-            type: 'error',
-            error_doc: entry.error,
-          }),
+          ? {
+              type: 'module',
+              deps: [...entry.deps],
+              source: entry.source,
+              last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
+              transpiled_code: transpileJS(
+                entry.source,
+                new RealmPaths(this.realmURL).local(url),
+              ),
+              error_doc: null,
+            }
+          : {
+              types: entry.types,
+              search_doc: entry.searchData,
+              // favor the last known good types over the types derived from the error state
+              ...((await this.getProductionVersion(url)) ?? {}),
+              type: 'error',
+              error_doc: entry.error,
+            }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass

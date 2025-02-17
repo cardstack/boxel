@@ -12,9 +12,9 @@ export default class CopyCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.CopyCardInput,
   typeof BaseCommandModule.CopyCardResult
 > {
-  @service private declare cardService: CardService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private cardService: CardService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   description = 'Copy a card to a realm';
 

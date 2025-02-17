@@ -21,9 +21,9 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendAiAssistantMessageInput,
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
   #cardAPI?: typeof CardAPI;
 
   async getInputType() {
