@@ -57,11 +57,11 @@ import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 
-interface CardorFieldTypeIconSignature {
+interface CardOrFieldTypeIconSignature {
   Element: Element;
 }
 
-export type CardorFieldTypeIcon = ComponentLike<CardorFieldTypeIconSignature>;
+export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -120,7 +120,7 @@ interface Options {
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
-  // explictly being used.
+  // explicitly being used.
   isUsed?: true;
 }
 
@@ -301,7 +301,7 @@ export interface Field<
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
-  // explictly being used.
+  // explicitly being used.
   isUsed?: undefined | true;
   serialize(
     value: any,
@@ -1650,7 +1650,7 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
-  static icon: CardorFieldTypeIcon;
+  static icon: CardOrFieldTypeIcon;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
@@ -1821,7 +1821,7 @@ export type BaseDefComponent = ComponentLike<{
 
 export class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
-  // class type cannot masquarade as a FieldDef class type
+  // class type cannot masquerade as a FieldDef class type
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
@@ -2565,7 +2565,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         // This happens when the instance has a field that is not in the definition. It can happen when
         // instance or definition is updated and the other is not. In this case we will just ignore the
         // mismatch and try to serialize it anyway so that the client can see still see the instance data
-        // and have a chance to fix it so that it adheres to the definiton
+        // and have a chance to fix it so that it adheres to the definition
         return [];
       }
       let relativeToVal = instance[relativeTo];
