@@ -11,9 +11,11 @@ import {
   linksToMany,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
 import { Contact } from './contact';
+import { CrmApp } from '../crm-app';
 import { StatusTagField } from './contact-status-tag';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -39,6 +41,42 @@ const taskSource = {
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
+
+class EditTemplate extends Component<typeof Account> {
+  <template>
+    <div class='account-form'>
+      <FieldContainer @label='Company'>
+        <@fields.company />
+      </FieldContainer>
+      <FieldContainer @label='Primary Contact'>
+        <@fields.primaryContact />
+      </FieldContainer>
+      <FieldContainer @label='Contacts'>
+        <@fields.contacts />
+      </FieldContainer>
+      <FieldContainer @label='Shipping Address'>
+        <@fields.shippingAddress />
+      </FieldContainer>
+      <FieldContainer @label='Billing Address'>
+        <@fields.billingAddress />
+      </FieldContainer>
+      <FieldContainer @label='Urgency Tag'>
+        <@fields.urgencyTag />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .account-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
 
 class IsolatedTemplate extends Component<typeof Account> {
   get hasCompanyInfo() {
@@ -1227,9 +1265,10 @@ class FittedTemplate extends Component<typeof Account> {
 
 export class Account extends CardDef {
   static displayName = 'CRM Account';
-  @field company = linksTo(Company);
-  @field primaryContact = linksTo(Contact);
-  @field contacts = linksToMany(Contact);
+  @field crmApp = linksTo(() => CrmApp);
+  @field company = linksTo(() => Company);
+  @field primaryContact = linksTo(() => Contact);
+  @field contacts = linksToMany(() => Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
   @field urgencyTag = contains(UrgencyTag);
@@ -1263,6 +1302,7 @@ export class Account extends CardDef {
     },
   });
 
+  static edit = EditTemplate;
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;

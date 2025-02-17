@@ -4,6 +4,8 @@ import CalendarMonth from '@cardstack/boxel-icons/calendar-month';
 import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import UserQuestion from '@cardstack/boxel-icons/user-question';
 
+import { TaskStatusField } from '../task';
+
 export const taskStatusValues = [
   {
     index: 0,
@@ -36,3 +38,21 @@ export const taskStatusValues = [
     value: 'unassigned',
   },
 ];
+
+export class CRMTaskStatusField extends TaskStatusField {
+  static values = [
+    { index: 0, label: 'Not Started', color: '#B0BEC5', completed: false },
+    {
+      index: 1,
+      label: 'In Progress',
+      color: '#FFB74D',
+      completed: false,
+    },
+    {
+      index: 2,
+      label: 'Done',
+      color: '#66BB6A',
+      completed: true,
+    },
+  ];
+}
