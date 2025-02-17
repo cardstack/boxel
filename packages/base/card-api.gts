@@ -2884,17 +2884,17 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
     fieldName as string,
   );
+  if (!field) {
+    throw new Error(
+      `the field '${fieldName as string} does not exist in card ${
+        instance.constructor.name
+      }'`,
+    );
+  }
   if (
     field.computeVia &&
     (isStaleValue(maybeStale) || !deserialized.has(fieldName as string))
   ) {
-    if (!field) {
-      throw new Error(
-        `the field '${fieldName as string} does not exist in card ${
-          instance.constructor.name
-        }'`,
-      );
-    }
     let { computeVia: _computeVia } = field;
     if (!_computeVia) {
       throw new Error(
