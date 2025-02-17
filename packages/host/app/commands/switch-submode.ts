@@ -9,7 +9,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class SwitchSubmodeCommand extends HostBaseCommand<
+export class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput
 > {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -60,3 +60,5 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     this.operatorModeStateService.updateSubmode(input.submode);
   }
 }
+
+export default SwitchSubmodeCommand;

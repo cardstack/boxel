@@ -8,8 +8,8 @@ import { Command } from '@cardstack/runtime-common';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import StringField from 'https://cardstack.com/base/string';
 import { ProductRequirementDocument } from '../product-requirement-document';
-import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
-import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import { AddSkillsToRoomCommand } from '@cardstack/boxel-host/commands/add-skills-to-room';
+import { SendAiAssistantMessageCommand } from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 
 export class GenerateCodeInput extends CardDef {
   @field productRequirements = linksTo(() => ProductRequirementDocument);
@@ -90,7 +90,7 @@ import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
 import { baseRealm, getCard } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
+import { AddSkillsToRoomCommand } from '@cardstack/boxel-host/commands/add-skills-to-room';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';

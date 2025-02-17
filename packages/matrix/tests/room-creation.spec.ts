@@ -48,7 +48,6 @@ test.describe('Room creation', () => {
     await setupUserSubscribed('@xuser:localhost', realmServer);
   });
   test.afterEach(async ({ page }) => {
-    await page.pause();
     await clearLocalStorage(page, appURL);
     await synapseStop(synapse.synapseId);
     await realmServer.stop();

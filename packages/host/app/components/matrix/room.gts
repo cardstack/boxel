@@ -34,8 +34,8 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { unixTime } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
-import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
+import { AddSkillsToRoomCommand } from '@cardstack/host/commands/add-skills-to-room';
+import { UpdateSkillActivationCommand } from '@cardstack/host/commands/update-skill-activation';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -215,11 +215,10 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
 
-  private roomResource = getRoom(
-    this,
-    () => this.args.roomId,
-    () => this.matrixService.getRoomData(this.args.roomId)?.events,
-  );
+  private get roomResource() {
+    return this.matrixService.roomResources.get(this.args.roomId);
+  }
+
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,

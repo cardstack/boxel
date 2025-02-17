@@ -491,7 +491,7 @@ export async function assertMessages(
           `[data-test-message-idx="${index}"] [data-test-attached-card]`,
         ),
       ).toHaveCount(cards.length);
-      cards.map(async (card) => {
+      for (let card of cards) {
         if (card.title) {
           if (message != null && card.title.includes(message)) {
             throw new Error(
@@ -513,7 +513,7 @@ export async function assertMessages(
             ),
           ).toHaveCount(1);
         }
-      });
+      }
     } else {
       await expect(
         page.locator(

@@ -6,7 +6,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class GetBoxelUIStateCommand extends HostBaseCommand<
+export class GetBoxelUIStateCommand extends HostBaseCommand<
   undefined,
   typeof GetBoxelUIStateResult
 > {
