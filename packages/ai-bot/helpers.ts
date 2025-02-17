@@ -61,13 +61,23 @@ type TextMessage = {
   complete: boolean;
 };
 
-export interface PromptParts {
-  tools: Tool[];
-  messages: OpenAIPromptMessage[];
-  model: string;
-  history: DiscreteMatrixEvent[];
-  toolChoice: ToolChoice;
-}
+export type PromptParts =
+  | {
+      shouldRespond: true;
+      tools: Tool[];
+      messages: OpenAIPromptMessage[];
+      model: string;
+      history: DiscreteMatrixEvent[];
+      toolChoice: ToolChoice;
+    }
+  | {
+      shouldRespond: false;
+      tools: undefined;
+      messages: undefined;
+      model: undefined;
+      history: undefined;
+      toolChoice: undefined;
+    };
 
 export type Message = CommandMessage | TextMessage;
 
@@ -88,12 +98,24 @@ export function getPromptParts(
     eventList,
     cardFragments,
   );
+  let shouldRespond = getShouldRespond(history);
+  if (!shouldRespond) {
+    return {
+      shouldRespond: false,
+      tools: undefined,
+      messages: undefined,
+      model: undefined,
+      history: undefined,
+      toolChoice: undefined,
+    };
+  }
   let skills = getEnabledSkills(eventList, cardFragments);
   let tools = getTools(history, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
   let model = getModel(eventList);
   return {
+    shouldRespond,
     tools,
     messages,
     model,
@@ -197,6 +219,30 @@ export function constructHistory(
   let latestEvents = Array.from(latestEventsMap.values());
   latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   return latestEvents;
+}
+
+function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
+  // If the aibot is awaiting command results, it should not respond yet.
+  let lastEventExcludingCommandResults = history.findLast(
+    (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  );
+  let commandRequests =
+    lastEventExcludingCommandResults.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+  if (!commandRequests || commandRequests.length === 0) {
+    return true;
+  }
+  let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
+  let allCommandsHaveResults = commandRequests.every(
+    (commandRequest: CommandRequestContent) => {
+      return history.slice(lastEventIndex).some((event) => {
+        return (
+          event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          event.content.data.commandRequestId === commandRequest.id
+        );
+      });
+    },
+  );
+  return allCommandsHaveResults;
 }
 
 function getEnabledSkills(

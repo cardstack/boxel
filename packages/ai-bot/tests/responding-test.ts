@@ -426,7 +426,7 @@ module('Responding', (hooks) => {
     );
   });
 
-  test.only('Handles multiple tool calls', async () => {
+  test('Handles multiple tool calls', async () => {
     const weatherCheck1Args = {
       description: 'Check the weather in NYC',
       attributes: {

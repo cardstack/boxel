@@ -213,6 +213,9 @@ Common issues are:
           []) as DiscreteMatrixEvent[];
         try {
           promptParts = getPromptParts(eventList, aiBotUserId);
+          if (!promptParts.shouldRespond) {
+            return;
+          }
         } catch (e) {
           log.error(e);
           await responder.onError(

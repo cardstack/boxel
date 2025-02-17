@@ -1026,8 +1026,8 @@ module('getModifyPrompt', () => {
       ),
     );
 
-    const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
-    assert.equal(result.length, 1);
+    const result = getPromptParts(eventList, '@ai-bot:localhost').messages!;
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(result[0].content?.includes('['));
@@ -1633,11 +1633,59 @@ test('Tools calls are connected to their results', () => {
   const { messages } = getPromptParts(eventList, '@aibot:localhost');
   // find the message with the tool call and its id
   // it should have the result deserialised
-  const toolCallMessage = messages.find((message) => message.role === 'tool');
+  const toolCallMessage = messages!.find((message) => message.role === 'tool');
   assert.ok(toolCallMessage, 'Should have a tool call message');
   assert.ok(
     toolCallMessage!.content!.includes('Cloudy'),
     'Tool call result should include "Cloudy"',
+  );
+});
+
+test('Does not respond to first tool call result when two tool calls were made', function () {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/two-tool-calls-one-result.json'),
+      'utf-8',
+    ),
+  );
+
+  const { shouldRespond } = getPromptParts(eventList, '@aibot:localhost');
+  assert.strictEqual(
+    shouldRespond,
+    false,
+    'AiBot does not solicit a response before all tool calls are made',
+  );
+});
+
+test('Responds to second tool call result when two tool calls were made', function () {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/two-tool-calls-two-results.json'),
+      'utf-8',
+    ),
+  );
+
+  const { shouldRespond, messages } = getPromptParts(
+    eventList,
+    '@aibot:localhost',
+  );
+  assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+  // tool call results should be deserialised
+  const toolCallMessages = messages!.filter(
+    (message) => message.role === 'tool',
+  );
+  assert.strictEqual(
+    toolCallMessages.length,
+    2,
+    'Should have two tool call messages',
+  );
+  assert.ok(
+    toolCallMessages[0].content!.includes('Cloudy'),
+    'Tool call result should include "Cloudy"',
+  );
+  assert.ok(
+    toolCallMessages[1].content!.includes('Sunny'),
+    'Tool call result should include "Sunny"',
   );
 });
 
