@@ -16,6 +16,7 @@ import {
   type PatchData,
   RealmPaths,
   type ResolvedCodeRef,
+  type LocalPath,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -357,6 +358,15 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
+  get codePathString() {
+    return this.state.codePath?.toString();
+  }
+
+  onFileSelected = (entryPath: LocalPath) => {
+    let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
+    this.updateCodePath(fileUrl);
+  };
+
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
@@ -540,7 +550,7 @@ export default class OperatorModeStateService extends Service {
     return this.state.openDirs ?? new TrackedMap();
   }
 
-  toggleOpenDir(entryPath: string): void {
+  toggleOpenDir = (entryPath: string): void => {
     if (!this.realmURL) {
       return;
     }
@@ -568,7 +578,7 @@ export default class OperatorModeStateService extends Service {
       new TrackedArray([...dirs, entryPath]),
     );
     this.schedulePersist();
-  }
+  };
 
   private get readyFile() {
     if (isReady(this.openFile.current)) {

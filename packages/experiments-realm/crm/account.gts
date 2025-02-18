@@ -11,9 +11,11 @@ import {
   linksToMany,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { Address as AddressField } from '../address';
 import { Company } from './company';
 import { Contact } from './contact';
+import { CrmApp } from '../crm-app';
 import { StatusTagField } from './contact-status-tag';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -25,12 +27,10 @@ import TrendingUp from '@cardstack/boxel-icons/trending-up';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import PlusIcon from '@cardstack/boxel-icons/plus';
-import CalendarTime from '@cardstack/boxel-icons/calendar-time';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { Deal } from './deal';
-import EntityIconDisplay from '../components/entity-icon-display';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
@@ -41,6 +41,42 @@ const taskSource = {
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
+
+class EditTemplate extends Component<typeof Account> {
+  <template>
+    <div class='account-form'>
+      <FieldContainer @label='Company'>
+        <@fields.company />
+      </FieldContainer>
+      <FieldContainer @label='Primary Contact'>
+        <@fields.primaryContact />
+      </FieldContainer>
+      <FieldContainer @label='Contacts'>
+        <@fields.contacts />
+      </FieldContainer>
+      <FieldContainer @label='Shipping Address'>
+        <@fields.shippingAddress />
+      </FieldContainer>
+      <FieldContainer @label='Billing Address'>
+        <@fields.billingAddress />
+      </FieldContainer>
+      <FieldContainer @label='Urgency Tag'>
+        <@fields.urgencyTag />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .account-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
 
 class IsolatedTemplate extends Component<typeof Account> {
   get hasCompanyInfo() {
@@ -312,6 +348,10 @@ class IsolatedTemplate extends Component<typeof Account> {
     return `${formattedValue} in ${currentYear}`;
   }
 
+  removeFileExtension(cardUrl: string) {
+    return cardUrl.replace(/\.[^/.]+$/, '');
+  }
+
   <template>
     <AccountPageLayout>
       <:header>
@@ -431,45 +471,15 @@ class IsolatedTemplate extends Component<typeof Account> {
         </SummaryGridContainer>
       </:summary>
 
-      <:activities>
-        <SummaryCard class='activities-summary-card'>
-          <:title>
-            <h2 class='activity-title'>Recent Activities</h2>
-          </:title>
-          <:icon>
-            <BoxelButton
-              @kind='primary'
-              class='activity-button-mobile'
-              data-test-settings-button
-            >
-              <PlusIcon />
-            </BoxelButton>
-
-            <BoxelButton
-              @kind='primary'
-              @size='base'
-              class='activity-button-desktop'
-              data-test-settings-button
-            >
-              <PlusIcon />
-              New Activity
-            </BoxelButton>
-          </:icon>
-          <:content>
-            {{! remove activity mock }}
-          </:content>
-        </SummaryCard>
-      </:activities>
-
       <:tasks>
         <SummaryCard class='tasks-summary-card'>
           <:title>
-            <h2 class='activity-title'>Upcoming Tasks</h2>
+            <h2 class='task-title'>Upcoming Tasks</h2>
           </:title>
           <:icon>
             <BoxelButton
               @kind='primary'
-              class='activity-button-mobile'
+              class='task-button-mobile'
               data-test-settings-button
               @disabled={{this.activeTasks.isLoading}}
               @loading={{this._createNewTask.isRunning}}
@@ -482,7 +492,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             <BoxelButton
               @kind='primary'
               @size='base'
-              class='activity-button-desktop'
+              class='task-button-desktop'
               @disabled={{this.activeTasks.isLoading}}
               @loading={{this._createNewTask.isRunning}}
               data-test-settings-button
@@ -501,7 +511,23 @@ class IsolatedTemplate extends Component<typeof Account> {
               {{#if this.hasActiveTasks}}
                 {{#each this.activeTasks.instances as |task|}}
                   {{#let (getComponent task) as |Component|}}
-                    <Component @format='embedded' @displayContainer={{false}} />
+                    <div
+                      {{@context.cardComponentModifier
+                        cardId=task.id
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                      data-test-cards-grid-item={{this.removeFileExtension
+                        task.id
+                      }}
+                      data-cards-grid-item={{this.removeFileExtension task.id}}
+                    >
+                      <Component
+                        @format='embedded'
+                        @displayContainer={{false}}
+                      />
+                    </div>
                   {{/let}}
                 {{/each}}
               {{else}}
@@ -569,40 +595,38 @@ class IsolatedTemplate extends Component<typeof Account> {
       .default-value {
         color: var(--boxel-400);
       }
-      /* Activities */
-      .activity-button-mobile {
+      /* Task */
+      .task-button-mobile {
         display: none;
       }
-      .activity-button-desktop {
+      .task-button-desktop {
         display: inline-flex;
       }
-      .activities-summary-card {
-        --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
-        container-type: inline-size;
-        container-name: activities-summary-card;
-      }
       .tasks-summary-card {
+        --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
         --summary-card-content-gap: 0;
+        container-type: inline-size;
+        container-name: tasks-summary-card;
       }
       .tasks-summary-card :where(.task-card) {
         --task-card-padding: var(--boxel-sp) 0;
         border-top: 1px solid var(--boxel-200);
       }
-      .activity-title {
+      .task-title {
         font: 600 var(--boxel-font-med);
         letter-spacing: var(--boxel-lsp-xxs);
         margin: 0;
       }
-      .activity-pill {
+      .task-pill {
         --pill-background-color: var(--boxel-200);
       }
-      .activity-card-group {
+      .task-card-group {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp);
       }
-      .activity-time {
+      .task-time {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-color-gray);
         margin-left: auto;
@@ -622,20 +646,20 @@ class IsolatedTemplate extends Component<typeof Account> {
         justify-content: center;
       }
 
-      @container activities-summary-card (max-width: 447px) {
-        .activity-button-mobile {
+      @container tasks-summary-card (max-width: 447px) {
+        .task-button-mobile {
           display: inline-flex;
           --boxel-button-padding: 0px 0px;
           min-width: 2rem;
         }
-        .activity-button-desktop {
+        .task-button-desktop {
           display: none;
         }
-        .activity-card-group {
+        .task-card-group {
           flex-direction: column;
           align-items: flex-start;
         }
-        .activity-time {
+        .task-time {
           margin-left: 0;
         }
       }
@@ -929,18 +953,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
                     @displayContainer={{false}}
                   />
                 {{/if}}
-              </div>
-            </article>
-
-            <article>
-              <label>NEXT STEPS</label>
-              <div class='next-steps-display'>
-                {{! TODO: Add activity tasks after lucas pr go in }}
-                <EntityIconDisplay @title='--'>
-                  <:icon>
-                    <CalendarTime />
-                  </:icon>
-                </EntityIconDisplay>
               </div>
             </article>
 
@@ -1253,9 +1265,10 @@ class FittedTemplate extends Component<typeof Account> {
 
 export class Account extends CardDef {
   static displayName = 'CRM Account';
-  @field company = linksTo(Company);
-  @field primaryContact = linksTo(Contact);
-  @field contacts = linksToMany(Contact);
+  @field crmApp = linksTo(() => CrmApp);
+  @field company = linksTo(() => Company);
+  @field primaryContact = linksTo(() => Contact);
+  @field contacts = linksToMany(() => Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);
   @field urgencyTag = contains(UrgencyTag);
@@ -1289,6 +1302,7 @@ export class Account extends CardDef {
     },
   });
 
+  static edit = EditTemplate;
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
@@ -1298,7 +1312,6 @@ interface AccountPageLayoutArgs {
   Blocks: {
     header: [];
     summary: [];
-    activities: [];
     tasks: [];
   };
   Element: HTMLElement;
@@ -1309,7 +1322,6 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
     <div class='account-page-layout' ...attributes>
       {{yield to='header'}}
       {{yield to='summary'}}
-      {{yield to='activities'}}
       {{yield to='tasks'}}
     </div>
 

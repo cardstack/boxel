@@ -58,11 +58,11 @@ import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 
-interface CardorFieldTypeIconSignature {
+interface CardOrFieldTypeIconSignature {
   Element: Element;
 }
 
-export type CardorFieldTypeIcon = ComponentLike<CardorFieldTypeIconSignature>;
+export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -121,7 +121,7 @@ interface Options {
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
-  // explictly being used.
+  // explicitly being used.
   isUsed?: true;
 }
 
@@ -302,7 +302,7 @@ export interface Field<
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
-  // explictly being used.
+  // explicitly being used.
   isUsed?: undefined | true;
   serialize(
     value: any,
@@ -643,10 +643,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
-    throw new Error(
-      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`,
-    );
+  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
+    return undefined;
   }
 
   component(model: Box<BaseDef>): BoxComponent {
@@ -800,10 +798,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return value;
   }
 
-  async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
-    throw new Error(
-      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`,
-    );
+  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
+    return undefined;
   }
 
   component(model: Box<BaseDef>): BoxComponent {
@@ -1658,7 +1654,7 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
-  static icon: CardorFieldTypeIcon;
+  static icon: CardOrFieldTypeIcon;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
@@ -1830,7 +1826,7 @@ export type BaseDefComponent = ComponentLike<{
 
 export class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
-  // class type cannot masquarade as a FieldDef class type
+  // class type cannot masquerade as a FieldDef class type
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
@@ -2574,7 +2570,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         // This happens when the instance has a field that is not in the definition. It can happen when
         // instance or definition is updated and the other is not. In this case we will just ignore the
         // mismatch and try to serialize it anyway so that the client can see still see the instance data
-        // and have a chance to fix it so that it adheres to the definiton
+        // and have a chance to fix it so that it adheres to the definition
         return [];
       }
       let relativeToVal = instance[relativeTo];
@@ -2897,14 +2893,17 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
     fieldName as string,
   );
-  if (isStaleValue(maybeStale)) {
-    if (!field) {
-      throw new Error(
-        `the field '${fieldName as string} does not exist in card ${
-          instance.constructor.name
-        }'`,
-      );
-    }
+  if (!field) {
+    throw new Error(
+      `the field '${fieldName as string} does not exist in card ${
+        instance.constructor.name
+      }'`,
+    );
+  }
+  if (
+    field.computeVia &&
+    (isStaleValue(maybeStale) || !deserialized.has(fieldName as string))
+  ) {
     let { computeVia: _computeVia } = field;
     if (!_computeVia) {
       throw new Error(
