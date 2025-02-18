@@ -211,7 +211,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{yield}}
 
           {{#if @resources.cards.length}}
-            <div class='cards' data-test-message-cards>
+            <div class='items' data-test-message-cards>
               {{#each @resources.cards as |card|}}
                 <CardPill @card={{card}} />
               {{/each}}
@@ -219,7 +219,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{/if}}
 
           {{#if @resources.files.length}}
-            <div class='cards' data-test-message-files>
+            <div class='items' data-test-message-files>
               {{#each @resources.files as |file|}}
                 <FilePill @file={{file}} />
               {{/each}}
@@ -331,15 +331,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .is-pending .content,
-      .is-pending .content .cards > :deep(.card-pill),
-      .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
+      .is-pending .content .items > :deep(.card-pill),
+      .is-pending .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
 
       .is-error .content,
-      .is-error .content .cards > :deep(.card-pill),
-      .is-error .content .cards > :deep(.card-pill .boxel-card-container) {
+      .is-error .content .items > :deep(.card-pill),
+      .is-error .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
         max-height: 300px;
@@ -400,7 +400,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         border-color: var(--boxel-light);
       }
 
-      .cards {
+      .items {
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;
