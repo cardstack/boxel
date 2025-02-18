@@ -13,7 +13,7 @@ import NetworkService from './network';
   actually implemented via direct HTTP.
 */
 export default class MatrixSDKLoader extends Service {
-  @service private declare network: NetworkService;
+  @service declare private network: NetworkService;
   #extended: ExtendedMatrixSDK | undefined;
 
   async load(): Promise<ExtendedMatrixSDK> {

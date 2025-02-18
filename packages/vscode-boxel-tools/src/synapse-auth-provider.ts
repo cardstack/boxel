@@ -84,9 +84,8 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   async getSessions(): Promise<vscode.AuthenticationSession[]> {
     if (!this.sessionsLoaded) {
       this.sessionsLoaded = true;
-      const existingSessions = await this.secretsStorage.get(
-        'synapse-sessions',
-      );
+      const existingSessions =
+        await this.secretsStorage.get('synapse-sessions');
       if (existingSessions) {
         this._sessions = JSON.parse(existingSessions);
       }

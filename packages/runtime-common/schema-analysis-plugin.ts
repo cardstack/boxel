@@ -339,8 +339,8 @@ function findExportSpecifierPathForDeclaration(
 ): NodePath<t.Identifier> | undefined {
   let binding = localName ? path.scope.getBinding(localName) : undefined;
   if (binding) {
-    return binding.referencePaths.find(
-      (b) => b.parentPath?.isExportSpecifier(),
+    return binding.referencePaths.find((b) =>
+      b.parentPath?.isExportSpecifier(),
     ) as NodePath<t.Identifier> | undefined;
   }
   return undefined;
