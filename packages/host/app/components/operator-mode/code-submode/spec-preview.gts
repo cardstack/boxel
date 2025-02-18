@@ -510,7 +510,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   private initiateAutoSaveTask = restartableTask(async () => {
     if (this.card) {
-      console.log(this.card.id);
       await timeout(this.environmentService.autoSaveDelayMs);
       await this.saveCard.perform(this.card);
     }
