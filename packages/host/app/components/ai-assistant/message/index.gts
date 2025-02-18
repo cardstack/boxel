@@ -109,7 +109,10 @@ interface ScrollPositionSignature {
   Args: {
     Named: {
       setScrollPosition: (args: { isBottom: boolean }) => void;
-      registerConversationScroller: (isScrollable: () => boolean) => void;
+      registerConversationScroller: (
+        isScrollable: () => boolean,
+        scrollToBottom: () => void,
+      ) => void;
     };
   };
 }
@@ -131,6 +134,9 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       this.hasRegistered = true;
       registerConversationScroller(
         () => element.scrollHeight > element.clientHeight,
+        () => {
+          element.scrollTop = element.scrollHeight - element.clientHeight;
+        },
       );
     }
 
@@ -407,7 +413,10 @@ interface AiAssistantConversationSignature {
   Element: HTMLDivElement;
   Args: {
     setScrollPosition: (args: { isBottom: boolean }) => void;
-    registerConversationScroller: (isScrollable: () => boolean) => void;
+    registerConversationScroller: (
+      isScrollable: () => boolean,
+      scrollToBottom: () => void,
+    ) => void;
   };
   Blocks: {
     default: [];
