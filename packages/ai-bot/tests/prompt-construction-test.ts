@@ -485,6 +485,12 @@ module('getModifyPrompt', () => {
                 name: 'file-that-does-not-exist.txt',
                 contentType: 'text/plain',
               },
+              {
+                sourceUrl: 'http://test.com/my-realm/example.pdf',
+                url: 'http://test.com/example.pdf',
+                name: 'example.pdf',
+                contentType: 'application/pdf',
+              },
             ],
           },
         },
@@ -508,13 +514,13 @@ module('getModifyPrompt', () => {
           ok: true,
           status: 200,
           text: async () =>
-            'this is the contents of the spaghetti-recipe.gts file',
+            'this is the content of the spaghetti-recipe.gts file',
         };
       } else if (url === 'http://test.com/best-friends.txt') {
         return {
           ok: true,
           status: 200,
-          text: async () => 'this is the contents of the best-friends.txt file',
+          text: async () => 'this is the content of the best-friends.txt file',
         };
       } else if (url === 'http://test.com/file-that-does-not-exist.txt') {
         return {
@@ -537,9 +543,10 @@ module('getModifyPrompt', () => {
       prompt[0].content?.includes(
         `
 Attached files:
-spaghetti-recipe.gts: this is the contents of the spaghetti-recipe.gts file
-best-friends.txt: this is the contents of the best-friends.txt file
-file-that-does-not-exist.txt: Error loading attached file: HTTP error! status: 404. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.
+spaghetti-recipe.gts: this is the content of the spaghetti-recipe.gts file
+best-friends.txt: this is the content of the best-friends.txt file
+file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 404
+example.pdf: Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
     );

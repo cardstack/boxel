@@ -368,30 +368,27 @@ export async function loadCurrentlyAttachedFiles(
         contentType?: string;
       }) => {
         try {
-          let response = await globalThis.fetch(attachedFile.url);
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          let content: string;
-
+          let content: string | undefined;
+          let error: string | undefined;
           if (attachedFile.contentType?.startsWith('text/')) {
+            let response = await (globalThis as any).fetch(attachedFile.url);
+            if (!response.ok) {
+              throw new Error(`HTTP error. Status: ${response.status}`);
+            }
             content = await response.text();
           } else {
-            const buffer = await response.arrayBuffer();
-            content = Buffer.from(buffer).toString('base64');
+            error = `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`;
           }
+
           return {
             url: attachedFile.url,
             name: attachedFile.name,
             contentType: attachedFile.contentType,
             content,
-            error: undefined,
+            error,
           };
         } catch (error) {
-          log.error(
-            `Failed to globalThis.fetch file ${attachedFile.url}:`,
-            error,
-          );
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
           Sentry.captureException(error, {
             extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
           });
@@ -423,7 +420,7 @@ export function attachedFilesToPrompt(
   return attachedFiles
     .map((f) => {
       if (f.error) {
-        return `${f.name}: ${f.error}. Tell the user you are not able to load the file. Instruct the user to re-attach the file and retry.`;
+        return `${f.name}: ${f.error}`;
       }
 
       return `${f.name}: ${f.content}`;
