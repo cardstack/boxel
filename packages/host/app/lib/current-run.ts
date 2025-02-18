@@ -95,8 +95,8 @@ export class CurrentRun {
     moduleErrors: 0,
     totalIndexEntries: 0,
   };
-  @service private declare loaderService: LoaderService;
-  @service private declare network: NetworkService;
+  @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
 
   constructor({
     realmURL,
@@ -639,7 +639,7 @@ export class CurrentRun {
         error.error.deps = [
           moduleURL,
           ...(uncaughtError instanceof CardError
-            ? uncaughtError.deps ?? []
+            ? (uncaughtError.deps ?? [])
             : []),
         ];
       } else if (typesMaybeError?.type === 'error') {

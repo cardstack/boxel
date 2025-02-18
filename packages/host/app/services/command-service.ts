@@ -42,12 +42,12 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
-  @service private declare realm: Realm;
-  @service private declare realmServer: RealmServerService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
+  @service declare private realm: Realm;
+  @service declare private realmServer: RealmServerService;
   currentlyExecutingCommandEventIds = new TrackedSet<string>();
 
   private commands: Map<
@@ -204,8 +204,8 @@ export default class CommandService extends Service {
         typeof e === 'string'
           ? new Error(e)
           : e instanceof Error
-          ? e
-          : new Error('Command failed.');
+            ? e
+            : new Error('Command failed.');
       console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(eventId, error);

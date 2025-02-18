@@ -59,8 +59,8 @@ export default class MessageBuilder {
     setOwner(this, owner);
   }
 
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
 
   private get coreMessageArgs() {
     return new Message({

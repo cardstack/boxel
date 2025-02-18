@@ -11,7 +11,7 @@ import type MatrixService from '../services/matrix-service';
 export default class AddSkillsToRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.AddSkillsToRoomInput
 > {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

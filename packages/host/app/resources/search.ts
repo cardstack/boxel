@@ -40,8 +40,8 @@ interface Args {
 }
 
 export class Search extends Resource<Args> {
-  @service private declare cardService: CardService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private cardService: CardService;
+  @service declare private realmServer: RealmServerService;
   @tracked private realmsToSearch: string[] = [];
   loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];

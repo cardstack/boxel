@@ -50,8 +50,8 @@ export class CardResource extends Resource<Args> {
   @tracked private _error: CardError | undefined;
   @tracked private _isLoaded = false;
   @tracked private _loaded: Promise<void> | undefined;
-  private declare store: StoreService;
-  private declare cardService: CardService;
+  declare private store: StoreService;
+  declare private cardService: CardService;
   #url: string | undefined;
   #isLive = false;
   #api: typeof CardAPI | undefined;

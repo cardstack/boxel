@@ -67,10 +67,10 @@ interface CardErrors {
 export type CardError = CardErrors['errors'][0];
 
 export default class StoreService extends Service {
-  @service private declare realm: RealmService;
-  @service private declare loaderService: LoaderService;
-  @service private declare messageService: MessageService;
-  @service private declare cardService: CardService;
+  @service declare private realm: RealmService;
+  @service declare private loaderService: LoaderService;
+  @service declare private messageService: MessageService;
+  @service declare private cardService: CardService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private identityContext = new ResettableIdentityContext();
   private subscribers: Map<
