@@ -36,7 +36,7 @@ interface Signature {
   Args: {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
-    subclassType?: ResolvedCodeRef;
+    typeConstraint?: ResolvedCodeRef;
   };
 }
 
@@ -147,8 +147,8 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    if (this.args.subclassType) {
-      type = await getNarrowestType(this.args.subclassType, type, myLoader());
+    if (this.args.typeConstraint) {
+      type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter: { type } },

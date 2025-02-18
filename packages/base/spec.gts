@@ -157,7 +157,7 @@ export class Spec extends CardDef {
           {{#if (eq @model.specType 'field')}}
             <@fields.containedExamples />
           {{else}}
-            <@fields.linkedExamples @subclassType={{this.absoluteRef}} />
+            <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
           {{/if}}
         </section>
         <section class='module section'>

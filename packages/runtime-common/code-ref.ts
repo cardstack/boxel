@@ -239,15 +239,16 @@ async function isInsideAncestorChainOfCardDef(
   return false;
 }
 
-// utility to return subclassType when it exists and is part of the ancestor chain of type
+// utility to return typeConstraint when it exists and is part of the ancestor chain of type
 export async function getNarrowestType(
-  subclassType: CodeRef,
+  typeConstraint: CodeRef,
   type: CodeRef,
   loader: Loader,
 ) {
   let narrowTypeExists = false;
   narrowTypeExists =
-    (await isInsideAncestorChainOfCardDef(subclassType, loader)) ?? false;
-  let narrowestType = narrowTypeExists && subclassType ? subclassType : type;
+    (await isInsideAncestorChainOfCardDef(typeConstraint, loader)) ?? false;
+  let narrowestType =
+    narrowTypeExists && typeConstraint ? typeConstraint : type;
   return narrowestType;
 }

@@ -55,7 +55,7 @@ interface Signature {
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
-    subclassType?: ResolvedCodeRef;
+    typeConstraint?: ResolvedCodeRef;
   };
 }
 
@@ -99,8 +99,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    if (this.args.subclassType) {
-      type = await getNarrowestType(this.args.subclassType, type, myLoader());
+    if (this.args.typeConstraint) {
+      type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
@@ -414,7 +414,7 @@ export function getLinksToManyComponent({
               defaultFormats.cardDef
               model
             }}
-            @subclassType={{@subclassType}}
+            @typeConstraint={{@typeConstraint}}
             ...attributes
           />
         {{else}}

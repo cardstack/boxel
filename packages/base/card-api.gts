@@ -1097,7 +1097,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         Named: {
           format?: Format;
           displayContainer?: boolean;
-          subclassType?: ResolvedCodeRef;
+          typeConstraint?: ResolvedCodeRef;
         };
       };
       Blocks: {};
@@ -1108,7 +1108,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
             <LinksToEditor
               @model={{(getInnerModel)}}
               @field={{linksToField}}
-              @subclassType={{@subclassType}}
+              @typeConstraint={{@typeConstraint}}
               ...attributes
             />
           {{else}}
@@ -1824,7 +1824,7 @@ export type BaseDefComponent = ComponentLike<{
     fieldName: string | undefined;
     context?: CardContext;
     canEdit?: boolean;
-    subclassType?: ResolvedCodeRef;
+    typeConstraint?: ResolvedCodeRef;
   };
 }>;
 

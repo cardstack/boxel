@@ -38,7 +38,7 @@ export interface BoxComponentSignature {
     Named: {
       format?: Format;
       displayContainer?: boolean;
-      subclassType?: ResolvedCodeRef;
+      typeConstraint?: ResolvedCodeRef;
     };
   };
   Blocks: {};
@@ -195,7 +195,7 @@ export function getBoxComponent(
     Args: {
       format?: Format;
       displayContainer?: boolean;
-      subclassType?: ResolvedCodeRef;
+      typeConstraint?: ResolvedCodeRef;
     };
   }> = <template>
     <CardContextConsumer as |context|>
@@ -249,7 +249,7 @@ export function getBoxComponent(
                           (not field.computeVia)
                           permissions.canWrite
                         }}
-                        @subclassType={{@subclassType}}
+                        @typeConstraint={{@typeConstraint}}
                       />
                     </CardContainer>
                   </DefaultFormatsProvider>
