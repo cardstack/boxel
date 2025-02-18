@@ -702,8 +702,11 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   ): JSONAPIResource {
     let serialized: JSONAPISingleResourceDocument['data'] & {
       meta: Record<string, any>;
-    } = callSerializeHook(this.card, value, doc, undefined, opts);
+    } = callSerializeHook(this.card, value, doc);
     if (primitive in this.card) {
+      if (this.card.name === 'CodeRefField' && isFieldDef(this.card)) {
+        serialized = callSerializeHook(this.card, value, doc, undefined, opts);
+      }
       return { attributes: { [this.name]: serialized } };
     } else {
       let resource: JSONAPIResource = {
