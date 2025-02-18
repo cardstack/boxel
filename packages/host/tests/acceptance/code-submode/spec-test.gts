@@ -327,7 +327,7 @@ module('Spec preview', function (hooks) {
     assert.dom('[data-test-exported-type]').hasText('card');
   });
 
-  test('can add linked examples to spec instance narrows the chooser by code ref inside of the instance', async function (assert) {
+  test('when adding linked examples, card chooser options are narrowed to this type', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
