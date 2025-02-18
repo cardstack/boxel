@@ -5,8 +5,6 @@ import {
   SortMenu,
   type SortOption,
   sortByCardTitleAsc,
-  sortByDueDateDesc,
-  sortByPriorityDesc,
 } from './components/sort';
 import { SearchInput } from './components/search-input';
 import { action } from '@ember/object';
@@ -49,8 +47,8 @@ import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
 import { DEAL_STATUS_VALUES } from './crm/deal-status';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-
+import type { LooseSingleCardDocument, Sort } from '@cardstack/runtime-common';
+import type { TaskSortBy, TaskSortOrder } from './crm/task-planner';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   Card as CardIcon,
@@ -66,6 +64,24 @@ interface ViewItem {
   }>;
   id: ViewOption;
 }
+
+const sortByDueDate: (direction: TaskSortOrder) => Sort = (
+  direction: TaskSortOrder,
+) => [
+  {
+    by: 'dueDate',
+    direction,
+  },
+];
+
+const sortByPriority: (direction: TaskSortOrder) => Sort = (
+  direction: TaskSortOrder,
+) => [
+  {
+    by: 'priority',
+    direction,
+  },
+];
 
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
@@ -139,12 +155,22 @@ const TASK_FILTERS: LayoutFilter[] = [
       {
         id: 'dueDateDesc',
         displayName: 'Due Date',
-        sort: sortByDueDateDesc,
+        sort: sortByDueDate('desc'),
+      },
+      {
+        id: 'dueDateAsc',
+        displayName: 'Due Date',
+        sort: sortByDueDate('asc'),
       },
       {
         id: 'priorityDesc',
         displayName: 'Priority',
-        sort: sortByPriorityDesc,
+        sort: sortByPriority('desc'),
+      },
+      {
+        id: 'priorityAsc',
+        displayName: 'Priority',
+        sort: sortByPriority('asc'),
       },
     ],
   },
@@ -444,6 +470,13 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     return taskFilter;
   }
 
+  get taskSort() {
+    return {
+      by: this.selectedSort?.sort?.[0]?.by as TaskSortBy | undefined,
+      order: this.selectedSort?.sort?.[0]?.direction,
+    };
+  }
+
   get searchPlaceholder() {
     return `Search ${this.activeFilter.displayName}`;
   }
@@ -567,6 +600,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @viewCard={{this.viewCard}}
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
+            @sort={{this.taskSort}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}

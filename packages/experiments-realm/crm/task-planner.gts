@@ -7,6 +7,14 @@ import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { DndItem } from '@cardstack/boxel-ui/components';
 import { AppCard } from '../app-card';
+import { CRMTask } from './task';
+
+export type TaskSortBy = 'dueDate' | 'priority';
+export type TaskSortOrder = 'asc' | 'desc';
+type TaskSort = {
+  by?: TaskSortBy;
+  order?: TaskSortOrder;
+};
 
 interface CRMTaskPlannerArgs {
   Args: {
@@ -16,9 +24,61 @@ interface CRMTaskPlannerArgs {
     viewCard: () => void;
     searchFilter?: Filter[];
     taskFilter?: Filter[];
+    sort?: TaskSort;
   };
   Element: HTMLElement;
 }
+
+const sortByDueDate = (
+  a: CardDef,
+  b: CardDef,
+  order: TaskSortOrder = 'asc',
+) => {
+  const crmTaskA = a as CRMTask;
+  const crmTaskB = b as CRMTask;
+
+  // Handle cases where one or both items don't have dates
+  if (!crmTaskA.dateRange?.end && !crmTaskB.dateRange?.end) return 0;
+  if (!crmTaskA.dateRange?.end) return 1; // null dates always go last
+  if (!crmTaskB.dateRange?.end) return -1; // non-null dates always go first
+
+  const comparison =
+    crmTaskA.dateRange.end.getTime() - crmTaskB.dateRange.end.getTime();
+  return order === 'asc' ? comparison : -comparison;
+};
+
+const sortByPriority = (
+  a: CardDef,
+  b: CardDef,
+  order: TaskSortOrder = 'asc',
+) => {
+  const crmTaskA = a as CRMTask;
+  const crmTaskB = b as CRMTask;
+
+  // Handle cases where one or both items don't have priority
+  // Check if priority or index is undefined/null, but allow 0 as valid value
+  if (
+    (crmTaskA.priority?.index === undefined ||
+      crmTaskA.priority?.index === null) &&
+    (crmTaskB.priority?.index === undefined ||
+      crmTaskB.priority?.index === null)
+  )
+    return 0;
+
+  if (
+    crmTaskA.priority?.index === undefined ||
+    crmTaskA.priority?.index === null
+  )
+    return 1;
+  if (
+    crmTaskB.priority?.index === undefined ||
+    crmTaskB.priority?.index === null
+  )
+    return -1;
+
+  const comparison = crmTaskA.priority.index - crmTaskB.priority.index;
+  return order === 'asc' ? comparison : -comparison;
+};
 
 export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
   get parentId() {
@@ -95,6 +155,18 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
 
   get assigneeCards() {
     return this.assigneeQuery?.instances ?? [];
+  }
+
+  getOrderBy() {
+    if (this.args.sort?.by === 'dueDate') {
+      return (a: CardDef, b: CardDef) =>
+        sortByDueDate(a, b, this.args.sort?.order);
+    }
+    if (this.args.sort?.by === 'priority') {
+      return (a: CardDef, b: CardDef) =>
+        sortByPriority(a, b, this.args.sort?.order);
+    }
+    return undefined;
   }
 
   get config() {
@@ -181,6 +253,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
             await this.args.context?.actions?.saveCard?.(cardInNewCol);
           }
         },
+        orderBy: this.getOrderBy(),
       },
       taskSource: {
         module: new URL('./task', import.meta.url).href,
