@@ -213,6 +213,30 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
+    if (this.activeTabId === 'Task') {
+      switch (this.activeFilter.displayName) {
+        case 'All Tasks':
+        case 'Overdue':
+        case 'Due this week':
+        case 'Unassigned':
+          this.activeFilter.selectedSort = {
+            id: 'dueDateAsc',
+            displayName: 'Due Date',
+            sort: sortByDueDate('asc'),
+          };
+          break;
+        case 'Due Today':
+        case 'High Priority':
+          this.activeFilter.selectedSort = {
+            id: 'priorityDesc',
+            displayName: 'Priority',
+            sort: sortByPriority('desc'),
+          };
+          break;
+        default:
+          break;
+      }
+    }
   }
   //tabs
   @tracked activeTabId: string | undefined = TABS[0].tabId;
