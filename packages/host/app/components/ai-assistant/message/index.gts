@@ -89,6 +89,7 @@ interface MessageScrollerSignature {
 
 class MessageScroller extends Modifier<MessageScrollerSignature> {
   private hasRegistered = false;
+  private observer?: MutationObserver;
   modify(
     element: HTMLElement,
     _positional: [],
@@ -102,6 +103,21 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
         scrollTo: element.scrollIntoView.bind(element),
       });
     }
+
+    this.observer?.disconnect();
+
+    this.observer = new MutationObserver(() => {
+      registerScroller({
+        index,
+        element,
+        scrollTo: element.scrollIntoView.bind(element),
+      });
+    });
+    this.observer.observe(element, { childList: true, subtree: true });
+
+    registerDestructor(this, () => {
+      this.observer?.disconnect();
+    });
   }
 }
 

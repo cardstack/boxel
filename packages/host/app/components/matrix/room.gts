@@ -373,7 +373,7 @@ export default class Room extends Component<Signature> {
       !this.hasUnreadMessages &&
       index === this.messages.length - 1
     ) {
-      scrollTo({ block: 'end' });
+      scrollTo();
     } else if (
       // otherwise if we are permitted to auto-scroll and if there are unread
       // messages in the room, then scroll to the first unread message in the room.
@@ -381,7 +381,7 @@ export default class Room extends Component<Signature> {
       index === this.lastReadMessageIndex + 1
     ) {
       scrollTo();
-    } else {
+    } else if (this.isScrolledToBottom) {
       this.scrollConversationToBottom?.();
     }
   };
