@@ -1,7 +1,7 @@
 import { click } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -627,7 +627,7 @@ export class Author extends CardDef {
     assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
   });
 
-  skip<TestContextWithSSE>('playground preview for card with linked fields can live update when module changes', async function (assert) {
+  test<TestContextWithSSE>('playground preview for card with linked fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
 import DatetimeField from 'https://cardstack.com/base/datetime';

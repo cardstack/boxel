@@ -13,6 +13,20 @@ import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 import ArrowDown from '@cardstack/boxel-icons/arrow-down';
 import ArrowUp from '@cardstack/boxel-icons/arrow-up';
 
+export const sortByDueDateDesc: Sort = [
+  {
+    by: 'dueDate',
+    direction: 'desc',
+  },
+];
+
+export const sortByPriorityDesc: Sort = [
+  {
+    by: 'priority',
+    direction: 'desc',
+  },
+];
+
 export const sortByCardTitleAsc: Sort = [
   {
     on: {
