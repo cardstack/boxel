@@ -11,6 +11,7 @@ interface Args {
     // that is equal to the column
     hasColumnKey: <T extends CardDef>(card: T, key: string) => boolean;
     columnKeys: string[];
+    orderBy?: <T extends CardDef>(a: T, b: T) => number;
   };
 }
 
@@ -22,6 +23,7 @@ class KanbanResource extends Resource<Args> {
   @tracked private data: Map<string, DndColumn> = new Map();
   hasColumnKey?: <T extends CardDef>(card: T, key: string) => boolean =
     undefined;
+  orderBy?: <T extends CardDef>(a: T, b: T) => number = undefined;
 
   commit(cards: CardDef[], columnKeys: string[]) {
     columnKeys.forEach((key: string) => {
@@ -41,10 +43,19 @@ class KanbanResource extends Resource<Args> {
         let newCards = cardsForStatus.filter(
           (card: CardDef) => !existingCardIds.has(card.id),
         );
-        this.data.set(key, new DndColumn(key, [...newCards, ...existingCards]));
+
+        let sortedCards = [...newCards, ...existingCards];
+        if (this.orderBy) {
+          sortedCards = sortedCards.sort(this.orderBy);
+        }
+        this.data.set(key, new DndColumn(key, sortedCards));
       } else {
         // First time loading this column
-        this.data.set(key, new DndColumn(key, cardsForStatus));
+        let sortedCards = cardsForStatus;
+        if (this.orderBy) {
+          sortedCards = sortedCards.sort(this.orderBy);
+        }
+        this.data.set(key, new DndColumn(key, sortedCards));
       }
     });
   }
@@ -55,6 +66,7 @@ class KanbanResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     this.hasColumnKey = named.hasColumnKey;
+    this.orderBy = named.orderBy;
     this.commit(named.cards, named.columnKeys);
   }
 }
@@ -64,6 +76,7 @@ export default function getKanbanResource<T extends CardDef>(
   cards: () => T[],
   columnKeys: () => string[],
   hasColumnKey: () => (card: T, key: string) => boolean,
+  orderBy: () => (<T extends CardDef>(a: T, b: T) => number) | undefined,
 ) {
   return KanbanResource.from(parent, () => ({
     named: {
@@ -73,6 +86,7 @@ export default function getKanbanResource<T extends CardDef>(
         card: T,
         key: string,
       ) => boolean,
+      orderBy: orderBy?.(),
     },
   }));
 }
