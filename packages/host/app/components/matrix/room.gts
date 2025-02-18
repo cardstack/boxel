@@ -17,6 +17,7 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { resource, use } from 'ember-resources';
 import max from 'lodash/max';
 
 import { MatrixEvent } from 'matrix-js-sdk';
@@ -42,11 +43,13 @@ import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
@@ -139,7 +142,10 @@ export default class Room extends Component<Signature> {
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
-                @autoAttachedFiles={{this.autoAttachedFiles}}
+                @chooseFile={{this.chooseFile}}
+                @removeFile={{this.removeFile}}
+                @submode={{this.operatorModeStateService.state.submode}}
+                @autoAttachedFile={{this.autoAttachedFile}}
                 @filesToAttach={{this.filesToAttach}}
               />
               <LLMSelect
@@ -187,8 +193,6 @@ export default class Room extends Component<Signature> {
       .chat-input-area__bottom-section {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
-        align-items: center;
         padding-right: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xxl);
       }
@@ -209,6 +213,7 @@ export default class Room extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
 
   private roomResource = getRoom(
     this,
@@ -274,12 +279,46 @@ export default class Room extends Component<Signature> {
     return state;
   }
 
-  private get autoAttachedFiles() {
-    return []; // TODO: implement
+  // Using a resource for automatically attached files,
+  // so the file can be reattached after being removed
+  // when the user opens a different file and then returns to this one.
+  @use private autoAttachedFileResource = resource(() => {
+    let state = new TrackedObject<{
+      value: FileDef | undefined;
+      remove: () => void;
+    }>({
+      value: undefined,
+      remove: () => {
+        state.value = undefined;
+      },
+    });
+
+    if (!this.autoAttachedFileUrl) {
+      state.value = undefined;
+    } else {
+      state.value = this.matrixService.fileAPI.createFileDef({
+        sourceUrl: this.autoAttachedFileUrl,
+        name: this.autoAttachedFileUrl.split('/').pop(),
+      });
+    }
+
+    return state;
+  });
+
+  private get autoAttachedFileUrl() {
+    return this.operatorModeStateService.state.codePath?.href;
+  }
+
+  private get autoAttachedFile() {
+    return this.autoAttachedFileResource.value;
+  }
+
+  private get removeAutoAttachedFile() {
+    return this.autoAttachedFileResource.remove;
   }
 
   private get filesToAttach() {
-    return []; // TODO: implement
+    return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
   }
 
   private get isScrolledToBottom() {
@@ -547,6 +586,7 @@ export default class Room extends Component<Signature> {
     this.doSendMessage.perform(
       myLastMessage.message,
       attachedCards,
+      myLastMessage.attachedFiles,
       true,
       myLastMessage.clientGeneratedId,
     );
@@ -568,9 +608,17 @@ export default class Room extends Component<Signature> {
         cards.push(card);
       });
     }
+
+    let files = [];
+    if (this.autoAttachedFile) {
+      files.push(this.autoAttachedFile);
+    }
+    files.push(...this.filesToAttach);
+
     this.doSendMessage.perform(
       prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
+      files.length ? files : undefined,
       Boolean(prompt),
     );
   }
@@ -608,10 +656,47 @@ export default class Room extends Component<Signature> {
       this.cardsToAttach?.length ? this.cardsToAttach : undefined,
     );
   }
+
+  @action
+  private chooseFile(file: FileDef) {
+    let files = this.filesToAttach;
+    if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
+    }
+  }
+
+  @action
+  private isAutoAttachedFile(file: FileDef) {
+    return this.autoAttachedFile?.sourceUrl === file.sourceUrl;
+  }
+
+  @action
+  private removeFile(file: FileDef) {
+    if (this.isAutoAttachedFile(file)) {
+      this.removeAutoAttachedFile();
+      return;
+    }
+
+    const fileIndex = this.filesToAttach?.findIndex(
+      (f) => f.sourceUrl === file.sourceUrl,
+    );
+    if (fileIndex != undefined && fileIndex !== -1) {
+      if (this.filesToAttach !== undefined) {
+        this.filesToAttach.splice(fileIndex, 1);
+      }
+    }
+
+    this.matrixService.cardsToSend.set(
+      this.args.roomId,
+      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+    );
+  }
+
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
       cards?: CardDef[],
+      files?: FileDef[],
       keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
     ) => {
@@ -630,10 +715,15 @@ export default class Room extends Component<Signature> {
           .map((stackItem) => stackItem.card.id),
       };
       try {
+        if (files) {
+          files = await this.matrixService.uploadFiles(files);
+        }
+
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
+          files,
           clientGeneratedId,
           context,
         );

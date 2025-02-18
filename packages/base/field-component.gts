@@ -306,7 +306,7 @@ export function getBoxComponent(
           works if we use up all the space horizontally and vertically that is available
           to the card since some of our queries are height queries
         */
-        height: 58px;
+        height: 65px;
         container-name: fitted-card;
         container-type: size;
         overflow: hidden;

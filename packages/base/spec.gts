@@ -8,7 +8,7 @@ import {
   FieldDef,
   containsMany,
   getCardMeta,
-  type CardorFieldTypeIcon,
+  type CardOrFieldTypeIcon,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -82,7 +82,7 @@ export class Spec extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    icon: CardorFieldTypeIcon | undefined;
+    icon: CardOrFieldTypeIcon | undefined;
 
     get defaultIcon() {
       return this.args.model.constructor?.icon;
