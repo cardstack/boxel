@@ -4,7 +4,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
 import { restartableTask, task } from 'ember-concurrency';
@@ -38,6 +37,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -248,11 +249,13 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           {{/if}}
         {{/if}}
       </div>
-      <FormatChooser
-        class='format-chooser'
-        @format={{this.format}}
-        @setFormat={{this.setFormat}}
-      />
+      {{#if this.card}}
+        <FormatChooser
+          class='format-chooser'
+          @format={{this.format}}
+          @setFormat={{this.setFormat}}
+        />
+      {{/if}}
     </div>
     <style scoped>
       .playground-panel-content {
@@ -355,12 +358,14 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
-  @tracked private format: Format = 'isolated';
-  private playgroundSelections: Record<string, string>;
+  private playgroundSelections: Record<
+    string, // moduleId
+    { cardId: string; format: Format }
+  >; // TrackedObject
 
   constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
-    let selections = window.localStorage.getItem('playground-selections');
+    let selections = window.localStorage.getItem(PlaygroundSelections);
 
     this.playgroundSelections = new TrackedObject(
       selections?.length ? JSON.parse(selections) : {},
@@ -403,22 +408,27 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     };
   }
 
-  private cardResource = getCard(this, () =>
-    this.playgroundSelections[this.args.moduleId]?.replace(/\.json$/, ''),
+  private cardResource = getCard(
+    this,
+    () => this.playgroundSelections[this.args.moduleId]?.cardId,
   );
 
   private get card(): CardDef | undefined {
     return this.cardResource.card;
   }
 
+  private get format(): Format {
+    return this.playgroundSelections[this.args.moduleId]?.format ?? 'isolated';
+  }
+
   private copyToClipboard = task(async (id: string) => {
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = task(async (id: string, format: Format) => {
+  private openInInteractMode = task(async (id: string) => {
     await this.operatorModeStateService.openCardInInteractMode(
       new URL(id),
-      format,
+      this.format === 'edit' ? 'edit' : 'isolated',
     );
   });
 
@@ -438,28 +448,31 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode.perform(cardId, this.format),
+        action: () => this.openInInteractMode.perform(cardId),
         icon: Eye,
       }),
     ];
     return menuItems;
   }
 
-  private persistSelections = (cardId: string) => {
-    this.playgroundSelections[this.args.moduleId] = cardId;
+  private persistSelections = (cardId: string, format = this.format) => {
+    this.playgroundSelections[this.args.moduleId] = { cardId, format };
     window.localStorage.setItem(
-      'playground-selections',
+      PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
     );
   };
 
   @action private onSelect(card: PrerenderedCard) {
-    this.persistSelections(card.url);
+    this.persistSelections(card.url.replace(/\.json$/, ''));
   }
 
   @action
   private setFormat(format: Format) {
-    this.format = format;
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistSelections(this.card.id, format);
   }
 
   private chooseCard = restartableTask(async () => {

@@ -5,6 +5,10 @@ import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+
+import type { Format } from 'https://cardstack.com/base/card-api';
+
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
@@ -230,7 +234,7 @@ export class BlogPost extends CardDef {
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );
-    window.localStorage.setItem('playground-selections', '');
+    window.localStorage.setItem(PlaygroundSelections, '');
   });
 
   test('can render playground panel when a card def is selected', async function (assert) {
@@ -262,7 +266,7 @@ export class BlogPost extends CardDef {
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
     window.localStorage.setItem('recent-files', '');
-    window.localStorage.setItem('playground-selections', '');
+    window.localStorage.setItem(PlaygroundSelections, '');
 
     await visitOperatorMode({
       submode: 'code',
@@ -339,12 +343,18 @@ export class BlogPost extends CardDef {
 
   test('can populate playground preview with previous choices saved in local storage', async function (assert) {
     let selections = {
-      [`${testRealmURL}author/Author`]: `${testRealmURL}Author/jane-doe.json`,
-      [`${testRealmURL}blog-post/BlogPost`]: `${testRealmURL}BlogPost/remote-work.json`,
-      [`${testRealmURL}blog-post/Category`]: `${testRealmURL}Category/city-design.json`,
+      [`${testRealmURL}author/Author`]: {
+        cardId: `${testRealmURL}Author/jane-doe`,
+      },
+      [`${testRealmURL}blog-post/BlogPost`]: {
+        cardId: `${testRealmURL}BlogPost/remote-work`,
+      },
+      [`${testRealmURL}blog-post/Category`]: {
+        cardId: `${testRealmURL}Category/city-design`,
+      },
     };
     window.localStorage.setItem(
-      'playground-selections',
+      PlaygroundSelections,
       JSON.stringify(selections),
     );
     const assertCardExists = (fileName: string) => {
@@ -718,5 +728,115 @@ export class BlogPost extends CardDef {
       callback: async () => await realm.write('blog-post.gts', blogPostCard),
     });
     assert.dom('[data-test-post-title]').includesText('Hello Mad As a Hatter');
+  });
+
+  test('can remember format choice via local storage', async function (assert) {
+    const authorModuleId = `${testRealmURL}author/Author`;
+    const categoryModuleId = `${testRealmURL}blog-post/Category`;
+    const blogPostModuleId = `${testRealmURL}blog-post/BlogPost`;
+    const authorId = `${testRealmURL}Author/jane-doe`;
+    const categoryId1 = `${testRealmURL}Category/city-design`;
+    const categoryId2 = `${testRealmURL}Category/future-tech`;
+    const blogPostId1 = `${testRealmURL}BlogPost/mad-hatter`;
+    const blogPostId2 = `${testRealmURL}BlogPost/remote-work`;
+
+    window.localStorage.setItem(
+      PlaygroundSelections,
+      JSON.stringify({
+        [`${authorModuleId}`]: {
+          cardId: authorId,
+          format: 'edit',
+        },
+        [`${categoryModuleId}`]: {
+          cardId: categoryId1,
+          format: 'embedded',
+        },
+        [`${blogPostModuleId}`]: {
+          cardId: blogPostId1,
+        },
+      }),
+    );
+    const getSelection = (moduleId: string) => {
+      let selections = window.localStorage.getItem(PlaygroundSelections);
+      if (!selections) {
+        throw new Error('No selections found in mock local storage');
+      }
+      return JSON.parse(selections)[moduleId];
+    };
+    const assertCorrectFormat = (
+      cardId: string,
+      format: Format,
+      message?: string,
+    ) => {
+      const dataAttr = `[data-test-playground-panel] [data-test-card="${cardId}"][data-test-card-format="${format}"]`;
+      assert.dom(dataAttr).exists(message);
+    };
+    await visitOperatorMode({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    assertCorrectFormat(authorId, 'edit');
+    await click('[data-test-format-chooser-atom]'); // change selected format
+    assertCorrectFormat(authorId, 'atom');
+    assert.deepEqual(
+      getSelection(authorModuleId),
+      {
+        cardId: authorId,
+        format: 'atom',
+      },
+      'local storage is updated',
+    );
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="blog-post.gts"]'); // change open file
+    assertCorrectFormat(categoryId1, 'embedded');
+
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="1"]'); // change selected instance
+    assertCorrectFormat(categoryId2, 'embedded');
+    assert.deepEqual(
+      getSelection(categoryModuleId),
+      {
+        cardId: categoryId2,
+        format: 'embedded',
+      },
+      'local storage is updated',
+    );
+
+    await click('[data-test-inspector-toggle]');
+    await click('[data-test-boxel-selector-item-text="BlogPost"]'); // change selected module
+    assertCorrectFormat(blogPostId1, 'isolated', 'default format is correct');
+    await click('[data-test-format-chooser-fitted]'); // change selected format
+    assert.deepEqual(getSelection(blogPostModuleId), {
+      cardId: blogPostId1,
+      format: 'fitted',
+    });
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="1"]'); // change selected instance
+    assertCorrectFormat(blogPostId2, 'fitted');
+    assert.deepEqual(getSelection(blogPostModuleId), {
+      cardId: blogPostId2,
+      format: 'fitted',
+    });
+
+    let selections = window.localStorage.getItem(PlaygroundSelections);
+    assert.strictEqual(
+      selections,
+      JSON.stringify({
+        [`${authorModuleId}`]: {
+          cardId: authorId,
+          format: 'atom',
+        },
+        [`${categoryModuleId}`]: {
+          cardId: categoryId2,
+          format: 'embedded',
+        },
+        [`${blogPostModuleId}`]: {
+          cardId: blogPostId2,
+          format: 'fitted',
+        },
+      }),
+    );
   });
 });
