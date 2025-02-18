@@ -9,6 +9,13 @@ import { DndItem } from '@cardstack/boxel-ui/components';
 import { AppCard } from '../app-card';
 import { CRMTask } from './task';
 
+export type TaskSortBy = 'dueDate' | 'priority';
+export type TaskSortOrder = 'asc' | 'desc';
+type TaskSort = {
+  by?: TaskSortBy;
+  order?: TaskSortOrder;
+};
+
 interface CRMTaskPlannerArgs {
   Args: {
     model: Partial<AppCard>;
@@ -17,8 +24,7 @@ interface CRMTaskPlannerArgs {
     viewCard: () => void;
     searchFilter?: Filter[];
     taskFilter?: Filter[];
-    sortBy?: 'dueDate' | 'priority';
-    sortOrder?: 'asc' | 'desc';
+    sort?: TaskSort;
   };
   Element: HTMLElement;
 }
@@ -26,7 +32,7 @@ interface CRMTaskPlannerArgs {
 const sortByDueDate = (
   a: CardDef,
   b: CardDef,
-  order: 'asc' | 'desc' = 'asc',
+  order: TaskSortOrder = 'asc',
 ) => {
   const crmTaskA = a as CRMTask;
   const crmTaskB = b as CRMTask;
@@ -44,7 +50,7 @@ const sortByDueDate = (
 const sortByPriority = (
   a: CardDef,
   b: CardDef,
-  order: 'asc' | 'desc' = 'asc',
+  order: TaskSortOrder = 'asc',
 ) => {
   const crmTaskA = a as CRMTask;
   const crmTaskB = b as CRMTask;
@@ -152,13 +158,13 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
   }
 
   getOrderBy() {
-    if (this.args.sortBy === 'dueDate') {
+    if (this.args.sort?.by === 'dueDate') {
       return (a: CardDef, b: CardDef) =>
-        sortByDueDate(a, b, this.args.sortOrder);
+        sortByDueDate(a, b, this.args.sort?.order);
     }
-    if (this.args.sortBy === 'priority') {
+    if (this.args.sort?.by === 'priority') {
       return (a: CardDef, b: CardDef) =>
-        sortByPriority(a, b, this.args.sortOrder);
+        sortByPriority(a, b, this.args.sort?.order);
     }
     return undefined;
   }

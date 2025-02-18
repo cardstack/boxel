@@ -48,7 +48,7 @@ import { DEAL_STATUS_VALUES } from './crm/deal-status';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
 import type { LooseSingleCardDocument, Sort } from '@cardstack/runtime-common';
-
+import type { TaskSortBy, TaskSortOrder } from './crm/task-planner';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   Card as CardIcon,
@@ -65,8 +65,8 @@ interface ViewItem {
   id: ViewOption;
 }
 
-const sortByDueDate: (direction: 'asc' | 'desc') => Sort = (
-  direction: 'asc' | 'desc',
+const sortByDueDate: (direction: TaskSortOrder) => Sort = (
+  direction: TaskSortOrder,
 ) => [
   {
     by: 'dueDate',
@@ -74,8 +74,8 @@ const sortByDueDate: (direction: 'asc' | 'desc') => Sort = (
   },
 ];
 
-const sortByPriority: (direction: 'asc' | 'desc') => Sort = (
-  direction: 'asc' | 'desc',
+const sortByPriority: (direction: TaskSortOrder) => Sort = (
+  direction: TaskSortOrder,
 ) => [
   {
     by: 'priority',
@@ -470,15 +470,11 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     return taskFilter;
   }
 
-  get taskSortBy() {
-    return this.selectedSort?.sort?.[0]?.by as
-      | 'dueDate'
-      | 'priority'
-      | undefined;
-  }
-
-  get taskSortOrder() {
-    return this.selectedSort?.sort?.[0]?.direction ?? 'desc';
+  get taskSort() {
+    return {
+      by: this.selectedSort?.sort?.[0]?.by as TaskSortBy | undefined,
+      order: this.selectedSort?.sort?.[0]?.direction,
+    };
   }
 
   get searchPlaceholder() {
@@ -604,8 +600,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @viewCard={{this.viewCard}}
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
-            @sortBy={{this.taskSortBy}}
-            @sortOrder={{this.taskSortOrder}}
+            @sort={{this.taskSort}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}
