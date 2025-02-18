@@ -84,8 +84,9 @@ export function isCardDef(
         'Loader is required to check if a code ref is a card def',
       );
     }
-    let card = loadCard(cardOrCodeRef, { loader });
-    return isBaseDef(card) && 'isCardDef' in card;
+    return loadCard(cardOrCodeRef, { loader })
+      .then((card) => isCardDef(card))
+      .catch(() => false);
   }
   return isBaseDef(cardOrCodeRef) && 'isCardDef' in cardOrCodeRef;
 }
