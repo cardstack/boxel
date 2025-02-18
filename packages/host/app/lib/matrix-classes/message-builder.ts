@@ -173,7 +173,7 @@ export default class MessageBuilder {
 
     if (
       this.event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-      this.event.content.data.toolCall
+      this.event.content.data?.toolCall
     ) {
       message.command = this.buildMessageCommand(message);
       message.isStreamingFinished = true;
