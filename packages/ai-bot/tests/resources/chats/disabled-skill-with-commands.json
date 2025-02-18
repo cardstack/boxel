@@ -337,9 +337,7 @@
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"
-      ],
+      "enabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"],
       "disabledEventIds": []
     },
     "state_key": "",
@@ -358,7 +356,7 @@
     "content": {
       "msgtype": "app.boxel.commandDefinitions",
       "body": "Command Definitions",
-      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"SwitchSubmodeCommand\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"SwitchSubmodeCommand_e82a\",\"description\":\"Navigate the UI to another submode. Possible values for submode are \\\"interact\\\" and \\\"code\\\".\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
+      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"default\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"switch-submode_dd88\",\"description\":\"Navigate the UI to another submode. Possible values for submode are \\\"interact\\\" and \\\"code\\\".\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
     },
     "origin_server_ts": 1739278803483,
     "unsigned": {
@@ -377,7 +375,7 @@
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
       "formatted_body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/72d005b5-1a6b-4c6d-995f-2411c5948e74\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Use the tool SwitchSubmodeCommand with \\\\\\\"code\\\\\\\" to go to codemode and \\\\\\\"interact\\\\\\\" to go to interact mode.\\\",\\\"commands\\\":[{\\\"codeRef\\\":{\\\"name\\\":\\\"SwitchSubmodeCommand\\\",\\\"module\\\":\\\"@cardstack/boxel-host/commands/switch-submode\\\"},\\\"requiresApproval\\\":false,\\\"functionName\\\":\\\"SwitchSubmodeCommand_e82a\\\"}],\\\"title\\\":\\\"Switcher\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/72d005b5-1a6b-4c6d-995f-2411c5948e74\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Use the tool SwitchSubmodeCommand with \\\\\\\"code\\\\\\\" to go to codemode and \\\\\\\"interact\\\\\\\" to go to interact mode.\\\",\\\"commands\\\":[{\\\"codeRef\\\":{\\\"name\\\":\\\"default\\\",\\\"module\\\":\\\"@cardstack/boxel-host/commands/switch-submode\\\"},\\\"requiresApproval\\\":false,\\\"functionName\\\":\\\"switch-submode_dd88\\\"}],\\\"title\\\":\\\"Switcher\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1739278803536,
     "unsigned": {
@@ -403,9 +401,7 @@
     "unsigned": {
       "replaces_state": "$YYEiRfzGX1hzo5bN-NgHoBvbjoFJuXRCLIzccG8zBLs",
       "prev_content": {
-        "enabledEventIds": [
-          "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"
-        ],
+        "enabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"],
         "disabledEventIds": []
       },
       "prev_sender": "@admin:localhost",
@@ -416,9 +412,7 @@
     "age": 67563,
     "replaces_state": "$YYEiRfzGX1hzo5bN-NgHoBvbjoFJuXRCLIzccG8zBLs",
     "prev_content": {
-      "enabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"
-      ],
+      "enabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"],
       "disabledEventIds": []
     }
   },
@@ -427,12 +421,8 @@
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": [
-        "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
-      ],
-      "disabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"
-      ]
+      "enabledEventIds": ["$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"],
+      "disabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"]
     },
     "state_key": "",
     "origin_server_ts": 1739278804885,
@@ -476,12 +466,8 @@
     "unsigned": {
       "replaces_state": "$lQl-3AyhfFV2WP2wVP0oYO4L74UbEkbcgMp8AMOm69A",
       "prev_content": {
-        "enabledEventIds": [
-          "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
-        ],
-        "disabledEventIds": [
-          "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"
-        ]
+        "enabledEventIds": ["$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"],
+        "disabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"]
       },
       "prev_sender": "@admin:localhost",
       "age": 8835
@@ -491,12 +477,8 @@
     "age": 8835,
     "replaces_state": "$lQl-3AyhfFV2WP2wVP0oYO4L74UbEkbcgMp8AMOm69A",
     "prev_content": {
-      "enabledEventIds": [
-        "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
-      ],
-      "disabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"
-      ]
+      "enabledEventIds": ["$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"],
+      "disabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"]
     }
   }
 ]

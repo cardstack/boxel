@@ -5,7 +5,7 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
-import { SwitchSubmodeCommand } from '@cardstack/host/commands/switch-submode';
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 

@@ -22,14 +22,14 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { CreateAIAssistantRoomCommand } from '@cardstack/host/commands/create-ai-assistant-room';
-import { GetBoxelUIStateCommand } from '@cardstack/host/commands/get-boxel-ui-state';
-import { OpenAiAssistantRoomCommand } from '@cardstack/host/commands/open-ai-assistant-room';
-import { PatchCardCommand } from '@cardstack/host/commands/patch-card';
-import { SaveCardCommand } from '@cardstack/host/commands/save-card';
-import { SendAiAssistantMessageCommand } from '@cardstack/host/commands/send-ai-assistant-message';
-import { ShowCardCommand } from '@cardstack/host/commands/show-card';
-import { SwitchSubmodeCommand } from '@cardstack/host/commands/switch-submode';
+import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
+import PatchCardCommand from '@cardstack/host/commands/patch-card';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import ShowCardCommand from '@cardstack/host/commands/show-card';
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -152,7 +152,7 @@ module('Acceptance | Commands tests', function (hooks) {
           cardType: Meeting,
         });
 
-        let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+        let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
         );
         let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -219,7 +219,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
             commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -272,7 +272,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
             commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -393,7 +393,7 @@ module('Acceptance | Commands tests', function (hooks) {
               commands: [
                 {
                   codeRef: {
-                    name: 'SwitchSubmodeCommand',
+                    name: 'default',
                     module: '@cardstack/boxel-host/commands/switch-submode',
                   },
                   executors: [],
@@ -847,7 +847,7 @@ module('Acceptance | Commands tests', function (hooks) {
       format: 'org.matrix.custom.html',
       data: JSON.stringify({
         toolCall: {
-          name: 'SwitchSubmodeCommand_e82a',
+          name: 'switch-submode_dd88',
           arguments: {
             attributes: {
               submode: 'code',

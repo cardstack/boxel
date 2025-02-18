@@ -12,7 +12,7 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { Accordion, Button } from '@cardstack/boxel-ui/components';
 
-import { SwitchSubmodeCommand } from '../../commands/switch-submode';
+import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardError } from '../../services/store';
 
 import type CommandService from '../../services/command-service';

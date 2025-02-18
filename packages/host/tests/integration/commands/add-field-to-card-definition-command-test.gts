@@ -5,7 +5,7 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
-import { AddFieldToCardDefinitionCommand } from '@cardstack/host/commands/add-field-to-card-definition';
+import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
 import CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 

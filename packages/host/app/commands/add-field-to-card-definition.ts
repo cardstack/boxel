@@ -7,11 +7,11 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { WriteTextFileCommand } from './write-text-file';
+import WriteTextFileCommand from './write-text-file';
 
 import type CardService from '../services/card-service';
 
-export class AddFieldToCardDefinitionCommand extends HostBaseCommand<
+export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
   typeof BaseCommandModule.AddFieldToCardDefinitionInput
 > {
   @service private declare cardService: CardService;

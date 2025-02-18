@@ -6,7 +6,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export class ShowCardCommand extends HostBaseCommand<
+export default class ShowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.ShowCardInput
 > {
   @service private declare operatorModeStateService: OperatorModeStateService;

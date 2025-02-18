@@ -40,9 +40,20 @@ export class CommandField extends FieldDef {
       }
 
       const hashed = djb2_xor(`${this.codeRef.module}#${this.codeRef.name}`);
-      return `${this.codeRef.name}_${hashed.slice(0, 4)}`;
+      let name =
+        this.codeRef.name === 'default'
+          ? friendlyModuleName(this.codeRef.module)
+          : this.codeRef.name;
+      return `${name}_${hashed.slice(0, 4)}`;
     },
   });
+}
+
+function friendlyModuleName(fullModuleUrl: string) {
+  return fullModuleUrl
+    .split('/')
+    .slice(-1)[0]
+    .replace(/\.gts$/, ' ');
 }
 
 export class SkillCard extends CardDef {

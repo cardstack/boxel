@@ -8,8 +8,8 @@ import { Command } from '@cardstack/runtime-common';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import StringField from 'https://cardstack.com/base/string';
 import { ProductRequirementDocument } from '../product-requirement-document';
-import { AddSkillsToRoomCommand } from '@cardstack/boxel-host/commands/add-skills-to-room';
-import { SendAiAssistantMessageCommand } from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 
 export class GenerateCodeInput extends CardDef {
   @field productRequirements = linksTo(() => ProductRequirementDocument);

@@ -24,8 +24,8 @@ import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
-import { CopyCardCommand } from '@cardstack/host/commands/copy-card';
-import { ShowCardCommand } from '@cardstack/host/commands/show-card';
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import monacoModifier from '@cardstack/host/modifiers/monaco';

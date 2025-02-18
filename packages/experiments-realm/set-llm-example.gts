@@ -2,9 +2,9 @@ import { CardDef, Component } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { SetActiveLLMCommand } from '@cardstack/boxel-host/commands/set-active-llm';
-import { CreateAIAssistantRoomCommand } from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import { OpenAiAssistantRoomCommand } from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 import { Button } from '@cardstack/boxel-ui/components';
 
 class IsolatedTemplate extends Component<typeof SetLlmExample> {
@@ -16,7 +16,7 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) return;
 
-    let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+    let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
       commandContext,
     );
     let { roomId } = await createAIAssistantRoomCommand.execute({

@@ -17,7 +17,7 @@ import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 
-export class SendAiAssistantMessageCommand extends HostBaseCommand<
+export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendAiAssistantMessageInput,
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {

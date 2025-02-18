@@ -20,7 +20,7 @@ interface Configuration {
   cardType: typeof CardDef;
 }
 
-export class PatchCardCommand extends HostBaseCommand<
+export default class PatchCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchCardInput,
   undefined
 > {

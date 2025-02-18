@@ -8,7 +8,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
 
-export class AddSkillsToRoomCommand extends HostBaseCommand<
+export default class AddSkillsToRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.AddSkillsToRoomInput
 > {
   @service private declare matrixService: MatrixService;

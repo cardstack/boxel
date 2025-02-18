@@ -13,7 +13,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
 
-export class CreateAIAssistantRoomCommand extends HostBaseCommand<
+export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,
   typeof BaseCommandModule.CreateAIAssistantRoomResult
 > {

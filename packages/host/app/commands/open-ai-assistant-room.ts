@@ -7,7 +7,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import MatrixService from '../services/matrix-service';
 import OperatorModeStateService from '../services/operator-mode-state-service';
 
-export class OpenAiAssistantRoomCommand extends HostBaseCommand<
+export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.OpenAiAssistantRoomInput
 > {
   @service private declare operatorModeStateService: OperatorModeStateService;

@@ -5,7 +5,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 import NetworkService from '../services/network';
 
-export class WriteTextFileCommand extends HostBaseCommand<
+export default class WriteTextFileCommand extends HostBaseCommand<
   typeof BaseCommandModule.WriteTextFileInput
 > {
   @service private declare network: NetworkService;
