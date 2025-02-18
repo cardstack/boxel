@@ -6,7 +6,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import Folder from '@cardstack/boxel-icons/folder';
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
@@ -18,13 +18,19 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  Eye,
+  IconCode,
+  IconLink,
+  IconPlusThin,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
   type Query,
+  type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -33,6 +39,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -109,6 +116,7 @@ const BeforeOptions: TemplateOnlyComponent<{ Args: {} }> = <template>
 interface AfterOptionsSignature {
   Args: {
     chooseCard: () => void;
+    createNew: () => void;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -116,6 +124,10 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     <span class='title'>
       Action
     </span>
+    <button class='action' {{on 'click' @createNew}} data-test-create-instance>
+      <IconPlusThin width='16px' height='16px' />
+      New card instance
+    </button>
     <button
       class='action'
       {{on 'click' @chooseCard}}
@@ -193,6 +205,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               @afterOptionsComponent={{component
                 AfterOptions
                 chooseCard=(perform this.chooseCard)
+                createNew=(perform this.createNew)
               }}
               data-test-instance-chooser
               as |card|
@@ -354,6 +367,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
+  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
@@ -475,7 +489,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     this.persistSelections(this.card.id, format);
   }
 
-  private chooseCard = restartableTask(async () => {
+  private chooseCard = task(async () => {
     let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type: this.args.codeRef },
     });
@@ -483,6 +497,32 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (chosenCard) {
       this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
       this.persistSelections(chosenCard.id);
+    }
+  });
+
+  private createNew = task(async () => {
+    let ref = this.args.codeRef;
+    let realmURL = this.operatorModeStateService.realmURL.href; // creates in current workspace
+    let doc: LooseSingleCardDocument = {
+      data: {
+        meta: {
+          adoptsFrom: ref,
+          realmURL,
+        },
+      },
+    };
+    try {
+      let card = await this.cardService.createFromSerialized(doc.data, doc);
+      if (!card) {
+        throw new Error(
+          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+        );
+      }
+      await this.cardService.saveModel(card);
+      this.recentFilesService.addRecentFileUrl(`${card.id}.json`);
+      this.persistSelections(card.id, 'edit'); // open new instance in playground in edit format
+    } catch (e: any) {
+      console.log('Error saving', e);
     }
   });
 }
