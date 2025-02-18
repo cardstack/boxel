@@ -34,7 +34,7 @@ test.describe('User Registration w/o Token', () => {
     });
     await smtpStart();
     await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
+    realmServer = await startRealmServer({ includeSeedRealm: true });
   });
 
   test.afterEach(async () => {
