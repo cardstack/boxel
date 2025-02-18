@@ -117,6 +117,7 @@ interface AfterOptionsSignature {
   Args: {
     chooseCard: () => void;
     createNew: () => void;
+    createNewIsRunning?: boolean;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -125,7 +126,11 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       Action
     </span>
     <button class='action' {{on 'click' @createNew}} data-test-create-instance>
-      <IconPlusThin width='16px' height='16px' />
+      {{#if @createNewIsRunning}}
+        <LoadingIndicator class='action-running' />
+      {{else}}
+        <IconPlusThin width='16px' height='16px' />
+      {{/if}}
       New card instance
     </button>
     <button
@@ -163,6 +168,9 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     }
     .action:hover {
       background-color: var(--boxel-100);
+    }
+    .action-running {
+      --boxel-loading-indicator-size: 16px;
     }
   </style>
 </template>;
@@ -206,6 +214,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                 AfterOptions
                 chooseCard=(perform this.chooseCard)
                 createNew=(perform this.createNew)
+                createNewIsRunning=this.createNew.isRunning
               }}
               data-test-instance-chooser
               as |card|
