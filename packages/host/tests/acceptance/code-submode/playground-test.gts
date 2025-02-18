@@ -5,6 +5,8 @@ import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+
 import type { Format } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -232,7 +234,7 @@ export class BlogPost extends CardDef {
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );
-    window.localStorage.setItem('playground-selections', '');
+    window.localStorage.setItem(PlaygroundSelections, '');
   });
 
   test('can render playground panel when a card def is selected', async function (assert) {
@@ -264,7 +266,7 @@ export class BlogPost extends CardDef {
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
     window.localStorage.setItem('recent-files', '');
-    window.localStorage.setItem('playground-selections', '');
+    window.localStorage.setItem(PlaygroundSelections, '');
 
     await visitOperatorMode({
       submode: 'code',
@@ -352,7 +354,7 @@ export class BlogPost extends CardDef {
       },
     };
     window.localStorage.setItem(
-      'playground-selections',
+      PlaygroundSelections,
       JSON.stringify(selections),
     );
     const assertCardExists = (fileName: string) => {
@@ -739,7 +741,7 @@ export class BlogPost extends CardDef {
     const blogPostId2 = `${testRealmURL}BlogPost/remote-work`;
 
     window.localStorage.setItem(
-      'playground-selections',
+      PlaygroundSelections,
       JSON.stringify({
         [`${authorModuleId}`]: {
           cardId: authorId,
@@ -755,7 +757,7 @@ export class BlogPost extends CardDef {
       }),
     );
     const getSelection = (moduleId: string) => {
-      let selections = window.localStorage.getItem('playground-selections');
+      let selections = window.localStorage.getItem(PlaygroundSelections);
       if (!selections) {
         throw new Error('No selections found in mock local storage');
       }
@@ -818,7 +820,7 @@ export class BlogPost extends CardDef {
       format: 'fitted',
     });
 
-    let selections = window.localStorage.getItem('playground-selections');
+    let selections = window.localStorage.getItem(PlaygroundSelections);
     assert.strictEqual(
       selections,
       JSON.stringify({

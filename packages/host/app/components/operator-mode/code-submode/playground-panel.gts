@@ -38,6 +38,8 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import PrerenderedCardSearch, {
@@ -363,7 +365,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
-    let selections = window.localStorage.getItem('playground-selections');
+    let selections = window.localStorage.getItem(PlaygroundSelections);
 
     this.playgroundSelections = new TrackedObject(
       selections?.length ? JSON.parse(selections) : {},
@@ -456,7 +458,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   private persistSelections = (cardId: string, format = this.format) => {
     this.playgroundSelections[this.args.moduleId] = { cardId, format };
     window.localStorage.setItem(
-      'playground-selections',
+      PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
     );
   };
