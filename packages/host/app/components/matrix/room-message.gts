@@ -34,7 +34,7 @@ interface Signature {
     // use a RoomResource as an arg instead of message to keep this component stable
     // when new messages are received--otherwise a RoomMessage component is created for
     // _every_ matrix event received regardless if the event had anything to do with this
-    // message--probably the
+    // message.
     roomResource: RoomResource;
     index: number;
     monacoSDK: MonacoSDK;
