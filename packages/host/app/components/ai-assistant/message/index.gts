@@ -14,6 +14,8 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 
@@ -23,7 +25,6 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { ComponentLike } from '@glint/template';
-import { isCardInstance } from '@cardstack/runtime-common';
 
 function findLastTextNodeWithContent(parentNode: Node): Text | null {
   // iterate childNodes in reverse to find the last text node with non-whitespace text
