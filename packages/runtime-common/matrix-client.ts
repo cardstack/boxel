@@ -40,18 +40,6 @@ export class MatrixClient {
     this.username = username;
     this.password = password;
     this.seed = seed;
-
-    console.trace(
-      'matrix clien created for username ' +
-        this.username +
-        ' client index ' +
-        this.clientIndex,
-    );
-
-    if (this.clientIndex === 3) {
-      console.log("skpping logging in but it's 3");
-      // this.login();
-    }
   }
 
   getUserId() {
