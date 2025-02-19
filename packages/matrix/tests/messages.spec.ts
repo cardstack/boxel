@@ -348,6 +348,12 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'Are there any computed fields in person.gts?',
+        files: [
+          {
+            sourceUrl: `${appURL}/person.gts`,
+            name: 'person.gts'
+          },
+        ]
       },
     ]);
 
@@ -406,6 +412,16 @@ test.describe('Room messages', () => {
       {
         from: 'user1',
         message: 'Are there any computed fields in person.gts?',
+        files: [
+          {
+            sourceUrl: `${appURL}/person.gts`,
+            name: 'person.gts'
+          },
+          {
+            sourceUrl: `${appURL}/pet.gts`,
+            name: 'pet.gts'
+          }
+        ]
       },
     ]);
 
