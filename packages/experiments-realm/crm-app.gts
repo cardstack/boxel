@@ -458,7 +458,20 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           ];
           break;
         case 'High Priority':
-          taskFilter = [{ eq: { 'priority.label': 'High' } }];
+          taskFilter = [
+            {
+              on: this.activeFilter.cardRef,
+              not: { eq: { 'priority.label': 'Lowest' } },
+            },
+            {
+              on: this.activeFilter.cardRef,
+              not: { eq: { 'priority.label': 'Low' } },
+            },
+            {
+              on: this.activeFilter.cardRef,
+              not: { eq: { 'priority.label': 'Medium' } },
+            },
+          ];
           break;
         case 'Unassigned':
           taskFilter = [{ eq: { 'assignee.id': null } }];
