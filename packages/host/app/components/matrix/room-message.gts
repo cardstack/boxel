@@ -182,6 +182,9 @@ export default class RoomMessage extends Component<Signature> {
 
     return {
       cards: cards.length ? cards : undefined,
+      files: this.message.attachedFiles?.length
+        ? this.message.attachedFiles
+        : undefined,
       errors: errors.length ? errors : undefined,
     };
   });

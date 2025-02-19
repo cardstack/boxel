@@ -228,6 +228,7 @@ export default class Room extends Component<Signature> {
 
   @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
+  private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
     RoomData,
     {
@@ -352,7 +353,7 @@ export default class Room extends Component<Signature> {
   }: {
     index: number;
     element: HTMLElement;
-    scrollTo: () => void;
+    scrollTo: (arg?: any) => void;
   }) => {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
@@ -380,13 +381,17 @@ export default class Room extends Component<Signature> {
       index === this.lastReadMessageIndex + 1
     ) {
       scrollTo();
+    } else if (this.isScrolledToBottom) {
+      this.scrollConversationToBottom?.();
     }
   };
 
   private registerConversationScroller = (
     isConversationScrollable: () => boolean,
+    scrollToBottom: () => void,
   ) => {
     this.getConversationScrollability = isConversationScrollable;
+    this.scrollConversationToBottom = scrollToBottom;
   };
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {

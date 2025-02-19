@@ -14,13 +14,18 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import CardPill from '@cardstack/host/components/card-pill';
+import FilePill from '@cardstack/host/components/file-pill';
 import CodeBlock from '@cardstack/host/modifiers/code-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+
 import type CardService from '@cardstack/host/services/card-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -61,6 +66,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     resources?: {
       cards: CardDef[] | undefined;
+      files: FileDef[] | undefined;
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
@@ -92,6 +98,7 @@ interface MessageScrollerSignature {
 
 class MessageScroller extends Modifier<MessageScrollerSignature> {
   private hasRegistered = false;
+  private observer?: MutationObserver;
   modify(
     element: HTMLElement,
     _positional: [],
@@ -105,6 +112,21 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
         scrollTo: element.scrollIntoView.bind(element),
       });
     }
+
+    this.observer?.disconnect();
+
+    this.observer = new MutationObserver(() => {
+      registerScroller({
+        index,
+        element,
+        scrollTo: element.scrollIntoView.bind(element),
+      });
+    });
+    this.observer.observe(element, { childList: true, subtree: true });
+
+    registerDestructor(this, () => {
+      this.observer?.disconnect();
+    });
   }
 }
 
@@ -112,7 +134,10 @@ interface ScrollPositionSignature {
   Args: {
     Named: {
       setScrollPosition: (args: { isBottom: boolean }) => void;
-      registerConversationScroller: (isScrollable: () => boolean) => void;
+      registerConversationScroller: (
+        isScrollable: () => boolean,
+        scrollToBottom: () => void,
+      ) => void;
     };
   };
 }
@@ -134,6 +159,9 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       this.hasRegistered = true;
       registerConversationScroller(
         () => element.scrollHeight > element.clientHeight,
+        () => {
+          element.scrollTop = element.scrollHeight - element.clientHeight;
+        },
       );
     }
 
@@ -217,10 +245,14 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           {{yield}}
 
-          {{#if @resources.cards.length}}
-            <div class='cards' data-test-message-cards>
-              {{#each @resources.cards as |card|}}
-                <CardPill @card={{card}} />
+          {{#if this.items.length}}
+            <div class='items' data-test-message-items>
+              {{#each this.items as |item|}}
+                {{#if (isCardInstance item)}}
+                  <CardPill @card={{item}} />
+                {{else}}
+                  <FilePill @file={{item}} />
+                {{/if}}
               {{/each}}
             </div>
           {{/if}}
@@ -330,15 +362,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .is-pending .content,
-      .is-pending .content .cards > :deep(.card-pill),
-      .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
+      .is-pending .content .items > :deep(.card-pill),
+      .is-pending .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
 
       .is-error .content,
-      .is-error .content .cards > :deep(.card-pill),
-      .is-error .content .cards > :deep(.card-pill .boxel-card-container) {
+      .is-error .content .items > :deep(.card-pill),
+      .is-error .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
         max-height: 300px;
@@ -399,7 +431,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         border-color: var(--boxel-light);
       }
 
-      .cards {
+      .items {
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;
@@ -486,13 +518,23 @@ export default class AiAssistantMessage extends Component<Signature> {
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;
   }
+
+  private get items() {
+    return [
+      ...(this.args.resources?.cards ?? []),
+      ...(this.args.resources?.files ?? []),
+    ];
+  }
 }
 
 interface AiAssistantConversationSignature {
   Element: HTMLDivElement;
   Args: {
     setScrollPosition: (args: { isBottom: boolean }) => void;
-    registerConversationScroller: (isScrollable: () => boolean) => void;
+    registerConversationScroller: (
+      isScrollable: () => boolean,
+      scrollToBottom: () => void,
+    ) => void;
   };
   Blocks: {
     default: [];

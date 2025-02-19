@@ -1609,6 +1609,55 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
+  test('scrolling stays at the bottom if a message is streaming in', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    fillRoomWithReadMessages(roomId);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `thinking...`,
+      msgtype: 'm.text',
+      formatted_body: `thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      msgtype: 'm.text',
+      formatted_body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      ['m.relates_to']: {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
