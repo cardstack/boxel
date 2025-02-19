@@ -351,9 +351,9 @@ test.describe('Room messages', () => {
         files: [
           {
             sourceUrl: `${appURL}/person.gts`,
-            name: 'person.gts'
+            name: 'person.gts',
           },
-        ]
+        ],
       },
     ]);
 
@@ -415,13 +415,13 @@ test.describe('Room messages', () => {
         files: [
           {
             sourceUrl: `${appURL}/person.gts`,
-            name: 'person.gts'
+            name: 'person.gts',
           },
           {
             sourceUrl: `${appURL}/pet.gts`,
-            name: 'pet.gts'
-          }
-        ]
+            name: 'pet.gts',
+          },
+        ],
       },
     ]);
 
@@ -497,8 +497,6 @@ test.describe('Room messages', () => {
 
     await page.locator('[data-test-message-field]').fill('no card');
     await page.locator('[data-test-send-message-btn]').click();
-
-    await page.pause();
 
     await assertMessages(page, [
       {
