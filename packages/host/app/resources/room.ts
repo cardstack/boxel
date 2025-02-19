@@ -284,6 +284,30 @@ export class RoomResource extends Resource<Args> {
     }
   });
 
+  private async loadFromEvents(roomId: string) {
+    let index = this._messageCache.size;
+
+    for (let event of this.sortedEvents) {
+      switch (event.type) {
+        case 'm.room.member':
+          await this.loadRoomMemberEvent(roomId, event);
+          break;
+        case 'm.room.message':
+          this.loadRoomMessage({ roomId, event, index });
+          break;
+        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          this.updateMessageCommandResult({ roomId, event, index });
+          break;
+        case 'm.room.create':
+          await this.loadRoomCreateEvent(event);
+          break;
+        case 'm.room.name':
+          await this.loadRoomNameEvent(event);
+          break;
+      }
+    }
+  }
+
   private async loadRoomMemberEvent(
     roomId: string,
     event: InviteEvent | JoinEvent | LeaveEvent,

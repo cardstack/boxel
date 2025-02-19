@@ -26,7 +26,6 @@ import {
   baseRealm,
   LooseCardResource,
   ResolvedCodeRef,
-  getClass,
   aiBotUsername,
 } from '@cardstack/runtime-common';
 
