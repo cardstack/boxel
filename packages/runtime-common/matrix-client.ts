@@ -49,8 +49,8 @@ export class MatrixClient {
     );
 
     if (this.clientIndex === 3) {
-      console.log("logging in because it's 3");
-      this.login();
+      console.log("skpping logging in but it's 3");
+      // this.login();
     }
   }
 

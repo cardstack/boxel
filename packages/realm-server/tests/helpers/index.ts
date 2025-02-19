@@ -385,6 +385,11 @@ export async function runTestRealmServer({
     publisher,
     dbAdapter,
   });
+
+  if (loginMatrix) {
+    await testRealm.matrixClient.login();
+  }
+
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
   let seedRealmURL: URL | undefined;
