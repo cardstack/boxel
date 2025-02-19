@@ -15,8 +15,10 @@ import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import CardPill from '@cardstack/host/components/card-pill';
-
+import CodeBlock from '@cardstack/host/modifiers/code-block';
+import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import type CardService from '@cardstack/host/services/card-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -62,6 +64,7 @@ interface Signature {
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
+    monacoSDK: MonacoSDK;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -160,6 +163,13 @@ export default class AiAssistantMessage extends Component<Signature> {
         is-error=@errorMessage
       }}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
+      {{CodeBlock
+        codeBlockSelector='pre[data-codeblock]'
+        languageAttr='data-codeblock'
+        monacoSDK=@monacoSDK
+        editorDisplayOptions=this.editorDisplayOptions
+        index=@index
+      }}
       data-test-ai-assistant-message
       ...attributes
     >
@@ -395,8 +405,83 @@ export default class AiAssistantMessage extends Component<Signature> {
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
       }
+
+      :deep(.preview-code) {
+        --spacing: var(--boxel-sp-sm);
+        --fill-container-spacing: calc(
+          -1 * var(--ai-assistant-message-padding)
+        );
+        margin: var(--boxel-sp) var(--fill-container-spacing) 0
+          var(--fill-container-spacing);
+        padding: var(--spacing) 0;
+        background-color: var(--boxel-dark);
+      }
+
+      :deep(.preview-code.code-block) {
+        position: relative;
+        padding-top: var(--boxel-sp-xxxl);
+      }
+
+      :deep(.monaco-container) {
+        height: var(--monaco-container-height);
+        min-height: 7rem;
+        max-height: 30vh;
+      }
+
+      /*
+        This filter is a best-effort approximation of a good looking dark theme that is a function of the white theme that
+        we use for code previews in the AI panel. While Monaco editor does support multiple themes, it does not support
+        monaco instances with different themes *on the same page*. This is why we are using a filter to approximate the
+        dark theme. More details here: https://github.com/Microsoft/monaco-editor/issues/338 (monaco uses global style tags
+        with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
+        effectively disabling multiple themes to be used on the same page)
+      */
+      :global(.preview-code .monaco-editor) {
+        filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
+      }
+
+      /* we are cribbing the boxel-ui style here as we have a rather 
+      awkward way that we insert the copy button */
+      :deep(.code-copy-button) {
+        --spacing: calc(1rem / 1.333);
+
+        position: absolute;
+        top: var(--boxel-sp);
+        left: var(--boxel-sp-lg);
+        color: var(--boxel-highlight);
+        background: none;
+        border: none;
+        font: 600 var(--boxel-font-xs);
+        padding: 0;
+        margin-bottom: var(--spacing);
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--spacing);
+        letter-spacing: var(--boxel-lsp-xs);
+        justify-content: center;
+        height: min-content;
+        align-items: center;
+        white-space: nowrap;
+        min-height: var(--boxel-button-min-height);
+        min-width: var(--boxel-button-min-width, 5rem);
+      }
+      :deep(.code-copy-button .copy-text) {
+        color: transparent;
+      }
+      :deep(.code-copy-button .copy-text:hover) {
+        color: var(--boxel-highlight);
+      }
     </style>
   </template>
+
+  editorDisplayOptions: MonacoEditorOptions = {
+    wordWrap: 'on',
+    wrappingIndent: 'indent',
+    fontWeight: 'bold',
+    scrollbar: {
+      alwaysConsumeMouseWheel: false,
+    },
+  };
 
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;

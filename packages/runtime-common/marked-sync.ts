@@ -1,53 +1,34 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
+import { v4 as uuidv4 } from 'uuid';
 
-interface Options {
-  includeCodeCopyButton?: true;
-}
+const CODEBLOCK_KEY_PREFIX = 'codeblock_';
 
-export function markedSync(markdown: string, opts?: Options) {
+export function markedSync(markdown: string) {
   return marked
     .use({
       renderer: {
+        // If you are relying on codeblocks in your
+        // markdown, please use the `CodeBlock` modifier to render the
+        // markdown.
         code(code, language) {
-          let html: string[] = [];
-          if (opts?.includeCodeCopyButton) {
-            html.push(`
-              <button class="code-copy-button">
-                <svg
-                  xmlns='http://www.w3.org/2000/svg'
-                  width='16'
-                  height='16'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                  stroke-width='3'
-                  class='lucide lucide-copy'
-                  viewBox='0 0 24 24'
-                  role='presentation'
-                  aria-hidden='true'
-                  ...attributes
-                ><rect width='14' height='14' x='8' y='8' rx='2' ry='2' /><path
-                    d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'
-                  />
-                </svg>
-                <span class="copy-text">Copy to clipboard</span>
-              </button>`);
-          }
-          html.push(
-            `<pre class="language-${language}" data-codeblock>${code}</pre>`,
-          );
-          return html.join('\n');
+          let id = `${CODEBLOCK_KEY_PREFIX}${uuidv4()}`;
+          // we pass the code thru using localstorage instead of in the DOM,
+          // that way we don't have to worry about escaping code. note that the
+          // DOM wants to render "<template>" strings when we put them in the
+          // DOM even when wrapped by <pre>. also consider a codeblock that has
+          // a "</pre>" string in it.
+          //
+          // also note that since we are in common, we don't have ember-window-mock
+          // available to us.
+          globalThis.localStorage?.setItem(id, code);
+          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${code}</pre></div>`;
         },
       },
     })
     .parse(markdown, { async: false }) as string;
 }
 
-export function markdownToHtml(
-  markdown: string | null | undefined,
-  opts?: Options,
-): string {
-  return markdown ? sanitizeHtml(markedSync(markdown, opts)) : '';
+export function markdownToHtml(markdown: string | null | undefined): string {
+  return markdown ? sanitizeHtml(markedSync(markdown)) : '';
 }

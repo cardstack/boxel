@@ -88,7 +88,7 @@ export default class Room extends Component<Signature> {
           {{#each this.messages key='eventId' as |message i|}}
             <RoomMessage
               @roomId={{@roomId}}
-              @message={{message}}
+              @roomResource={{this.roomResource}}
               @index={{i}}
               @registerScroller={{this.registerMessageScroller}}
               @isPending={{this.isPendingMessage message}}
