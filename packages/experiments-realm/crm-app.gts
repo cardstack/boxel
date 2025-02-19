@@ -469,15 +469,12 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
         case 'High Priority':
           taskFilter = [
             {
-              on: this.activeFilter.cardRef,
               not: { eq: { 'priority.label': 'Lowest' } },
             },
             {
-              on: this.activeFilter.cardRef,
               not: { eq: { 'priority.label': 'Low' } },
             },
             {
-              on: this.activeFilter.cardRef,
               not: { eq: { 'priority.label': 'Medium' } },
             },
           ];
