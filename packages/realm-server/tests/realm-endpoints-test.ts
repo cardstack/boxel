@@ -131,7 +131,7 @@ module(basename(__filename), function () {
         );
       }, 5000);
 
-      new eventSource(`${testRealmHref}_message`);
+      let actualEventSource = new eventSource(`${testRealmHref}_message`);
 
       let joinedRooms = await matrixClient.getJoinedRooms();
       console.log(
@@ -167,6 +167,8 @@ module(basename(__filename), function () {
         console.log('no roomId');
       }
       clearTimeout(timeout);
+
+      actualEventSource.close();
 
       return result;
 
