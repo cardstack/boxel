@@ -2638,6 +2638,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('button.code-copy-button')
       .exists('the copy code to clipboard button exists');
+
+    // the chrome security model prevents the clipboard API
+    // from working when tests are run in a headless mode, so we are unable to
+    // assert the button actually copies contents to the clipboard
   });
 
   test('it renders codeblock in monaco', async function (assert) {

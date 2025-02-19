@@ -215,10 +215,6 @@ export class RoomResource extends Resource<Args> {
       .filter(Boolean) as Skill[];
   }
 
-  // get roomId() {
-  //   return this._previousRoomId;
-  // }
-
   @cached
   get created() {
     if (this._createEvent) {
