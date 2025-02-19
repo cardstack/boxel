@@ -112,11 +112,11 @@ export default class StoreService extends Service {
       const index = resources.findIndex(
         (s) => s.resourceState.resource === resource,
       );
-      let { onCardChange } = resources[index].resourceState;
+      let { onCardChange } = resources[index]?.resourceState || {};
       if (onCardChange && resource.card) {
         let autoSaveState = this.getAutoSaveState(resource.card);
         if (autoSaveState?.hasUnsavedChanges) {
-          onCardChange();
+          this.saveCard.perform(resource.card);
         }
 
         resource.api.unsubscribeFromChanges(resource.card, onCardChange);

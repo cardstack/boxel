@@ -288,9 +288,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         max-height: 20rem;
       }
       :deep(
-          .boxel-select__dropdown
-            .ember-power-select-option[aria-current='true']
-        ),
+        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
+      ),
       :deep(.instances-dropdown-content .ember-power-select-option) {
         background-color: var(--boxel-light);
       }
