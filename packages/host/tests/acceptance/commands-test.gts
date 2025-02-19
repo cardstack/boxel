@@ -17,7 +17,7 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 import { baseRealm, Command } from '@cardstack/runtime-common';
 
 import {
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -481,11 +481,12 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1',
           name: toolName,
           arguments: {
             attributes: {
@@ -493,8 +494,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -545,18 +545,18 @@ module('Acceptance | Commands tests', function (hooks) {
     let toolName = boxelMessageData.context.tools[0].function.name;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Delaying 1 second',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Delaying 1 second',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1',
           name: toolName,
           arguments: {
             attributes: {},
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -659,11 +659,11 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: toolName,
           arguments: {
             attributes: {
@@ -671,8 +671,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -750,11 +749,11 @@ module('Acceptance | Commands tests', function (hooks) {
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Update card',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Update card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: toolName,
           arguments: {
             attributes: {
@@ -767,8 +766,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -843,18 +841,17 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Inspecting the current UI state',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Inspecting the current UI state',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: toolName,
           arguments: {
             attributes: {},
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -903,11 +900,11 @@ module('Acceptance | Commands tests', function (hooks) {
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Getting weather information for London',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Getting weather information for London',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: toolName,
           arguments: {
             attributes: {
@@ -915,8 +912,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
