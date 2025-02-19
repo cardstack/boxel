@@ -85,7 +85,7 @@ class SuperProjectAppTemplate extends Component<typeof SuperProjectApp> {
     if (filters) {
       for (let filter of filters) {
         let summary = cardTypeSummaries.find(
-          (s) => s.attributes.displayName === filter.cardTypeName,
+          (s: any) => s.attributes.displayName === filter.cardTypeName,
         );
         if (!summary) {
           return;

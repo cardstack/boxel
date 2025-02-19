@@ -8,8 +8,6 @@ import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import { field } from 'https://cardstack.com/base/card-api';
 import { SuperProjectApp } from '../super-project-app';
-import BuildingIcon from '@cardstack/boxel-icons/building';
-import AccountHeader from '../components/account-header';
 import { Query } from '@cardstack/runtime-common/query';
 import { getCards } from '@cardstack/runtime-common';
 import { SkeletonPlaceholder } from '@cardstack/boxel-ui/components';

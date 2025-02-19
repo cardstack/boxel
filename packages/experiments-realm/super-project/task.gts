@@ -12,7 +12,7 @@ import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 class EmbeddedTemplate extends Component<typeof SuperProjectTask> {
   <template>
-    <EntityDisplayWithIcon @title={{this.args.model.name}}>
+    <EntityDisplayWithIcon @title={{@model.name}}>
       <:icon>
         <FolderOpen />
       </:icon>

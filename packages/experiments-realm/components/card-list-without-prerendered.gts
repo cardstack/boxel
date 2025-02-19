@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 
-import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type CardContext, BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { type Query } from '@cardstack/runtime-common';
 
