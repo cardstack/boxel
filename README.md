@@ -309,10 +309,10 @@ The matrix client relies upon the host app and the realm servers. Start the host
 pnpm start
 ```
 
-Then start the realm server (minus the matrix server). From the `packages/realm-server` folder:
+Then start the realm server for matrix tests (does not start the matrix server). From the `packages/realm-server` folder:
 
 ```
-pnpm start:without-matrix
+MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests
 ```
 
 Then to run the tests from the CLI execute the following from `packages/matrix`:
