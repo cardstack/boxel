@@ -112,7 +112,7 @@ const newSkillCardSource = `
 `;
 
 let matrixRoomId: string;
-module('Spec preview', function (hooks) {
+module('Acceptance | Spec preview', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);

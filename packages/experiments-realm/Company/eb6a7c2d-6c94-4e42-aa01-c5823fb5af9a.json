@@ -22,6 +22,13 @@
       "description": "Early-stage startup developing productivity tools for remote teams. Looking to improve their market presence and lead generation through digital marketing.",
       "thumbnailURL": "https://example.com/techflow-logo.png"
     },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../crm/company",

@@ -1,7 +1,7 @@
 :root {
   --boxel-font-family: 'Poppins', 'Open Sans', helvetica, arial, sans-serif;
-  --boxel-monospace-font-family: 'Roboto Mono', 'Courier New', courier,
-    monospace;
+  --boxel-monospace-font-family:
+    'Roboto Mono', 'Courier New', courier, monospace;
   --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
     var(--boxel-font-family);
   --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)

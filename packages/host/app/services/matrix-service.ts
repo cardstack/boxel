@@ -47,7 +47,6 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
-  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -458,34 +457,6 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
-        // TODO: remove this once we've migrated all users
-        // TEMPORARY MIGRATION CODE
-        if (!accountDataContent?.realms?.length) {
-          console.log(
-            'You currently have no realms set, checking your old realms',
-          );
-          try {
-            accountDataContent = await this._client.getAccountDataFromServer<{
-              realms: string[];
-            }>(LEGACY_APP_BOXEL_REALMS_EVENT_TYPE);
-          } catch (e) {
-            // throws if nothing at this key
-          }
-          if (accountDataContent?.realms) {
-            console.log('Migrating your old realms to the new format');
-            await this._client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-              realms: accountDataContent.realms,
-            });
-            console.log('Removing your old realms data');
-            await this._client.setAccountData(
-              LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
-              {},
-            );
-          } else {
-            console.log('No old realms found');
-          }
-        }
-        // END OF TEMPORARY MIGRATION CODE
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );

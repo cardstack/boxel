@@ -15,7 +15,11 @@ import DateField from 'https://cardstack.com/base/date';
 import GlimmerComponent from '@glimmer/component';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import { Pill, BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  Pill,
+  BoxelButton,
+  FieldContainer,
+} from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import Info from '@cardstack/boxel-icons/info';
 import AccountHeader from '../components/account-header';
@@ -42,6 +46,7 @@ import { on } from '@ember/modifier';
 import { DealEvent } from './deal-event';
 import { DealStatus } from './deal-status';
 import { DealPriority } from './deal-priority';
+import { CrmApp } from '../crm-app';
 
 interface DealSizeSummary {
   summary: string;
@@ -53,6 +58,60 @@ const taskSource = {
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
+
+class EditTemplate extends Component<typeof Deal> {
+  <template>
+    <div class='deal-form'>
+      <FieldContainer @label='Name'>
+        <@fields.name />
+      </FieldContainer>
+      <FieldContainer @label='Account'>
+        <@fields.account />
+      </FieldContainer>
+      <FieldContainer @label='Status'>
+        <@fields.status />
+      </FieldContainer>
+      <FieldContainer @label='Priority'>
+        <@fields.priority />
+      </FieldContainer>
+      <FieldContainer @label='Close Date'>
+        <@fields.closeDate />
+      </FieldContainer>
+      <FieldContainer @label='Current Value'>
+        <@fields.currentValue />
+      </FieldContainer>
+      <FieldContainer @label='Predicted Revenue'>
+        <@fields.predictedRevenue />
+      </FieldContainer>
+      <FieldContainer @label='Primary Stakeholder'>
+        <@fields.primaryStakeholder />
+      </FieldContainer>
+      <FieldContainer @label='Stakeholders'>
+        <@fields.stakeholders />
+      </FieldContainer>
+      <FieldContainer @label='Value Breakdown'>
+        <@fields.valueBreakdown />
+      </FieldContainer>
+      <FieldContainer @label='Health Score'>
+        <@fields.healthScore />
+      </FieldContainer>
+      <FieldContainer @label='Event'>
+        <@fields.event />
+      </FieldContainer>
+      <FieldContainer @label='CRM App'>
+        <@fields.crmApp />
+      </FieldContainer>
+    </div>
+    <style scoped>
+      .deal-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
 
 class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
@@ -1088,6 +1147,7 @@ export class ValueLineItem extends FieldDef {
 export class Deal extends CardDef {
   static displayName = 'CRM Deal';
   static headerColor = '#f8f7fa';
+  @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field account = linksTo(() => Account);
   @field status = contains(DealStatus);
@@ -1144,13 +1204,13 @@ export class Deal extends CardDef {
     },
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
-  @field primaryContact = linksTo(Contact, {
+  @field primaryContact = linksTo(() => Contact, {
     computeVia: function (this: Deal) {
       return this.account?.primaryContact;
     },
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
-  @field company = linksTo(Company, {
+  @field company = linksTo(() => Company, {
     computeVia: function (this: Deal) {
       return this.account?.company;
     },
@@ -1161,6 +1221,7 @@ export class Deal extends CardDef {
     },
   });
 
+  static edit = EditTemplate;
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
 }

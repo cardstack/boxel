@@ -43,7 +43,12 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     @matchTriggerWidth={{@matchTriggerWidth}}
     @eventType='click'
     @searchEnabled={{@searchEnabled}}
-    @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
+    @beforeOptionsComponent={{if
+      @beforeOptionsComponent
+      @beforeOptionsComponent
+      (component BeforeOptions autofocus=false)
+    }}
+    @afterOptionsComponent={{@afterOptionsComponent}}
     ...attributes
     as |item|
   >

@@ -63,8 +63,9 @@ export default class Room {
   }
 
   get activeLLM() {
-    let event = this._roomState?.events.get(APP_BOXEL_ACTIVE_LLM)?.get('')
-      ?.event;
+    let event = this._roomState?.events
+      .get(APP_BOXEL_ACTIVE_LLM)
+      ?.get('')?.event;
     return (event as ActiveLLMEvent)?.content.model ?? DEFAULT_LLM;
   }
 
