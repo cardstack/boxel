@@ -19,6 +19,7 @@ import {
   type CardDef,
   type IdentityContext,
 } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import EnvironmentService from './environment-service';
 
@@ -100,6 +101,7 @@ export default class StoreService extends Service {
   > = new Map();
   private autoSaveStates: TrackedWeakMap<CardDef, AutoSaveState> =
     new TrackedWeakMap();
+  private cardApiCache?: typeof CardAPI;
 
   unloadResource(resource: CardResource) {
     let id = resource.url;
@@ -112,17 +114,20 @@ export default class StoreService extends Service {
       const index = resources.findIndex(
         (s) => s.resourceState.resource === resource,
       );
-      let { onCardChange } = resources[index]?.resourceState || {};
-      if (onCardChange && resource.card) {
-        let autoSaveState = this.getAutoSaveState(resource.card);
-        if (autoSaveState?.hasUnsavedChanges) {
-          this.saveCard.perform(resource.card);
-        }
-
-        resource.api.unsubscribeFromChanges(resource.card, onCardChange);
-      }
 
       if (index > -1) {
+        let { onCardChange } = resources[index].resourceState;
+        if (onCardChange && resource.card) {
+          let autoSaveState = this.getAutoSaveState(resource.card);
+          if (autoSaveState?.hasUnsavedChanges) {
+            this.saveCard.perform(resource.card);
+          }
+          let card = this.identityContext.get(id);
+
+          if (this.cardApiCache && card) {
+            this.cardApiCache?.unsubscribeFromChanges(card, onCardChange);
+          }
+        }
         resources.splice(index, 1);
       }
       if (resources.length === 0) {
@@ -311,7 +316,9 @@ export default class StoreService extends Service {
     }
 
     if (maybeUpdatedCard?.id) {
-      let api = await this.cardService.getAPI();
+      if (!this.cardApiCache) {
+        this.cardApiCache = await this.cardService.getAPI();
+      }
       for (let subscriber of this.subscribers.get(maybeUpdatedCard.id)
         ?.resources ?? []) {
         let onCardChange = subscriber.resourceState.onCardChange;
@@ -320,12 +327,12 @@ export default class StoreService extends Service {
         }
         let autoSaveState;
         if (oldCard) {
-          api.unsubscribeFromChanges(oldCard, onCardChange);
+          this.cardApiCache.unsubscribeFromChanges(oldCard, onCardChange);
           autoSaveState = this.autoSaveStates.get(oldCard);
           this.autoSaveStates.delete(oldCard);
         }
         if (isCardInstance(maybeUpdatedCard)) {
-          api.subscribeToChanges(maybeUpdatedCard, onCardChange);
+          this.cardApiCache.subscribeToChanges(maybeUpdatedCard, onCardChange);
           if (autoSaveState) {
             this.autoSaveStates.set(maybeUpdatedCard, autoSaveState);
           }
