@@ -213,7 +213,7 @@ export default class CardService extends Service {
         // for a brand new card that has no id yet, we don't know what we are
         // relativeTo because its up to the realm server to assign us an ID, so
         // URL's should be absolute
-        maybeRelativeURL: card.id ? undefined : null, // forces URL's to be absolute when no ID
+        maybeRelativeURL: null,
       });
 
       // send doc over the wire with absolute URL's. The realm server will convert

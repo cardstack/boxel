@@ -705,7 +705,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     } = callSerializeHook(this.card, value, doc);
     if (primitive in this.card) {
       if (this.card.name === 'CodeRefField' && 'isFieldDef' in this.card) {
-        serialized = callSerializeHook(this.card, value, doc, undefined, opts);
+        serialized = callSerializeHook(this.card, value, doc, new Set(), opts);
       }
       return { attributes: { [this.name]: serialized } };
     } else {
