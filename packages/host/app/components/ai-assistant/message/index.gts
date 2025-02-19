@@ -23,6 +23,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { ComponentLike } from '@glint/template';
+import { isCardInstance } from '@cardstack/runtime-common';
 
 function findLastTextNodeWithContent(parentNode: Node): Text | null {
   // iterate childNodes in reverse to find the last text node with non-whitespace text
@@ -210,18 +211,14 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           {{yield}}
 
-          {{#if @resources.cards.length}}
+          {{#if this.items.length}}
             <div class='items' data-test-message-cards>
-              {{#each @resources.cards as |card|}}
-                <CardPill @card={{card}} />
-              {{/each}}
-            </div>
-          {{/if}}
-
-          {{#if @resources.files.length}}
-            <div class='items' data-test-message-files>
-              {{#each @resources.files as |file|}}
-                <FilePill @file={{file}} />
+              {{#each this.items as |item|}}
+                {{#if (isCardInstance item)}}
+                  <CardPill @card={{item}} />
+                {{else}}
+                  <FilePill @file={{item}} />
+                {{/if}}
               {{/each}}
             </div>
           {{/if}}
@@ -411,6 +408,13 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;
+  }
+
+  private get items() {
+    return [
+      ...(this.args.resources?.cards ?? []),
+      ...(this.args.resources?.files ?? []),
+    ];
   }
 }
 
