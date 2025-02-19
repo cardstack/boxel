@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, moduleStart, test, testStart } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
@@ -96,6 +96,14 @@ let createJWT = (
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
+    testStart(async function ({ name }) {
+      console.log('testStart: ' + name);
+    });
+
+    moduleStart(async function ({ name }) {
+      console.log('moduleStart: ' + name);
+    });
+
     async function expectEvent<T>({
       assert,
       expected,
@@ -274,7 +282,9 @@ module(basename(__filename), function () {
     });
 
     hooks.afterEach(async function () {
+      console.log('closing server');
       await closeServer(testRealmHttpServer);
+      console.log('closed server');
       resetCatalogRealms();
     });
 
