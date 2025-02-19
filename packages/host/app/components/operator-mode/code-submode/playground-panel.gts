@@ -489,12 +489,19 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   });
 
   private get canEdit() {
-    return this.format !== 'edit' && this.realm.canWrite(this.card.id);
+    return (
+      this.format !== 'edit' &&
+      this.card?.id &&
+      this.realm.canWrite(this.card.id)
+    );
   }
 
   @action
   private setEditFormat() {
-    this.format = 'edit';
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistSelections(this.card.id, 'edit');
   }
 }
 
