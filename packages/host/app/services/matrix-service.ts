@@ -27,6 +27,7 @@ import {
   LooseCardResource,
   ResolvedCodeRef,
   aiBotUsername,
+  getClass,
 } from '@cardstack/runtime-common';
 
 import {
