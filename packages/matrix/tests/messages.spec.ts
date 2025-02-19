@@ -351,9 +351,9 @@ test.describe('Room messages', () => {
         files: [
           {
             sourceUrl: `${appURL}/person.gts`,
-            name: 'person.gts'
+            name: 'person.gts',
           },
-        ]
+        ],
       },
     ]);
 
@@ -415,13 +415,13 @@ test.describe('Room messages', () => {
         files: [
           {
             sourceUrl: `${appURL}/person.gts`,
-            name: 'person.gts'
+            name: 'person.gts',
           },
           {
             sourceUrl: `${appURL}/pet.gts`,
-            name: 'pet.gts'
-          }
-        ]
+            name: 'pet.gts',
+          },
+        ],
       },
     ]);
 
