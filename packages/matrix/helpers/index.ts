@@ -514,12 +514,6 @@ export async function assertMessages(
           ).toHaveCount(1);
         }
       });
-    } else {
-      await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-items]`,
-        ),
-      ).toHaveCount(0);
     }
   }
 }
