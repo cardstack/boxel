@@ -1,8 +1,11 @@
 import Service, { service } from '@ember/service';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { formatDistanceToNow } from 'date-fns';
+import { all, restartableTask, task, timeout } from 'ember-concurrency';
 
 import status from 'statuses';
+
+import { TrackedObject, TrackedWeakMap } from 'tracked-built-ins';
 
 import {
   hasExecutableExtension,
@@ -16,6 +19,8 @@ import {
   type CardDef,
   type IdentityContext,
 } from 'https://cardstack.com/base/card-api';
+
+import EnvironmentService from './environment-service';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -65,12 +70,19 @@ interface CardErrors {
 }
 
 export type CardError = CardErrors['errors'][0];
-
+type AutoSaveState = {
+  isSaving: boolean;
+  hasUnsavedChanges: boolean;
+  lastSaved: number | undefined;
+  lastSaveError: Error | undefined;
+  lastSavedErrorMsg: string | undefined;
+};
 export default class StoreService extends Service {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private environmentService: EnvironmentService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private identityContext = new ResettableIdentityContext();
   private subscribers: Map<
@@ -79,13 +91,15 @@ export default class StoreService extends Service {
       // it's possible to have the same card instance used in different
       // resources as the owners of the resources can differ
       resources: {
-        resource: CardResource;
+        resourceState: { resource: CardResource; onCardChange?: () => void };
         setCard: (card: CardDef | undefined) => void;
         setCardError: (error: CardError | undefined) => void;
       }[];
       realm: string;
     }
   > = new Map();
+  private autoSaveStates: TrackedWeakMap<CardDef, AutoSaveState> =
+    new TrackedWeakMap();
 
   unloadResource(resource: CardResource) {
     let id = resource.url;
@@ -95,7 +109,19 @@ export default class StoreService extends Service {
     let subscriber = this.subscribers.get(id);
     if (subscriber) {
       let { resources, realm } = subscriber;
-      const index = resources.findIndex((s) => s.resource === resource);
+      const index = resources.findIndex(
+        (s) => s.resourceState.resource === resource,
+      );
+      let { onCardChange } = resources[index].resourceState;
+      if (onCardChange && resource.card) {
+        let autoSaveState = this.getAutoSaveState(resource.card);
+        if (autoSaveState?.hasUnsavedChanges) {
+          onCardChange();
+        }
+
+        resource.api.unsubscribeFromChanges(resource.card, onCardChange);
+      }
+
       if (index > -1) {
         resources.splice(index, 1);
       }
@@ -139,7 +165,7 @@ export default class StoreService extends Service {
 
     let url = cardOrError.id;
     if (!url || !resource.isLive) {
-      this.handleUpdatedCard(undefined, cardOrError);
+      await this.handleUpdatedCard(undefined, cardOrError);
       // when there is no 'url' it is likely a card error for a doc without an ID
       return { url: url ?? resource.url, card, error };
     }
@@ -166,7 +192,20 @@ export default class StoreService extends Service {
         };
         this.subscribers.set(url, subscriber);
       }
-      subscriber.resources.push({ resource, setCard, setCardError });
+      subscriber.resources.push({
+        resourceState: {
+          resource,
+          onCardChange: resource.isAutoSave
+            ? () => {
+                if (card) {
+                  this.initiateAutoSaveTask.perform(card);
+                }
+              }
+            : undefined,
+        },
+        setCard,
+        setCardError,
+      });
       let subscription = this.subscriptions.get(realm);
       if (!subscription) {
         this.subscriptions.set(realm, {
@@ -177,7 +216,7 @@ export default class StoreService extends Service {
         });
       }
     }
-    this.handleUpdatedCard(undefined, cardOrError);
+    await this.handleUpdatedCard(undefined, cardOrError);
     return { url, card, error };
   }
 
@@ -229,7 +268,7 @@ export default class StoreService extends Service {
       let url = asURL(urlOrDoc);
       let oldCard = url ? this.identityContext.get(url) : undefined;
       let cardOrError = await this.getCard(urlOrDoc);
-      this.handleUpdatedCard(oldCard, cardOrError);
+      await this.handleUpdatedCard(oldCard, cardOrError);
       if (url) {
         this.notifyLiveResources(url, cardOrError);
       }
@@ -259,7 +298,7 @@ export default class StoreService extends Service {
     this.notifyLiveResources(card.id, maybeReloadedCard);
   });
 
-  private handleUpdatedCard(
+  private async handleUpdatedCard(
     oldCard: CardDef | undefined,
     maybeUpdatedCard: CardDef | CardError | undefined,
   ) {
@@ -272,9 +311,25 @@ export default class StoreService extends Service {
     }
 
     if (maybeUpdatedCard?.id) {
+      let api = await this.cardService.getAPI();
       for (let subscriber of this.subscribers.get(maybeUpdatedCard.id)
         ?.resources ?? []) {
-        subscriber.resource.onCardInstanceChange?.(oldCard, instance);
+        let onCardChange = subscriber.resourceState.onCardChange;
+        if (!onCardChange) {
+          continue;
+        }
+        let autoSaveState;
+        if (oldCard) {
+          api.unsubscribeFromChanges(oldCard, onCardChange);
+          autoSaveState = this.autoSaveStates.get(oldCard);
+          this.autoSaveStates.delete(oldCard);
+        }
+        if (isCardInstance(maybeUpdatedCard)) {
+          api.subscribeToChanges(maybeUpdatedCard, onCardChange);
+          if (autoSaveState) {
+            this.autoSaveStates.set(maybeUpdatedCard, autoSaveState);
+          }
+        }
       }
     }
   }
@@ -355,6 +410,84 @@ export default class StoreService extends Service {
       );
       return errorResponse.errors[0];
     }
+  }
+
+  getAutoSaveState(card: CardDef): AutoSaveState | undefined {
+    return this.autoSaveStates.get(card);
+  }
+
+  private initiateAutoSaveTask = restartableTask(async (card: CardDef) => {
+    if (!card.id) {
+      return;
+    }
+    let autoSaveState = this.initOrGetAutoSaveState(card);
+    autoSaveState.hasUnsavedChanges = true;
+    await timeout(this.environmentService.autoSaveDelayMs);
+    try {
+      autoSaveState.isSaving = true;
+      autoSaveState.lastSaveError = undefined;
+
+      await timeout(25);
+      await this.saveCard.perform(card);
+
+      autoSaveState.hasUnsavedChanges = false;
+      autoSaveState.lastSaved = Date.now();
+      autoSaveState.lastSaveError = undefined;
+      autoSaveState.lastSavedErrorMsg = undefined;
+    } catch (error) {
+      // error will already be logged in CardService
+      autoSaveState.lastSaveError = error as Error;
+    } finally {
+      autoSaveState.isSaving = false;
+      this.calculateLastSavedMsg(autoSaveState);
+    }
+  });
+
+  private initOrGetAutoSaveState(card: CardDef): AutoSaveState {
+    let autoSaveState = this.autoSaveStates.get(card);
+    if (!autoSaveState) {
+      autoSaveState = new TrackedObject({
+        isSaving: false,
+        hasUnsavedChanges: false,
+        lastSaved: undefined,
+        lastSavedErrorMsg: undefined,
+        lastSaveError: undefined,
+      });
+      this.autoSaveStates.set(card, autoSaveState!);
+    }
+    return autoSaveState!;
+  }
+
+  private saveCard = restartableTask(async (card: CardDef) => {
+    // these saves can happen so fast that we'll make sure to wait at
+    // least 500ms for human consumption
+    await all([this.cardService.saveModel(card), timeout(500)]);
+  });
+
+  private calculateLastSavedMsg(autoSaveState: AutoSaveState) {
+    let savedMessage: string | undefined;
+    if (autoSaveState.lastSaveError) {
+      savedMessage = `Failed to save: ${this.getErrorMessage(
+        autoSaveState.lastSaveError,
+      )}`;
+    } else if (autoSaveState.lastSaved) {
+      savedMessage = `Saved ${formatDistanceToNow(autoSaveState.lastSaved, {
+        addSuffix: true,
+      })}`;
+    }
+    if (autoSaveState.lastSavedErrorMsg != savedMessage) {
+      autoSaveState.lastSavedErrorMsg = savedMessage;
+    }
+  }
+
+  private getErrorMessage(error: Error) {
+    if ((error as any).responseHeaders?.get('x-blocked-by-waf-rule')) {
+      return 'Rejected by firewall';
+    }
+    if (error.message) {
+      return error.message;
+    }
+    return 'Unknown error';
   }
 }
 

@@ -10,7 +10,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -153,11 +153,9 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
 
-  private hasUnsavedCardChanges = false;
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
   private updateCursorByName: ((name: string) => void) | undefined;
-  #currentCard: CardDef | undefined;
 
   private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
@@ -172,7 +170,7 @@ export default class CodeSubmode extends Component<Signature> {
       return url;
     },
     {
-      onCardInstanceChange: () => this.onCardLoaded,
+      isAutoSave: () => true,
     },
   );
   private moduleContentsResource = moduleContentsResource(
@@ -225,18 +223,6 @@ export default class CodeSubmode extends Component<Signature> {
         : defaultPanelHeights;
 
     registerDestructor(this, () => {
-      // destructor functons are called synchronously. in order to save,
-      // which is async, we leverage an EC task that is running in a
-      // parent component (EC task lifetimes are bound to their context)
-      // that is not being destroyed.
-      if (this.hasUnsavedCardChanges && this.#currentCard) {
-        // we use this.#currentCard here instead of this.card because in
-        // the destructor we no longer have access to resources bound to
-        // this component since they are destroyed first, so this.#currentCard
-        // is something we copy from the card resource when it changes so that
-        // we have access to it in the destructor
-        this.args.saveCardOnClose(this.#currentCard);
-      }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
   }
@@ -439,26 +425,6 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
-  private onCardLoaded = (
-    oldCard: CardDef | undefined,
-    newCard: CardDef | undefined,
-  ) => {
-    // this handles the scenario for the initial load, as well as unloading a
-    // card that went into an error state or was deleted
-    if (oldCard !== newCard) {
-      if (oldCard) {
-        this.cardResource.api.unsubscribeFromChanges(
-          oldCard,
-          this.onCardChange,
-        );
-      }
-      if (newCard) {
-        this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
-      }
-    }
-    this.#currentCard = newCard;
-  };
-
   private get declarations() {
     return this.moduleContentsResource?.declarations;
   }
@@ -530,25 +496,6 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private onCardChange = () => {
-    this.initiateAutoSaveTask.perform();
-  };
-
-  private initiateAutoSaveTask = restartableTask(async () => {
-    if (this.card) {
-      this.hasUnsavedCardChanges = true;
-      await timeout(this.environmentService.autoSaveDelayMs);
-      await this.saveCard.perform(this.card);
-      this.hasUnsavedCardChanges = false;
-    }
-  });
-
-  private saveCard = restartableTask(async (card: CardDef) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
-
   private loadScopedCSS = restartableTask(async () => {
     if (this.cardError?.meta.scopedCssUrls) {
       await Promise.all(
@@ -560,7 +507,9 @@ export default class CodeSubmode extends Component<Signature> {
   });
 
   private get isSaving() {
-    return this.sourceFileIsSaving || this.saveCard.isRunning;
+    return (
+      this.sourceFileIsSaving || !!this.cardResource.autoSaveState?.isSaving
+    );
   }
 
   @action
@@ -800,7 +749,7 @@ export default class CodeSubmode extends Component<Signature> {
         data-test-code-mode
         data-test-save-idle={{and
           (not this.sourceFileIsSaving)
-          this.initiateAutoSaveTask.isIdle
+          (not this.cardResource.autoSaveState.isSaving)
         }}
       >
         <div class='code-mode-top-bar'>

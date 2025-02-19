@@ -529,7 +529,9 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let cardResource = getCard(this, () => item.id);
+        let cardResource = getCard(this, () => item.id, {
+          isAutoSave: () => true,
+        });
         let stackItem = new StackItem({
           owner: this, // ugh, not a great owner...
           cardResource,
