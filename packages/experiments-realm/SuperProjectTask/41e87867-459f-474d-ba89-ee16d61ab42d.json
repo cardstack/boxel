@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Testing Super App Bug",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../SuperProjectAccount/1d5b6e71-067c-44bf-982e-d41285f5d53f"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../super-project/task",
+        "name": "SuperProjectTask"
+      }
+    }
+  }
+}

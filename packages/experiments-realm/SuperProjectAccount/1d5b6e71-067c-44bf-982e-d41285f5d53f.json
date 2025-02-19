@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Super Tech Solutions",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "superProjectApp": {
+        "links": {
+          "self": "../SuperProjectApp/65cf8a72-61d0-438a-a37a-71b57058aff6"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../super-project/account",
+        "name": "SuperProjectAccount"
+      }
+    }
+  }
+}

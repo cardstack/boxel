@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Super Project Management",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../super-project-app",
+        "name": "SuperProjectApp"
+      }
+    }
+  }
+}
