@@ -1576,7 +1576,7 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        test.only('serves the request', async function (assert) {
+        test('serves the request', async function (assert) {
           let matrixClient = new MatrixClient({
             matrixURL: realmServerTestMatrix.url,
             // it's a little awkward that we are hijacking a realm user to pretend to
