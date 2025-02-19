@@ -144,10 +144,29 @@ module(basename(__filename), function () {
       if (roomId) {
         console.log('roomId', roomId);
         let messages = await matrixClient.roomMessages(roomId);
-        console.log('messages', messages);
+        let messagesAfterSentinel = messages.slice(
+          0,
+          messages.findIndex(
+            (m) => m.content.msgtype === 'app.boxel.test.sentinel',
+          ),
+        );
+        console.log('messages', messagesAfterSentinel);
+
+        let events = messagesAfterSentinel.map((m) =>
+          JSON.parse(m.content.body),
+        );
+
+        defer.fulfill(events);
+
+        assert.deepEqual(events, expected);
+
+        if (onEvents) {
+          onEvents(events);
+        }
       } else {
         console.log('no roomId');
       }
+      clearTimeout(timeout);
 
       return result;
 
@@ -1617,6 +1636,11 @@ module(basename(__filename), function () {
               ),
           );
 
+          await matrixClient.sendEvent(json.room, 'm.room.message', {
+            body: `sentinel-event`,
+            msgtype: 'app.boxel.test.sentinel',
+          });
+
           let entry = 'unused-card.gts';
           let expected = [
             {
@@ -1630,7 +1654,8 @@ module(basename(__filename), function () {
               invalidations: [`${testRealmURL}unused-card.gts`],
             },
           ];
-          response = await expectEvent({
+
+          let expectEventPromise = expectEvent({
             assert,
             matrixClient,
             expected,
@@ -1641,6 +1666,16 @@ module(basename(__filename), function () {
                 .set('Accept', 'application/vnd.card+source');
             },
           });
+
+          console.log('expectEventPromise', expectEventPromise);
+
+          console.log('before await');
+
+          response = await expectEventPromise;
+
+          console.log('after await');
+
+          console.log('response status', response.status);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1655,6 +1690,10 @@ module(basename(__filename), function () {
           );
           let cardFile = join(dir.name, entry);
           assert.false(existsSync(cardFile), 'card module does not exist');
+
+          console.log('done assertions');
+
+          return;
         });
 
         test('serves a card-source DELETE request for a card instance', async function (assert) {
