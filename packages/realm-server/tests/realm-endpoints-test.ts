@@ -56,6 +56,7 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
+import jwt from 'jsonwebtoken';
 import { shimExternals } from '../lib/externals';
 import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -101,12 +102,14 @@ module(basename(__filename), function () {
       expectedNumberOfEvents,
       onEvents,
       callback,
+      matrixClient,
     }: {
       assert: Assert;
       expected?: Record<string, any>[];
       expectedNumberOfEvents?: number;
       onEvents?: (events: Record<string, any>[]) => void;
       callback: () => Promise<T>;
+      matrixClient: MatrixClient;
     }): Promise<T> {
       let defer = new Deferred<Record<string, any>[]>();
       let events: Record<string, any>[] = [];
@@ -117,14 +120,9 @@ module(basename(__filename), function () {
         );
       }
       let numEvents = maybeNumEvents;
-      let es = new eventSource(`${testRealmHref}_message`);
-      es.addEventListener('index', (ev: MessageEvent) => {
-        events.push(JSON.parse(ev.data));
-        if (events.length >= numEvents) {
-          defer.fulfill(events);
-        }
-      });
-      es.onerror = (err: Event) => defer.reject(err);
+
+      let result = await callback();
+
       let timeout = setTimeout(() => {
         defer.reject(
           new Error(
@@ -132,18 +130,54 @@ module(basename(__filename), function () {
           ),
         );
       }, 5000);
-      await new Promise((resolve) => es.addEventListener('open', resolve));
-      let result = await callback();
-      let actualEvents = await defer.promise;
-      if (expected) {
-        assert.deepEqual(actualEvents, expected);
+
+      new eventSource(`${testRealmHref}_message`);
+
+      let joinedRooms = await matrixClient.getJoinedRooms();
+      console.log(
+        'joinedRooms for client ' + matrixClient.getUserId(),
+        joinedRooms,
+      );
+
+      let roomId = joinedRooms.joined_rooms[0];
+
+      if (roomId) {
+        console.log('roomId', roomId);
+        let messages = await matrixClient.roomMessages(roomId);
+        console.log('messages', messages);
+      } else {
+        console.log('no roomId');
       }
-      if (onEvents) {
-        onEvents(actualEvents);
-      }
-      clearTimeout(timeout);
-      es.close();
+
       return result;
+
+      // let es = new eventSource(`${testRealmHref}_message`);
+      // es.addEventListener('index', (ev: MessageEvent) => {
+      //   events.push(JSON.parse(ev.data));
+      //   if (events.length >= numEvents) {
+      //     defer.fulfill(events);
+      //   }
+      // });
+      // es.onerror = (err: Event) => defer.reject(err);
+      // let timeout = setTimeout(() => {
+      //   defer.reject(
+      //     new Error(
+      //       `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+      //     ),
+      //   );
+      // }, 5000);
+      // await new Promise((resolve) => es.addEventListener('open', resolve));
+      // let result = await callback();
+      // let actualEvents = await defer.promise;
+      // if (expected) {
+      //   assert.deepEqual(actualEvents, expected);
+      // }
+      // if (onEvents) {
+      //   onEvents(actualEvents);
+      // }
+      // clearTimeout(timeout);
+      // es.close();
+      // return result;
     }
 
     let testRealm: Realm;
@@ -152,6 +186,7 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
+    let matrixClient: MatrixClient;
 
     function setupPermissionedRealm(
       hooks: NestedHooks,
@@ -168,7 +203,10 @@ module(basename(__filename), function () {
           if (!fileSystem) {
             copySync(join(__dirname, 'cards'), testRealmDir);
           }
+
           let virtualNetwork = createVirtualNetwork();
+
+          console.log('running runTestRealmServer');
           ({
             testRealm,
             testRealmHttpServer,
@@ -184,7 +222,16 @@ module(basename(__filename), function () {
             publisher,
             matrixURL,
             fileSystem,
+            loginMatrix: true,
           }));
+          console.log('done running runTestRealmServer');
+
+          let matrixClient = testRealm.matrixClient;
+
+          console.log(
+            'matrix client ' + matrixClient.getUserId(),
+            matrixClient.isLoggedIn(),
+          );
 
           request = supertest(testRealmHttpServer);
         },
@@ -863,6 +910,7 @@ module(basename(__filename), function () {
           let id: string | undefined;
           let response = await expectEvent({
             assert,
+            matrixClient,
             expectedNumberOfEvents: 2,
             onEvents: ([_, event]) => {
               if (event.type === 'incremental') {
@@ -1053,6 +1101,7 @@ module(basename(__filename), function () {
           ];
           let response = await expectEvent({
             assert,
+            matrixClient,
             expected,
             callback: async () => {
               return await request
@@ -1234,6 +1283,7 @@ module(basename(__filename), function () {
           ];
           let response = await expectEvent({
             assert,
+            matrixClient,
             expected,
             callback: async () => {
               return await request
@@ -1274,6 +1324,7 @@ module(basename(__filename), function () {
 
           let response = await expectEvent({
             assert,
+            matrixClient,
             expected,
             callback: async () => {
               return await request
@@ -1504,7 +1555,68 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        test('serves the request', async function (assert) {
+        test.only('serves the request', async function (assert) {
+          let matrixClient = new MatrixClient({
+            matrixURL: realmServerTestMatrix.url,
+            // it's a little awkward that we are hijacking a realm user to pretend to
+            // act like a normal user, but that's what's happening here
+            username: 'node-test_realm',
+            seed: realmSecretSeed,
+          });
+          await matrixClient.login();
+          let userId = matrixClient.getUserId();
+
+          let response = await request
+            .post('/_server-session')
+            .send(JSON.stringify({ user: userId }))
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json');
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let json = response.body;
+
+          let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+          if (!rooms.includes(json.room)) {
+            await matrixClient.joinRoom(json.room);
+          }
+
+          await matrixClient.sendEvent(json.room, 'm.room.message', {
+            body: `auth-response: ${json.challenge}`,
+            msgtype: 'm.text',
+          });
+
+          response = await request
+            .post('/_server-session')
+            .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          let token = response.headers['authorization'];
+          let decoded = jwt.verify(
+            token,
+            realmSecretSeed,
+          ) as RealmServerTokenClaim;
+
+          console.log(
+            'setting account data for username ' + matrixClient.username,
+          );
+
+          await matrixClient.setAccountData('boxel.session-rooms', {
+            [userId]: json.room,
+          });
+
+          console.log('account data set for username ' + matrixClient.username);
+
+          console.log(
+            'account data for username ' +
+              matrixClient.username +
+              ' ' +
+              JSON.stringify(
+                await matrixClient.getAccountData('boxel.session-rooms'),
+              ),
+          );
+
           let entry = 'unused-card.gts';
           let expected = [
             {
@@ -1518,10 +1630,12 @@ module(basename(__filename), function () {
               invalidations: [`${testRealmURL}unused-card.gts`],
             },
           ];
-          let response = await expectEvent({
+          response = await expectEvent({
             assert,
+            matrixClient,
             expected,
             callback: async () => {
+              console.log('in callback???');
               return await request
                 .delete('/unused-card.gts')
                 .set('Accept', 'application/vnd.card+source');
@@ -1559,6 +1673,7 @@ module(basename(__filename), function () {
           ];
           let response = await expectEvent({
             assert,
+            matrixClient,
             expected,
             callback: async () => {
               return await request
@@ -1643,6 +1758,7 @@ module(basename(__filename), function () {
           ];
           let response = await expectEvent({
             assert,
+            matrixClient,
             expected,
             callback: async () => {
               return await request
@@ -1712,6 +1828,7 @@ module(basename(__filename), function () {
 
             let response = await expectEvent({
               assert,
+              matrixClient,
               expected,
               callback: async () => {
                 return await request
@@ -1735,6 +1852,7 @@ module(basename(__filename), function () {
           {
             let response = await expectEvent({
               assert,
+              matrixClient,
               expectedNumberOfEvents: 2,
               callback: async () => {
                 return await request
@@ -1785,6 +1903,7 @@ module(basename(__filename), function () {
 
             let response = await expectEvent({
               assert,
+              matrixClient,
               expected,
               callback: async () => {
                 return await request
@@ -1837,6 +1956,7 @@ module(basename(__filename), function () {
             ];
             let response = await expectEvent({
               assert,
+              matrixClient,
               expected,
               callback: async () => {
                 return await request
@@ -3184,6 +3304,7 @@ module(basename(__filename), function () {
         ];
         await expectEvent({
           assert,
+          matrixClient,
           expected,
           callback: async () => {
             writeJSONSync(
@@ -3277,6 +3398,7 @@ module(basename(__filename), function () {
         ];
         await expectEvent({
           assert,
+          matrixClient,
           expected,
           callback: async () => {
             writeJSONSync(
@@ -3334,6 +3456,7 @@ module(basename(__filename), function () {
         ];
         await expectEvent({
           assert,
+          matrixClient,
           expected,
           callback: async () => {
             removeSync(

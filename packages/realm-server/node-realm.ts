@@ -192,7 +192,9 @@ export class NodeAdapter implements RealmAdapter {
     console.log('sending server event', event);
 
     if (!matrixClient.isLoggedIn()) {
-      console.log('not logged in, skipping server event');
+      console.log(
+        `not logged in (${matrixClient.username} client ${matrixClient.clientIndex}), skipping server event`,
+      );
       return;
     }
 
@@ -208,6 +210,15 @@ export class NodeAdapter implements RealmAdapter {
       console.log('error getting account data', e);
       return;
     }
+
+    console.log(
+      'raw dmrooms for username ' +
+        matrixClient.username +
+        ' client ' +
+        matrixClient.clientIndex,
+      JSON.stringify(dmRooms, null, 2),
+    );
+    console.log('sending to dm rooms', Object.values(dmRooms));
 
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];

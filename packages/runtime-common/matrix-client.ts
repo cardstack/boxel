@@ -3,6 +3,8 @@ import { uint8ArrayToHex } from './index';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
 
+let clientIndex = 0;
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -16,6 +18,7 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loggedIn = new Deferred<void>();
+  clientIndex = clientIndex++;
 
   constructor({
     matrixURL,
@@ -37,6 +40,18 @@ export class MatrixClient {
     this.username = username;
     this.password = password;
     this.seed = seed;
+
+    console.trace(
+      'matrix clien created for username ' +
+        this.username +
+        ' client index ' +
+        this.clientIndex,
+    );
+
+    if (this.clientIndex === 3) {
+      console.log("logging in because it's 3");
+      this.login();
+    }
   }
 
   getUserId() {
@@ -84,6 +99,8 @@ export class MatrixClient {
       );
     }
 
+    console.log('logging in to matrix', this.username, this.clientIndex);
+
     let response = await this.request(
       '_matrix/client/v3/login',
       'POST',
@@ -111,12 +128,21 @@ export class MatrixClient {
       this.loggedIn.reject(error);
       throw error;
     }
+    console.log('logged in to matrix', this.username, this.clientIndex);
     let {
       access_token: accessToken,
       device_id: deviceId,
       user_id: userId,
     } = json;
     this.access = { accessToken, deviceId, userId };
+
+    console.log(
+      'logged in??? on client ' + this.clientIndex,
+      this.isLoggedIn(),
+      this.access,
+      this.getUserId(),
+    );
+
     this.loggedIn.fulfill();
   }
 

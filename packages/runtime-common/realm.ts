@@ -292,6 +292,10 @@ export class Realm {
     return this.paths.url;
   }
 
+  get matrixClient(): MatrixClient {
+    return this.#matrixClient;
+  }
+
   constructor(
     {
       url,
@@ -2044,6 +2048,11 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
+    console.log('in realm sendServerEvent', event);
+    console.log(
+      `matrix client ${this.#matrixClient.username} logged in?`,
+      this.#matrixClient.isLoggedIn(),
+    );
     this.#adapter.sendServerEvent(event, this.#matrixClient);
   }
 

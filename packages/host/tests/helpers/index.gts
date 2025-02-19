@@ -356,6 +356,8 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         );
       } else {
         if (expectedNumberOfEvents !== sseRoomEvents.length) {
+          console.log('expectedNumberOfEvents', expectedNumberOfEvents);
+          console.log('sseRoomEvents', sseRoomEvents);
           throw new Error(
             `expected ${expectedNumberOfEvents} events, saw ${sseRoomEvents.length} events`,
           );

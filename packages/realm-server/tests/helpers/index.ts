@@ -349,6 +349,7 @@ export async function runTestRealmServer({
   matrixConfig,
   matrixURL,
   permissions = { '*': ['read'] },
+  loginMatrix,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -361,6 +362,7 @@ export async function runTestRealmServer({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
+  loginMatrix?: true;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -407,6 +409,11 @@ export async function runTestRealmServer({
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
+
+  if (loginMatrix) {
+    // await matrixClient.login();
+  }
+
   let testRealmServer = new RealmServer({
     realms,
     virtualNetwork,
@@ -431,6 +438,7 @@ export async function runTestRealmServer({
     seedRealm,
     testRealmServer,
     testRealmHttpServer,
+    matrixClient,
   };
 }
 
