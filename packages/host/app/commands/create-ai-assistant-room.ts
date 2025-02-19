@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import format from 'date-fns/format';
 
-import { aiBotUsername } from '@cardstack/runtime-common';
-
 import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
@@ -31,14 +29,8 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     input: BaseCommandModule.CreateAIAssistantRoomInput,
   ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
     let { matrixService } = this;
-    let { userId } = matrixService;
-    if (!userId) {
-      throw new Error(
-        `bug: there is no userId associated with the matrix client`,
-      );
-    }
-    let server = userId!.split(':')[1];
-    let aiBotFullId = `@${aiBotUsername}:${server}`;
+    let userId = matrixService.userId;
+    let aiBotFullId = matrixService.aiBotUserId;
     let { room_id: roomId } = await matrixService.createRoom({
       preset: matrixService.privateChatPreset,
       invite: [aiBotFullId],
