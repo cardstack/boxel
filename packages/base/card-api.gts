@@ -703,7 +703,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     if (primitive in this.card) {
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
-      } = callSerializeHook(this.card, value, doc, new Set(), opts);
+      } = callSerializeHook(this.card, value, doc, undefined, opts);
       return { attributes: { [this.name]: serialized } };
     } else {
       let serialized: JSONAPISingleResourceDocument['data'] & {
@@ -2299,8 +2299,9 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
 export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
-  maybeRelativeURL?: ((possibleURL: string) => string) | null; // setting this to null will force all URL's to be absolute
+  useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
+  maybeRelativeURL?: (possibleURL: string) => string;
 }
 
 function serializeCardResource(
@@ -2309,7 +2310,10 @@ function serializeCardResource(
   opts?: SerializeOpts,
   visited: Set<string> = new Set(),
 ): LooseCardResource {
-  let adoptsFrom = identifyCard(model.constructor, opts?.maybeRelativeURL);
+  let adoptsFrom = identifyCard(
+    model.constructor,
+    opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+  );
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
@@ -2346,28 +2350,22 @@ export function serializeCard(
   let modelRelativeTo = model[relativeTo];
   let data = serializeCardResource(model, doc, {
     ...opts,
-    // if opts.maybeRelativeURL is null that is our indication
-    // that the caller wants all the URL's to be absolute
-    ...(opts?.maybeRelativeURL !== null
-      ? {
-          maybeRelativeURL(possibleURL: string) {
-            let url = maybeURL(possibleURL, modelRelativeTo);
-            if (!url) {
-              throw new Error(
-                `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`,
-              );
-            }
-            if (!modelRelativeTo) {
-              return url.href;
-            }
-            const realmURLString = getCardMeta(model, 'realmURL');
-            const realmURL = realmURLString
-              ? new URL(realmURLString)
-              : undefined;
-            return maybeRelativeURL(url, modelRelativeTo, realmURL);
-          },
+    ...{
+      maybeRelativeURL(possibleURL: string) {
+        let url = maybeURL(possibleURL, modelRelativeTo);
+        if (!url) {
+          throw new Error(
+            `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`,
+          );
         }
-      : {}),
+        if (!modelRelativeTo) {
+          return url.href;
+        }
+        const realmURLString = getCardMeta(model, 'realmURL');
+        const realmURL = realmURLString ? new URL(realmURLString) : undefined;
+        return maybeRelativeURL(url, modelRelativeTo, realmURL);
+      },
+    },
   });
   merge(doc, { data });
   if (!isSingleCardDocument(doc)) {
@@ -3147,7 +3145,9 @@ export class Box<T> {
 type ElementType<T> = T extends (infer V)[] ? V : never;
 
 function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
-  return opts?.maybeRelativeURL ? opts.maybeRelativeURL(maybeURL) : maybeURL;
+  return opts?.maybeRelativeURL && !opts?.useAbsoluteURL
+    ? opts.maybeRelativeURL(maybeURL)
+    : maybeURL;
 }
 
 declare module 'ember-provide-consume-context/context-registry' {
