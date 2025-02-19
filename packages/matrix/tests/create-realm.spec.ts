@@ -59,11 +59,11 @@ test.describe('Create Realm via Dashboard', () => {
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
 
-    const filterListElements = page.locator(
-      '[data-test-boxel-filter-list-button]',
+    const filterListItemSelector = '[data-test-boxel-filter-list-button]';
+    await page.waitForFunction(
+      (selector) => document.querySelectorAll(selector).length > 1,
+      filterListItemSelector,
     );
-    const count = await filterListElements.count();
-    expect(count).toBeGreaterThan(1);
 
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(
