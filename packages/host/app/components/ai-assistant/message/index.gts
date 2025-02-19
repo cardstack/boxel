@@ -94,6 +94,7 @@ interface MessageScrollerSignature {
 
 class MessageScroller extends Modifier<MessageScrollerSignature> {
   private hasRegistered = false;
+  private observer?: MutationObserver;
   modify(
     element: HTMLElement,
     _positional: [],
@@ -107,6 +108,21 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
         scrollTo: element.scrollIntoView.bind(element),
       });
     }
+
+    this.observer?.disconnect();
+
+    this.observer = new MutationObserver(() => {
+      registerScroller({
+        index,
+        element,
+        scrollTo: element.scrollIntoView.bind(element),
+      });
+    });
+    this.observer.observe(element, { childList: true, subtree: true });
+
+    registerDestructor(this, () => {
+      this.observer?.disconnect();
+    });
   }
 }
 
@@ -114,7 +130,10 @@ interface ScrollPositionSignature {
   Args: {
     Named: {
       setScrollPosition: (args: { isBottom: boolean }) => void;
-      registerConversationScroller: (isScrollable: () => boolean) => void;
+      registerConversationScroller: (
+        isScrollable: () => boolean,
+        scrollToBottom: () => void,
+      ) => void;
     };
   };
 }
@@ -136,6 +155,9 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       this.hasRegistered = true;
       registerConversationScroller(
         () => element.scrollHeight > element.clientHeight,
+        () => {
+          element.scrollTop = element.scrollHeight - element.clientHeight;
+        },
       );
     }
 
@@ -423,7 +445,10 @@ interface AiAssistantConversationSignature {
   Element: HTMLDivElement;
   Args: {
     setScrollPosition: (args: { isBottom: boolean }) => void;
-    registerConversationScroller: (isScrollable: () => boolean) => void;
+    registerConversationScroller: (
+      isScrollable: () => boolean,
+      scrollToBottom: () => void,
+    ) => void;
   };
   Blocks: {
     default: [];

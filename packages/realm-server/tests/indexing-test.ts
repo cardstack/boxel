@@ -6,6 +6,7 @@ import {
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
+  type IndexedInstance,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -45,6 +46,16 @@ module(basename(__filename), function () {
     let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
       createVirtualNetworkAndLoader();
 
+    async function getInstance(
+      realm: Realm,
+      url: URL,
+    ): Promise<IndexedInstance | undefined> {
+      let maybeInstance = await realm.realmIndexQueryEngine.instance(url);
+      if (maybeInstance?.type === 'error') {
+        return undefined;
+      }
+      return maybeInstance;
+    }
     setupCardLogs(
       hooks,
       async () => await loader.import(`${baseRealm.url}card-api`),
@@ -97,6 +108,23 @@ module(basename(__filename), function () {
                   </style>
                 </template>
               }
+            }
+          `,
+            'pet-person.gts': `
+            import { contains, linksTo, field, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+            import { Pet } from "./pet";
+
+            export class PetPerson extends CardDef {
+              @field firstName = contains(StringField);
+              @field pet = linksTo(() => Pet);
+              @field nickName = contains(StringField, {
+                computeVia: function (this: Person) {
+                  if (this.pet?.firstName) {
+                    return this.pet.firstName + "'s buddy";
+                  }
+                  return firstName;
+                },
+              });
             }
           `,
             'pet.gts': `
@@ -195,6 +223,22 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './person',
                     name: 'Person',
+                  },
+                },
+              },
+            },
+            'hassan.json': {
+              data: {
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  pet: { links: { self: './ringo' } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './pet-person',
+                    name: 'PetPerson',
                   },
                 },
               },
@@ -454,7 +498,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 11,
+          totalIndexEntries: 13,
         },
         'indexed correct number of files',
       );
@@ -479,8 +523,8 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 0,
-          instanceErrors: 1,
-          moduleErrors: 1,
+          instanceErrors: 2,
+          moduleErrors: 2,
           modulesIndexed: 0,
           totalIndexEntries: 9,
         },
@@ -570,7 +614,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 10,
+          totalIndexEntries: 12,
         },
         'index did not touch any files',
       );
@@ -611,7 +655,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 11,
+          totalIndexEntries: 13,
         },
         'indexed correct number of files',
       );
@@ -653,7 +697,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 11,
+          totalIndexEntries: 13,
         },
         'indexed correct number of files',
       );
@@ -703,7 +747,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 11,
         },
         'indexed correct number of files',
       );
@@ -744,7 +788,81 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 11,
+          totalIndexEntries: 13,
+        },
+        'indexed correct number of files',
+      );
+    });
+
+    // Note this particular test should only be a server test as the nature of
+    // the TestAdapter in the host tests will trigger the linked card to be
+    // already loaded when in fact in the real world it is not.
+    test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
+      const hassanId = `${testRealm}hassan`;
+      let queryEngine = realm.realmIndexQueryEngine;
+      let hassan = await queryEngine.cardDocument(new URL(hassanId));
+      if (hassan?.type === 'doc') {
+        assert.deepEqual(
+          hassan.doc.data.attributes,
+          {
+            title: null,
+            nickName: "Ringo's buddy",
+            firstName: 'Hassan',
+            description: null,
+            thumbnailURL: null,
+          },
+          'doc attributes are correct',
+        );
+        assert.deepEqual(
+          hassan.doc.data.relationships,
+          {
+            pet: {
+              links: {
+                self: './ringo',
+              },
+            },
+          },
+          'doc relationships are correct',
+        );
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${hassan?.error.errorDetail.message}`,
+        );
+      }
+
+      let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
+      if (hassanEntry) {
+        assert.deepEqual(
+          hassanEntry.searchDoc,
+          {
+            id: hassanId,
+            pet: {
+              id: `${testRealm}ringo`,
+              title: null,
+              firstName: 'Ringo',
+              description: null,
+              thumbnailURL: null,
+            },
+            nickName: "Ringo's buddy",
+            _cardType: 'PetPerson',
+            firstName: 'Hassan',
+          },
+          'searchData is correct',
+        );
+      } else {
+        assert.ok(false, `could not find ${hassanId} in the index`);
+      }
+
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...realm.realmIndexUpdater.stats },
+        {
+          moduleErrors: 0,
+          instanceErrors: 3,
+          modulesIndexed: 7,
+          instancesIndexed: 6,
+          totalIndexEntries: 13,
         },
         'indexed correct number of files',
       );

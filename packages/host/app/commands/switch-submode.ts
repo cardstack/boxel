@@ -12,7 +12,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 export default class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput
 > {
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   description =
     'Navigate the UI to another submode. Possible values for submode are "interact" and "code".';

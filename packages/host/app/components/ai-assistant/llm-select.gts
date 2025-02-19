@@ -42,10 +42,11 @@ const LLMSelect: TemplateOnlyComponent<Signature> = <template>
       border: none;
       padding: 0;
       width: auto;
+      height: 43.5px;
+      min-width: 120px;
       flex: 1;
       padding-right: var(--boxel-sp-xxs);
       cursor: pointer;
-      font:;
     }
     .llm-select :deep(.boxel-trigger) {
       padding: 0;
@@ -76,8 +77,8 @@ const LLMSelect: TemplateOnlyComponent<Signature> = <template>
     }
 
     :global(
-        .llm-select__dropdown .ember-power-select-option[aria-current='true']
-      ) {
+      .llm-select__dropdown .ember-power-select-option[aria-current='true']
+    ) {
       background-color: var(--boxel-teal) !important;
     }
   </style>
