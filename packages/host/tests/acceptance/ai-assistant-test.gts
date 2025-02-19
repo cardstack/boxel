@@ -66,7 +66,7 @@ async function assertMessages(
     }
     if (cards?.length) {
       assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
+        .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
         .exists({ count: 1 });
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
@@ -94,14 +94,11 @@ async function assertMessages(
             .exists({ count: 1 });
         }
       });
-    } else {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
-        .doesNotExist();
     }
+
     if (files?.length) {
       assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-files]`)
+        .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
         .exists({ count: 1 });
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-file]`)
@@ -113,9 +110,11 @@ async function assertMessages(
           )
           .containsText(file.name);
       });
-    } else {
+    }
+
+    if (!files?.length && !cards?.length) {
       assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-files]`)
+        .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
         .doesNotExist();
     }
   }

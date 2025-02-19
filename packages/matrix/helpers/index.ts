@@ -483,7 +483,7 @@ export async function assertMessages(
     if (cards?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
         ),
       ).toHaveCount(1);
       await expect(
@@ -517,7 +517,7 @@ export async function assertMessages(
     } else {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
         ),
       ).toHaveCount(0);
     }

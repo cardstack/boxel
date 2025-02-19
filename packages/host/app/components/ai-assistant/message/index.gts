@@ -213,7 +213,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{yield}}
 
           {{#if this.items.length}}
-            <div class='items' data-test-message-cards>
+            <div class='items' data-test-message-items>
               {{#each this.items as |item|}}
                 {{#if (isCardInstance item)}}
                   <CardPill @card={{item}} />
