@@ -36,7 +36,8 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .ai-assistant-button.is-active {
-      background-image: image-set(
+      background-image:
+        image-set(
           url('./ai-assist-icon-bw.png') 1x,
           url('./ai-assist-icon-bw@2x.png') 2x,
           url('./ai-assist-icon-bw@3x.png')

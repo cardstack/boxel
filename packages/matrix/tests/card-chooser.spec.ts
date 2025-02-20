@@ -101,7 +101,7 @@ test.describe('Card Chooser', () => {
       template: 'test',
     });
     await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
+    realmServer = await startRealmServer({ includeSeedRealm: true });
     await registerUser(synapse, 'user1', 'pass');
   });
 

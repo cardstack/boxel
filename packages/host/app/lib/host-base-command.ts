@@ -19,7 +19,7 @@ export default abstract class HostBaseCommand<
     setOwner(this, getOwner(commandContext)!);
   }
 
-  @service protected declare loaderService: LoaderService;
+  @service declare protected loaderService: LoaderService;
 
   protected loadCommandModule(): Promise<typeof BaseCommandModule> {
     return this.loaderService.loader.import<typeof BaseCommandModule>(

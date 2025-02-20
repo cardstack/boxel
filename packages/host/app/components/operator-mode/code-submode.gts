@@ -19,6 +19,8 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
@@ -62,7 +64,11 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import { htmlComponent } from '../../lib/html-component';
-import { CodeModePanelWidths } from '../../utils/local-storage-keys';
+import {
+  CodeModePanelWidths,
+  CodeModePanelHeights,
+  CodeModePanelSelections,
+} from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
 import AttachFileModal from './attach-file-modal';
@@ -121,7 +127,6 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: 100 - defaultLeftPanelWidth,
 };
 
-const CodeModePanelHeights = 'code-mode-panel-heights';
 const ApproximateRecentPanelDefaultPercentage =
   ((43 + 40 * 3.5) / (document.documentElement.clientHeight - 140)) * 100; // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
@@ -157,6 +162,7 @@ export default class CodeSubmode extends Component<Signature> {
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
   private updateCursorByName: ((name: string) => void) | undefined;
+  private panelSelections: Record<string, SelectedAccordionItem>;
   #currentCard: CardDef | undefined;
 
   private createFileModal: CreateFileModal | undefined;
@@ -186,6 +192,11 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
+
+    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -242,13 +253,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get card() {
-    if (
-      this.cardResource.card &&
-      this.codePath?.href.replace(/\.json$/, '') === this.cardResource.url
-    ) {
-      return this.cardResource.card;
-    }
-    return undefined;
+    return this.cardResource.card;
+  }
+
+  private get cardError() {
+    return this.cardResource.cardError;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {
@@ -318,11 +327,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isEmptyFile() {
     return this.readyFile.content.match(/^\s*$/);
-  }
-
-  @cached
-  get cardError() {
-    return this.cardResource.cardError;
   }
 
   @cached
@@ -450,21 +454,21 @@ export default class CodeSubmode extends Component<Signature> {
     oldCard: CardDef | undefined,
     newCard: CardDef | undefined,
   ) => {
-    if (oldCard) {
-      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
-    }
-    if (newCard) {
-      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
+    // this handles the scenario for the initial load, as well as unloading a
+    // card that went into an error state or was deleted
+    if (oldCard !== newCard) {
+      if (oldCard) {
+        this.cardResource.api.unsubscribeFromChanges(
+          oldCard,
+          this.onCardChange,
+        );
+      }
+      if (newCard) {
+        this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
+      }
     }
     this.#currentCard = newCard;
   };
-
-  private get loadedCard() {
-    if (!this.card) {
-      throw new Error(`bug: card ${this.codePath} is not loaded`);
-    }
-    return this.card;
-  }
 
   private get declarations() {
     return this.moduleContentsResource?.declarations;
@@ -760,16 +764,23 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @tracked private selectedAccordionItem: SelectedAccordionItem =
-    'schema-editor';
+  private get selectedAccordionItem(): SelectedAccordionItem {
+    let selection = this.panelSelections[this.readyFile.url];
+    if (selection === null) {
+      return null;
+    }
+    return selection ?? 'schema-editor';
+  }
 
   @action private selectAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      this.selectedAccordionItem = null;
-      return;
-    }
+    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
+    this.panelSelections[this.readyFile.url] = selection;
 
-    this.selectedAccordionItem = item;
+    // persist in local storage
+    window.localStorage.setItem(
+      CodeModePanelSelections,
+      JSON.stringify(this.panelSelections),
+    );
   }
 
   get isReadOnly() {
@@ -969,7 +980,11 @@ export default class CodeSubmode extends Component<Signature> {
                       {{this.fileIncompatibilityMessage}}
                     </div>
                   {{else if this.selectedCardOrField.cardOrField}}
-                    <Accordion as |A|>
+                    <Accordion
+                      data-test-rhs-panel='card-or-field'
+                      data-test-selected-accordion-item={{this.selectedAccordionItem}}
+                      as |A|
+                    >
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
@@ -1068,7 +1083,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </Accordion>
                   {{else if this.card}}
                     <CardPreviewPanel
-                      @card={{this.loadedCard}}
+                      @card={{this.card}}
                       @realmURL={{this.realmURL}}
                       @format={{this.previewFormat}}
                       @setFormat={{this.setPreviewFormat}}

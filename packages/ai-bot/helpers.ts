@@ -76,10 +76,10 @@ export class HistoryConstructionError extends Error {
   }
 }
 
-export function getPromptParts(
+export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): PromptParts {
+): Promise<PromptParts> {
   let cardFragments: Map<string, CardFragmentContent> =
     extractCardFragmentsFromEvents(eventList);
   let history: DiscreteMatrixEvent[] = constructHistory(
@@ -89,7 +89,7 @@ export function getPromptParts(
   let skills = getEnabledSkills(eventList, cardFragments);
   let tools = getTools(history, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
-  let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
+  let messages = await getModifyPrompt(history, aiBotUserId, tools, skills);
   let model = getModel(eventList);
   return {
     tools,
@@ -321,6 +321,113 @@ export function getRelevantCards(
   };
 }
 
+export async function loadCurrentlyAttachedFiles(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): Promise<
+  {
+    url: string;
+    name: string;
+    contentType?: string;
+    content: string | undefined;
+    error: string | undefined;
+  }[]
+> {
+  let lastMessageEventByUser = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+
+  let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
+    msgtype?: string;
+    data?: {
+      attachedFiles?: { url: string; name: string; contentType?: string }[];
+    };
+  };
+
+  if (
+    !mostRecentUserMessageContent ||
+    mostRecentUserMessageContent.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    return [];
+  }
+
+  // We are only interested in downloading the most recently attached files -
+  // downloading older ones is not needed since the prompt that is being constructed
+  // should operate on fresh data
+  if (!mostRecentUserMessageContent.data?.attachedFiles?.length) {
+    return [];
+  }
+
+  let attachedFiles = mostRecentUserMessageContent.data.attachedFiles;
+
+  return Promise.all(
+    attachedFiles.map(
+      async (attachedFile: {
+        url: string;
+        name: string;
+        contentType?: string;
+      }) => {
+        try {
+          let content: string | undefined;
+          let error: string | undefined;
+          if (attachedFile.contentType?.startsWith('text/')) {
+            let response = await (globalThis as any).fetch(attachedFile.url);
+            if (!response.ok) {
+              throw new Error(`HTTP error. Status: ${response.status}`);
+            }
+            content = await response.text();
+          } else {
+            error = `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`;
+          }
+
+          return {
+            url: attachedFile.url,
+            name: attachedFile.name,
+            contentType: attachedFile.contentType,
+            content,
+            error,
+          };
+        } catch (error) {
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          Sentry.captureException(error, {
+            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+          });
+          return {
+            url: attachedFile.url,
+            name: attachedFile.name,
+            contentType: attachedFile.contentType,
+            content: undefined,
+            error: `Error loading attached file: ${(error as Error).message}`,
+          };
+        }
+      },
+    ),
+  );
+}
+
+export function attachedFilesToPrompt(
+  attachedFiles: {
+    url: string;
+    name: string;
+    contentType?: string;
+    content: string | undefined;
+    error: string | undefined;
+  }[],
+): string {
+  if (!attachedFiles.length) {
+    return 'No attached files';
+  }
+  return attachedFiles
+    .map((f) => {
+      if (f.error) {
+        return `${f.name}: ${f.error}`;
+      }
+
+      return `${f.name}: ${f.content}`;
+    })
+    .join('\n');
+}
+
 export function getTools(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -431,7 +538,7 @@ function toPromptMessageWithToolResult(
   };
 }
 
-export function getModifyPrompt(
+export async function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
@@ -501,15 +608,18 @@ export function getModifyPrompt(
     history,
     aiBotUserId,
   );
-  let systemMessage =
-    MODIFY_SYSTEM_MESSAGE +
-    `
-  The user currently has given you the following data to work with:
-  Cards:\n`;
-  systemMessage += attachedCardsToMessage(
-    mostRecentlyAttachedCard,
-    attachedCards,
-  );
+
+  let attachedFiles = await loadCurrentlyAttachedFiles(history, aiBotUserId);
+
+  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
+The user currently has given you the following data to work with:
+
+Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
+
+Attached files:
+${attachedFilesToPrompt(attachedFiles)}
+`;
+
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);

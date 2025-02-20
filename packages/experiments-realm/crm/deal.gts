@@ -19,6 +19,7 @@ import {
   Pill,
   BoxelButton,
   FieldContainer,
+  SkeletonPlaceholder,
 } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import Info from '@cardstack/boxel-icons/info';
@@ -367,7 +368,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
                 Current Value
                 <@fields.computedValue class='highlight-value' @format='atom' />
                 {{#if this.query.isLoading}}
-                  Loading...
+                  <SkeletonPlaceholder
+                    class='skeleton-placeholder-deal-description'
+                  />
                 {{else if this.query.instances}}
                   {{#let
                     (this.dealSizeSummary this.query.instances)
@@ -532,7 +535,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:icon>
             <:content>
               {{#if this.activeTasks.isLoading}}
-                <div class='loading-skeleton'>Loading...</div>
+                <SkeletonPlaceholder />
+                <SkeletonPlaceholder />
               {{else}}
                 {{#if this.hasActiveTasks}}
                   {{#each this.activeTasks.instances as |task|}}
@@ -711,6 +715,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
         align-items: center;
         gap: var(--boxel-sp-sm);
         font-weight: 600;
+      }
+      /* Skeleton Placeholder */
+      .skeleton-placeholder-deal-description {
+        --skeleton-height: var(--boxel-font-sm);
       }
       @container (max-width: 447px) {
         .progress-container {

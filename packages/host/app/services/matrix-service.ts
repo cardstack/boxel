@@ -26,7 +26,9 @@ import {
   baseRealm,
   LooseCardResource,
   ResolvedCodeRef,
+  aiBotUsername,
 } from '@cardstack/runtime-common';
+
 import {
   basicMappings,
   generateJsonSchemaForCardType,
@@ -47,7 +49,6 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
-  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -107,15 +108,15 @@ export type OperatorModeContext = {
 };
 
 export default class MatrixService extends Service {
-  @service private declare loaderService: LoaderService;
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare realm: RealmService;
-  @service private declare matrixSdkLoader: MatrixSDKLoader;
-  @service private declare realmServer: RealmServerService;
-  @service private declare router: RouterService;
-  @service private declare reset: ResetService;
-  @service private declare network: NetworkService;
+  @service declare private loaderService: LoaderService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private realm: RealmService;
+  @service declare private matrixSdkLoader: MatrixSDKLoader;
+  @service declare private realmServer: RealmServerService;
+  @service declare private router: RouterService;
+  @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
@@ -232,6 +233,11 @@ export default class MatrixService extends Service {
 
   get userId() {
     return this.client.getUserId();
+  }
+
+  get aiBotUserId() {
+    let server = this.userId!.split(':')[1];
+    return `@${aiBotUsername}:${server}`;
   }
 
   get userName() {
@@ -455,34 +461,6 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
-        // TODO: remove this once we've migrated all users
-        // TEMPORARY MIGRATION CODE
-        if (!accountDataContent?.realms?.length) {
-          console.log(
-            'You currently have no realms set, checking your old realms',
-          );
-          try {
-            accountDataContent = await this._client.getAccountDataFromServer<{
-              realms: string[];
-            }>(LEGACY_APP_BOXEL_REALMS_EVENT_TYPE);
-          } catch (e) {
-            // throws if nothing at this key
-          }
-          if (accountDataContent?.realms) {
-            console.log('Migrating your old realms to the new format');
-            await this._client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-              realms: accountDataContent.realms,
-            });
-            console.log('Removing your old realms data');
-            await this._client.setAccountData(
-              LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
-              {},
-            );
-          } else {
-            console.log('No old realms found');
-          }
-        }
-        // END OF TEMPORARY MIGRATION CODE
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );

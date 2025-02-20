@@ -37,14 +37,14 @@ interface ExportConfig {
 type Configuration<T extends SQLiteWorkerOperationType> = T extends 'open'
   ? OpenConfig
   : T extends 'config-get'
-  ? {}
-  : T extends 'close'
-  ? CloseConfig
-  : T extends 'exec'
-  ? ExecConfig
-  : T extends 'export'
-  ? ExportConfig
-  : never;
+    ? {}
+    : T extends 'close'
+      ? CloseConfig
+      : T extends 'exec'
+        ? ExecConfig
+        : T extends 'export'
+          ? ExportConfig
+          : never;
 
 interface OpenResponse {
   type: 'open';
@@ -100,14 +100,14 @@ interface ExportResponse {
 type Response<T extends SQLiteWorkerOperationType> = T extends 'open'
   ? OpenResponse
   : T extends 'config-get'
-  ? GetConfigResponse
-  : T extends 'close'
-  ? CloseResponse
-  : T extends 'exec'
-  ? ExecResponse
-  : T extends 'export'
-  ? ExportResponse
-  : never;
+    ? GetConfigResponse
+    : T extends 'close'
+      ? CloseResponse
+      : T extends 'exec'
+        ? ExecResponse
+        : T extends 'export'
+          ? ExportResponse
+          : never;
 
 export declare function SQLiteWorker<T extends SQLiteWorkerOperationType>(
   action: T,

@@ -2,7 +2,7 @@ import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -77,10 +77,10 @@ export class RoomResource extends Resource<Args> {
 
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
   // that updates immediately after the user selects the LLM.
-  @tracked _activeLLM: string | undefined;
-  @service private declare matrixService: MatrixService;
-  @service private declare commandService: CommandService;
-  @service private declare cardService: CardService;
+  @tracked private llmBeingActivated: string | undefined;
+  @service declare private matrixService: MatrixService;
+  @service declare private commandService: CommandService;
+  @service declare private cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
     if (named.roomId) {
@@ -89,7 +89,6 @@ export class RoomResource extends Resource<Args> {
       }
       this._previousRoomId = named.roomId;
       this.loading = this.load.perform(named.roomId);
-      this._activeLLM = undefined;
     }
   }
 
@@ -223,15 +222,11 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
-  get activeLLM() {
-    return this._activeLLM ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+  get activeLLM(): string {
+    return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
 
   activateLLM(model: string) {
-    if (this.activeLLM === model) {
-      return;
-    }
-    this._activeLLM = model;
     this.activateLLMTask.perform(model);
   }
 
@@ -240,10 +235,29 @@ export class RoomResource extends Resource<Args> {
   }
 
   private activateLLMTask = restartableTask(async (model: string) => {
-    if (!this.matrixRoom) {
-      throw new Error('matrixRoom is required to activate LLM');
+    if (this.activeLLM === model) {
+      return;
     }
-    await this.matrixService.sendActiveLLMEvent(this.matrixRoom.roomId, model);
+    this.llmBeingActivated = model;
+    try {
+      if (!this.matrixRoom) {
+        throw new Error('matrixRoom is required to activate LLM');
+      }
+      await this.matrixService.sendActiveLLMEvent(
+        this.matrixRoom.roomId,
+        model,
+      );
+      let remainingRetries = 20;
+      while (this.matrixRoom.activeLLM !== model && remainingRetries > 0) {
+        await timeout(50);
+        remainingRetries--;
+      }
+      if (remainingRetries === 0) {
+        throw new Error('Failed to activate LLM');
+      }
+    } finally {
+      this.llmBeingActivated = undefined;
+    }
   });
 
   private async loadFromEvents(roomId: string) {
