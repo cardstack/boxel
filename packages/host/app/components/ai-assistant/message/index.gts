@@ -348,10 +348,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
 
-      .content :deep(.message) {
-        padding: 0;
-      }
-
       .is-from-assistant .content :deep(.message) {
         padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
