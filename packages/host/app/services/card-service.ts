@@ -213,8 +213,9 @@ export default class CardService extends Service {
         // for a brand new card that has no id yet, we don't know what we are
         // relativeTo because its up to the realm server to assign us an ID, so
         // URL's should be absolute
-        maybeRelativeURL: null, // forces URL's to be absolute.
+        useAbsoluteURL: true,
       });
+
       // send doc over the wire with absolute URL's. The realm server will convert
       // to relative URL's as it serializes the cards
       let realmURL = await this.getRealmURL(card);
@@ -423,7 +424,7 @@ export default class CardService extends Service {
   async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
     let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
-      maybeRelativeURL: null, // forces URL's to be absolute.
+      useAbsoluteURL: true,
     });
     delete serialized.data.id;
     let json = await this.saveCardDocument(serialized, destinationRealm);

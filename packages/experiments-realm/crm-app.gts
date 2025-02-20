@@ -735,6 +735,10 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       .crm-app.Deal {
         --strip-view-min-width: 1fr;
       }
+      .crm-app.Task:deep(.content-grid) {
+        padding-bottom: 0;
+        padding-right: 0;
+      }
     </style>
   </template>
 }
