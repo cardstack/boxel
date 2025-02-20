@@ -33,14 +33,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     {{/if}}
 
     <style scoped>
-      .message {
-        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
-      }
-
       /* code blocks can be rendered inline and as blocks, 
          this is the styling for when it is rendered as a block */
       .message > :deep(.preview-code.code-block) {
         width: calc(100% + 2 * var(--boxel-sp));
+      }
+
+      .message > :deep(*) {
+        margin-top: 0;
+        margin-bottom: 0;
+      }
+
+      .message > :deep(* + *) {
+        margin-top: var(--boxel-sp);
       }
 
       :deep(.preview-code) {
