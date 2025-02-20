@@ -11,7 +11,7 @@ const convertAuthHeaderMiddleware = async (
   if (authHeader) {
     ctx.request.headers.authorization = authHeader; // Set Auth header on request object
     delete ctx.query.authHeader; // Remove authHeader query parameter
-    ctx.search = '?' + qs.stringify(ctx.query, { strictNullHandling: true });
+    ctx.search = '?' + qs.stringify(ctx.query);
     ctx.url = ctx.url.split('?')[0] + ctx.search;
   }
   await next(); // Allow subsequent middleware to run

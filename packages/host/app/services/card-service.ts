@@ -453,9 +453,7 @@ export default class CardService extends Service {
   // duplicative instances of cards when it deserializes the results. instead of
   // using this please use the SearchResource.
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    let json = await this.fetchJSON(
-      `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
-    );
+    let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
