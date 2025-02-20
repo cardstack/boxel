@@ -136,7 +136,7 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
           {{yield to='contentHeader'}}
         </header>
         {{#if (has-block 'grid')}}
-          <div class='content-grid content-scroll-container'>
+          <div class='content-grid'>
             {{yield to='grid'}}
           </div>
         {{/if}}
@@ -168,6 +168,7 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
         flex-grow: 1;
         display: grid;
         grid-template-rows: max-content 1fr;
+        overflow-y: scroll;
       }
 
       /* these help hide overlay button visibility through gaps during scroll */
@@ -208,12 +209,8 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
       }
       .content-grid {
         max-width: 100%;
-        padding-left: var(--layout-padding);
-        padding-bottom: var(--layout-padding);
-      }
-      .content-scroll-container {
-        padding-right: var(--layout-padding);
-        overflow: auto;
+        padding: var(--layout-padding);
+        padding-top: 0;
       }
     </style>
   </template>
