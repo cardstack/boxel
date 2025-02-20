@@ -1,4 +1,4 @@
-import { module, moduleStart, test, testStart } from 'qunit';
+import { module, moduleStart, start, test, testStart } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
@@ -53,6 +53,7 @@ import {
   insertPlan,
   mtimes,
   cleanWhiteSpace,
+  waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -69,6 +70,7 @@ import {
   insertSubscription,
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -129,7 +131,9 @@ module(basename(__filename), function () {
       }
       let numEvents = maybeNumEvents;
 
+      console.log('before callback');
       let result = await callback();
+      console.log('after callback');
 
       let timeout = setTimeout(() => {
         defer.reject(
@@ -139,7 +143,21 @@ module(basename(__filename), function () {
         );
       }, 5000);
 
-      let actualEventSource = new eventSource(`${testRealmHref}_message`);
+      console.log('after timeout, before eventSource');
+
+      let actualEventSource: eventSource;
+      try {
+        actualEventSource = new eventSource(`${testRealmHref}_message`);
+      } catch (e) {
+        console.log('error creating eventSource', e);
+      }
+
+      console.log('hello');
+
+      console.log(
+        'calling getJoinedRooms, logged in?',
+        matrixClient.isLoggedIn(),
+      );
 
       let joinedRooms = await matrixClient.getJoinedRooms();
       console.log(
@@ -168,8 +186,13 @@ module(basename(__filename), function () {
 
         assert.deepEqual(events, expected);
 
+        console.log('expectEvent deepEqual done');
+
         if (onEvents) {
+          console.log('calling onEvents');
           onEvents(events);
+        } else {
+          console.log('no onEvents');
         }
       } else {
         console.log('no roomId');
@@ -267,6 +290,86 @@ module(basename(__filename), function () {
       });
     }
 
+    function setupMatrixRoom(hooks: NestedHooks) {
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        // it's a little awkward that we are hijacking a realm user to pretend to
+        // act like a normal user, but that's what's happening here
+        username: 'node-test_realm',
+        seed: realmSecretSeed,
+      });
+
+      let testAuthRoomId: string | undefined;
+
+      hooks.beforeEach(async function () {
+        await matrixClient.login();
+        let userId = matrixClient.getUserId();
+
+        let response = await request
+          .post('/_server-session')
+          .send(JSON.stringify({ user: userId }))
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json');
+
+        let json = response.body;
+
+        let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+        if (!rooms.includes(json.room)) {
+          await matrixClient.joinRoom(json.room);
+        }
+
+        await matrixClient.sendEvent(json.room, 'm.room.message', {
+          body: `auth-response: ${json.challenge}`,
+          msgtype: 'm.text',
+        });
+
+        response = await request
+          .post('/_server-session')
+          .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json');
+        let token = response.headers['authorization'];
+        let decoded = jwt.verify(
+          token,
+          realmSecretSeed,
+        ) as RealmServerTokenClaim;
+
+        console.log(
+          'setting account data for username ' + matrixClient.username,
+        );
+
+        testAuthRoomId = json.room;
+
+        await matrixClient.setAccountData('boxel.session-rooms', {
+          [userId]: json.room,
+        });
+
+        console.log('account data set for username ' + matrixClient.username);
+
+        // FIXME maybe use timestamp instead?
+        await matrixClient.sendEvent(json.room, 'm.room.message', {
+          body: `sentinel-event`,
+          msgtype: 'app.boxel.test.sentinel',
+        });
+      });
+
+      return {
+        matrixClient,
+        getMessagesSinceTestStarted: async function () {
+          let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+          let messagesAfterSentinel = allMessages.slice(
+            0,
+            allMessages.findIndex(
+              (m) => (m.content as any).msgtype === 'app.boxel.test.sentinel',
+            ),
+          );
+
+          return messagesAfterSentinel;
+        },
+      };
+    }
+
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
     setupCardLogs(
@@ -282,9 +385,7 @@ module(basename(__filename), function () {
     });
 
     hooks.afterEach(async function () {
-      console.log('closing server');
       await closeServer(testRealmHttpServer);
-      console.log('closed server');
       resetCatalogRealms();
     });
 
@@ -936,48 +1037,52 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
-          assert.expect(9);
           let id: string | undefined;
-          let response = await expectEvent({
-            assert,
-            matrixClient,
-            expectedNumberOfEvents: 2,
-            onEvents: ([_, event]) => {
-              if (event.type === 'incremental') {
-                id = event.invalidations[0].split('/').pop()!;
-                assert.true(uuidValidate(id!), 'card identifier is a UUID');
-                assert.strictEqual(
-                  event.invalidations[0],
-                  `${testRealmURL}CardDef/${id}`,
-                );
-              } else {
-                assert.ok(
-                  false,
-                  `expect to receive 'incremental' event, but saw ${JSON.stringify(
-                    event,
-                  )} `,
-                );
-              }
-            },
-            callback: async () => {
-              return await request
-                .post('/')
-                .send({
-                  data: {
-                    type: 'card',
-                    attributes: {},
-                    meta: {
-                      adoptsFrom: {
-                        module: 'https://cardstack.com/base/card-api',
-                        name: 'CardDef',
-                      },
-                    },
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
-                })
-                .set('Accept', 'application/vnd.card+json');
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          let incrementalEventMessage;
+
+          await waitUntil(
+            async () => {
+              let matrixMessages = await getMessagesSinceTestStarted();
+              console.log(matrixMessages);
+
+              incrementalEventMessage = matrixMessages.find(
+                (m) => m.content.indexType === 'incremental',
+              );
+
+              return incrementalEventMessage !== undefined;
             },
-          });
+            { timeoutMessage: 'no incremental event message received' },
+          );
+
+          let incrementalEvent = incrementalEventMessage!.content;
+
+          id = incrementalEvent.invalidations[0].split('/').pop()!;
+          assert.true(uuidValidate(id!), 'card identifier is a UUID');
+          assert.strictEqual(
+            incrementalEvent.invalidations[0],
+            `${testRealmURL}CardDef/${id}`,
+          );
+
           if (!id) {
             assert.ok(false, 'new card identifier was undefined');
           }
@@ -994,45 +1099,46 @@ module(basename(__filename), function () {
           );
           let json = response.body;
 
-          if (isSingleCardDocument(json)) {
-            assert.strictEqual(
-              json.data.id,
-              `${testRealmHref}CardDef/${id}`,
-              'the id is correct',
-            );
-            assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-            let cardFile = join(
-              dir.name,
-              'realm_server_1',
-              'test',
-              'CardDef',
-              `${id}.json`,
-            );
-            assert.ok(existsSync(cardFile), 'card json exists');
-            let card = readJSONSync(cardFile);
-            assert.deepEqual(
-              card,
-              {
-                data: {
-                  attributes: {
-                    title: null,
-                    description: null,
-                    thumbnailURL: null,
-                  },
-                  type: 'card',
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
-                    },
+          assert.true(
+            isSingleCardDocument(json),
+            'response body is a card document',
+          );
+
+          assert.strictEqual(
+            json.data.id,
+            `${testRealmHref}CardDef/${id}`,
+            'the id is correct',
+          );
+          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'CardDef',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), 'card json exists');
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card,
+            {
+              data: {
+                attributes: {
+                  title: null,
+                  description: null,
+                  thumbnailURL: null,
+                },
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
                 },
               },
-              'file contents are correct',
-            );
-          } else {
-            assert.ok(false, 'response body is not a card document');
-          }
+            },
+            'file contents are correct',
+          );
         });
       });
 
@@ -1115,45 +1221,28 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              invalidations: [`${testRealmURL}person-1`],
-              realmURL: testRealmURL.href,
-              clientRequestId: null,
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            matrixClient,
-            expected,
-            callback: async () => {
-              return await request
-                .patch('/person-1')
-                .send({
-                  data: {
-                    type: 'card',
-                    attributes: {
-                      firstName: 'Van Gogh',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: './person.gts',
-                        name: 'Person',
-                      },
-                    },
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
                   },
-                })
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
@@ -1169,41 +1258,43 @@ module(basename(__filename), function () {
 
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
-          if (isSingleCardDocument(json)) {
-            assert.strictEqual(
-              json.data.attributes?.firstName,
-              'Van Gogh',
-              'the field data is correct',
-            );
-            assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-            delete json.data.meta.lastModified;
-            delete json.data.meta.resourceCreatedAt;
-            let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
-            assert.ok(existsSync(cardFile), 'card json exists');
-            let card = readJSONSync(cardFile);
-            assert.deepEqual(
-              card,
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                    description: null,
-                    thumbnailURL: null,
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: `./person`,
-                      name: 'Person',
-                    },
+
+          assert.true(
+            isSingleCardDocument(json),
+            'response body is a card document',
+          );
+
+          assert.strictEqual(
+            json.data.attributes?.firstName,
+            'Van Gogh',
+            'the field data is correct',
+          );
+          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+          delete json.data.meta.lastModified;
+          delete json.data.meta.resourceCreatedAt;
+          let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
+          assert.ok(existsSync(cardFile), 'card json exists');
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card,
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `./person`,
+                    name: 'Person',
                   },
                 },
               },
-              'file contents are correct',
-            );
-          } else {
-            assert.ok(false, 'response body is not a card document');
-          }
+            },
+            'file contents are correct',
+          );
 
           let query: Query = {
             filter: {
@@ -1223,6 +1314,68 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');
+        });
+
+        test('broadcasts realm events', async function (assert) {
+          let entry = 'person-1.json';
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          await waitUntil(async () => {
+            let matrixMessages = await getMessagesSinceTestStarted();
+            console.log(matrixMessages);
+            return matrixMessages.some(
+              (m) =>
+                m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+                m.content.eventName === 'index' &&
+                m.content.indexType === 'incremental',
+            );
+          });
+
+          let messages = await getMessagesSinceTestStarted();
+          let incrementalIndexInitiationEvent = messages.find(
+            (m) =>
+              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+              m.content.eventName === 'index' &&
+              m.content.indexType === 'incremental-index-initiation',
+          );
+
+          let incrementalEvent = messages.find(
+            (m) =>
+              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+              m.content.eventName === 'index' &&
+              m.content.indexType === 'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            // FIXME realmURL should not be here…??
+            realmURL: 'http://127.0.0.1:4444/',
+            updatedFile: `${testRealmURL}person-1.json`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}person-1`],
+            clientRequestId: null,
+          });
         });
       });
 
@@ -1586,73 +1739,9 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let matrixClient = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
-          let matrixClient = new MatrixClient({
-            matrixURL: realmServerTestMatrix.url,
-            // it's a little awkward that we are hijacking a realm user to pretend to
-            // act like a normal user, but that's what's happening here
-            username: 'node-test_realm',
-            seed: realmSecretSeed,
-          });
-          await matrixClient.login();
-          let userId = matrixClient.getUserId();
-
-          let response = await request
-            .post('/_server-session')
-            .send(JSON.stringify({ user: userId }))
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json');
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-          let json = response.body;
-
-          let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
-
-          if (!rooms.includes(json.room)) {
-            await matrixClient.joinRoom(json.room);
-          }
-
-          await matrixClient.sendEvent(json.room, 'm.room.message', {
-            body: `auth-response: ${json.challenge}`,
-            msgtype: 'm.text',
-          });
-
-          response = await request
-            .post('/_server-session')
-            .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json');
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
-          let token = response.headers['authorization'];
-          let decoded = jwt.verify(
-            token,
-            realmSecretSeed,
-          ) as RealmServerTokenClaim;
-
-          console.log(
-            'setting account data for username ' + matrixClient.username,
-          );
-
-          await matrixClient.setAccountData('boxel.session-rooms', {
-            [userId]: json.room,
-          });
-
-          console.log('account data set for username ' + matrixClient.username);
-
-          console.log(
-            'account data for username ' +
-              matrixClient.username +
-              ' ' +
-              JSON.stringify(
-                await matrixClient.getAccountData('boxel.session-rooms'),
-              ),
-          );
-
-          await matrixClient.sendEvent(json.room, 'm.room.message', {
-            body: `sentinel-event`,
-            msgtype: 'app.boxel.test.sentinel',
-          });
-
           let entry = 'unused-card.gts';
           let expected = [
             {
@@ -1791,6 +1880,8 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           '*': ['read', 'write'],
         });
+
+        let matrixClient = setupMatrixRoom(hooks);
 
         test('serves a card-source POST request', async function (assert) {
           let entry = 'unused-card.gts';

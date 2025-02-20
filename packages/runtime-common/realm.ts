@@ -81,6 +81,8 @@ import {
   Utils,
 } from './matrix-backend-authentication';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
 export interface RealmSession {
@@ -165,6 +167,11 @@ export interface RealmAdapter {
 
   sendServerEvent(
     event: ServerEvents,
+    matrixClient: MatrixClient,
+  ): Promise<void>;
+
+  broadcastRealmEvent(
+    event: RealmEventEventContent,
     matrixClient: MatrixClient,
   ): Promise<void>;
 }
@@ -528,14 +535,11 @@ export class Realm {
     let results = await this.#adapter.write(path, contents);
     await this.#realmIndexUpdater.update(url, {
       onInvalidation: (invalidatedURLs: URL[]) => {
-        this.sendServerEvent({
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: invalidatedURLs.map((u) => u.href),
-            realmURL: this.url,
-            clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
-          },
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
+          clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
         });
       },
     });
@@ -1214,6 +1218,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let body = await request.text();
+    console.log('in createCard, body', body);
     let json;
     try {
       json = JSON.parse(body);
@@ -1251,6 +1256,7 @@ export class Realm {
         fileURL,
       );
     } catch (err: any) {
+      console.log('error in post', err);
       if (err.message.startsWith('field validation error')) {
         return badRequest(err.message, requestContext);
       } else {
@@ -1944,6 +1950,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    console.log('subscribe starting');
     let headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -1993,14 +2000,20 @@ export class Realm {
     // FIXME listeningClients should go away
     this.listeningClients.push(writable);
 
+    console.log('subscribe about to sendServerEvent');
+
     this.sendServerEvent({
       type: 'message',
       data: { count: `${this.listeningClients.length} clients` },
     });
 
+    console.log('subscribe sentServerEvent done, waitForClose');
+
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
+
+    console.log('subscribe waitForClose done');
 
     return response;
   }
@@ -2052,6 +2065,12 @@ export class Realm {
       this.#matrixClient.isLoggedIn(),
     );
     this.#adapter.sendServerEvent(event, this.#matrixClient);
+  }
+
+  private async broadcastRealmEvent(
+    event: RealmEventEventContent,
+  ): Promise<void> {
+    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
   }
 
   private async createRequestContext(): Promise<RequestContext> {
