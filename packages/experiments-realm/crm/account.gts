@@ -37,7 +37,7 @@ import { Deal } from './deal';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { UrgencyTag } from './urgency-tag';
 
 const taskSource = {
@@ -359,15 +359,13 @@ class IsolatedTemplate extends Component<typeof Account> {
   }
 
   <template>
-    <AccountPageLayout>
+    <AccountPageLayout class='isolated-account'>
       <:header>
         <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
           <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Account Name</h1>
-            {{/if}}
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{if @model.name @model.name 'Missing Account Name'}}
+            </h1>
           </:name>
           <:content>
             {{#if @model.primaryContact}}
@@ -386,14 +384,8 @@ class IsolatedTemplate extends Component<typeof Account> {
       </:header>
 
       <:summary>
-        <SummaryGridContainer class='summary-grid'>
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Company Info</h3>
-            </:title>
-            <:icon>
-              <BuildingIcon class='header-icon' />
-            </:icon>
+        <SummaryGridContainer>
+          <SummaryCard @iconComponent={{BuildingIcon}} @title='Company Info'>
             <:content>
               {{#if this.hasCompanyInfo}}
                 <@fields.website @format='atom' />
@@ -406,13 +398,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Contacts</h3>
-            </:title>
-            <:icon>
-              <ContactIcon class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{ContactIcon}} @title='Contacts'>
             <:content>
               {{#if this.hasContacts}}
                 <div class='primary-contact-group'>
@@ -434,13 +420,10 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Lifetime Value</h3>
-            </:title>
-            <:icon>
-              <ChartBarPopular class='header-icon' />
-            </:icon>
+          <SummaryCard
+            @iconComponent={{ChartBarPopular}}
+            @title='Lifetime Value'
+          >
             <:content>
               {{#if this.lifetimeValueDeals.isLoading}}
                 <SkeletonPlaceholder
@@ -460,13 +443,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Active Deals</h3>
-            </:title>
-            <:icon>
-              <TrendingUp class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{TrendingUp}} @title='Active Deals'>
             <:content>
               {{#if this.deals.isLoading}}
                 <SkeletonPlaceholder
@@ -487,7 +464,7 @@ class IsolatedTemplate extends Component<typeof Account> {
       <:tasks>
         <SummaryCard class='tasks-summary-card'>
           <:title>
-            <h2 class='task-title'>Upcoming Tasks</h2>
+            <h3 class='upcoming-tasks-title'>Upcoming Tasks</h3>
           </:title>
           <:icon>
             <BoxelButton
@@ -559,36 +536,22 @@ class IsolatedTemplate extends Component<typeof Account> {
       p {
         margin: 0;
       }
+      .isolated-account {
+        height: max-content;
+        min-height: 100%;
+        background-color: var(--boxel-100);
+      }
       .account-name {
         font: 600 var(--boxel-font-lg);
         margin: 0;
       }
       /* Summary Grid & Card */
-      .summary-grid {
-        --summary-card-min-height: 170px;
-      }
-      .summary-title {
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xxs);
-        align-self: flex-start;
-      }
       .summary-highlight {
         font: 600 var(--boxel-font-xl);
       }
       .description {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
-      .info-card {
-        --summary-card-gap: var(--boxel-sp-xl);
-        --summary-card-padding: var(--boxel-sp);
-        --entity-display-title-font-weight: 400;
       }
       .primary-contact {
         width: fit-content;
@@ -621,21 +584,22 @@ class IsolatedTemplate extends Component<typeof Account> {
       }
       .task-button-desktop {
         display: inline-flex;
+        gap: var(--boxel-sp-xxxs);
       }
       .tasks-summary-card {
-        --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
         --summary-card-content-gap: 0;
         container-type: inline-size;
         container-name: tasks-summary-card;
+        padding: var(--boxel-sp-lg) var(--boxel-sp);
       }
-      .tasks-summary-card :where(.task-card) {
-        --task-card-padding: var(--boxel-sp) 0;
-        border-top: 1px solid var(--boxel-200);
-      }
-      .task-title {
+      .upcoming-tasks-title {
         font: 600 var(--boxel-font-med);
         letter-spacing: var(--boxel-lsp-xxs);
-        margin: 0;
+      }
+      .tasks-summary-card :deep(.task-card) {
+        --task-card-padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp)
+          var(--boxel-sp-xs);
+        border-top: 1px solid var(--boxel-200);
       }
       .task-pill {
         --pill-background-color: var(--boxel-200);
@@ -903,11 +867,9 @@ class EmbeddedTemplate extends Component<typeof Account> {
         <div class='top-bar'>
           <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
             <:name>
-              {{#if @model.name}}
-                <h1 class='account-name'>{{@model.name}}</h1>
-              {{else}}
-                <h1 class='account-name default-value'>Missing Account Name</h1>
-              {{/if}}
+              <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+                {{if @model.name @model.name 'Missing Account Name'}}
+              </h1>
             </:name>
             <:content>
               {{#if @model.primaryContact}}
@@ -924,13 +886,11 @@ class EmbeddedTemplate extends Component<typeof Account> {
       <:summary>
         <section class='summary-articles-container'>
           <SummaryGridContainer>
-            <SummaryCard>
-              <:title>
-                <h3 class='summary-title'>Lifetime Value</h3>
-              </:title>
-              <:icon>
-                <ChartBarPopular class='header-icon' />
-              </:icon>
+            <SummaryCard
+              @size='small'
+              @iconComponent={{ChartBarPopular}}
+              @title='Lifetime Value'
+            >
               <:content>
                 {{#if this.lifetimeValueDeals.isLoading}}
                   <h3 class='summary-highlight'>Loading...</h3>
@@ -946,13 +906,11 @@ class EmbeddedTemplate extends Component<typeof Account> {
               </:content>
             </SummaryCard>
 
-            <SummaryCard>
-              <:title>
-                <h3 class='summary-title'>Active Deals</h3>
-              </:title>
-              <:icon>
-                <TrendingUp class='header-icon' />
-              </:icon>
+            <SummaryCard
+              @size='small'
+              @iconComponent={{TrendingUp}}
+              @title='Active Deals'
+            >
               <:content>
                 {{#if this.deals.isLoading}}
                   <h3 class='summary-highlight'>Loading...</h3>
@@ -1010,10 +968,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
         margin: 0;
       }
       .account-page-layout-embedded {
-        --account-page-layout-padding: var(--boxel-sp-sm);
-        height: 100%;
         container-type: inline-size;
         container-name: account-page-layout-embedded;
+        padding: var(--boxel-sp-sm);
+        height: 100%;
       }
       .top-bar {
         display: flex;
@@ -1177,8 +1135,8 @@ class FittedTemplate extends Component<typeof Account> {
 
     <style scoped>
       .account-page-layout-fitted {
-        --account-page-layout-padding: var(--boxel-sp-sm);
         height: 100%;
+        padding: var(--boxel-sp-sm);
       }
       .account-header-fitted {
         gap: var(--boxel-sp-sm);
@@ -1270,7 +1228,7 @@ class FittedTemplate extends Component<typeof Account> {
 
       @container fitted-card (2.0 < aspect-ratio) and (height <= 57px) {
         .account-page-layout-fitted {
-          --account-page-layout-padding: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xs);
         }
         .account-header-fitted {
           --account-header-logo-display: none;
@@ -1334,6 +1292,7 @@ interface AccountPageLayoutArgs {
   Element: HTMLElement;
 }
 
+// TODO: Refactor to use this for CRM Deal instead of duplicating styles
 class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
   <template>
     <div class='account-page-layout' ...attributes>
@@ -1343,14 +1302,15 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
     </div>
 
     <style scoped>
-      .account-page-layout {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        width: 100%;
-        padding: var(--account-page-layout-padding, 20px);
-        box-sizing: border-box;
-        background-color: var(--boxel-100);
+      @layer {
+        .account-page-layout {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+          width: 100%;
+          padding: var(--boxel-sp-xl);
+          box-sizing: border-box;
+        }
       }
     </style>
   </template>

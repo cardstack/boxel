@@ -344,10 +344,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       </:header>
 
       <:dashboard>
-        <SummaryCard class='dashboard'>
-          <:title>
-            <h2 class='summary-title'>Deal Value</h2>
-          </:title>
+        <SummaryCard class='dashboard' @title='Deal Value'>
           <:icon>
             {{#if @model.healthScore}}
               <div class='progress-container'>
@@ -465,13 +462,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
       <:summary>
         <SummaryGridContainer class='task-summary-grid'>
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='info-card-title'>Company Info</h3>
-            </:title>
-            <:icon>
-              <World class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{World}} @title='Company Info'>
             <:content>
               {{#if this.hasCompanyInfo}}
                 <@fields.headquartersAddress @format='atom' />
@@ -483,14 +474,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               {{/if}}
             </:content>
           </SummaryCard>
-
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='info-card-title'>Stakeholders</h3>
-            </:title>
-            <:icon>
-              <Users class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{Users}} @title='Stakeholders'>
             <:content>
               {{#if this.hasStakeholders}}
                 {{#if @model.primaryStakeholder}}
@@ -516,11 +500,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               {{/if}}
             </:content>
           </SummaryCard>
-
-          <SummaryCard class='info-card tasks-summary-card'>
-            <:title>
-              <h3 class='info-card-title'>Active Tasks</h3>
-            </:title>
+          <SummaryCard class='tasks-summary-card' @title='Active Tasks'>
             <:icon>
               <BoxelButton
                 class='sidebar-create-button'
@@ -611,7 +591,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-4xs);
       }
       .dashboard {
-        --summary-card-padding: var(--boxel-sp);
+        --summary-card-content-gap: 0;
         container-type: inline-size;
       }
       .dashboard-cards {
@@ -654,8 +634,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .info-field {
         --entity-display-title-font-weight: 400;
       }
-      .summary-title,
-      .info-card-title {
+      .summary-title {
         font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xxs);
         align-self: flex-start;
@@ -694,9 +673,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-top: 0.5rem;
       }
       /* Task Summary Grid & Card */
-      .task-summary-grid {
-        --summary-card-min-height: 170px;
-      }
       .tasks-summary-card :where(.task-card) {
         --task-card-padding: var(--boxel-sp-xxxs) 0;
       }
@@ -732,17 +708,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .info-atom {
         width: fit-content;
         display: inline-flex;
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
-      .info-card {
-        --summary-card-gap: var(--boxel-sp-xl);
-        --summary-card-padding: var(--boxel-sp);
-        --entity-display-title-font-weight: 400;
       }
       .new-item-button {
         font-weight: 600;
@@ -1243,6 +1208,7 @@ interface DealPageLayoutArgs {
   Element: HTMLElement;
 }
 
+// TODO: Use PageLayout component shared with CRM Account instead of doing this
 class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
   <template>
     <div class='deal-page-layout' ...attributes>
@@ -1257,6 +1223,8 @@ class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         width: 100%;
+        height: max-content;
+        min-height: 100%;
         padding: var(--boxel-sp-xl);
         box-sizing: border-box;
         background-color: var(--boxel-100);

@@ -71,13 +71,7 @@ export class DealSummary extends Component<Signature> {
 
   <template>
     <SummaryGridContainer>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Total Deal Value</h3>
-        </:title>
-        <:icon>
-          <TrendingUpIcon class='header-icon' />
-        </:icon>
+      <SummaryCard @size='small' @iconComponent={{TrendingUpIcon}} @title='Total Deal Value'>
         <:content>
           <div class='value'>
             {{#if this.dealSummaries}}
@@ -88,13 +82,7 @@ export class DealSummary extends Component<Signature> {
           </div>
         </:content>
       </SummaryCard>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Average Deal Size</h3>
-        </:title>
-        <:icon>
-          <CalculatorIcon class='header-icon' />
-        </:icon>
+      <SummaryCard @size='small' @iconComponent={{CalculatorIcon}} @title='Average Deal Size'>
         <:content>
           <div class='value'>
             {{#if this.dealSummaries}}
@@ -105,13 +93,7 @@ export class DealSummary extends Component<Signature> {
           </div>
         </:content>
       </SummaryCard>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Deal Count</h3>
-        </:title>
-        <:icon>
-          <NumbersIcon class='header-icon' />
-        </:icon>
+      <SummaryCard @size='small' @iconComponent={{NumbersIcon}} @title='Deal Count'>
         <:content>
           <div class='value'>
             {{#if this.dealSummaries}}
@@ -122,13 +104,7 @@ export class DealSummary extends Component<Signature> {
           </div>
         </:content>
       </SummaryCard>
-      <SummaryCard>
-        <:title>
-          <h3 class='summary-title'>Predicted Revenue</h3>
-        </:title>
-        <:icon>
-          <ChartCovariateIcon class='header-icon' />
-        </:icon>
+      <SummaryCard @size='small' @iconComponent={{ChartCovariateIcon}} @title='Predicted Revenue'>
         <:content>
           <div class='value'>
             {{#if this.dealSummaries}}
@@ -147,16 +123,6 @@ export class DealSummary extends Component<Signature> {
       h4,
       p {
         margin: 0;
-      }
-      .summary-title {
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xxs);
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
       }
       .value {
         font: 600 var(--boxel-font-lg);
