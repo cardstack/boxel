@@ -118,7 +118,11 @@ export class PermissionsConsumer extends Component<PermissionsConsumerSignature>
 
 const componentCache = initSharedState(
   'componentCache',
-  () => new WeakMap<Box<BaseDef>, BoxComponent>(),
+  () =>
+    new WeakMap<
+      Box<BaseDef>,
+      { component: BoxComponent; cardOrField: typeof BaseDef }
+    >(),
 );
 
 export function getBoxComponent(
@@ -130,8 +134,8 @@ export function getBoxComponent(
   // the componentCodeRef is only set on the server during card prerendering,
   // it should have no effect on component stability
   let stable = componentCache.get(model);
-  if (stable) {
-    return stable;
+  if (stable?.cardOrField === cardOrField) {
+    return stable.component;
   }
   function determineFormats(
     userFormat: Format | undefined,
@@ -364,9 +368,13 @@ export function getBoxComponent(
   let externalFields = fieldsComponentsFor(component, model);
 
   // This cast is safe because we're returning a proxy that wraps component.
-  stable = externalFields as unknown as typeof component;
+  stable = {
+    component: externalFields as unknown as typeof component,
+    cardOrField: cardOrField,
+  };
+
   componentCache.set(model, stable);
-  return stable;
+  return stable.component;
 }
 
 function defaultFieldFormats(containingFormat: Format): FieldFormats {
@@ -399,11 +407,6 @@ function fieldsComponentsFor<T extends BaseDef>(
       ) {
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
-      }
-
-      let stable = stableComponents.get(property);
-      if (stable) {
-        return stable;
       }
 
       let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above

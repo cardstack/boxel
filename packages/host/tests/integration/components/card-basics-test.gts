@@ -73,6 +73,7 @@ import {
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { on } from '@ember/modifier';
 
 let loader: Loader;
 
@@ -2221,6 +2222,52 @@ module('Integration | card-basics', function (hooks) {
       await click('[data-test-remove="0"]');
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('italian');
+    });
+
+    test('test subclass field', async function (assert) {
+      class TestField extends FieldDef {
+        static displayName = 'TestField';
+        @field firstName = contains(StringField);
+
+        static fitted = class TestFieldFitted extends Component<typeof this> {
+          <template>
+            BaseClass <@fields.firstName />
+          </template>
+        };
+      }
+      class SubTestField extends TestField {
+        static displayName = 'SubTestField';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            SubClass <@fields.firstName />
+          </template>
+        };
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(TestField);
+
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          setSubclass = () => {
+            this.args.model.specialField = new SubTestField({
+              firstName: 'New first name',
+            });
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <@fields.specialField @format='fitted' />
+          </template>
+        };
+      }
+
+      let card = new TestCard();
+
+      await renderCard(loader, card, 'isolated');
+
+      await click('[data-test-set-subclass]');
+      assert.ok(true);
     });
 
     test('add, remove and edit items in containsMany composite field', async function (assert) {
