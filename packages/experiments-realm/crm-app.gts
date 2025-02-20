@@ -461,7 +461,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           taskFilter = [{ eq: { 'priority.label': 'High' } }];
           break;
         case 'Unassigned':
-          taskFilter = [{ eq: { 'assignee.id': null } }];
+          taskFilter = [{ eq: { assignee: null } }];
           break;
         default:
           break;

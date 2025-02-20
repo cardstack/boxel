@@ -11,7 +11,7 @@ const convertAcceptHeaderMiddleware = async (
   if (acceptHeader) {
     ctx.request.headers.accept = acceptHeader; // Set Accept header on request object
     delete ctx.query.acceptHeader; // Remove acceptHeader query parameter
-    ctx.search = '?' + qs.stringify(ctx.query);
+    ctx.search = '?' + qs.stringify(ctx.query, { strictNullHandling: true });
     ctx.url = ctx.url.split('?')[0] + ctx.search;
   }
   await next(); // Allow subsequent middleware to run

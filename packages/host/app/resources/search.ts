@@ -40,8 +40,8 @@ interface Args {
 }
 
 export class Search extends Resource<Args> {
-  @service declare private cardService: CardService;
-  @service declare private realmServer: RealmServerService;
+  @service private declare cardService: CardService;
+  @service private declare realmServer: RealmServerService;
   @tracked private realmsToSearch: string[] = [];
   loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
@@ -168,7 +168,9 @@ export class Search extends Resource<Args> {
         await Promise.all(
           this.realmsToSearch.map(async (realm) => {
             let json = await this.cardService.fetchJSON(
-              `${realm}_search?${stringify(query)}`,
+              `${realm}_search?${stringify(query, {
+                strictNullHandling: true,
+              })}`,
             );
             if (!isCardCollectionDocument(json)) {
               throw new Error(

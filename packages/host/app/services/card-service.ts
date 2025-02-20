@@ -52,11 +52,11 @@ const { environment } = ENV;
 const waiter = buildWaiter('card-service:waiter');
 
 export default class CardService extends Service {
-  @service declare private loaderService: LoaderService;
-  @service declare private messageService: MessageService;
-  @service declare private network: NetworkService;
-  @service declare private realm: Realm;
-  @service declare private reset: ResetService;
+  @service private declare loaderService: LoaderService;
+  @service private declare messageService: MessageService;
+  @service private declare network: NetworkService;
+  @service private declare realm: Realm;
+  @service private declare reset: ResetService;
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
@@ -76,7 +76,7 @@ export default class CardService extends Service {
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
-  declare private loaderToCardAPILoadingCache: WeakMap<
+  private declare loaderToCardAPILoadingCache: WeakMap<
     Loader,
     Promise<typeof CardAPI>
   >;
@@ -453,7 +453,9 @@ export default class CardService extends Service {
   // duplicative instances of cards when it deserializes the results. instead of
   // using this please use the SearchResource.
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
+    let json = await this.fetchJSON(
+      `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
+    );
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
