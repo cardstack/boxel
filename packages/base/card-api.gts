@@ -1687,9 +1687,6 @@ export class BaseDef {
     if (primitive in this) {
       return value;
     }
-    if (value == null) {
-      return value;
-    }
     throw new Error(`Cannot format query value for composite card/field`);
   }
 

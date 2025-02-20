@@ -1620,27 +1620,6 @@ export class Realm {
 
     let cardsQuery = parseQuery(new URL(request.url).search.slice(1));
 
-    // cardsQuery = {
-    //   filter: {
-    //     on: {
-    //       module: 'http://localhost:4201/experiments/crm/task',
-    //       name: 'CRMTask',
-    //     },
-    //     every: [
-    //       {
-    //         eq: {
-    //           'crmApp.id':
-    //             'http://localhost:4201/experiments/CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6',
-    //         },
-    //       },
-    //       {
-    //         eq: {
-    //           assignee: null,
-    //         },
-    //       },
-    //     ],
-    //   },
-    // } as any;
     assertQuery(cardsQuery);
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
