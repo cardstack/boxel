@@ -1317,7 +1317,6 @@ module(basename(__filename), function () {
         });
 
         test('broadcasts realm events', async function (assert) {
-          let entry = 'person-1.json';
           await request
             .patch('/person-1')
             .send({
