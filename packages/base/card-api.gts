@@ -1687,8 +1687,10 @@ export class BaseDef {
     if (primitive in this) {
       return value;
     }
-    return value;
-    // throw new Error(`Cannot format query value for composite card/field`);
+    if (value == null) {
+      return value;
+    }
+    throw new Error(`Cannot format query value for composite card/field`);
   }
 
   static [queryableValue](value: any, stack: BaseDef[] = []): any {
