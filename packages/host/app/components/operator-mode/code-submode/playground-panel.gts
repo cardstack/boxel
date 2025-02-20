@@ -149,7 +149,6 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       border-top: var(--boxel-border);
       background-color: var(--boxel-light);
       padding: var(--boxel-sp-xs);
-      margin-top: var(--boxel-sp-xxs);
       gap: var(--boxel-sp-xxs);
     }
     .title {
@@ -305,9 +304,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         max-width: 100%;
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
-      }
-      :deep(.instances-dropdown-content > .ember-power-select-options) {
-        max-height: 20rem;
       }
       :deep(
           .boxel-select__dropdown
