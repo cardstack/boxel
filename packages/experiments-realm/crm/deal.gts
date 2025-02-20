@@ -319,8 +319,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
   }
 
   <template>
-    {{log this.args.model.account.thumbnailURL}}
-    {{log this.args.model.thumbnailURL}}
     <DealPageLayout>
       <:header>
         <div class='header-container'>
