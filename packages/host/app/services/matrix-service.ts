@@ -590,7 +590,7 @@ export default class MatrixService extends Service {
     cards: CardDef[],
     roomId: string,
     cardHashes: Map<string, string> = this.cardHashes,
-    opts: CardAPI.SerializeOpts = { maybeRelativeURL: null },
+    opts: CardAPI.SerializeOpts = { useAbsoluteURL: true },
   ): Promise<string[]> {
     if (!cards.length) {
       return [];

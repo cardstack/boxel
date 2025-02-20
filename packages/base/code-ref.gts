@@ -39,7 +39,7 @@ export default class CodeRefField extends FieldDef {
   ) {
     return {
       ...codeRef,
-      ...(opts?.maybeRelativeURL
+      ...(opts?.maybeRelativeURL && !opts?.useAbsoluteURL
         ? { module: opts.maybeRelativeURL(codeRef.module) }
         : {}),
     };
