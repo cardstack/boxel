@@ -71,6 +71,11 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type {
+  MatrixEvent,
+  RealmEventEvent,
+  RealmEventEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -1058,28 +1063,19 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          let incrementalEventMessage;
+          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
 
-          await waitUntil(
-            async () => {
-              let matrixMessages = await getMessagesSinceTestStarted();
-              console.log(matrixMessages);
-
-              incrementalEventMessage = matrixMessages.find(
-                (m) => m.content.indexType === 'incremental',
-              );
-
-              return incrementalEventMessage !== undefined;
-            },
-            { timeoutMessage: 'no incremental event message received' },
+          let messages = await getMessagesSinceTestStarted();
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
           );
 
-          let incrementalEvent = incrementalEventMessage!.content;
-
-          id = incrementalEvent.invalidations[0].split('/').pop()!;
+          id = incrementalEvent!.content.invalidations[0].split('/').pop()!;
           assert.true(uuidValidate(id!), 'card identifier is a UUID');
           assert.strictEqual(
-            incrementalEvent.invalidations[0],
+            incrementalEvent.content.invalidations[0],
             `${testRealmURL}CardDef/${id}`,
           );
 
@@ -1335,30 +1331,19 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          await waitUntil(async () => {
-            let matrixMessages = await getMessagesSinceTestStarted();
-            console.log(matrixMessages);
-            return matrixMessages.some(
-              (m) =>
-                m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-                m.content.eventName === 'index' &&
-                m.content.indexType === 'incremental',
-            );
-          });
+          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
 
           let messages = await getMessagesSinceTestStarted();
-          let incrementalIndexInitiationEvent = messages.find(
-            (m) =>
-              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-              m.content.eventName === 'index' &&
-              m.content.indexType === 'incremental-index-initiation',
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
           );
 
-          let incrementalEvent = messages.find(
-            (m) =>
-              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-              m.content.eventName === 'index' &&
-              m.content.indexType === 'incremental',
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
           );
 
           assert.deepEqual(incrementalIndexInitiationEvent!.content, {
@@ -1479,30 +1464,19 @@ module(basename(__filename), function () {
             .delete('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          await waitUntil(async () => {
-            let matrixMessages = await getMessagesSinceTestStarted();
-            console.log(matrixMessages);
-            return matrixMessages.some(
-              (m) =>
-                m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-                m.content.eventName === 'index' &&
-                m.content.indexType === 'incremental',
-            );
-          });
+          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
 
           let messages = await getMessagesSinceTestStarted();
-          let incrementalIndexInitiationEvent = messages.find(
-            (m) =>
-              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-              m.content.eventName === 'index' &&
-              m.content.indexType === 'incremental-index-initiation',
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
           );
 
-          let incrementalEvent = messages.find(
-            (m) =>
-              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-              m.content.eventName === 'index' &&
-              m.content.indexType === 'incremental',
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
           );
 
           assert.deepEqual(incrementalIndexInitiationEvent!.content, {
@@ -4191,3 +4165,31 @@ let cardDefModuleDependencies = [
   'https://cardstack.com/base/links-to-editor.gts',
   'https://cardstack.com/base/links-to-many-component.gts',
 ];
+
+async function waitForIncrementalIndexEvent(
+  getMessagesSinceTestStarted: () => Promise<MatrixEvent[]>,
+) {
+  await waitUntil(async () => {
+    let matrixMessages = await getMessagesSinceTestStarted();
+    console.log(matrixMessages);
+    return matrixMessages.some(
+      (m) =>
+        m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+        m.content.eventName === 'index' &&
+        m.content.indexType === 'incremental',
+    );
+  });
+}
+
+function findRealmEvent(
+  events: MatrixEvent[],
+  eventName: string,
+  indexType: string,
+): RealmEventEvent | undefined {
+  return events.find(
+    (m) =>
+      m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+      m.content.eventName === eventName &&
+      m.content.indexType === indexType,
+  );
+}
