@@ -1,5 +1,7 @@
 import { click } from '@ember/test-helpers';
 
+import { fillIn } from '@ember/test-helpers';
+
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -14,22 +16,28 @@ import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
+  setupOnSave,
+  setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
+let matrixRoomId: string;
 module('Acceptance | code-submode | playground panel', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
-  });
+  let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:staging',
+      activeRealms: [testRealmURL],
+    });
+  setupOnSave(hooks);
 
   const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -117,7 +125,11 @@ export class BlogPost extends CardDef {
 }`;
 
   hooks.beforeEach(async function () {
+    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    setupUserSubscription(matrixRoomId);
+
     ({ realm } = await setupAcceptanceTestRealm({
+      realmURL: testRealmURL,
       contents: {
         'author.gts': authorCard,
         'blog-post.gts': blogPostCard,
@@ -235,6 +247,11 @@ export class BlogPost extends CardDef {
       ]),
     );
     window.localStorage.setItem(PlaygroundSelections, '');
+
+    setActiveRealms([testRealmURL]);
+    setRealmPermissions({
+      [testRealmURL]: ['read', 'write'],
+    });
   });
 
   test('can render playground panel when a card def is selected', async function (assert) {
@@ -882,6 +899,30 @@ export class BlogPost extends CardDef {
           format: 'fitted',
         },
       }),
+    );
+  });
+
+  test<TestContextWithSave>('trigger auto saved in edit format', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-edit-button]');
+    assert.dom('[data-test-card-format="edit"]').exists();
+
+    let newFirstName = 'John';
+    this.onSave((_, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.firstName, newFirstName);
+    });
+    await fillIn(
+      '[data-test-field="firstName"] [data-test-boxel-input]',
+      newFirstName,
     );
   });
 });

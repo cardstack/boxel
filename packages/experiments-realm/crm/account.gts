@@ -25,7 +25,10 @@ import AccountHeader from '../components/account-header';
 import { WebsiteField } from '../website';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 import ContactIcon from '@cardstack/boxel-icons/contact';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  SkeletonPlaceholder,
+} from '@cardstack/boxel-ui/components';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { Query } from '@cardstack/runtime-common/query';
@@ -437,8 +440,12 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:icon>
             <:content>
               {{#if this.lifetimeValueDeals.isLoading}}
-                <h3 class='summary-highlight'>Loading...</h3>
-                <p class='description'>Loading...</p>
+                <SkeletonPlaceholder
+                  class='skeleton-placeholder-deal-summary-highlight'
+                />
+                <SkeletonPlaceholder
+                  class='skeleton-placeholder-deal-description'
+                />
               {{else}}
                 <h3 class='summary-highlight'>
                   {{this.formattedLifetimeTotal}}
@@ -446,7 +453,6 @@ class IsolatedTemplate extends Component<typeof Account> {
                 <p class='description'>
                   {{this.formattedCurrentYearValue}}
                 </p>
-
               {{/if}}
             </:content>
           </SummaryCard>
@@ -460,8 +466,12 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:icon>
             <:content>
               {{#if this.deals.isLoading}}
-                <h3 class='summary-highlight'>Loading...</h3>
-                <p class='description'>Loading...</p>
+                <SkeletonPlaceholder
+                  class='skeleton-placeholder-deal-summary-highlight'
+                />
+                <SkeletonPlaceholder
+                  class='skeleton-placeholder-deal-description'
+                />
               {{else}}
                 <h3 class='summary-highlight'>{{this.activeDealsCount}}</h3>
                 <p class='description'>{{this.totalDealsValue}}</p>
@@ -506,7 +516,7 @@ class IsolatedTemplate extends Component<typeof Account> {
           </:icon>
           <:content>
             {{#if this.activeTasks.isLoading}}
-              <div class='loading-skeleton'>Loading...</div>
+              <SkeletonPlaceholder class='skeleton-placeholder-task' />
             {{else}}
               {{#if this.hasActiveTasks}}
                 {{#each this.activeTasks.instances as |task|}}
@@ -636,14 +646,16 @@ class IsolatedTemplate extends Component<typeof Account> {
         --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
       }
-      .loading-skeleton {
-        height: 60px;
-        width: 100%;
-        background-color: var(--boxel-100);
-        border-radius: var(--boxel-border-radius-sm);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      /* Skeleton Placeholder */
+      .skeleton-placeholder-deal-summary-highlight {
+        --skeleton-width: 50%;
+        --skeleton-height: 22px;
+      }
+      .skeleton-placeholder-deal-description {
+        --skeleton-height: 13px;
+      }
+      .skeleton-placeholder-task {
+        --skeleton-height: 55px;
       }
 
       @container tasks-summary-card (max-width: 447px) {
@@ -959,7 +971,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
             <article>
               <label>PRIORITY TASKS</label>
               {{#if this.activeTasks.isLoading}}
-                <div class='loading-skeleton'>Loading...</div>
+                <SkeletonPlaceholder class='skeleton-placeholder-task' />
               {{else}}
                 <div class='task-container'>
                   {{#if this.hasActiveTasks}}
@@ -1107,14 +1119,9 @@ class EmbeddedTemplate extends Component<typeof Account> {
         --task-card-padding: var(--boxel-sp) 0;
         border-top: 1px solid var(--boxel-200);
       }
-      .loading-skeleton {
-        height: 60px;
-        width: 100%;
-        background: var(--boxel-light-300);
-        border-radius: var(--boxel-border-radius-sm);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      /* Skeleton Placeholder */
+      .skeleton-placeholder-task {
+        --skeleton-height: 55px;
       }
 
       @container account-page-layout-embedded (max-width: 447px) {
