@@ -1340,6 +1340,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
         width: 100%;
         padding: var(--account-page-layout-padding, 20px);
         box-sizing: border-box;
+        background-color: var(--boxel-100);
       }
     </style>
   </template>
