@@ -203,7 +203,9 @@ export default class StoreService extends Service {
           onCardChange: resource.isAutoSave
             ? () => {
                 if (card) {
-                  this.initiateAutoSaveTask.perform(card);
+                  // Using the card ID instead, so this function doesn't need to be updated
+                  // when the card instance changes.
+                  this.initiateAutoSaveTask.perform(card.id);
                 }
               }
             : undefined,
@@ -321,18 +323,23 @@ export default class StoreService extends Service {
       }
       for (let subscriber of this.subscribers.get(maybeUpdatedCard.id)
         ?.resources ?? []) {
-        let onCardChange = subscriber.resourceState.onCardChange;
-        if (!onCardChange) {
+        if (!subscriber.resourceState.onCardChange) {
           continue;
         }
         let autoSaveState;
         if (oldCard) {
-          this.cardApiCache.unsubscribeFromChanges(oldCard, onCardChange);
+          this.cardApiCache.unsubscribeFromChanges(
+            oldCard,
+            subscriber.resourceState.onCardChange,
+          );
           autoSaveState = this.autoSaveStates.get(oldCard);
           this.autoSaveStates.delete(oldCard);
         }
         if (isCardInstance(maybeUpdatedCard)) {
-          this.cardApiCache.subscribeToChanges(maybeUpdatedCard, onCardChange);
+          this.cardApiCache.subscribeToChanges(
+            maybeUpdatedCard,
+            subscriber.resourceState.onCardChange,
+          );
           if (autoSaveState) {
             this.autoSaveStates.set(maybeUpdatedCard, autoSaveState);
           }
@@ -423,8 +430,9 @@ export default class StoreService extends Service {
     return this.autoSaveStates.get(card);
   }
 
-  private initiateAutoSaveTask = restartableTask(async (card: CardDef) => {
-    if (!card.id) {
+  private initiateAutoSaveTask = restartableTask(async (id: string) => {
+    let card = this.identityContext.get(id);
+    if (!card) {
       return;
     }
     let autoSaveState = this.initOrGetAutoSaveState(card);
