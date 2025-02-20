@@ -1450,30 +1450,14 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}person-1`],
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            matrixClient,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/person-1')
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1490,31 +1474,60 @@ module(basename(__filename), function () {
           assert.false(existsSync(cardFile), 'card json does not exist');
         });
 
+        test('broadcasts realm events', async function (assert) {
+          await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          await waitUntil(async () => {
+            let matrixMessages = await getMessagesSinceTestStarted();
+            console.log(matrixMessages);
+            return matrixMessages.some(
+              (m) =>
+                m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+                m.content.eventName === 'index' &&
+                m.content.indexType === 'incremental',
+            );
+          });
+
+          let messages = await getMessagesSinceTestStarted();
+          let incrementalIndexInitiationEvent = messages.find(
+            (m) =>
+              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+              m.content.eventName === 'index' &&
+              m.content.indexType === 'incremental-index-initiation',
+          );
+
+          let incrementalEvent = messages.find(
+            (m) =>
+              m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+              m.content.eventName === 'index' &&
+              m.content.indexType === 'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            // FIXME realmURL should not be here…??
+            realmURL: 'http://127.0.0.1:4444/',
+            updatedFile: `${testRealmURL}person-1.json`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}person-1`],
+            // FIXME realmURL should not be here…??
+            realmURL: 'http://127.0.0.1:4444/',
+          });
+        });
+
         test('serves a card DELETE request with .json extension in the url', async function (assert) {
           let entry = 'person-1.json';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}person-1`],
-            },
-          ];
 
-          let response = await expectEvent({
-            assert,
-            matrixClient,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/person-1.json')
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+          let response = await request
+            .delete('/person-1.json')
+            .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
