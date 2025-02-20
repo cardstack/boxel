@@ -17,7 +17,6 @@ interface Signature {
       languageAttr: string;
       monacoSDK: typeof MonacoSDK;
       editorDisplayOptions?: MonacoEditorOptions;
-      index: number;
     };
   };
 }
