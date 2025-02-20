@@ -12,7 +12,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
   let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [],
     autostart: true,
   });
@@ -31,7 +31,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     };
 
     let testScenario = {
-      roomId: await createAndJoinRoom('@testuser:staging', 'Test Room'),
+      roomId: await createAndJoinRoom('@testuser:localhost', 'Test Room'),
       message,
       messages: [message],
       isStreaming,

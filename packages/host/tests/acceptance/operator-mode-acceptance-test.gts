@@ -57,12 +57,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupOnSave(hooks);
   let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     setExpiresInSec(60 * 60);
@@ -877,7 +877,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         type: 'user',
         id: 1,
         attributes: {
-          matrixUserId: '@testuser:staging',
+          matrixUserId: '@testuser:localhost',
           stripeCustomerId: 'stripe-id-1',
           creditsAvailableInPlanAllowance: 1000,
           creditsIncludedInPlanAllowance: 1000,
@@ -949,7 +949,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               headers: {
                 Authorization: createJWT(
                   {
-                    user: '@testuser:staging',
+                    user: '@testuser:localhost',
                     sessionRoom: matrixRoomId,
                   },
                   '1d',
@@ -980,14 +980,14 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-profile-popover]').doesNotExist();
       assert.dom('[data-test-settings-modal]').exists();
 
-      assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
+      assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:localhost
       assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
       assert
         .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
+        .hasStyle({ backgroundColor: 'rgb(88, 226, 29)' });
       assert
         .dom('[data-test-profile-icon-handle]')
-        .hasText('@testuser:staging');
+        .hasText('@testuser:localhost');
 
       await fillIn('[data-test-display-name-field]', '');
       assert
@@ -1030,7 +1030,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-profile-icon]').hasText('T');
       assert
         .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
+        .hasStyle({ backgroundColor: 'rgb(88, 226, 29)' });
 
       assert.dom('[data-test-profile-popover]').doesNotExist();
 
@@ -1091,7 +1091,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasAttribute(
           'href',
           `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:staging',
+            '@testuser:localhost',
           )}`,
         );
       assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
@@ -1100,7 +1100,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasAttribute(
           'href',
           `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:staging',
+            '@testuser:localhost',
           )}`,
         );
       assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
@@ -1109,7 +1109,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasAttribute(
           'href',
           `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:staging',
+            '@testuser:localhost',
           )}`,
         );
       assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
