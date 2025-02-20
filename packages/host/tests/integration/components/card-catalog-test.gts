@@ -120,7 +120,7 @@ module('Integration | card-catalog', function (hooks) {
           description: 'Spec for PublishingPacket',
           specType: 'card',
           ref: {
-            module: `../publishing-packet`,
+            module: `${testRealmURL}publishing-packet`,
             name: 'PublishingPacket',
           },
         }),
