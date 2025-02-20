@@ -69,6 +69,9 @@ class EditTemplate extends Component<typeof Account> {
       <FieldContainer @label='CRM App'>
         <@fields.crmApp />
       </FieldContainer>
+      <FieldContainer @label='Logo URL'>
+        <@fields.thumbnailURL />
+      </FieldContainer>
     </div>
     <style scoped>
       .account-form {
@@ -383,8 +386,8 @@ class IsolatedTemplate extends Component<typeof Account> {
       </:header>
 
       <:summary>
-        <SummaryGridContainer>
-          <SummaryCard>
+        <SummaryGridContainer class='summary-grid'>
+          <SummaryCard class='info-card'>
             <:title>
               <h3 class='summary-title'>Company Info</h3>
             </:title>
@@ -393,8 +396,8 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:icon>
             <:content>
               {{#if this.hasCompanyInfo}}
-                <@fields.headquartersAddress @format='atom' />
                 <@fields.website @format='atom' />
+                <@fields.headquartersAddress @format='atom' />
               {{else}}
                 <div class='default-value'>
                   Missing Company Info
@@ -403,7 +406,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
+          <SummaryCard class='info-card'>
             <:title>
               <h3 class='summary-title'>Contacts</h3>
             </:title>
@@ -431,7 +434,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
+          <SummaryCard class='info-card'>
             <:title>
               <h3 class='summary-title'>Lifetime Value</h3>
             </:title>
@@ -457,7 +460,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard>
+          <SummaryCard class='info-card'>
             <:title>
               <h3 class='summary-title'>Active Deals</h3>
             </:title>
@@ -560,11 +563,21 @@ class IsolatedTemplate extends Component<typeof Account> {
         font: 600 var(--boxel-font-lg);
         margin: 0;
       }
-      /* Summary */
+      /* Summary Grid & Card */
+      .summary-grid {
+        --summary-card-min-height: 170px;
+      }
       .summary-title {
-        font: 600 var(--boxel-font-sm);
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xxs);
-        margin: 0;
+        align-self: flex-start;
+      }
+      .summary-highlight {
+        font: 600 var(--boxel-font-xl);
+      }
+      .description {
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
       }
       .header-icon {
         width: var(--boxel-icon-sm);
@@ -572,9 +585,10 @@ class IsolatedTemplate extends Component<typeof Account> {
         flex-shrink: 0;
         margin-left: auto;
       }
-      .summary-highlight {
-        font: 600 var(--boxel-font-lg);
-        margin: 0;
+      .info-card {
+        --summary-card-gap: var(--boxel-sp-xl);
+        --summary-card-padding: var(--boxel-sp);
+        --entity-display-title-font-weight: 400;
       }
       .primary-contact {
         width: fit-content;
@@ -591,10 +605,6 @@ class IsolatedTemplate extends Component<typeof Account> {
         --pill-font: 400 var(--boxel-font-xs);
         --pill-border: none;
         flex-shrink: 0;
-      }
-      .description {
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
       }
       .tag-container {
         display: flex;
