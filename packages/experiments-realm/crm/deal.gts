@@ -48,6 +48,9 @@ import { DealEvent } from './deal-event';
 import { DealStatus } from './deal-status';
 import { DealPriority } from './deal-priority';
 import { CrmApp } from '../crm-app';
+import MapPin from '@cardstack/boxel-icons/map-pin';
+import Calendar from '@cardstack/boxel-icons/calendar';
+import UsersGroup from '@cardstack/boxel-icons/users-group';
 
 interface DealSizeSummary {
   summary: string;
@@ -102,6 +105,9 @@ class EditTemplate extends Component<typeof Deal> {
       <FieldContainer @label='CRM App'>
         <@fields.crmApp />
       </FieldContainer>
+      <FieldContainer @label='Logo URL'>
+        <@fields.thumbnailURL />
+      </FieldContainer>
     </div>
     <style scoped>
       .deal-form {
@@ -117,19 +123,36 @@ class EditTemplate extends Component<typeof Deal> {
 class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
     //We default to account thumbnail
-    return (
-      this.args.model.thumbnailURL ?? this.args.model.account?.thumbnailURL
-    );
+    return this.args.model?.thumbnailURL?.length
+      ? this.args.model.thumbnailURL
+      : this.args.model.account?.thumbnailURL;
   }
   get primaryContactName() {
     return this.args.model.account?.primaryContact?.name;
   }
 
-  get hasCompanyInfo() {
-    return (
-      this.args.model?.account?.website ||
-      this.args.model?.account?.headquartersAddress
-    );
+  get hasDealEventInfo() {
+    return this.args.model?.event;
+  }
+
+  get eventLocation() {
+    return this.args.model?.event?.location?.length
+      ? this.args.model.event.location
+      : '-';
+  }
+
+  get eventDate() {
+    return this.args.model?.event?.eventDate
+      ? this.args.model.event.eventDate
+      : '-';
+  }
+
+  get eventAttendees() {
+    const attendees = this.args.model?.event?.attendees;
+    const attendeesString = attendees
+      ? attendees.toString() + ' Expected Attendees'
+      : '-';
+    return attendeesString;
   }
 
   get hasValueBreakdown() {
@@ -296,6 +319,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
   }
 
   <template>
+    {{log this.args.model.account.thumbnailURL}}
+    {{log this.args.model.thumbnailURL}}
     <DealPageLayout>
       <:header>
         <div class='header-container'>
@@ -467,18 +492,33 @@ class IsolatedTemplate extends Component<typeof Deal> {
         <SummaryGridContainer class='task-summary-grid'>
           <SummaryCard class='info-card'>
             <:title>
-              <h3 class='info-card-title'>Company Info</h3>
+              <h3 class='info-card-title'>Deal Info</h3>
             </:title>
             <:icon>
               <World class='header-icon' />
             </:icon>
             <:content>
-              {{#if this.hasCompanyInfo}}
-                <@fields.headquartersAddress @format='atom' />
-                <@fields.website @format='atom' />
+              {{#if this.hasDealEventInfo}}
+                <EntityDisplayWithIcon @title={{this.eventLocation}}>
+                  <:icon>
+                    <MapPin class='info-icon' />
+                  </:icon>
+                </EntityDisplayWithIcon>
+
+                <EntityDisplayWithIcon @title={{this.eventDate}}>
+                  <:icon>
+                    <Calendar class='info-icon' />
+                  </:icon>
+                </EntityDisplayWithIcon>
+
+                <EntityDisplayWithIcon @title={{this.eventAttendees}}>
+                  <:icon>
+                    <UsersGroup class='info-icon' />
+                  </:icon>
+                </EntityDisplayWithIcon>
               {{else}}
                 <div class='default-value'>
-                  Missing Company Info
+                  Missing Deal Info
                 </div>
               {{/if}}
             </:content>
@@ -486,7 +526,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
           <SummaryCard class='info-card'>
             <:title>
-              <h3 class='info-card-title'>Stakeholders</h3>
+              <h3 class='info-card-title'>Key Stakeholders</h3>
             </:title>
             <:icon>
               <Users class='header-icon' />
@@ -660,9 +700,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         letter-spacing: var(--boxel-lsp-xxs);
         align-self: flex-start;
       }
-      .summary-highlight {
-        font: 600 var(--boxel-font-lg);
-      }
       .description {
         color: var(--boxel-450);
         font: var(--boxel-font-sm);
@@ -753,20 +790,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
 class FittedTemplate extends Component<typeof Deal> {
   get logoURL() {
-    return (
-      this.args.model.thumbnailURL ?? this.args.model.account?.thumbnailURL
-    );
+    //We default to account thumbnail
+    return this.args.model?.thumbnailURL?.length
+      ? this.args.model.thumbnailURL
+      : this.args.model.account?.thumbnailURL;
   }
 
   get primaryContactName() {
     return this.args.model.account?.primaryContact?.name;
-  }
-
-  get hasCompanyInfo() {
-    return (
-      this.args.model?.account?.website ||
-      this.args.model?.account?.headquartersAddress
-    );
   }
 
   get hasValueBreakdown() {
