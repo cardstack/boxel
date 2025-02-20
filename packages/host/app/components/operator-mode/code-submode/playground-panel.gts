@@ -306,9 +306,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
       }
       :deep(
-          .boxel-select__dropdown
-            .ember-power-select-option[aria-current='true']
-        ),
+        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
+      ),
       :deep(.instances-dropdown-content .ember-power-select-option) {
         background-color: var(--boxel-light);
       }
