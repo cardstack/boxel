@@ -10,7 +10,7 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 
 import { StatusPill } from '../components/status-pill';
 
-import { ColorField } from '../color';
+import { ColorField } from '../fields/color';
 
 export class StatusTagField extends FieldDef {
   static icon = ContactIcon;

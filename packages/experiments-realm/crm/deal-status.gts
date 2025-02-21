@@ -9,7 +9,7 @@ import NumberField from 'https://cardstack.com/base/number';
 
 import EntityDisplayWithIcon from '../components/entity-icon-display';
 
-import { ColorField } from '../color';
+import { ColorField } from '../fields/color';
 
 import FilterSearch from '@cardstack/boxel-icons/filter-search';
 import FilePen from '@cardstack/boxel-icons/file-pen';

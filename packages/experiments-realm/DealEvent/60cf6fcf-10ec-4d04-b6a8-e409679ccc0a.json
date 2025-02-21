@@ -14,7 +14,7 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": null
+          "self": "../Representative/880c1d41-2563-43da-999d-ef577fa3eac9"
         }
       }
     },

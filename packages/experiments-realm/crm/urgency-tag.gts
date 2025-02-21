@@ -11,7 +11,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
-import { ColorField } from '../color';
+import { ColorField } from '../fields/color';
 import { StatusPill } from '../components/status-pill';
 
 import ClockExclamation from '@cardstack/boxel-icons/clock-exclamation';

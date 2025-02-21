@@ -1,8 +1,15 @@
-import { contains, field } from 'https://cardstack.com/base/card-api';
-import { Event } from '../event';
+import {
+  contains,
+  field,
+  CardDef,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
+import { Representative } from '../crm/representative';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
+import DateTimeField from 'https://cardstack.com/base/datetime';
+import TextAreaField from 'https://cardstack.com/base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarPlus from '@cardstack/boxel-icons/calendar-plus';
 import { tracked } from '@glimmer/tracking';
@@ -207,11 +214,18 @@ class EditTemplate extends Component<typeof DealEvent> {
 }
 
 // @ts-ignore
-export class DealEvent extends Event {
+export class DealEvent extends CardDef {
   static displayName = 'Deal Event';
   static icon = CalendarPlus;
 
   @field attendees = contains(NumberField);
+  @field subject = contains(StringField);
+  @field location = contains(StringField);
+  @field assignee = linksTo(() => Representative);
+  @field startDateTime = contains(DateTimeField);
+  @field endDateTime = contains(DateTimeField);
+  @field eventType = contains(StringField);
+  @field description = contains(TextAreaField);
 
   @field title = contains(StringField, {
     computeVia(this: DealEvent) {

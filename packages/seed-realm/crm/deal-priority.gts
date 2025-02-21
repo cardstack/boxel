@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 
-import { ColorField } from '../color';
+import { ColorField } from '../fields/color';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
