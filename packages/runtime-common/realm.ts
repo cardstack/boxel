@@ -2032,13 +2032,10 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update(url, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          this.sendServerEvent({
-            type: 'index',
-            data: {
-              type: 'incremental',
-              realmURL: this.url,
-              invalidations: invalidatedURLs.map((u) => u.href),
-            },
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: invalidatedURLs.map((u) => u.href),
           });
         },
         ...(operation === 'removed' ? { delete: true } : {}),

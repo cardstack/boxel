@@ -352,6 +352,7 @@ module(basename(__filename), function () {
         });
 
         console.log('account data set for username ' + matrixClient.username);
+        console.log(await matrixClient.getAccountData('boxel.session-rooms'));
 
         // FIXME maybe use timestamp instead?
         await matrixClient.sendEvent(json.room, 'm.room.message', {
@@ -3305,6 +3306,7 @@ module(basename(__filename), function () {
       let runner: QueueRunner;
       let testRealmDir: string;
       let seedRealm: Realm | undefined;
+      let testRealmEventSource: eventSource;
 
       hooks.beforeEach(async function () {
         shimExternals(virtualNetwork);
@@ -3313,6 +3315,8 @@ module(basename(__filename), function () {
       setupPermissionedRealm(hooks, {
         '*': ['read', 'write'],
       });
+
+      let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
 
       async function startRealmServer(
         dbAdapter: PgAdapter,
@@ -3336,6 +3340,8 @@ module(basename(__filename), function () {
           runner,
           matrixURL,
         }));
+
+        await testRealm.matrixClient.login();
       }
 
       setupDB(hooks, {
@@ -3347,12 +3353,17 @@ module(basename(__filename), function () {
           ensureDirSync(testRealmDir);
           copySync(join(__dirname, 'cards'), testRealmDir);
           await startRealmServer(dbAdapter, publisher, runner);
+
+          // FIXME how to remove this?
+          testRealmEventSource = new eventSource(`${testRealmHref}_message`);
         },
         afterEach: async () => {
           if (seedRealm) {
             virtualNetwork.unmount(seedRealm.handle);
           }
           await closeServer(testRealmHttpServer2);
+          // FIXME see above
+          testRealmEventSource.close();
         },
       });
 
@@ -3433,40 +3444,46 @@ module(basename(__filename), function () {
             .set('Accept', 'application/vnd.card+json');
           assert.strictEqual(response.status, 404, 'HTTP 404 status');
         }
-        let expected = [
+
+        writeJSONSync(
+          join(dir.name, 'realm_server_1', 'test', 'new-card.json'),
           {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL.href,
-            updatedFile: `${testRealmURL}new-card.json`,
-          },
-          {
-            type: 'incremental',
-            realmURL: testRealmURL.href,
-            invalidations: [`${testRealmURL}new-card`],
-          },
-        ];
-        await expectEvent({
-          assert,
-          matrixClient,
-          expected,
-          callback: async () => {
-            writeJSONSync(
-              join(dir.name, 'realm_server_1', 'test', 'new-card.json'),
-              {
-                data: {
-                  attributes: {
-                    firstName: 'Mango',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './person',
-                      name: 'Person',
-                    },
-                  },
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
                 },
-              } as LooseSingleCardDocument,
-            );
-          },
+              },
+            },
+          } as LooseSingleCardDocument,
+        );
+
+        await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+
+        let messages = await getMessagesSinceTestStarted();
+
+        let incrementalIndexInitiationEvent = findRealmEvent(
+          messages,
+          'index',
+          'incremental-index-initiation',
+        );
+        let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
+
+        assert.deepEqual(incrementalIndexInitiationEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          realmURL: testRealmURL.href,
+          updatedFile: `${testRealmURL}new-card.json`,
+        });
+
+        assert.deepEqual(incrementalEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}new-card`],
         });
 
         {
@@ -3503,7 +3520,11 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                realmInfo: testRealmInfo,
+                // FIXME how to globally fix this?
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
                 realmURL: testRealmURL.href,
               },
               links: {
