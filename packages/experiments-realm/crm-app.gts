@@ -13,7 +13,7 @@ import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
-import { format, startOfWeek } from 'date-fns';
+import { format, startOfWeek, endOfWeek } from 'date-fns';
 
 const dateFormat = `yyyy-MM-dd`;
 
@@ -452,13 +452,32 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           break;
         case 'Due this week':
           const dueThisWeek = startOfWeek(today, { weekStartsOn: 1 });
+          const endOfThisWeek = endOfWeek(today, { weekStartsOn: 1 });
           const formattedDueThisWeek = format(dueThisWeek, dateFormat);
+          const formattedEndOfThisWeek = format(endOfThisWeek, dateFormat);
           taskFilter = [
-            { range: { 'dateRange.start': { gt: formattedDueThisWeek } } },
+            {
+              range: {
+                'dateRange.end': {
+                  gte: formattedDueThisWeek,
+                  lte: formattedEndOfThisWeek,
+                },
+              },
+            },
           ];
           break;
         case 'High Priority':
-          taskFilter = [{ eq: { 'priority.label': 'High' } }];
+          taskFilter = [
+            {
+              not: { eq: { 'priority.label': 'Lowest' } },
+            },
+            {
+              not: { eq: { 'priority.label': 'Low' } },
+            },
+            {
+              not: { eq: { 'priority.label': 'Medium' } },
+            },
+          ];
           break;
         case 'Unassigned':
           taskFilter = [{ eq: { 'assignee.id': null } }];

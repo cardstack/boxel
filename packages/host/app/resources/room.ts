@@ -1,6 +1,6 @@
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
@@ -57,7 +57,6 @@ interface Args {
 }
 
 export class RoomResource extends Resource<Args> {
-  private _previousRoomId: string | undefined;
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _skillEventIdToCardIdCache: TrackedMap<string, string> =
     new TrackedMap();
@@ -72,6 +71,7 @@ export class RoomResource extends Resource<Args> {
     new TrackedMap();
   @tracked matrixRoom: Room | undefined;
   @tracked loading: Promise<void> | undefined;
+  @tracked roomId: string | undefined;
 
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
   // that updates immediately after the user selects the LLM.
@@ -81,13 +81,11 @@ export class RoomResource extends Resource<Args> {
   @service declare private cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
-    if (named.roomId) {
-      if (this.isNewRoom(named.roomId)) {
-        this.resetCache();
-      }
-      this._previousRoomId = named.roomId;
-      this.loading = this.load.perform(named.roomId);
+    if (!named.roomId) {
+      return;
     }
+    this.roomId = named.roomId;
+    this.loading = this.load.perform(named.roomId);
   }
 
   private isNewRoom(roomId: string) {
@@ -155,28 +153,58 @@ export class RoomResource extends Resource<Args> {
     }
   });
 
+  // note that the arrays below recreated as they are recomputed and hence
+  // different when the values change. downstream components that consume these
+  // messages directly as args are unnecessarily re-created since they are
+  // triple equals different when the values change. components should consume
+  // something stable like this resource and not these ever changing arrays
+  @cached
   get messages() {
-    return [...this._messageCache.values()].sort(
-      (a, b) => a.created.getTime() - b.created.getTime(),
+    if (this.roomId == undefined) {
+      return [];
+    }
+    return [...this._messageCache.values()]
+      .filter((m) => m.roomId === this.roomId)
+      .sort((a, b) => a.created.getTime() - b.created.getTime());
+  }
+
+  @cached
+  get members() {
+    if (this.roomId == undefined) {
+      return [];
+    }
+    return (
+      Array.from(this._memberCache.values()).filter(
+        (m) => m.roomId === this.roomId,
+      ) ?? []
     );
   }
 
-  get members() {
-    return Array.from(this._memberCache.values()) ?? [];
-  }
-
+  @cached
   get invitedMembers() {
-    return this.members.filter((m) => m.membership === 'invite');
+    if (this.roomId == undefined) {
+      return [];
+    }
+    return this.members.filter(
+      (m) => m.membership === 'invite' && m.roomId === this.roomId,
+    );
   }
 
+  @cached
   get joinedMembers() {
-    return this.members.filter((m) => m.membership === 'join');
+    if (this.roomId == undefined) {
+      return [];
+    }
+    return this.members.filter(
+      (m) => m.membership === 'join' && m.roomId === this.roomId,
+    );
   }
 
   private get events() {
     return this.matrixRoom?.events ?? [];
   }
 
+  @cached
   private get sortedEvents() {
     return this.events.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   }
@@ -227,10 +255,7 @@ export class RoomResource extends Resource<Args> {
     return commands;
   }
 
-  get roomId() {
-    return this._previousRoomId;
-  }
-
+  @cached
   get created() {
     if (this._createEvent) {
       return new Date(this._createEvent.origin_server_ts);
@@ -244,6 +269,7 @@ export class RoomResource extends Resource<Args> {
     return this.matrixRoom?.name;
   }
 
+  @cached
   get lastActiveTimestamp() {
     let eventsWithTime = this.events.filter((t) => t.origin_server_ts);
     let maybeLastActive =
