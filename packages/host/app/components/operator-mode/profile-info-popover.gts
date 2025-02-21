@@ -214,6 +214,8 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
         margin: auto;
         display: flex;
         flex-direction: column;
+        max-width: 100%;
+        overflow: hidden;
         --profile-avatar-icon-size: 70px;
         --profile-avatar-icon-border: 0;
       }
@@ -226,11 +228,19 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
         margin-top: var(--boxel-sp-xxxs);
         font-size: var(--boxel-font-size);
         font-weight: 600;
+        max-width: 100%;
+        text-wrap: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .profile-handle {
         margin-top: var(--boxel-sp-xxxxs);
         color: var(--boxel-500);
+        max-width: 100%;
+        text-wrap: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     </style>
   </template>
