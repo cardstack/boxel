@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
@@ -94,7 +95,7 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
-const BeforeOptions: TemplateOnlyComponent<{ Args: {} }> = <template>
+const BeforeOptions: TemplateOnlyComponent = <template>
   <div class='before-options'>
     <span class='title'>
       Recent
@@ -378,6 +379,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
+  @tracked newCardJSON: LooseSingleCardDocument | undefined;
   private playgroundSelections: Record<
     string, // moduleId
     { cardId: string; format: Format }
@@ -430,7 +432,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   private cardResource = getCard(
     this,
-    () => this.playgroundSelections[this.args.moduleId]?.cardId,
+    () =>
+      this.newCardJSON ?? this.playgroundSelections[this.args.moduleId]?.cardId,
     { isAutoSave: () => true },
   );
 
@@ -477,6 +480,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private persistSelections = (cardId: string, format = this.format) => {
+    this.newCardJSON = undefined;
     this.playgroundSelections[this.args.moduleId] = { cardId, format };
     window.localStorage.setItem(
       PlaygroundSelections,
@@ -507,29 +511,20 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
   });
 
+  // TODO: convert this to @action once we no longer need to await below
   private createNew = task(async () => {
-    let ref = this.args.codeRef;
-    let realmURL = this.operatorModeStateService.realmURL.href; // creates in current workspace
-    let doc: LooseSingleCardDocument = {
+    this.newCardJSON = {
       data: {
         meta: {
-          adoptsFrom: ref,
-          realmURL,
+          adoptsFrom: this.args.codeRef,
+          realmURL: this.operatorModeStateService.realmURL.href,
         },
       },
     };
-    try {
-      let card = await this.cardService.createFromSerialized(doc.data, doc);
-      if (!card) {
-        throw new Error(
-          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-        );
-      }
-      await this.cardService.saveModel(card);
-      this.recentFilesService.addRecentFileUrl(`${card.id}.json`);
-      this.persistSelections(card.id, 'edit'); // open new instance in playground in edit format
-    } catch (e: any) {
-      console.log('Error saving', e);
+    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+    if (this.card) {
+      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
     }
   });
 
