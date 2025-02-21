@@ -12,7 +12,7 @@ import { ImageSizeField } from 'https://cardstack.com/base/base64-image';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import PhotoIcon from '@cardstack/boxel-icons/photo';
-import { UrlField } from './url';
+import { UrlField } from '../url';
 import { setBackgroundImage } from '../components/layout';
 
 function cssForFeaturedImage({

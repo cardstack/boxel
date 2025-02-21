@@ -17,7 +17,7 @@ import Email from '@cardstack/boxel-icons/mail';
 import Link from '@cardstack/boxel-icons/link';
 import Phone from '@cardstack/boxel-icons/phone';
 
-import { UrlField } from './url';
+import { UrlField } from '../url';
 
 export interface ContactLink {
   type: 'email' | 'tel' | 'link' | string;
