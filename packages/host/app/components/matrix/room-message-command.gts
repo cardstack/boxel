@@ -279,16 +279,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
       }
-      .preview-code {
-        --spacing: var(--boxel-sp-sm);
-        --fill-container-spacing: calc(
-          -1 * var(--ai-assistant-message-padding)
-        );
-        margin: var(--boxel-sp) var(--fill-container-spacing) 0
-          var(--fill-container-spacing);
-        padding: var(--spacing) 0;
-        background-color: var(--boxel-dark);
-      }
       .copy-to-clipboard-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
@@ -303,11 +293,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       .copy-to-clipboard-button:hover:not(:disabled) {
         --boxel-button-text-color: var(--boxel-highlight);
         filter: brightness(1.1);
-      }
-      .monaco-container {
-        height: var(--monaco-container-height);
-        min-height: 7rem;
-        max-height: 30vh;
       }
       .header {
         --boxel-label-color: var(--boxel-450);
@@ -330,17 +315,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .options-menu :deep(.check-icon) {
         display: none;
-      }
-      /*
-        This filter is a best-effort approximation of a good looking dark theme that is a function of the white theme that
-        we use for code previews in the AI panel. While Monaco editor does support multiple themes, it does not support
-        monaco instances with different themes *on the same page*.  This is why we are using a filter to approximate the
-        dark theme. More details here: https://github.com/Microsoft/monaco-editor/issues/338 (monaco uses global style tags
-        with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
-        effectively disabling multiple themes to be used on the same page)
-      */
-      :global(.preview-code .monaco-editor) {
-        filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
       }
     </style>
   </template>

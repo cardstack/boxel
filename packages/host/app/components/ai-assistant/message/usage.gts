@@ -9,6 +9,8 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+
 import AiAssistantMessage, { AiAssistantConversation } from './index';
 export default class AiAssistantMessageUsage extends Component {
   @tracked formattedMessage = 'Hello, world';
@@ -37,6 +39,7 @@ export default class AiAssistantMessageUsage extends Component {
   twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
 
   noop = () => {};
+  noopMonacoSDK = {} as MonacoSDK;
 
   <template>
     <FreestyleUsage @name='AiAssistant::Message'>
@@ -60,6 +63,7 @@ export default class AiAssistantMessageUsage extends Component {
                 userId=this.userId
                 isReady=true
               }}
+              @monacoSDK={{this.noopMonacoSDK}}
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
               @isStreaming={{this.isStreaming}}
@@ -130,6 +134,7 @@ export default class AiAssistantMessageUsage extends Component {
               @isFromAssistant={{false}}
               @index={{0}}
               @registerScroller={{this.noop}}
+              @monacoSDK={{this.noopMonacoSDK}}
               @profileAvatar={{component
                 Avatar
                 userId=this.userId
@@ -142,6 +147,7 @@ export default class AiAssistantMessageUsage extends Component {
                 'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
               }}
               @index={{1}}
+              @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}

@@ -168,7 +168,9 @@ export class Search extends Resource<Args> {
         await Promise.all(
           this.realmsToSearch.map(async (realm) => {
             let json = await this.cardService.fetchJSON(
-              `${realm}_search?${stringify(query)}`,
+              `${realm}_search?${stringify(query, {
+                strictNullHandling: true,
+              })}`,
             );
             if (!isCardCollectionDocument(json)) {
               throw new Error(

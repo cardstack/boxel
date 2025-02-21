@@ -48,10 +48,13 @@ export class StackItem {
     if (cardResource) {
       this.cardResource = cardResource;
     } else if (url) {
-      this.cardResource = getCard(owner, () => url!.href);
+      this.cardResource = getCard(owner, () => url!.href, {
+        isAutoSave: () => true,
+      });
     } else if (newCard) {
       this.cardResource = getCard(owner, () => newCard!.doc, {
         relativeTo: newCard.relativeTo,
+        isAutoSave: () => true,
       });
     }
 
@@ -75,6 +78,10 @@ export class StackItem {
     }
 
     throw new Error(`This StackItem has no card set`);
+  }
+
+  get autoSaveState() {
+    return this.cardResource?.autoSaveState;
   }
 
   get title() {

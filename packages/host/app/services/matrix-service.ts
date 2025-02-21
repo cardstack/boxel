@@ -261,7 +261,7 @@ export default class MatrixService extends Service {
   get fileAPI() {
     if (this.fileAPIModule.error) {
       throw new Error(
-        `Error loading File API: ${JSON.stringify(this.cardAPIModule.error)}`,
+        `Error loading File API: ${JSON.stringify(this.fileAPIModule.error)}`,
       );
     }
     if (!this.fileAPIModule.module) {

@@ -13,8 +13,8 @@
         "end": "2025-02-19"
       },
       "priority": {
-        "index": 3,
-        "label": "High"
+        "index": 4,
+        "label": "Highest"
       },
       "name": "TechFlow Content Calendar Review",
       "details": "Review and approve Q2 content marketing calendar for TechFlow's digital presence",

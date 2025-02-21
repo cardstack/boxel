@@ -22,6 +22,7 @@ module('Unit | qs | parse', function () {
           {
             eq: {
               'author.firstName': 'Cardy',
+              series: null,
             },
           },
           {
@@ -47,7 +48,9 @@ module('Unit | qs | parse', function () {
         },
       ],
     };
-    let queryString = qs.stringify(query);
+    let queryString = qs.stringify(query, {
+      strictNullHandling: true,
+    });
     let parsedQuery: any = parseQuery(queryString);
     assert.deepEqual(parsedQuery, query);
   });

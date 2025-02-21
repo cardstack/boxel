@@ -133,11 +133,14 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     realmURL: string,
   ): Promise<PrerenderedCard[]> {
     let json = (await this.cardService.fetchJSON(
-      `${realmURL}_search-prerendered?${stringify({
-        ...query,
-        prerenderedHtmlFormat: format,
-        cardUrls,
-      })}`,
+      `${realmURL}_search-prerendered?${stringify(
+        {
+          ...query,
+          prerenderedHtmlFormat: format,
+          cardUrls,
+        },
+        { strictNullHandling: true },
+      )}`,
     )) as unknown as PrerenderedCardCollectionDocument;
     if (!isPrerenderedCardCollectionDocument(json)) {
       throw new Error(

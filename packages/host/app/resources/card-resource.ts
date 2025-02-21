@@ -33,10 +33,7 @@ interface Args {
     storeService: StoreService;
     cardService: CardService;
     relativeTo?: URL;
-    onCardInstanceChange?: (
-      oldCard: CardDef | undefined,
-      newCard: CardDef | undefined,
-    ) => void;
+    isAutoSave: boolean;
   };
 }
 
@@ -55,6 +52,7 @@ export class CardResource extends Resource<Args> {
   #url: string | undefined;
   #isLive = false;
   #api: typeof CardAPI | undefined;
+  #isAutoSave = false;
 
   onCardInstanceChange?: (
     oldCard: CardDef | undefined,
@@ -65,7 +63,7 @@ export class CardResource extends Resource<Args> {
     let {
       urlOrDoc,
       isLive,
-      onCardInstanceChange,
+      isAutoSave,
       storeService,
       cardService,
       relativeTo,
@@ -74,7 +72,7 @@ export class CardResource extends Resource<Args> {
     this.cardService = cardService;
     this.#url = urlOrDoc ? asURL(urlOrDoc) : undefined;
     this.#isLive = isLive;
-    this.onCardInstanceChange = onCardInstanceChange;
+    this.#isAutoSave = isAutoSave;
 
     if (urlOrDoc) {
       this._loaded = this.load.perform(urlOrDoc, relativeTo);
@@ -87,6 +85,10 @@ export class CardResource extends Resource<Args> {
 
   get isLive() {
     return this.#isLive;
+  }
+
+  get isAutoSave() {
+    return this.#isAutoSave;
   }
 
   get card() {
@@ -103,6 +105,10 @@ export class CardResource extends Resource<Args> {
 
   get isLoaded() {
     return this._isLoaded;
+  }
+
+  get autoSaveState() {
+    return this._card ? this.store.getAutoSaveState(this._card) : undefined;
   }
 
   // This is deprecated. consumers of this resource need to be reactive such
@@ -149,11 +155,7 @@ export function getCard(
   opts?: {
     relativeTo?: URL; // used for new cards
     isLive?: () => boolean;
-    // TODO refactor this out
-    onCardInstanceChange?: () => (
-      oldCard: CardDef | undefined,
-      newCard: CardDef | undefined,
-    ) => void;
+    isAutoSave?: () => boolean;
   },
 ) {
   return CardResource.from(parent, () => ({
@@ -161,9 +163,7 @@ export function getCard(
       urlOrDoc: urlOrDoc(),
       isLive: opts?.isLive ? opts.isLive() : true,
       relativeTo: opts?.relativeTo,
-      onCardInstanceChange: opts?.onCardInstanceChange
-        ? opts.onCardInstanceChange()
-        : undefined,
+      isAutoSave: opts?.isAutoSave ? opts.isAutoSave() : false,
       storeService: (getOwner(parent) as any).lookup(
         'service:store',
       ) as StoreService,
