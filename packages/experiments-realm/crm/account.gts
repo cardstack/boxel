@@ -12,7 +12,7 @@ import {
   StringField,
 } from 'https://cardstack.com/base/card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { Address as AddressField } from '../address';
+import { Address as AddressField } from '../fields/address';
 import { Company } from './company';
 import { Contact } from './contact';
 import { CrmApp } from '../crm-app';
@@ -22,7 +22,7 @@ import SummaryGridContainer from '../components/summary-grid-container';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import AccountHeader from '../components/account-header';
-import { WebsiteField } from '../website';
+import { WebsiteField } from '../fields/website';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import {

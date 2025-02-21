@@ -20,8 +20,8 @@ import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 import { CrmApp } from '../crm-app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
-import { ContactPhoneNumber } from '../phone-number';
-import { EmailField } from '../email';
+import { ContactPhoneNumber } from '../fields/phone-number';
+import { EmailField } from '../fields/email';
 import { ContactLinkField } from '../fields/contact-link';
 
 export class SocialLinkField extends ContactLinkField {
