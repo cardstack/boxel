@@ -147,6 +147,10 @@ export default class CardService extends Service {
     return;
   }
 
+  // WARNING! please do not use this to create card instances. Use
+  // `CardResource.getCard()` instead for creating card instances. When you
+  // create card instances directly from here it bypasses the store's identity
+  // map and instances created directly from here will behave very problematically.
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
