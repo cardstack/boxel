@@ -83,6 +83,29 @@ const sortByPriority: (direction: TaskSortOrder) => Sort = (
   },
 ];
 
+const TASK_SORT_OPTIONS: SortOption[] = [
+  {
+    id: 'dueDateDesc',
+    displayName: 'Due Date',
+    sort: sortByDueDate('desc'),
+  },
+  {
+    id: 'dueDateAsc',
+    displayName: 'Due Date',
+    sort: sortByDueDate('asc'),
+  },
+  {
+    id: 'priorityDesc',
+    displayName: 'Priority',
+    sort: sortByPriority('desc'),
+  },
+  {
+    id: 'priorityAsc',
+    displayName: 'Priority',
+    sort: sortByPriority('asc'),
+  },
+];
+
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Contacts',
@@ -151,34 +174,14 @@ const TASK_FILTERS: LayoutFilter[] = [
     icon: ListDetails,
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
-    sortOptions: [
-      {
-        id: 'dueDateDesc',
-        displayName: 'Due Date',
-        sort: sortByDueDate('desc'),
-      },
-      {
-        id: 'dueDateAsc',
-        displayName: 'Due Date',
-        sort: sortByDueDate('asc'),
-      },
-      {
-        id: 'priorityDesc',
-        displayName: 'Priority',
-        sort: sortByPriority('desc'),
-      },
-      {
-        id: 'priorityAsc',
-        displayName: 'Priority',
-        sort: sortByPriority('asc'),
-      },
-    ],
+    sortOptions: TASK_SORT_OPTIONS,
   },
   ...taskStatusValues.map((status) => ({
     displayName: status.label,
     icon: status.icon,
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
+    sortOptions: TASK_SORT_OPTIONS,
   })),
 ];
 
@@ -213,6 +216,30 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
+    if (this.activeTabId === 'Task') {
+      switch (this.activeFilter.displayName) {
+        case 'All Tasks':
+        case 'Overdue':
+        case 'Due this week':
+        case 'Unassigned':
+          this.activeFilter.selectedSort = {
+            id: 'dueDateAsc',
+            displayName: 'Due Date',
+            sort: sortByDueDate('asc'),
+          };
+          break;
+        case 'Due Today':
+        case 'High Priority':
+          this.activeFilter.selectedSort = {
+            id: 'priorityDesc',
+            displayName: 'Priority',
+            sort: sortByPriority('desc'),
+          };
+          break;
+        default:
+          break;
+      }
+    }
   }
   //tabs
   @tracked activeTabId: string | undefined = TABS[0].tabId;
