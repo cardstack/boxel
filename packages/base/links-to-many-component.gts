@@ -395,13 +395,10 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
 }): BoxComponent {
-  let getComponents = () => {
-    // console.log('hi');
-    // let box = getBoxComponent(arrayField);
-    return arrayField.children.map((child) => {
-      return getBoxComponent(cardTypeFor(field, child), child, field);
-    }); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
-  };
+  let getComponents = () =>
+    arrayField.children.map((child) =>
+      getBoxComponent(cardTypeFor(field, child), child, field),
+    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let isComputed = !!field.computeVia;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
