@@ -395,10 +395,13 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
 }): BoxComponent {
-  let getComponents = () =>
-    arrayField.children.map((child) =>
-      getBoxComponent(cardTypeFor(field, child), child, field),
-    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
+  let getComponents = () => {
+    // console.log('hi');
+    // let box = getBoxComponent(arrayField);
+    return arrayField.children.map((child) => {
+      return getBoxComponent(cardTypeFor(field, child), child, field);
+    }); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
+  };
   let isComputed = !!field.computeVia;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
@@ -465,11 +468,22 @@ export function getLinksToManyComponent({
       </style>
     </template>
   };
+  let stableComponents = new Map<string, BoxComponent[]>();
   return new Proxy(linksToManyComponent, {
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
-      let components = getComponents();
+
+      //we need stable components to ensure the modifier remains on the linksToManyComponent and doesn't get recreated
+      //test would break otherwise but the expected behavior still works in the app (this has to do with the sortable modifier readiness when the component is torn down)
+      //we previously had a stable component cache in the proxy but removed it since we believe it is not needed
+      //in order to fix test, I have moved a cache here since this seems like the only place it is affected
+      //TODO: meet with ed to iron out this cache
+      let components = stableComponents.get(property);
+      if (!components) {
+        components = getComponents();
+        stableComponents.set(property, components);
+      }
 
       if (property === Symbol.iterator) {
         return components[Symbol.iterator];
