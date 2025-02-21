@@ -1,4 +1,3 @@
-import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -14,9 +13,7 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
-import { formatDistanceToNow } from 'date-fns';
 import {
-  task,
   restartableTask,
   timeout,
   waitForProperty,
@@ -124,18 +121,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
-  @tracked private isSaving = false;
   @tracked private animationType:
     | 'opening'
     | 'closing'
     | 'movingForward'
     | undefined = 'opening';
-  @tracked private hasUnsavedChanges = false;
-  @tracked private lastSaved: number | undefined;
-  @tracked private lastSavedMsg: string | undefined;
-  @tracked private lastSaveError: Error | undefined;
-  private refreshSaveMsg: number | undefined;
-  private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
   private itemEl: HTMLElement | undefined;
@@ -162,7 +152,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadCard.perform();
-    this.subscribeToCard.perform();
     this.args.setupStackItem(this.args.item, {
       clearSelections: this.clearSelections,
       doWithStableScroll: this.doWithStableScroll.perform,
@@ -376,86 +365,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   });
 
-  private subscribeToCard = task(async () => {
-    await this.args.item.ready();
-    // TODO how do we make sure that this is called after the error is cleared?
-    // Address this as part of SSE support for card errors
-    if (!this.cardError) {
-      this.subscribedCard = this.card;
-      let api = this.args.item.api;
-      registerDestructor(this, this.cleanup);
-      api.subscribeToChanges(this.subscribedCard, this.onCardChange);
-      this.refreshSaveMsg = setInterval(
-        () => this.calculateLastSavedMsg(),
-        10 * 1000,
-      ) as unknown as number;
-    }
-  });
-
-  private cleanup = () => {
-    if (this.subscribedCard) {
-      let api = this.args.item.api;
-      api.unsubscribeFromChanges(this.subscribedCard, this.onCardChange);
-      clearInterval(this.refreshSaveMsg);
-    }
-  };
-
-  private onCardChange = () => {
-    this.initiateAutoSaveTask.perform();
-  };
-
-  private initiateAutoSaveTask = restartableTask(async () => {
-    this.hasUnsavedChanges = true;
-    await timeout(this.environmentService.autoSaveDelayMs);
-    try {
-      this.isSaving = true;
-      this.lastSaveError = undefined;
-      await timeout(25);
-      await this.args.saveCard(this.card);
-      this.hasUnsavedChanges = false;
-      this.lastSaved = Date.now();
-    } catch (error) {
-      // error will already be logged in CardService
-      this.lastSaveError = error as Error;
-    } finally {
-      this.isSaving = false;
-      this.calculateLastSavedMsg();
-    }
-  });
-
-  private calculateLastSavedMsg() {
-    let savedMessage: string | undefined;
-    if (this.lastSaveError) {
-      savedMessage = `Failed to save: ${this.getErrorMessage(
-        this.lastSaveError,
-      )}`;
-    } else if (this.lastSaved) {
-      savedMessage = `Saved ${formatDistanceToNow(this.lastSaved, {
-        addSuffix: true,
-      })}`;
-    }
-    // runs frequently, so only change a tracked property if the value has changed
-    if (this.lastSavedMsg != savedMessage) {
-      this.lastSavedMsg = savedMessage;
-    }
-  }
-
-  private getErrorMessage(error: Error) {
-    if ((error as any).responseHeaders?.get('x-blocked-by-waf-rule')) {
-      return 'Rejected by firewall';
-    }
-    if (error.message) {
-      return error.message;
-    }
-    return 'Unknown error';
-  }
-
   private doneEditing = restartableTask(async () => {
     let item = this.args.item;
     let { request } = item;
     // if the card is actually different do the save and dismiss, otherwise
     // just change the stack item's format to isolated
-    if (this.hasUnsavedChanges) {
+    if (item.autoSaveState?.hasUnsavedChanges) {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
       let updatedCard = await this.args.saveCard(item.card);
@@ -675,9 +590,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon @item.card}}
-              @isSaving={{this.isSaving}}
+              @isSaving={{@item.autoSaveState.isSaving}}
               @isTopCard={{this.isTopCard}}
-              @lastSavedMessage={{this.lastSavedMsg}}
+              @lastSavedMessage={{@item.autoSaveState.lastSavedErrorMsg}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}

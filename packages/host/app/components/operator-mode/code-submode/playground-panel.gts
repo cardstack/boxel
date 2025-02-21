@@ -214,6 +214,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                   @cardTypeDisplayName={{cardTypeDisplayName this.card}}
                   @cardTypeIcon={{cardTypeIcon this.card}}
                   @realmInfo={{realmInfo}}
+                  @onEdit={{if this.canEdit this.setEditFormat}}
                   @isTopCard={{true}}
                   @moreOptionsMenuItems={{this.contextMenuItems}}
                 />
@@ -411,6 +412,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   private cardResource = getCard(
     this,
     () => this.playgroundSelections[this.args.moduleId]?.cardId,
+    { isAutoSave: () => true },
   );
 
   private get card(): CardDef | undefined {
@@ -485,6 +487,22 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       this.persistSelections(chosenCard.id);
     }
   });
+
+  private get canEdit() {
+    return (
+      this.format !== 'edit' &&
+      this.card?.id &&
+      this.realm.canWrite(this.card.id)
+    );
+  }
+
+  @action
+  private setEditFormat() {
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistSelections(this.card.id, 'edit');
+  }
 }
 
 interface Signature {

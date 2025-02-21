@@ -110,39 +110,44 @@ export class RoomResource extends Resource<Args> {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.matrixRoom) {
-        let index = this._messageCache.size;
-        let members = this.matrixRoom?.members;
-        // If the AI bot is not in the room, don't process the events
-        if (members && !(this.matrixService.aiBotUserId in members)) {
-          return;
-        }
-        // This is brought up to this level so if the
-        // load task is rerun we can stop processing
-        for (let event of this.sortedEvents) {
-          switch (event.type) {
-            case 'm.room.member':
-              await this.loadRoomMemberEvent(roomId, event);
+      if (!this.matrixRoom) {
+        return;
+      }
+      let memberIds = this.matrixRoom.memberIds;
+      // If the AI bot is not in the room, don't process the events
+      if (!memberIds) {
+        return;
+      }
+      if (!memberIds.includes(this.matrixService.aiBotUserId)) {
+        return;
+      }
+
+      let index = this._messageCache.size;
+      // This is brought up to this level so if the
+      // load task is rerun we can stop processing
+      for (let event of this.sortedEvents) {
+        switch (event.type) {
+          case 'm.room.member':
+            await this.loadRoomMemberEvent(roomId, event);
+            break;
+          case 'm.room.message':
+            if (this.isCardFragmentEvent(event)) {
+              await this.loadCardFragment(event);
+            } else if (this.isCommandDefinitionsEvent(event)) {
               break;
-            case 'm.room.message':
-              if (this.isCardFragmentEvent(event)) {
-                await this.loadCardFragment(event);
-              } else if (this.isCommandDefinitionsEvent(event)) {
-                break;
-              } else {
-                await this.loadRoomMessage({ roomId, event, index });
-              }
-              break;
-            case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-              this.updateMessageCommandResult({ roomId, event, index });
-              break;
-            case 'm.room.create':
-              await this.loadRoomCreateEvent(event);
-              break;
-            case 'm.room.name':
-              await this.loadRoomNameEvent(event);
-              break;
-          }
+            } else {
+              await this.loadRoomMessage({ roomId, event, index });
+            }
+            break;
+          case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+            this.updateMessageCommandResult({ roomId, event, index });
+            break;
+          case 'm.room.create':
+            await this.loadRoomCreateEvent(event);
+            break;
+          case 'm.room.name':
+            await this.loadRoomNameEvent(event);
+            break;
         }
       }
     } catch (e) {

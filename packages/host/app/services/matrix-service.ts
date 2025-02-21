@@ -264,7 +264,7 @@ export default class MatrixService extends Service {
   get fileAPI() {
     if (this.fileAPIModule.error) {
       throw new Error(
-        `Error loading File API: ${JSON.stringify(this.cardAPIModule.error)}`,
+        `Error loading File API: ${JSON.stringify(this.fileAPIModule.error)}`,
       );
     }
     if (!this.fileAPIModule.module) {
@@ -644,7 +644,7 @@ export default class MatrixService extends Service {
     cards: CardDef[],
     roomId: string,
     cardHashes: Map<string, string> = this.cardHashes,
-    opts: CardAPI.SerializeOpts = { maybeRelativeURL: null },
+    opts: CardAPI.SerializeOpts = { useAbsoluteURL: true },
   ): Promise<string[]> {
     if (!cards.length) {
       return [];

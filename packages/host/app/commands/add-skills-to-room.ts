@@ -27,7 +27,7 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
     let roomSkillEventIds = await matrixService.addSkillCardsToRoomHistory(
       skills,
       roomId,
-      { includeComputeds: true, maybeRelativeURL: null },
+      { includeComputeds: true, useAbsoluteURL: true },
     );
     await matrixService.updateStateEvent(
       roomId,

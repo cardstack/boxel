@@ -84,7 +84,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     getRoomEvents,
     setReadReceipt,
   } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
     now: (() => {
@@ -359,7 +359,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     messagesHaveBeenRead = true,
   ) {
     for (let i = 0; i < 20; i++) {
-      simulateRemoteMessage(roomId, '@testuser:staging', {
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
         body: `question #${i + 1}`,
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: `question #${i + 1}`,
@@ -373,7 +373,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: true,
       });
       if (messagesHaveBeenRead) {
-        setReadReceipt(roomId, eventId, '@testuser:staging');
+        setReadReceipt(roomId, eventId, '@testuser:localhost');
       }
     }
   }
@@ -436,8 +436,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-    let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+    let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let room2Id = createAndJoinRoom('@testuser:localhost', 'test room 2');
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Incorrect command',
@@ -1030,7 +1030,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it renders only new/updated messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: `question #0`,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: `question #1`,
@@ -1053,8 +1053,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
         eventId: '__EVENT_ID__',
       }),
     });
-    setReadReceipt(roomId, messageEventId, '@testuser:staging');
-    setReadReceipt(roomId, commandEventId, '@testuser:staging');
+    setReadReceipt(roomId, messageEventId, '@testuser:localhost');
+    setReadReceipt(roomId, commandEventId, '@testuser:localhost');
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1178,9 +1178,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom('@testuser:staging', 'test room 0');
-      let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-      const room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+      createAndJoinRoom('@testuser:localhost', 'test room 0');
+      let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
+      const room2Id = createAndJoinRoom('@testuser:localhost', 'test room 2');
       await settled();
 
       await openAiAssistant();
@@ -1415,7 +1415,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom(
+      '@testuser:localhost',
+      'Another Room',
+    );
 
     simulateRemoteMessage(
       anotherRoomId,
@@ -1576,7 +1579,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     fillRoomWithReadMessages(roomId, false);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1598,7 +1601,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1620,7 +1623,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1661,7 +1664,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'Say one word.',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Say one word.',
@@ -1685,7 +1688,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom(
+      '@testuser:localhost',
+      'Another Room',
+    );
 
     let eventId3 = simulateRemoteMessage(
       anotherRoomId,
@@ -1719,7 +1725,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    await simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
@@ -1736,7 +1742,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       errorMessage: 'AI bot error',
     });
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    await simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
@@ -2057,7 +2063,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity
     let anotherRoomId = await createAndJoinRoom(
-      '@testuser:staging',
+      '@testuser:localhost',
       'Another Room',
     );
 
@@ -2154,7 +2160,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
       body: 'Changing first name to Evie',
@@ -2227,7 +2233,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,
@@ -2595,7 +2601,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_COMMAND_MSGTYPE,

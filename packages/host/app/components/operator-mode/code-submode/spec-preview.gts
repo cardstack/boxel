@@ -12,7 +12,7 @@ import DotIcon from '@cardstack/boxel-icons/dot';
 
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
-import { task, restartableTask, timeout, all } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import {
   BoxelButton,
@@ -53,8 +53,6 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
@@ -482,7 +480,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private cardResource = getCard(this, () => this.selectedId, {
-    onCardInstanceChange: () => this.onCardLoaded,
+    isAutoSave: () => true,
   });
 
   get card() {
@@ -491,35 +489,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     }
     return this.cardResource.card as Spec;
   }
-
-  private onCardLoaded = (
-    oldCard: CardDef | undefined,
-    newCard: CardDef | undefined,
-  ) => {
-    if (oldCard) {
-      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
-    }
-    if (newCard) {
-      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
-    }
-  };
-
-  private onCardChange = () => {
-    this.initiateAutoSaveTask.perform();
-  };
-
-  private initiateAutoSaveTask = restartableTask(async () => {
-    if (this.card) {
-      await timeout(this.environmentService.autoSaveDelayMs);
-      await this.saveCard.perform(this.card);
-    }
-  });
-
-  private saveCard = restartableTask(async (card: Spec) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
 
   get specType() {
     return this.card?.specType as SpecType;
