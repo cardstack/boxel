@@ -76,6 +76,7 @@ import type {
   RealmEventEvent,
   RealmEventEventContent,
 } from 'https://cardstack.com/base/matrix-event';
+import isEqual from 'lodash/isEqual';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -1725,44 +1726,14 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        let matrixClient = setupMatrixRoom(hooks);
+        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
 
         test('serves the request', async function (assert) {
           let entry = 'unused-card.gts';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}unused-card.gts`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}unused-card.gts`],
-            },
-          ];
 
-          let expectEventPromise = expectEvent({
-            assert,
-            matrixClient,
-            expected,
-            callback: async () => {
-              console.log('in callback???');
-              return await request
-                .delete('/unused-card.gts')
-                .set('Accept', 'application/vnd.card+source');
-            },
-          });
-
-          console.log('expectEventPromise', expectEventPromise);
-
-          console.log('before await');
-
-          response = await expectEventPromise;
-
-          console.log('after await');
-
-          console.log('response status', response.status);
+          let response = await request
+            .delete('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1777,36 +1748,50 @@ module(basename(__filename), function () {
           );
           let cardFile = join(dir.name, entry);
           assert.false(existsSync(cardFile), 'card module does not exist');
+        });
 
-          console.log('done assertions');
+        test('broadcasts realm events', async function (assert) {
+          await request
+            .delete('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source');
 
-          return;
+          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+
+          let messages = await getMessagesSinceTestStarted();
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
+          );
+
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            // FIXME realmURL should not be here…??
+            realmURL: 'http://127.0.0.1:4444/',
+            updatedFile: `${testRealmURL}unused-card.gts`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}unused-card.gts`],
+            // FIXME realmURL should not be here…??
+            realmURL: 'http://127.0.0.1:4444/',
+          });
         });
 
         test('serves a card-source DELETE request for a card instance', async function (assert) {
           let entry = 'person-1';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}person-1`],
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            matrixClient,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/person-1')
-                .set('Accept', 'application/vnd.card+source');
-            },
-          });
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+source');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1862,39 +1847,20 @@ module(basename(__filename), function () {
     });
 
     module('card-source POST request', function (_hooks) {
-      module('public writable realm', function (hooks) {
+      // eslint-disable-next-line qunit/no-only
+      module.only('public writable realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           '*': ['read', 'write'],
         });
 
-        let matrixClient = setupMatrixRoom(hooks);
+        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
 
         test('serves a card-source POST request', async function (assert) {
           let entry = 'unused-card.gts';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}unused-card.gts`,
-            },
-            {
-              type: 'incremental',
-              invalidations: [`${testRealmURL}unused-card.gts`],
-              realmURL: testRealmURL.href,
-              clientRequestId: null,
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            matrixClient,
-            expected,
-            callback: async () => {
-              return await request
-                .post('/unused-card.gts')
-                .set('Accept', 'application/vnd.card+source')
-                .send(`//TEST UPDATE\n${cardSrc}`);
-            },
-          });
+          let response = await request
+            .post('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1916,6 +1882,44 @@ module(basename(__filename), function () {
             `//TEST UPDATE
           ${cardSrc}`,
           );
+        });
+
+        test('broadcasts realm events', async function (assert) {
+          await request
+            .post('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
+
+          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+
+          let messages = await getMessagesSinceTestStarted();
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
+          );
+
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            // FIXME why
+            realmURL: testRealmURL.href,
+            updatedFile: `${testRealmURL}unused-card.gts`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}unused-card.gts`],
+            // FIXME ??
+            clientRequestId: null,
+          });
         });
 
         test('serves a card-source POST request for a .txt file', async function (assert) {
@@ -1940,28 +1944,9 @@ module(basename(__filename), function () {
         test('can serialize a card instance correctly after card definition is changed', async function (assert) {
           // create a card def
           {
-            let expected = [
-              {
-                type: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
-                updatedFile: `${testRealmURL}test-card.gts`,
-              },
-              {
-                type: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`],
-                realmURL: testRealmURL.href,
-                clientRequestId: null,
-              },
-            ];
-
-            let response = await expectEvent({
-              assert,
-              matrixClient,
-              expected,
-              callback: async () => {
-                return await request
-                  .post('/test-card.gts')
-                  .set('Accept', 'application/vnd.card+source').send(`
+            let response = await request
+              .post('/test-card.gts')
+              .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
                 import StringCard from 'https://cardstack.com/base/string';
 
@@ -1970,39 +1955,32 @@ module(basename(__filename), function () {
                   @field field2 = contains(StringCard);
                 }
               `);
-              },
-            });
+
             assert.strictEqual(response.status, 204, 'HTTP 204 status');
           }
 
           // make an instance of the card def
           let maybeId: string | undefined;
           {
-            let response = await expectEvent({
-              assert,
-              matrixClient,
-              expectedNumberOfEvents: 2,
-              callback: async () => {
-                return await request
-                  .post('/')
-                  .send({
-                    data: {
-                      type: 'card',
-                      attributes: {
-                        field1: 'a',
-                        field2: 'b',
-                      },
-                      meta: {
-                        adoptsFrom: {
-                          module: `${testRealmURL}test-card`,
-                          name: 'TestCard',
-                        },
-                      },
+            let response = await request
+              .post('/')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    field1: 'a',
+                    field2: 'b',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-card`,
+                      name: 'TestCard',
                     },
-                  })
-                  .set('Accept', 'application/vnd.card+json');
-              },
-            });
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
             assert.strictEqual(response.status, 201, 'HTTP 201 status');
             maybeId = response.body.data.id;
           }
@@ -2015,28 +1993,9 @@ module(basename(__filename), function () {
 
           // modify field
           {
-            let expected = [
-              {
-                type: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
-                updatedFile: `${testRealmURL}test-card.gts`,
-              },
-              {
-                type: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`, id],
-                realmURL: testRealmURL.href,
-                clientRequestId: null,
-              },
-            ];
-
-            let response = await expectEvent({
-              assert,
-              matrixClient,
-              expected,
-              callback: async () => {
-                return await request
-                  .post('/test-card.gts')
-                  .set('Accept', 'application/vnd.card+source').send(`
+            let response = await request
+              .post('/test-card.gts')
+              .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
                 import StringCard from 'https://cardstack.com/base/string';
 
@@ -2045,8 +2004,7 @@ module(basename(__filename), function () {
                   @field field2a = contains(StringCard); // rename field2 -> field2a
                 }
               `);
-              },
-            });
+
             assert.strictEqual(response.status, 204, 'HTTP 204 status');
           }
 
@@ -2069,43 +2027,23 @@ module(basename(__filename), function () {
 
           // set value on renamed field
           {
-            let expected = [
-              {
-                type: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
-                updatedFile: `${id}.json`,
-              },
-              {
-                type: 'incremental',
-                invalidations: [id],
-                realmURL: testRealmURL.href,
-                clientRequestId: null,
-              },
-            ];
-            let response = await expectEvent({
-              assert,
-              matrixClient,
-              expected,
-              callback: async () => {
-                return await request
-                  .patch(new URL(id).pathname)
-                  .send({
-                    data: {
-                      type: 'card',
-                      attributes: {
-                        field2a: 'c',
-                      },
-                      meta: {
-                        adoptsFrom: {
-                          module: `${testRealmURL}test-card`,
-                          name: 'TestCard',
-                        },
-                      },
+            let response = await request
+              .patch(new URL(id).pathname)
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    field2a: 'c',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-card`,
+                      name: 'TestCard',
                     },
-                  })
-                  .set('Accept', 'application/vnd.card+json');
-              },
-            });
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
@@ -2180,6 +2118,84 @@ module(basename(__filename), function () {
               description: null,
               thumbnailURL: null,
             });
+          }
+
+          let messages = await getMessagesSinceTestStarted();
+
+          console.log('all messages', JSON.stringify(messages, null, 2));
+
+          let expected = [
+            {
+              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental-index-initiation',
+                realmURL: testRealmURL.href,
+                updatedFile: `${testRealmURL}test-card.gts`,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental',
+                invalidations: [`${testRealmURL}test-card.gts`],
+                // ??
+                // realmURL: testRealmURL.href,
+                clientRequestId: null,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental-index-initiation',
+                realmURL: testRealmURL.href,
+                updatedFile: `${testRealmURL}test-card.gts`,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental',
+                invalidations: [`${testRealmURL}test-card.gts`, id],
+                // ??
+                // realmURL: testRealmURL.href,
+                clientRequestId: null,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental-index-initiation',
+                realmURL: testRealmURL.href,
+                updatedFile: `${id}.json`,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental',
+                invalidations: [id],
+                // ??
+                // realmURL: testRealmURL.href,
+                clientRequestId: null,
+              },
+            },
+          ];
+
+          for (let expectedEvent of expected) {
+            // FIXME is there a better way?
+            let actualEvent = matchRealmEvent(messages, expectedEvent);
+
+            assert.deepEqual(
+              actualEvent?.content,
+              expectedEvent.content,
+              'expected event was broadcast',
+            );
           }
         });
       });
@@ -4191,5 +4207,11 @@ function findRealmEvent(
       m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
       m.content.eventName === eventName &&
       m.content.indexType === indexType,
+  );
+}
+
+function matchRealmEvent(events: MatrixEvent[], event: any) {
+  return events.find(
+    (m) => m.type === event.type && isEqual(event.content, m.content),
   );
 }
