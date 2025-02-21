@@ -1847,8 +1847,7 @@ module(basename(__filename), function () {
     });
 
     module('card-source POST request', function (_hooks) {
-      // eslint-disable-next-line qunit/no-only
-      module.only('public writable realm', function (hooks) {
+      module('public writable realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           '*': ['read', 'write'],
         });
