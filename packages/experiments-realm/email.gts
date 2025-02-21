@@ -69,6 +69,11 @@ export class EmailField extends StringField {
     <template>
       {{#if @model}}
         <EntityDisplayWithIcon @title={{@model}} @underline={{false}}>
+          <:title>
+            <a href='mailto:{{@model}}' rel='noopener noreferrer'>
+              {{@model}}
+            </a>
+          </:title>
           <:icon>
             <MailIcon class='icon' />
           </:icon>
@@ -77,6 +82,10 @@ export class EmailField extends StringField {
       <style scoped>
         .icon {
           color: var(--boxel-400);
+        }
+        a:hover {
+          text-decoration: underline;
+          color: inherit;
         }
       </style>
     </template>
