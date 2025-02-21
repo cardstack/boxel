@@ -20,6 +20,8 @@ export class WebsiteField extends UrlField {
     <template>
       <EntityDisplayWithIcon>
         <:title>
+          {{! Display only domain and path, unlike URLField's full URL representation }}
+          {{! Custom atom implementation for handling URL interactions }}
           {{#if @model}}
             {{#if (isValidUrl @model)}}
               <a href={{@model}} target='_blank' rel='noopener noreferrer'>
