@@ -814,9 +814,23 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills() {
+  async loadDefaultSkills(submode: Submode) {
+    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+
+    let codeModeDefaultSkills = [
+      `${baseRealm.url}SkillCard/code-module-editing`,
+    ];
+
+    let defaultSkills;
+
+    if (submode === 'code') {
+      defaultSkills = codeModeDefaultSkills;
+    } else {
+      defaultSkills = interactModeDefaultSkills;
+    }
+
     return await Promise.all(
-      DefaultSkillCards.map(async (skillCardURL) => {
+      defaultSkills.map(async (skillCardURL) => {
         return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
