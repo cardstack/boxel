@@ -13,7 +13,7 @@ import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
-import { format, startOfWeek } from 'date-fns';
+import { format, startOfWeek, endOfWeek } from 'date-fns';
 
 const dateFormat = `yyyy-MM-dd`;
 
@@ -80,6 +80,29 @@ const sortByPriority: (direction: TaskSortOrder) => Sort = (
   {
     by: 'priority',
     direction,
+  },
+];
+
+const TASK_SORT_OPTIONS: SortOption[] = [
+  {
+    id: 'dueDateDesc',
+    displayName: 'Due Date',
+    sort: sortByDueDate('desc'),
+  },
+  {
+    id: 'dueDateAsc',
+    displayName: 'Due Date',
+    sort: sortByDueDate('asc'),
+  },
+  {
+    id: 'priorityDesc',
+    displayName: 'Priority',
+    sort: sortByPriority('desc'),
+  },
+  {
+    id: 'priorityAsc',
+    displayName: 'Priority',
+    sort: sortByPriority('asc'),
   },
 ];
 
@@ -151,34 +174,14 @@ const TASK_FILTERS: LayoutFilter[] = [
     icon: ListDetails,
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
-    sortOptions: [
-      {
-        id: 'dueDateDesc',
-        displayName: 'Due Date',
-        sort: sortByDueDate('desc'),
-      },
-      {
-        id: 'dueDateAsc',
-        displayName: 'Due Date',
-        sort: sortByDueDate('asc'),
-      },
-      {
-        id: 'priorityDesc',
-        displayName: 'Priority',
-        sort: sortByPriority('desc'),
-      },
-      {
-        id: 'priorityAsc',
-        displayName: 'Priority',
-        sort: sortByPriority('asc'),
-      },
-    ],
+    sortOptions: TASK_SORT_OPTIONS,
   },
   ...taskStatusValues.map((status) => ({
     displayName: status.label,
     icon: status.icon,
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
+    sortOptions: TASK_SORT_OPTIONS,
   })),
 ];
 
@@ -213,6 +216,30 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
+    if (this.activeTabId === 'Task') {
+      switch (this.activeFilter.displayName) {
+        case 'All Tasks':
+        case 'Overdue':
+        case 'Due this week':
+        case 'Unassigned':
+          this.activeFilter.selectedSort = {
+            id: 'dueDateAsc',
+            displayName: 'Due Date',
+            sort: sortByDueDate('asc'),
+          };
+          break;
+        case 'Due Today':
+        case 'High Priority':
+          this.activeFilter.selectedSort = {
+            id: 'priorityDesc',
+            displayName: 'Priority',
+            sort: sortByPriority('desc'),
+          };
+          break;
+        default:
+          break;
+      }
+    }
   }
   //tabs
   @tracked activeTabId: string | undefined = TABS[0].tabId;
@@ -452,13 +479,32 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           break;
         case 'Due this week':
           const dueThisWeek = startOfWeek(today, { weekStartsOn: 1 });
+          const endOfThisWeek = endOfWeek(today, { weekStartsOn: 1 });
           const formattedDueThisWeek = format(dueThisWeek, dateFormat);
+          const formattedEndOfThisWeek = format(endOfThisWeek, dateFormat);
           taskFilter = [
-            { range: { 'dateRange.start': { gt: formattedDueThisWeek } } },
+            {
+              range: {
+                'dateRange.end': {
+                  gte: formattedDueThisWeek,
+                  lte: formattedEndOfThisWeek,
+                },
+              },
+            },
           ];
           break;
         case 'High Priority':
-          taskFilter = [{ eq: { 'priority.label': 'High' } }];
+          taskFilter = [
+            {
+              not: { eq: { 'priority.label': 'Lowest' } },
+            },
+            {
+              not: { eq: { 'priority.label': 'Low' } },
+            },
+            {
+              not: { eq: { 'priority.label': 'Medium' } },
+            },
+          ];
           break;
         case 'Unassigned':
           taskFilter = [{ eq: { 'assignee.id': null } }];

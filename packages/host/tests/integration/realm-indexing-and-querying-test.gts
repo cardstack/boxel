@@ -4391,6 +4391,22 @@ posts/ignore-me.json
       );
     });
 
+    test(`can use 'eq' to find empty linksTo field`, async function (assert) {
+      let { data: matching } = await queryEngine.search({
+        filter: {
+          on: {
+            module: `${testModuleRealm}friend`,
+            name: 'Friend',
+          },
+          every: [{ eq: { firstName: 'Mango' } }, { eq: { friend: null } }],
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}friend2`],
+      );
+    });
+
     test(`can search for cards by using a computed field`, async function (assert) {
       let { data: matching } = await queryEngine.search({
         filter: {

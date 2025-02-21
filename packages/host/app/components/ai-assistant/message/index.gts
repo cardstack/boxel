@@ -20,9 +20,12 @@ import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
+
+import FormattedMessage from '../formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -67,6 +70,7 @@ interface Signature {
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
+    monacoSDK: MonacoSDK;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -226,11 +230,21 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
 
         <div class='content' data-test-ai-message-content>
-          {{if
-            (and @isFromAssistant @isStreaming)
-            (wrapLastTextNodeInStreamingTextSpan @formattedMessage)
-            @formattedMessage
-          }}
+          {{#if (and @isFromAssistant @isStreaming)}}
+            <FormattedMessage
+              @renderCodeBlocks={{false}}
+              @monacoSDK={{@monacoSDK}}
+              @sanitizedHtml={{wrapLastTextNodeInStreamingTextSpan
+                @formattedMessage
+              }}
+            />
+          {{else}}
+            <FormattedMessage
+              @renderCodeBlocks={{true}}
+              @monacoSDK={{@monacoSDK}}
+              @sanitizedHtml={{@formattedMessage}}
+            />
+          {{/if}}
 
           {{yield}}
 
@@ -333,7 +347,13 @@ export default class AiAssistantMessage extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
         padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
+
+      .is-from-assistant .content :deep(.message) {
+        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
+      }
+
       .is-from-assistant .content {
+        padding: 0;
         background-color: var(--ai-bot-message-background-color);
         color: var(--boxel-light);
         /* the below font-smoothing options are only recommended for light-colored
