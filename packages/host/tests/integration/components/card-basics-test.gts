@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import {
   waitUntil,
@@ -73,7 +74,6 @@ import {
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-import { on } from '@ember/modifier';
 
 let loader: Loader;
 
