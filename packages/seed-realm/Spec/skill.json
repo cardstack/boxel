@@ -5,7 +5,7 @@
       "title": "Skill Card",
       "description": "Spec for Skill card",
       "ref": {
-        "module": "../skill-card",
+        "module": "https://cardstack.com/base/skill-card",
         "name": "SkillCard"
       },
       "specType": "card"

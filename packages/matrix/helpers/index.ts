@@ -464,12 +464,13 @@ export async function assertMessages(
     from: string;
     message?: string;
     cards?: { id: string; title?: string; realmIconUrl?: string }[];
+    files?: { name: string; sourceUrl: string }[];
   }[],
 ) {
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length,
   );
-  for (let [index, { from, message, cards }] of messages.entries()) {
+  for (let [index, { from, message, cards, files }] of messages.entries()) {
     await expect(
       page.locator(
         `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
@@ -483,7 +484,7 @@ export async function assertMessages(
     if (cards?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
         ),
       ).toHaveCount(1);
       await expect(
@@ -514,10 +515,29 @@ export async function assertMessages(
           ).toHaveCount(1);
         }
       });
-    } else {
+    }
+
+    if (files?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
+        ),
+      ).toHaveCount(1);
+      await expect(
+            page.locator(`[data-test-message-idx="${index}"] [data-test-attached-file]`)).toHaveCount(files.length)
+      files.map(async (file) => {
+          await expect(
+            page.locator(
+              `[data-test-message-idx="${index}"] [data-test-attached-file="${file.sourceUrl}"]`,
+            ),
+          ).toContainText(file.name);  
+      });
+    }
+
+    if (!files?.length && !cards?.length) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
         ),
       ).toHaveCount(0);
     }
