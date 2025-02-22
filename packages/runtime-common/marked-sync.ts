@@ -1,6 +1,6 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
-import { md5 } from 'super-fast-md5';
+import { simpleHash } from '.';
 
 const CODEBLOCK_KEY_PREFIX = 'codeblock_';
 
@@ -12,7 +12,7 @@ export function markedSync(markdown: string) {
         // markdown, please use the `CodeBlock` modifier to render the
         // markdown.
         code(code, language = '') {
-          let id = `${CODEBLOCK_KEY_PREFIX}${md5(Date.now() + language + code)}`;
+          let id = `${CODEBLOCK_KEY_PREFIX}${simpleHash(Date.now() + language + code)}`;
           // we pass the code thru using localstorage instead of in the DOM,
           // that way we don't have to worry about escaping code. note that the
           // DOM wants to render "<template>" strings when we put them in the
