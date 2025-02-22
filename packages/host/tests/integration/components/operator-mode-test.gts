@@ -233,8 +233,7 @@ module('Integration | operator-mode', function (hooks) {
           return this.firstName;
         },
       });
-      // Address existence causes a re-render of the linksToManyComponent -- WHY?!
-      // @field address = contains(Address);
+      @field address = contains(Address);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2 data-test-person={{@model.firstName}}>
@@ -247,7 +246,7 @@ module('Integration | operator-mode', function (hooks) {
           <@fields.pet />
           Friends:
           <@fields.friends />
-          {{! <div data-test-addresses>Address: <@fields.address /></div> }}
+          <div data-test-addresses>Address: <@fields.address /></div>
         </template>
       };
     }
