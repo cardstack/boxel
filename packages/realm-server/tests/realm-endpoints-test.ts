@@ -3548,41 +3548,46 @@ module(basename(__filename), function () {
           );
         }
 
-        let expected = [
+        writeJSONSync(
+          join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
           {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL.href,
-            updatedFile: `${testRealmURL}person-1.json`,
-          },
-          {
-            type: 'incremental',
-            realmURL: testRealmURL.href,
-            invalidations: [`${testRealmURL}person-1`],
-          },
-        ];
-        await expectEvent({
-          assert,
-          matrixClient,
-          expected,
-          callback: async () => {
-            writeJSONSync(
-              join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './person.gts',
-                      name: 'Person',
-                    },
-                  },
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
                 },
-              } as LooseSingleCardDocument,
-            );
-          },
+              },
+            },
+          } as LooseSingleCardDocument,
+        );
+
+        await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+
+        let messages = await getMessagesSinceTestStarted();
+
+        let incrementalIndexInitiationEvent = findRealmEvent(
+          messages,
+          'index',
+          'incremental-index-initiation',
+        );
+
+        let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
+
+        assert.deepEqual(incrementalIndexInitiationEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          updatedFile: `${testRealmURL}person-1.json`,
+        });
+
+        assert.deepEqual(incrementalEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}person-1`],
         });
 
         {

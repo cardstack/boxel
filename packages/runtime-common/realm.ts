@@ -2045,13 +2045,10 @@ export class Realm {
   }
 
   private sendIndexInitiationEvent(updatedFile: string) {
-    this.sendServerEvent({
-      type: 'index',
-      data: {
-        type: 'incremental-index-initiation',
-        realmURL: this.url,
-        updatedFile,
-      },
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental-index-initiation',
+      updatedFile,
     });
   }
 
