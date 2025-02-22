@@ -185,12 +185,12 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings

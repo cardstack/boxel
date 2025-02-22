@@ -44,6 +44,14 @@ export default class Room {
       ?.name;
   }
 
+  get memberIds(): string[] {
+    let memberEvents = (this._roomState?.events
+      .get('m.room.member')
+      ?.values() ?? []) as MatrixSDK.MatrixEvent[];
+    let memberIds = [...memberEvents.map((ev) => ev.event.state_key)];
+    return memberIds.filter((id) => id !== undefined) as string[];
+  }
+
   notifyRoomStateUpdated(rs: MatrixSDK.RoomState) {
     this._roomState = rs; // this is usually the same object, but some internal state has changed. This assignment kicks off reactivity.
   }

@@ -34,7 +34,7 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   setupServerSentEvents(hooks);
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
   setupOnSave(hooks);
@@ -125,7 +125,7 @@ export class BlogPost extends CardDef {
 }`;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     ({ realm } = await setupAcceptanceTestRealm({
