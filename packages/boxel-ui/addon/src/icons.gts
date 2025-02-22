@@ -40,6 +40,7 @@ import IconPencilCrossedOut from './icons/icon-pencil-crossed-out.gts';
 import IconPencilNotCrossedOut from './icons/icon-pencil-not-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
+import IconPlusThin from './icons/icon-plus-thin.gts';
 import IconSearch from './icons/icon-search.gts';
 import IconSearchThick from './icons/icon-search-thick.gts';
 import IconTrash from './icons/icon-trash.gts';
@@ -100,6 +101,7 @@ export const ALL_ICON_COMPONENTS = [
   IconPencilNotCrossedOut,
   IconPlus,
   IconPlusCircle,
+  IconPlusThin,
   IconSearch,
   IconSearchThick,
   IconTrash,
@@ -161,6 +163,7 @@ export {
   IconPencilNotCrossedOut,
   IconPlus,
   IconPlusCircle,
+  IconPlusThin,
   IconSearch,
   IconSearchThick,
   IconTrash,
