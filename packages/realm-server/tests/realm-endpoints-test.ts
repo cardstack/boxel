@@ -732,7 +732,11 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                realmInfo: testRealmInfo,
+                // FIXME see elsewhere… global fix?
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
                 realmURL: testRealmURL.href,
               },
               links: {
@@ -1225,8 +1229,6 @@ module(basename(__filename), function () {
           assert.deepEqual(incrementalIndexInitiationEvent!.content, {
             eventName: 'index',
             indexType: 'incremental-index-initiation',
-            // FIXME realmURL should not be here…??
-            realmURL: 'http://127.0.0.1:4444/',
             updatedFile: `${testRealmURL}person-1.json`,
           });
 
@@ -1358,8 +1360,6 @@ module(basename(__filename), function () {
           assert.deepEqual(incrementalIndexInitiationEvent!.content, {
             eventName: 'index',
             indexType: 'incremental-index-initiation',
-            // FIXME realmURL should not be here…??
-            realmURL: 'http://127.0.0.1:4444/',
             updatedFile: `${testRealmURL}person-1.json`,
           });
 
@@ -1648,8 +1648,6 @@ module(basename(__filename), function () {
           assert.deepEqual(incrementalIndexInitiationEvent!.content, {
             eventName: 'index',
             indexType: 'incremental-index-initiation',
-            // FIXME realmURL should not be here…??
-            realmURL: 'http://127.0.0.1:4444/',
             updatedFile: `${testRealmURL}unused-card.gts`,
           });
 
@@ -1782,8 +1780,6 @@ module(basename(__filename), function () {
           assert.deepEqual(incrementalIndexInitiationEvent!.content, {
             eventName: 'index',
             indexType: 'incremental-index-initiation',
-            // FIXME why
-            realmURL: testRealmURL.href,
             updatedFile: `${testRealmURL}unused-card.gts`,
           });
 
@@ -2004,7 +2000,6 @@ module(basename(__filename), function () {
               content: {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
                 updatedFile: `${testRealmURL}test-card.gts`,
               },
             },
@@ -2044,7 +2039,6 @@ module(basename(__filename), function () {
               content: {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
                 updatedFile: `${id}.json`,
               },
             },
@@ -2834,7 +2828,10 @@ module(basename(__filename), function () {
               data: {
                 id: testRealmHref,
                 type: 'realm-info',
-                attributes: testRealmInfo,
+                attributes: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
               },
             },
             '/_info response is correct',
