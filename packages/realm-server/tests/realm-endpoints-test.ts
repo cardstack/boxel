@@ -3611,27 +3611,31 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         }
 
-        let expected = [
-          {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL.href,
-            updatedFile: `${testRealmURL}person-1.json`,
-          },
-          {
-            type: 'incremental',
-            realmURL: testRealmURL.href,
-            invalidations: [`${testRealmURL}person-1`],
-          },
-        ];
-        await expectEvent({
-          assert,
-          matrixClient,
-          expected,
-          callback: async () => {
-            removeSync(
-              join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
-            );
-          },
+        removeSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'));
+
+        await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+
+        let messages = await getMessagesSinceTestStarted();
+
+        let incrementalIndexInitiationEvent = findRealmEvent(
+          messages,
+          'index',
+          'incremental-index-initiation',
+        );
+
+        let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
+
+        // FIXME split this test from the response-checking
+        assert.deepEqual(incrementalIndexInitiationEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          updatedFile: `${testRealmURL}person-1.json`,
+        });
+
+        assert.deepEqual(incrementalEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}person-1`],
         });
 
         {
