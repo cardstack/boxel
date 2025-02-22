@@ -2019,7 +2019,6 @@ module(basename(__filename), function () {
               content: {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
                 updatedFile: `${testRealmURL}test-card.gts`,
               },
             },
@@ -3347,7 +3346,6 @@ module(basename(__filename), function () {
         assert.deepEqual(incrementalIndexInitiationEvent?.content, {
           eventName: 'index',
           indexType: 'incremental-index-initiation',
-          realmURL: testRealmURL.href,
           updatedFile: `${testRealmURL}new-card.json`,
         });
 
