@@ -115,6 +115,7 @@ export default class Login extends Component<Signature> {
       }
       .forgot-password:hover {
         color: var(--boxel-highlight);
+        background-color: transparent;
       }
       .button {
         --boxel-button-padding: var(--boxel-sp-sm);
