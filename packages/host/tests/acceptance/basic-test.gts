@@ -21,12 +21,12 @@ module('Acceptance | basic tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     let loaderService = lookupLoaderService();

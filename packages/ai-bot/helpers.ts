@@ -12,12 +12,14 @@ import type {
   SkillsConfigEvent,
   ActiveLLMEvent,
   CommandResultEvent,
+  CommandDefinitionsEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '../runtime-common/matrix-constants';
@@ -87,7 +89,7 @@ export async function getPromptParts(
     cardFragments,
   );
   let skills = getEnabledSkills(eventList, cardFragments);
-  let tools = getTools(history, aiBotUserId);
+  let tools = getTools(history, skills, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = await getModifyPrompt(history, aiBotUserId, tools, skills);
   let model = getModel(eventList);
@@ -430,10 +432,45 @@ export function attachedFilesToPrompt(
 
 export function getTools(
   history: DiscreteMatrixEvent[],
+  enabledSkills: LooseCardResource[],
   aiBotUserId: string,
 ): Tool[] {
   // Build map directly from messages
+  let enabledCommandNames = new Set<string>();
   let toolMap = new Map<string, Tool>();
+
+  // Get the list of all names from enabled skills
+  for (let skill of enabledSkills) {
+    if (skill.attributes?.commands) {
+      let { commands } = skill.attributes;
+      for (let command of commands) {
+        enabledCommandNames.add(command.functionName);
+      }
+    }
+  }
+
+  // Iterate over the command definitions, and add any tools that are in
+  // enabled skills to the tool map
+  let commandDefinitionEvents: CommandDefinitionsEvent[] = history.filter(
+    (event) =>
+      event.type === 'm.room.message' &&
+      event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  ) as CommandDefinitionsEvent[];
+
+  for (let event of commandDefinitionEvents) {
+    let { content } = event;
+    let { commandDefinitions } = content.data;
+    for (let commandDefinition of commandDefinitions) {
+      if (enabledCommandNames.has(commandDefinition.tool.function.name)) {
+        toolMap.set(
+          commandDefinition.tool.function.name,
+          commandDefinition.tool,
+        );
+      }
+    }
+  }
+
+  // Add in tools from the user's messages
   for (let event of history) {
     if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
       continue;
@@ -719,7 +756,10 @@ export function isCommandResultEvent(
 export function eventRequiresResponse(event: MatrixEvent) {
   // If it's a message, we should respond unless it's a card fragment
   if (event.getType() === 'm.room.message') {
-    if (event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
+    if (
+      event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE ||
+      event.getContent().msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE
+    ) {
       return false;
     }
     return true;

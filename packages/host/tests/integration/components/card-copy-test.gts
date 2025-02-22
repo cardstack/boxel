@@ -271,7 +271,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
     autostart: true,
   });

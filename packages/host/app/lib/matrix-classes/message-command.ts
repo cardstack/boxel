@@ -4,6 +4,8 @@ import { inject as service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -25,6 +27,7 @@ export default class MessageCommand {
     public toolCallId: string,
     name: string,
     payload: any, //arguments of toolCall. Its not called arguments due to lint
+    public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     commandStatus: CommandStatus,
     commandResultCardEventId: string | undefined,

@@ -418,7 +418,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
     let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
     });
 
     async function openNewFileModal(menuSelection: string) {
@@ -428,7 +428,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
       setupUserSubscription(matrixRoomId);
 
       let realmServerService = this.owner.lookup(
@@ -442,7 +442,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await setupAcceptanceTestRealm({
         realmURL: personalRealmURL,
         permissions: {
-          '@testuser:staging': ['read', 'write', 'realm-owner'],
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
           'hello.txt': txtSource,
@@ -456,7 +456,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await setupAcceptanceTestRealm({
         realmURL: additionalRealmURL,
         permissions: {
-          '@testuser:staging': ['read', 'write', 'realm-owner'],
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
           'hello.txt': txtSource,
@@ -528,12 +528,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
     let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
       setupUserSubscription(matrixRoomId);
 
       monacoService = this.owner.lookup(

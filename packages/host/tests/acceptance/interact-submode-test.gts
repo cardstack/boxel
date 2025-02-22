@@ -56,12 +56,12 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupOnSave(hooks);
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     let loader = lookupLoaderService().loader;
@@ -1347,7 +1347,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             assert.notStrictEqual(token, null);
 
             let claims = claimsFromRawToken(token!);
-            assert.deepEqual(claims.user, '@testuser:staging');
+            assert.deepEqual(claims.user, '@testuser:localhost');
             assert.strictEqual(claims.realm, 'http://test-realm/test2/');
             assert.deepEqual(claims.permissions, ['read', 'write']);
           }

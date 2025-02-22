@@ -3,6 +3,8 @@ export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_COMMAND_MSGTYPE = 'app.boxel.command';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 export const APP_BOXEL_COMMAND_RESULT_EVENT_TYPE = 'app.boxel.commandResult';
+export const APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE =
+  'app.boxel.commandDefinitions';
 export const APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =
   'app.boxel.commandResultWithOutput';
 export const APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =

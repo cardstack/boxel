@@ -37,7 +37,7 @@ module('Integration | loading', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });

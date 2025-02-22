@@ -123,12 +123,12 @@ module('Acceptance | Spec preview', function (hooks) {
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL, testRealm2URL],
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
