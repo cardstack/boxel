@@ -63,6 +63,12 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
 
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+    autostart: true,
+  });
+
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (
       leftCards: string[],
@@ -268,12 +274,6 @@ module('Integration | card-copy', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
-  });
-
-  setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
-    autostart: true,
   });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {

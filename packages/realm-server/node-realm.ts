@@ -7,6 +7,7 @@ import {
   type ResponseWithNodeStream,
   type TokenClaims,
 } from '@cardstack/runtime-common';
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
@@ -26,9 +27,12 @@ import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {
   RequestContext,
+  ServerEvents,
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -182,6 +186,140 @@ export class NodeAdapter implements RealmAdapter {
       exp: number;
     };
   }
+
+  async sendServerEvent(
+    event: ServerEvents,
+    matrixClient: MatrixClient,
+  ): Promise<void> {
+    console.log('sending server event', event);
+
+    if (!matrixClient.isLoggedIn()) {
+      console.log(
+        `not logged in (${matrixClient.username} client ${matrixClient.clientIndex}), skipping server event`,
+      );
+      return;
+    }
+
+    let dmRooms;
+
+    try {
+      dmRooms =
+        (await matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+    } catch (e) {
+      // FIXME this is happening in CI, Matrix has been shut down presumably
+      console.log('error getting account data', e);
+      return;
+    }
+
+    console.log(
+      'raw dmrooms for username ' +
+        matrixClient.username +
+        ' client ' +
+        matrixClient.clientIndex,
+      JSON.stringify(dmRooms, null, 2),
+    );
+    console.log('sending to dm rooms', Object.values(dmRooms));
+
+    let translatedEvent = translateEvent(event);
+
+    if (!translatedEvent) {
+      return;
+    }
+
+    console.log('translated event', translatedEvent);
+
+    for (let userId of Object.keys(dmRooms)) {
+      let roomId = dmRooms[userId];
+      try {
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+          translatedEvent,
+        );
+      } catch (e) {
+        console.log(
+          `Unable to send event in room ${roomId} for user ${userId}`,
+          event,
+          e,
+        );
+      }
+    }
+  }
+
+  async broadcastRealmEvent(
+    event: RealmEventEventContent,
+    matrixClient: MatrixClient,
+  ): Promise<void> {
+    console.log('broadcasting realm event', event);
+
+    if (!matrixClient.isLoggedIn()) {
+      console.log(
+        `not logged in (${matrixClient.username} client ${matrixClient.clientIndex}), skipping server event`,
+      );
+      return;
+    }
+
+    let dmRooms;
+
+    try {
+      dmRooms =
+        (await matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+    } catch (e) {
+      // FIXME this is happening in CI, Matrix has been shut down presumably
+      console.log('error getting account data', e);
+      return;
+    }
+
+    console.log(
+      'raw dmrooms for username ' +
+        matrixClient.username +
+        ' client ' +
+        matrixClient.clientIndex,
+      JSON.stringify(dmRooms, null, 2),
+    );
+    console.log('sending to dm rooms', Object.values(dmRooms));
+
+    for (let userId of Object.keys(dmRooms)) {
+      let roomId = dmRooms[userId];
+      try {
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+          event,
+        );
+      } catch (e) {
+        console.log(
+          `Unable to send event in room ${roomId} for user ${userId}`,
+          event,
+          e,
+        );
+      }
+    }
+  }
+}
+
+function translateEvent(
+  event: ServerEvents,
+): RealmEventEvent['content'] | null {
+  let eventData = event.data;
+
+  if (event.type === 'message') {
+    return null;
+  }
+
+  if (event.type === 'index' && eventData.type) {
+    eventData.indexType = eventData.type;
+    delete eventData.type;
+  }
+
+  return {
+    eventName: event.type,
+    ...eventData,
+  };
 }
 
 export function onClose(request: Request, fn: () => void) {

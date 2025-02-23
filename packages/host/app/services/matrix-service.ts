@@ -91,10 +91,12 @@ import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
@@ -108,15 +110,16 @@ export type OperatorModeContext = {
 };
 
 export default class MatrixService extends Service {
-  @service declare private loaderService: LoaderService;
-  @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
-  @service declare private realm: RealmService;
-  @service declare private matrixSdkLoader: MatrixSDKLoader;
-  @service declare private realmServer: RealmServerService;
-  @service declare private router: RouterService;
-  @service declare private reset: ResetService;
-  @service declare private network: NetworkService;
+  @service private declare loaderService: LoaderService;
+  @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
+  @service private declare realm: RealmService;
+  @service private declare matrixSdkLoader: MatrixSDKLoader;
+  @service private declare messageService: MessageService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare router: RouterService;
+  @service private declare reset: ResetService;
+  @service private declare network: NetworkService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
@@ -1349,6 +1352,25 @@ export default class MatrixService extends Service {
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
       await this.realmServer.handleEvent(event);
+    } else if (
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'app.boxel.sse' &&
+      event.sender
+    ) {
+      // FIXME provenance should be checked
+      console.log('received sse event', event);
+      let parsedEventContent = JSON.parse(event.content.body);
+      console.log('relayMatrixSSE', parsedEventContent);
+
+      let realmInfoForSender = this.realm.realmOfMatrixUsername(event.sender);
+      if (!realmInfoForSender) {
+        console.log('ignoring sse event because no realm found', event);
+      } else {
+        this.messageService.relayMatrixSSE(
+          realmInfoForSender.url,
+          parsedEventContent,
+        );
+      }
     }
     await this.addRoomEvent(event, oldEventId);
 

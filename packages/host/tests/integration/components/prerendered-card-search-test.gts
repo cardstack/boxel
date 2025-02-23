@@ -42,6 +42,7 @@ import {
   linksTo,
   setupBaseRealm,
 } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module(`Integration | prerendered-card-search`, function (hooks) {
@@ -56,6 +57,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
