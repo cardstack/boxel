@@ -21,8 +21,8 @@ import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { setBackgroundImage } from './components/layout';
 import { ContactLinkField } from './fields/contact-link';
-import { EmailField } from './fields/email';
 import { BlogApp } from './blog-app';
+import { EmailField } from './fields/email';
 
 class AuthorContactLink extends ContactLinkField {
   static values = [

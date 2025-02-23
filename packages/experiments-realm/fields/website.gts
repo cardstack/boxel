@@ -1,7 +1,7 @@
 import WorldWwwIcon from '@cardstack/boxel-icons/world-www';
 import { UrlField } from './url';
 import { Component } from 'https://cardstack.com/base/card-api';
-import EntityDisplayWithIcon from './components/entity-icon-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 const domainWithPath = (urlString: string | null) => {
   if (!urlString) {

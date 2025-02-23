@@ -12,7 +12,7 @@ import { ImageSizeField } from 'https://cardstack.com/base/base64-image';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import PhotoIcon from '@cardstack/boxel-icons/photo';
-import { UrlField } from '../url';
+import { UrlField } from './url';
 import { setBackgroundImage } from '../components/layout';
 
 function cssForFeaturedImage({
@@ -178,11 +178,8 @@ export class FeaturedImageField extends FieldDef {
             -12px 0,
             0 0,
             0 12px;
-          background-image: linear-gradient(
-              45deg,
-              var(--boxel-300) 25%,
-              transparent 25%
-            ),
+          background-image:
+            linear-gradient(45deg, var(--boxel-300) 25%, transparent 25%),
             linear-gradient(-45deg, var(--boxel-300) 25%, transparent 25%),
             linear-gradient(45deg, transparent 75%, var(--boxel-300) 75%),
             linear-gradient(-45deg, transparent 75%, var(--boxel-300) 75%);

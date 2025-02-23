@@ -15,7 +15,7 @@ import MailIcon from '@cardstack/boxel-icons/mail';
 import { debounce } from 'lodash';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import EntityDisplayWithIcon from './components/entity-icon-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 // We use simple regex here to validate common email formats
 // This is definitely NOT a full email validation
