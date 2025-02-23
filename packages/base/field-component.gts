@@ -421,7 +421,17 @@ function fieldsComponentsFor<T extends BaseDef>(
       let field = maybeField;
 
       let result = field.component(model as unknown as Box<BaseDef>);
-      stableComponents.set(property, result);
+      if (
+        field.fieldType === 'linksToMany' ||
+        field.fieldType === 'containsMany'
+      ) {
+        let stable = stableComponents.get(property);
+        if (stable) {
+          return stable;
+        } else {
+          stableComponents.set(property, result);
+        }
+      }
       return result;
     },
     getPrototypeOf() {
