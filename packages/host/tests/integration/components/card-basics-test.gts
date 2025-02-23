@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import {
   waitUntil,
@@ -73,7 +74,6 @@ import {
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-import { on } from '@ember/modifier';
 
 let loader: Loader;
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -2033,6 +2033,151 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-customer-billAmount]').containsText('100');
     });
 
+    test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
+      class TestField extends FieldDef {
+        static displayName = 'TestField';
+        @field firstName = contains(StringField);
+
+        static fitted = class TestFieldFitted extends Component<typeof this> {
+          <template>
+            <div data-test-baseclass>
+              BaseClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class SubTestField extends TestField {
+        static displayName = 'SubTestField';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass>
+              SubClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(TestField);
+
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          setSubclass = () => {
+            this.args.model.specialField = new SubTestField({
+              firstName: 'New Name',
+            });
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <@fields.specialField @format='fitted' />
+          </template>
+        };
+      }
+
+      let card = new TestCard({
+        specialField: new TestField({
+          firstName: 'Old Name',
+        }),
+      });
+
+      await renderCard(loader, card, 'isolated');
+      assert.dom('[data-test-baseclass]').hasText('BaseClass Old Name');
+      assert.dom('[data-test-subclass]').doesNotExist();
+
+      await click('[data-test-set-subclass]');
+
+      assert.dom('[data-test-baseclass]').doesNotExist();
+      assert.dom('[data-test-subclass]').hasText('SubClass New Name');
+
+      assert.ok(true);
+    });
+
+    test('re-renders a card with a polymorphic "containsMany" field when field instance changes', async function (assert) {
+      class TestField extends FieldDef {
+        static displayName = 'TestField';
+        @field firstName = contains(StringField);
+
+        static fitted = class TestFieldFitted extends Component<typeof this> {
+          <template>
+            <div data-test-baseclass>
+              BaseClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class SubTestField extends TestField {
+        static displayName = 'SubTestField';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass>
+              SubClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+
+      class SubTestField2 extends TestField {
+        static displayName = 'SubTestField2';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass2>
+              SubClass2
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = containsMany(TestField);
+
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          setSubclass = () => {
+            this.args.model.specialField = [
+              new SubTestField({
+                firstName: 'New Name',
+              }),
+              new SubTestField2({
+                firstName: 'New Name 2',
+              }),
+            ];
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <@fields.specialField @format='fitted' />
+          </template>
+        };
+      }
+
+      let card = new TestCard({
+        specialField: [
+          new TestField({
+            firstName: 'Old Name',
+          }),
+        ],
+      });
+
+      await renderCard(loader, card, 'isolated');
+
+      assert.dom('[data-test-baseclass]').hasText('BaseClass Old Name');
+      assert.dom('[data-test-subclass]').doesNotExist();
+      assert.dom('[data-test-subclass2]').doesNotExist();
+
+      await click('[data-test-set-subclass]');
+
+      assert.dom('[data-test-baseclass]').doesNotExist();
+      assert.dom('[data-test-subclass]').hasText('SubClass New Name');
+      assert.dom('[data-test-subclass2]').hasText('SubClass2 New Name 2');
+    });
+
     test('rerender when a primitive field changes', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
@@ -2430,52 +2575,6 @@ module('Integration | card-basics', function (hooks) {
       await click('[data-test-remove="0"]');
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('italian');
-    });
-
-    test('test subclass field', async function (assert) {
-      class TestField extends FieldDef {
-        static displayName = 'TestField';
-        @field firstName = contains(StringField);
-
-        static fitted = class TestFieldFitted extends Component<typeof this> {
-          <template>
-            BaseClass <@fields.firstName />
-          </template>
-        };
-      }
-      class SubTestField extends TestField {
-        static displayName = 'SubTestField';
-
-        static fitted = class Fitted extends Component<typeof this> {
-          <template>
-            SubClass <@fields.firstName />
-          </template>
-        };
-      }
-      class TestCard extends CardDef {
-        static displayName = 'TestCard';
-        @field specialField = contains(TestField);
-
-        static isolated = class Isolated extends Component<typeof TestCard> {
-          setSubclass = () => {
-            this.args.model.specialField = new SubTestField({
-              firstName: 'New first name',
-            });
-          };
-          <template>
-            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
-              Subclass From Outside</button>
-            <@fields.specialField @format='fitted' />
-          </template>
-        };
-      }
-
-      let card = new TestCard();
-
-      await renderCard(loader, card, 'isolated');
-
-      await click('[data-test-set-subclass]');
-      assert.ok(true);
     });
 
     test('add, remove and edit items in containsMany composite field', async function (assert) {
