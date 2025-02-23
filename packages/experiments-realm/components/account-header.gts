@@ -28,40 +28,53 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
           {{yield to='name'}}
         {{/if}}
         {{#if (has-block 'content')}}
-          {{yield to='content'}}
+          <div class='account-header-info-content'>
+            {{yield to='content'}}
+          </div>
         {{/if}}
       </div>
     </header>
 
     <style scoped>
       .account-header {
-        display: flex;
-        align-items: start;
-        gap: var(--boxel-sp);
+        display: var(--account-header-display, flex);
+        align-items: var(--account-header-align-items, start);
+        gap: var(--account-header-gap, var(--boxel-sp));
         min-width: 0;
       }
       .account-header-logo {
         flex-shrink: 0;
         width: var(--account-header-logo-size, 60px);
         height: var(--account-header-logo-size, 60px);
-        object-fit: cover;
-        border-radius: var(--boxel-border-radius-xl);
+        object-fit: var(--account-header-logo-object-fit, cover);
+        border-radius: var(
+          --account-header-logo-border-radius,
+          var(--boxel-border-radius-xl)
+        );
       }
       .default-icon-container {
         display: var(--account-header-logo-display, flex);
-        align-items: center;
-        justify-content: center;
-        background-color: var(--boxel-200);
-        color: var(--boxel-400);
-        padding: 5px;
+        align-items: var(--account-header-logo-align-items, center);
+        justify-content: var(--account-header-logo-justify-content, center);
+        background-color: var(
+          --account-header-logo-background-color,
+          var(--boxel-200)
+        );
+        color: var(--account-header-logo-color, var(--boxel-400));
+        padding: var(--account-header-logo-padding, 5px);
       }
       .account-header-info {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxs);
+        display: var(--account-header-info-display, flex);
+        flex-direction: var(--account-header-info-flex-direction, column);
+        gap: var(--account-header-info-gap, var(--boxel-sp-xxs));
         min-width: 0;
         width: 100%;
         overflow: hidden;
+      }
+      .account-header-info-content {
+        display: var(--account-header-info-content-display, flex);
+        flex-direction: var(--account-header-info-content-flex-direction, row);
+        gap: var(--account-header-info-content-gap, var(--boxel-sp-xxs));
       }
     </style>
   </template>
