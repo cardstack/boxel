@@ -665,7 +665,7 @@ class IsolatedTemplate extends Component<typeof Account> {
         margin-left: auto;
       }
       .avatar {
-        --profile-avatar-icon-size: 20px;
+        --profile-avatar-icon-size: 25px;
         --profile-avatar-icon-border: 0px;
         flex-shrink: 0;
       }
@@ -1179,12 +1179,13 @@ class FittedTemplate extends Component<typeof Account> {
         </AccountHeader>
       </:header>
       <:summary>
-        {{#if @model.primaryContact}}
-          <div class='tag-container'>
+        <div class='tag-container'>
+          {{#if @model.primaryContact}}
             <@fields.statusTag @format='atom' />
             <@fields.urgencyTag @format='atom' />
-          </div>
-        {{/if}}
+
+          {{/if}}
+        </div>
       </:summary>
     </AccountPageLayout>
 
@@ -1193,10 +1194,12 @@ class FittedTemplate extends Component<typeof Account> {
         --account-page-layout-padding: var(--boxel-sp-sm);
         height: 100%;
       }
+
       .account-header-fitted {
         gap: var(--boxel-sp-sm);
         --account-header-logo-size: 40px;
       }
+
       .account-name {
         font: 600 var(--boxel-font);
         margin: 0;
@@ -1206,16 +1209,43 @@ class FittedTemplate extends Component<typeof Account> {
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
       }
+
       .description {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
+
       .tag-container {
         margin-top: auto;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
+        .account-page-layout-fitted {
+          --account-page-layout-padding: var(--boxel-sp-xs);
+        }
+        .account-header-fitted {
+          --account-header-logo-size: 25px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        }
+      }
+
+      /* Aspect ratio < 1.0 (Vertical card) */
+      @container fitted-card (aspect-ratio <= 1.0) and (224px <= height < 226px) {
+        .account-name {
+          font: 600 var(--boxel-font);
+          -webkit-line-clamp: 3;
+        }
+      }
+
+      @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
+        .tag-container {
+          display: none;
+        }
       }
 
       @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
@@ -1230,63 +1260,60 @@ class FittedTemplate extends Component<typeof Account> {
         }
       }
 
-      @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
+      /* 1.0 < Aspect ratio (Horizontal card) */
+      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height <= 150px)) {
+        .account-page-layout-fitted {
+          --account-page-layout-padding: var(--boxel-sp-xs);
+        }
+        .account-header-fitted {
+          --account-header-logo-size: 25px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        }
         .tag-container {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
         .tag-container {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
         .tag-container {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
         .tag-container {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
         .tag-container {
           display: none;
         }
       }
 
       @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card (2.0 < aspect-ratio) and (height <= 57px) {
         .account-page-layout-fitted {
           --account-page-layout-padding: var(--boxel-sp-xs);
         }
         .account-header-fitted {
-          --account-header-logo-display: none;
+          --account-header-logo-size: 25px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        }
+        .account-name {
+          font: 600 var(--boxel-font);
+          -webkit-line-clamp: 1;
+        }
+        .tag-container {
+          display: none;
         }
       }
     </style>
@@ -1361,7 +1388,7 @@ class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         width: 100%;
-        padding: var(--account-page-layout-padding, 20px);
+        padding: var(--account-page-layout-padding, 25px);
         box-sizing: border-box;
         background-color: var(--boxel-100);
       }
