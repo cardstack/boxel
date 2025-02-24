@@ -913,7 +913,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
       .account-info-grid-view {
         display: none; /* Hidden by default */
       }
-      .account-info-grid-view:deep(.avatar) {
+      .account-info-grid-view :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1212,7 +1212,7 @@ class FittedTemplate extends Component<typeof Deal> {
       .account-info-grid-view {
         display: none;
       }
-      .account-info-grid-view:deep(.avatar) {
+      .account-info-grid-view :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1373,7 +1373,7 @@ class FittedTemplate extends Component<typeof Deal> {
             --entity-display-thumbnail-size: var(--boxel-font-size);
             --entity-display-title-font-size: var(--boxel-font-size-xs);
           }
-          .account-info-grid-view:deep(.avatar) {
+          .account-info-grid-view :deep(.avatar) {
             --profile-avatar-icon-size: var(--boxel-font-size);
             --profile-avatar-icon-border: 0px;
           }
