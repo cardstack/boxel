@@ -11,22 +11,13 @@ import CodeRefField from './code-ref';
 import MarkdownField from './markdown';
 import StringField from './string';
 import RobotIcon from '@cardstack/boxel-icons/robot';
-
-function djb2_xor(str: string) {
-  let len = str.length;
-  let h = 5381;
-
-  for (let i = 0; i < len; i++) {
-    h = (h * 33) ^ str.charCodeAt(i);
-  }
-  return (h >>> 0).toString(16);
-}
+import { simpleHash } from '@cardstack/runtime-common';
 
 function friendlyModuleName(fullModuleUrl: string) {
   return fullModuleUrl
     .split('/')
-    .slice(-1)[0]
-    .replace(/\.gts$/, ' ');
+    .pop()!
+    .replace(/\.gts$/, '');
 }
 
 export class CommandField extends FieldDef {
@@ -46,7 +37,7 @@ export class CommandField extends FieldDef {
         return '';
       }
 
-      const hashed = djb2_xor(`${this.codeRef.module}#${this.codeRef.name}`);
+      const hashed = simpleHash(`${this.codeRef.module}#${this.codeRef.name}`);
       let name =
         this.codeRef.name === 'default'
           ? friendlyModuleName(this.codeRef.module)
