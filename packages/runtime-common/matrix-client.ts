@@ -4,8 +4,6 @@ import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
-let clientIndex = 0;
-
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -19,7 +17,6 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loggedIn = new Deferred<void>();
-  clientIndex = clientIndex++;
 
   constructor({
     matrixURL,
@@ -88,8 +85,6 @@ export class MatrixClient {
       );
     }
 
-    console.log('logging in to matrix', this.username, this.clientIndex);
-
     let response = await this.request(
       '_matrix/client/v3/login',
       'POST',
@@ -117,21 +112,12 @@ export class MatrixClient {
       this.loggedIn.reject(error);
       throw error;
     }
-    console.log('logged in to matrix', this.username, this.clientIndex);
     let {
       access_token: accessToken,
       device_id: deviceId,
       user_id: userId,
     } = json;
     this.access = { accessToken, deviceId, userId };
-
-    console.log(
-      'logged in??? on client ' + this.clientIndex,
-      this.isLoggedIn(),
-      this.access,
-      this.getUserId(),
-    );
-
     this.loggedIn.fulfill();
   }
 
