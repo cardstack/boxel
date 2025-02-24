@@ -19,8 +19,9 @@ import {
   RequestContext,
   TokenClaims,
   UpdateEventData,
-  type ServerEvents,
 } from '@cardstack/runtime-common/realm';
+
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 
@@ -95,7 +96,7 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async broadcastRealmEvent(
-    event: RealmEventEvent,
+    event: RealmEventEventContent,
     matrixClient: MatrixClient,
   ) {
     console.log('broadcastRealmEventViaMatrix', event);
