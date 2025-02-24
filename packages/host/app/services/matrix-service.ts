@@ -78,6 +78,7 @@ import type {
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -96,12 +97,10 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type * as MatrixSDK from 'matrix-js-sdk';
-import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
 export type OperatorModeContext = {
   submode: Submode;
