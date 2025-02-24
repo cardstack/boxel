@@ -41,8 +41,6 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
-import ENV from '@cardstack/host/config/environment';
-
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
@@ -87,8 +85,6 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-
-const isPlaygroundEnabled = ENV.featureFlags?.ENABLE_PLAYGROUND;
 
 interface Signature {
   Args: {
@@ -469,9 +465,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get shouldDisplayPlayground() {
-    if (!isPlaygroundEnabled) {
-      return false;
-    }
     return isCardDef(this.selectedCardOrField?.cardOrField);
   }
 
