@@ -1,56 +1,63 @@
-// TODO: please organize imports
 import {
   CardDef,
+  BaseDef,
+  Component,
   contains,
-  linksTo,
-  StringField,
-  field,
-  linksToMany,
   containsMany,
-  FieldDef,
+  field,
+  linksTo,
+  linksToMany,
   realmURL,
+  FieldDef,
+  StringField,
 } from 'https://cardstack.com/base/card-api';
-import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
+
+import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+
+import { getCards, Query } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+import { action } from '@ember/object';
+import { restartableTask } from 'ember-concurrency';
+import { on } from '@ember/modifier';
+
+import { Account } from './account';
+import { Company } from './company';
+import { Contact } from './contact';
+import { CrmApp } from '../crm-app';
+import { DealEvent } from './deal-event';
+import { DealPriority } from './deal-priority';
+import { DealStatus } from './deal-status';
+
+import { Address as AddressField } from '../fields/address';
+import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
+import { PercentageField } from '../fields/percentage';
+import { WebsiteField } from '../fields/website';
+
+import AccountHeader from '../components/account-header';
+import { ContactRow } from '../components/contact-row';
+import CrmProgressBar from '../components/crm-progress-bar';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 import PageLayout from '../components/page-layout';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
+
 import {
-  Pill,
   BoxelButton,
   FieldContainer,
+  Pill,
   SkeletonPlaceholder,
 } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
-import Info from '@cardstack/boxel-icons/info';
-import AccountHeader from '../components/account-header';
-import CrmProgressBar from '../components/crm-progress-bar';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
-import { Account } from './account';
-import { action } from '@ember/object';
-import { PercentageField } from '../fields/percentage';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Address as AddressField } from '../fields/address';
-import { WebsiteField } from '../fields/website';
-import { Contact } from './contact';
-import { ContactRow } from '../components/contact-row';
-import Users from '@cardstack/boxel-icons/users';
-import World from '@cardstack/boxel-icons/world';
-import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import { getCards } from '@cardstack/runtime-common';
-import { Query } from '@cardstack/runtime-common/query';
-import { Company } from './company';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { restartableTask } from 'ember-concurrency';
-import { on } from '@ember/modifier';
-import { DealEvent } from './deal-event';
-import { DealStatus } from './deal-status';
-import { DealPriority } from './deal-priority';
-import { CrmApp } from '../crm-app';
-import MapPin from '@cardstack/boxel-icons/map-pin';
+
 import Calendar from '@cardstack/boxel-icons/calendar';
+import Info from '@cardstack/boxel-icons/info';
+import MapPin from '@cardstack/boxel-icons/map-pin';
+import Users from '@cardstack/boxel-icons/users';
 import UsersGroup from '@cardstack/boxel-icons/users-group';
+import World from '@cardstack/boxel-icons/world';
 
 interface DealSizeSummary {
   summary: string;
