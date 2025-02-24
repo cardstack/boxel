@@ -132,7 +132,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       {{/if}}
 
       {{#if @model.statusTag.label}}
-        <@fields.statusTag @format='atom' class='crm-status-pill' />
+        <@fields.statusTag @format='atom' class='status-pill-atom' />
       {{/if}}
     </article>
 
@@ -142,7 +142,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         --entity-display-title-font-weight: 300;
         --entity-display-content-font-weight: 300;
         --entity-display-content-gap: var(--boxel-sp-xs);
-        --fitted-contact-card-padding: calc(var(--boxel-sp-lg) - 2px);
+        --contact-card-fitted-padding: calc(var(--boxel-sp-lg) - 2px);
         width: 100%;
         height: 100%;
         padding: var(--boxel-sp-lg);
@@ -159,14 +159,6 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       .avatar-group-container {
         grid-area: avatar-group-container;
       }
-      .avatar-group-container
-        :where(.avatar-info .company-group .entity-title-tag-container) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 1;
-      }
       .contact-info {
         grid-area: contact-info;
         display: flex;
@@ -196,7 +188,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         align-items: center;
         justify-content: center;
       }
-      .crm-status-pill {
+      .status-pill-atom {
         grid-area: status;
         width: fit-content;
       }
@@ -210,7 +202,7 @@ class FittedTemplate extends Component<typeof Contact> {
   }
 
   <template>
-    <article class='fitted-contact-card'>
+    <article class='contact-card-fitted'>
       <AvatarGroup
         @userId={{@model.id}}
         @name={{@model.name}}
@@ -218,7 +210,9 @@ class FittedTemplate extends Component<typeof Contact> {
         class='avatar-group-container'
       >
         <:content>
-          <@fields.company @format='atom' @displayContainer={{false}} />
+          <div class='company-name-atom'>
+            <@fields.company @format='atom' @displayContainer={{false}} />
+          </div>
         </:content>
       </AvatarGroup>
 
@@ -235,26 +229,27 @@ class FittedTemplate extends Component<typeof Contact> {
         </div>
       {{/if}}
       {{#if @model.statusTag.label}}
-        <@fields.statusTag @format='atom' class='crm-status-pill' />
+        <div class='status-pill-atom'>
+          <@fields.statusTag @format='atom' />
+        </div>
       {{/if}}
 
     </article>
 
     <style scoped>
-      .fitted-contact-card {
+      .contact-card-fitted {
         --entity-display-icon-size: 17px;
         --entity-display-title-font-weight: 300;
         --entity-display-content-font-weight: 300;
         --entity-display-content-gap: var(--boxel-sp-xs);
-        --fitted-contact-card-padding: calc(var(--boxel-sp-lg) - 2px);
         width: 100%;
         height: 100%;
         min-width: 100px;
         min-height: 29px;
         overflow: hidden;
         display: grid;
-        gap: var(--boxel-sp-lg);
-        padding: var(--fitted-contact-card-padding);
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
         grid-template-areas:
           'avatar-group-container'
           'contact-info'
@@ -263,15 +258,12 @@ class FittedTemplate extends Component<typeof Contact> {
         grid-template-rows: max-content max-content auto max-content;
       }
       .avatar-group-container {
+        --avatar-name-font: 600 var(--boxel-font);
         grid-area: avatar-group-container;
       }
-      .avatar-group-container
-        :where(.avatar-info .company-group .entity-title-tag-container) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 1;
+      .company-name-atom {
+        --entity-display-content-font-size: var(--boxel-font-size-sm);
+        --entity-display-title-line-clamp: 1;
       }
       .contact-info {
         grid-area: contact-info;
@@ -282,7 +274,7 @@ class FittedTemplate extends Component<typeof Contact> {
         color: var(--boxel-dark);
         word-break: break-word;
       }
-      .crm-status-pill {
+      .status-pill-atom {
         grid-area: status;
         width: fit-content;
       }
@@ -299,393 +291,157 @@ class FittedTemplate extends Component<typeof Contact> {
       }
       .links :deep(.pill) {
         --boxel-social-link-pill-size: calc(var(--boxel-font-size-xxl) - 2px);
+        --default-pill-border: 1px solid var(--boxel-300);
         width: var(--boxel-social-link-pill-size);
         height: var(--boxel-social-link-pill-size);
-        --default-pill-border: 1px solid var(--boxel-300);
         display: inline-flex;
         align-items: center;
         justify-content: center;
       }
-      .avatar-group-container :where(.avatar-thumbnail) {
-        --profile-avatar-icon-size: 60px;
+
+      /* Vertical card (aspect-ratio <= 1.0) */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        /* Base styles for smaller cards */
+        .contact-card-fitted {
+          padding: var(--boxel-sp-sm);
+        }
+        /* Height >= 400px */
+        @container (height >= 400px) {
+          .contact-card-fitted {
+            grid-template-areas:
+              'avatar-group-container'
+              'contact-info'
+              'links'
+              'status';
+            grid-template-rows: max-content max-content auto max-content;
+            padding: var(--boxel-sp);
+          }
+        }
+
+        /* 180px <= height <= 275px */
+        @container (180px <= height <= 275px) {
+          .contact-card-fitted {
+            grid-template-areas:
+              'avatar-group-container'
+              'links'
+              'status';
+            grid-template-rows: max-content auto max-content;
+          }
+          .avatar-group-container {
+            --avatar-thumbnail-size: 50px;
+            --avatar-group-flex-direction: column;
+            --avatar-group-align-items: flex-start;
+            --avatar-name-font: 600 var(--boxel-font);
+          }
+          .contact-info {
+            display: none;
+          }
+        }
+
+        /* height < 180px */
+        @container (height < 180px) {
+          .contact-card-fitted {
+            grid-template-areas:
+              'avatar-group-container'
+              'status';
+            grid-template-rows: max-content auto;
+          }
+          .avatar-group-container {
+            --avatar-thumbnail-size: 30px;
+            gap: var(--boxel-sp-xxs);
+          }
+          .contact-info,
+          .links {
+            display: none;
+          }
+          .status-pill-atom {
+            margin-top: auto;
+          }
+        }
       }
 
-      /* Catch all because contact info is too dense*/
-      @container fitted-card (height < 300px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'links'
-            'status';
-          grid-template-rows: max-content auto max-content;
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 60px;
-        }
-        .contact-info {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((aspect-ratio <= 1.0) and (224px <= height <= 226px)) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'links'
-            'status';
-          grid-template-rows: max-content auto max-content;
+      /* Horizontal card (aspect-ratio > 1.0) */
+      @container fitted-card (aspect-ratio > 1.0) {
+        .contact-card-fitted {
           gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xs);
         }
+
         .avatar-group-container {
+          --avatar-thumbnail-size: 40px;
           gap: var(--boxel-sp-xs);
         }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 45px;
+
+        /* height >= 180px */
+        @container (height >= 180px) {
+          .contact-card-fitted {
+            grid-template-areas:
+              'avatar-group-container'
+              'links'
+              'status';
+            grid-template-rows: max-content auto max-content;
+          }
+          .contact-info {
+            display: none;
+          }
         }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size);
+
+        /* 115px <= height < 180px */
+        @container (115px <= height < 180px) {
+          .contact-card-fitted {
+            grid-template-areas:
+              'avatar-group-container'
+              'status';
+            grid-template-rows: max-content auto;
+          }
+          .avatar-group-container {
+            --avatar-thumbnail-size: 30px;
+            gap: var(--boxel-sp-xxs);
+          }
+          .contact-info,
+          .links {
+            display: none;
+          }
+          .status-pill-atom {
+            margin-top: auto;
+          }
         }
-        .contact-info {
-          display: none;
+
+        /* 58px <= height < 115px */
+        @container (58px <= height < 115px) {
+          .contact-card-fitted {
+            grid-template-areas: 'avatar-group-container';
+            grid-template-rows: max-content;
+          }
+          .avatar-group-container {
+            --avatar-thumbnail-size: 25px;
+            --avatar-name-font: 600 var(--boxel-font);
+          }
+          .contact-info,
+          .links,
+          .status-pill-atom {
+            display: none;
+          }
+        }
+
+        /* height <= 57px */
+        @container (height <= 57px) {
+          .avatar-group-container {
+            --avatar-thumbnail-size: 25px;
+            --avatar-name-font: 600 var(--boxel-font);
+            --avatar-info-content-display: none;
+          }
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (180px <= height < 224px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'links'
-            'status';
-          grid-template-rows: max-content auto max-content;
-          gap: var(--boxel-sp-xs);
-        }
-        .contact-info {
-          display: none;
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 45px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size);
-        }
-      }
-
-      @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'status';
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .contact-info,
-        .links {
-          display: none;
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (148px <= height < 180px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'status';
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .contact-info,
-        .links {
-          display: none;
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'status';
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .contact-info,
-        .links {
-          display: none;
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'status';
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-      }
-
+      /* Special cases */
       @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
-        .fitted-contact-card {
-          grid-template:
+        .contact-card-fitted {
+          grid-template-areas:
             'avatar-group-container'
             'status'
             'links';
           grid-template-rows: max-content auto max-content;
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 60px;
-        }
-        .contact-info {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height) and (226px < width)) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'contact-info'
-            'links'
-            'status';
-          grid-template-rows: max-content max-content auto max-content;
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 60px;
-        }
-      }
-
-      @container fitted-card ((aspect-ratio <= 1.0) and (400px <= height)) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'contact-info'
-            'links'
-            'status';
-          grid-template-rows: max-content max-content auto max-content;
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 60px;
-        }
-      }
-
-      /* 1.0 < Aspect ratio (Horizontal card) */
-      @container fitted-card ((1.0 < aspect-ratio) and (180px <= height)) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'links'
-            'status';
-          grid-template-rows: max-content auto max-content;
-          gap: var(--boxel-sp-xs);
-        }
-        .contact-info {
-          display: none;
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 50px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size);
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (151px <= height < 180px)) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'status';
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .contact-info,
-        .links {
-          display: none;
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 40px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size);
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height <= 150px)) {
-        .fitted-contact-card {
-          grid-template:
-            'avatar-group-container'
-            'status';
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-        .contact-info,
-        .links {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
-        .fitted-contact-card {
-          grid-template: 'avatar-group-container';
-          grid-template-columns: min-content;
-          padding: var(--boxel-sp-xs);
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-        .contact-info,
-        .links,
-        .crm-status-pill {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
-        .fitted-contact-card {
-          grid-template: 'avatar-group-container status';
-          grid-template-columns: max-content auto;
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-        .contact-info,
-        .links {
-          display: none;
-        }
-        .crm-status-pill {
-          margin-left: auto;
-          margin-top: 0;
-          align-self: center;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
-        .fitted-contact-card {
-          grid-template: 'avatar-group-container';
-          grid-template-columns: min-content;
-          padding: var(--boxel-sp-xs);
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-        .links,
-        .crm-status-pill {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
-        .fitted-contact-card {
-          grid-template: 'avatar-group-container';
-          grid-template-columns: min-content;
-          padding: var(--boxel-sp-xs);
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail) {
-          --profile-avatar-icon-size: 30px;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
-        }
-        .links,
-        .crm-status-pill {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
-        .fitted-contact-card {
-          grid-template: 'avatar-group-container';
-          grid-template-columns: min-content;
-          padding: var(--boxel-sp-xs);
-          gap: var(--boxel-sp-xs);
-        }
-        .avatar-group-container {
-          gap: var(--boxel-sp-xxs);
-        }
-        .avatar-group-container :where(.avatar-thumbnail),
-        .avatar-group-container :where(.company-group),
-        .links,
-        .crm-status-pill {
-          display: none;
-        }
-        .avatar-group-container :where(.avatar-info .name) {
-          font-size: var(--boxel-font-size-sm);
         }
       }
     </style>
@@ -720,8 +476,8 @@ class AtomTemplate extends Component<typeof Contact> {
         min-width: 0; /* Helps with text overflow */
       }
       .avatar {
-        --profile-avatar-icon-size: 20px;
-        --profile-avatar-icon-border: 0px;
+        --avatar-thumbnail-size: 20px;
+        --avatar-thumbnail-border: 0px;
         flex-shrink: 0;
       }
     </style>

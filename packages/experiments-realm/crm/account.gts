@@ -1133,7 +1133,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
 
       @container account-page-layout-embedded (max-width: 447px) {
         .summary-articles-container {
-          grid-template-columns: 1fr;
+          grid-template-columns: 100%;
           gap: var(--boxel-sp-lg);
         }
         .summary-articles-container::after {
@@ -1245,6 +1245,10 @@ class FittedTemplate extends Component<typeof Account> {
         /* Base styles for smaller horizontal cards */
         .account-page-layout-fitted {
           --account-page-layout-padding: var(--boxel-sp-xs);
+        }
+        .account-header-fitted {
+          --account-header-logo-size: 20px;
+          --account-header-logo-border-radius: var(--boxel-border-radius);
         }
 
         /* Height-specific adjustments */

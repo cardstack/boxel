@@ -936,13 +936,9 @@ class FittedTemplate extends Component<typeof Deal> {
       .account-info-grid-view {
         display: none;
       }
-      .event-details .entity-content {
-        /* Replaced :deep() with standard selector */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
+      .account-info-grid-view:deep(.avatar) {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
       }
 
       /* Default card layout */
@@ -951,7 +947,7 @@ class FittedTemplate extends Component<typeof Deal> {
         width: 100%;
         height: 100%;
         grid-template-areas: 'deal-header' 'deal-content';
-        grid-template-columns: 1fr;
+        grid-template-columns: 100%;
         grid-template-rows: max-content auto;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp);
@@ -969,6 +965,7 @@ class FittedTemplate extends Component<typeof Deal> {
         display: grid;
         grid-template-areas: 'deal-details event-details';
         grid-template-columns: 1fr auto;
+        grid-template-rows: max-content;
         align-items: end;
         justify-content: space-between;
         gap: var(--boxel-sp-lg);
@@ -976,15 +973,13 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .deal-content:not(:has(.event-details)) {
         grid-template-areas: 'deal-details';
-        grid-template-columns: 1fr;
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
       }
       .deal-content:not(:has(.deal-details)) {
         grid-template-areas: 'event-details';
-        grid-template-columns: 1fr;
-      }
-      .account-header-fitted {
-        grid-area: account-header-fitted;
-        overflow: hidden;
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
       }
       .deal-status {
         grid-area: deal-status;
@@ -992,17 +987,38 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .deal-details {
         grid-area: deal-details;
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-lg);
+        display: grid;
+        grid-template-rows: auto;
+        grid-template-columns: max-content max-content max-content; /* 3 items per row initially */
+        gap: var(--boxel-sp-xl);
       }
+
       .deal-field {
+        width: 100%;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xxs);
       }
+
+      /* Make the first three fields appear in row 1 */
+      .deal-field:nth-child(1),
+      .deal-field:nth-child(2),
+      .deal-field:nth-child(3) {
+        grid-row: 1;
+      }
+
+      .account-header-fitted {
+        grid-area: account-header-fitted;
+        overflow: hidden;
+      }
+      .account-header-fitted:deep(.avatar) {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
+      }
       .event-details {
         grid-area: event-details;
+        --entity-display-title-line-clamp: 1;
+        --entity-display-content-line-clamp: 1;
       }
 
       /* Vertical card (aspect-ratio <= 1.0) */
@@ -1013,7 +1029,7 @@ class FittedTemplate extends Component<typeof Deal> {
         .account-header-fitted {
           --account-header-logo-size: 40px;
           --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+          --account-header-logo-border-radius: var(--boxel-border-radius);
           --account-header-info-content-display: none;
         }
         .account-name {
@@ -1022,23 +1038,43 @@ class FittedTemplate extends Component<typeof Deal> {
         .deal-status {
           display: none;
         }
+        .deal-details {
+          grid-template-columns: 1fr 1fr; /* Switch to 2 items per row */
+        }
+
+        /* Ensure that the first two fields appear in row 1 */
+        .deal-field:nth-child(1),
+        .deal-field:nth-child(2) {
+          grid-row: 1;
+        }
+
+        /* Make the health score field take full width in row 2 */
+        .deal-field:nth-child(3) {
+          grid-row: 2;
+          grid-column: 1 / -1;
+        }
 
         /* Base styles for deal-content and event-details */
         .deal-content {
-          grid-template-areas: 'deal-details' 'event-details';
-          grid-template-columns: 1fr;
+          grid-template-areas:
+            'deal-details'
+            'event-details';
           grid-template-rows: max-content auto;
+          grid-template-columns: 100%;
           gap: var(--boxel-sp);
         }
         .deal-details {
           gap: var(--boxel-sp);
+        }
+        .deal-details:deep(.progress-bar) {
+          flex-grow: 1;
         }
         .event-details {
           --event-summary-padding: var(--boxel-sp-xs);
           --event-summary-gap: var(--boxel-sp);
           --event-summary-icon-size: 0px;
           --event-summary-content-font-size: var(--boxel-font-size-xs);
-          --entity-display-content-gap: 0px;
+          --entity-display-gap: 0px;
         }
         .highlight-value {
           font-size: var(--boxel-font-size-xs);
@@ -1048,7 +1084,7 @@ class FittedTemplate extends Component<typeof Deal> {
         @container fitted-card (height >= 275px) {
           .deal-header {
             grid-template-areas: 'account-header-fitted' 'account-info-grid-view';
-            grid-template-columns: 1fr;
+            grid-template-columns: 100%;
             grid-template-rows: max-content max-content;
             gap: var(--boxel-sp-sm);
           }
@@ -1069,7 +1105,7 @@ class FittedTemplate extends Component<typeof Deal> {
         @container fitted-card (height < 275px) and (height >= 250px) {
           .deal-header {
             grid-template-areas: 'account-header-fitted';
-            grid-template-columns: 1fr;
+            grid-template-columns: 100%;
             grid-template-rows: max-content;
             gap: var(--boxel-sp-xs);
           }
@@ -1091,12 +1127,14 @@ class FittedTemplate extends Component<typeof Deal> {
           }
           .account-header-fitted {
             --account-header-logo-size: 25px;
+            --account-header-logo-border-radius: var(--boxel-border-radius);
           }
         }
 
         @container fitted-card (height <= 170px) {
           .account-header-fitted {
-            --account-header-logo-size: 30px;
+            --account-header-logo-size: 25px;
+            --account-header-logo-border-radius: var(--boxel-border-radius);
           }
           .account-info-grid-view {
             display: none;
@@ -1110,20 +1148,21 @@ class FittedTemplate extends Component<typeof Deal> {
           padding: var(--boxel-sp-xs);
         }
         .account-header-fitted {
-          --account-header-logo-size: 40px;
+          --account-header-logo-size: 60px;
           --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+          --account-header-logo-border-radius: var(--boxel-border-radius-xl);
           --account-header-info-content-display: none;
         }
         .account-name {
-          font: 600 var(--boxel-font);
+          font: 600 var(--boxel-font-med);
+          -webkit-line-clamp: 1;
         }
 
-        /* Height >= 180px */
-        @container fitted-card (180px <= height) {
+        /* Height > 180px */
+        @container fitted-card (180px < height) {
           .deal-content {
             grid-template-areas: 'deal-details' 'event-details';
-            grid-template-columns: 1fr;
+            grid-template-columns: 100%;
             gap: var(--boxel-sp-lg);
           }
           .deal-details {
@@ -1134,7 +1173,7 @@ class FittedTemplate extends Component<typeof Deal> {
             --event-summary-gap: var(--boxel-sp);
             --event-summary-icon-size: 0px;
             --event-summary-content-font-size: var(--boxel-font-size-xs);
-            --entity-display-content-gap: 0px;
+            --entity-display-gap: 0px;
           }
           .highlight-value {
             font-size: var(--boxel-font-size-xs);
@@ -1155,7 +1194,8 @@ class FittedTemplate extends Component<typeof Deal> {
             grid-template-areas: 'account-header-fitted';
           }
           .account-header-fitted {
-            --account-header-logo-size: 30px;
+            --account-header-logo-size: 25px;
+            --account-header-logo-border-radius: var(--boxel-border-radius);
           }
         }
 
@@ -1182,6 +1222,7 @@ class FittedTemplate extends Component<typeof Deal> {
             --account-header-logo-size: 25px;
           }
           .account-name {
+            font: 600 var(--boxel-font-sm);
             -webkit-line-clamp: 1;
           }
         }
@@ -1199,26 +1240,28 @@ class FittedTemplate extends Component<typeof Deal> {
           gap: var(--boxel-sp-xs);
         }
         .account-name {
-          -webkit-line-clamp: 3;
+          -webkit-line-clamp: 2;
         }
       }
 
       @container fitted-card (aspect-ratio >= 1.0) and (width < 400px) and (height <= 275px) {
+        .account-header-fitted {
+          --account-header-logo-size: 25px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius);
+          --account-header-info-content-display: none;
+        }
+        .account-name {
+          font: 600 var(--boxel-font);
+          -webkit-line-clamp: 1;
+        }
         .deal-header {
           grid-template-areas: 'account-header-fitted';
         }
         .account-info-grid-view,
-        .deal-status {
+        .deal-status,
+        .deal-content {
           display: none;
-        }
-        .deal-details {
-          gap: var(--boxel-sp-xs);
-        }
-        .event-details {
-          --event-summary-gap: var(--boxel-sp-xs);
-        }
-        .account-name {
-          -webkit-line-clamp: 1;
         }
       }
 
@@ -1236,6 +1279,7 @@ class FittedTemplate extends Component<typeof Deal> {
           --event-summary-icon-size: var(--boxel-font-size);
           --event-summary-content-font-size: var(--boxel-font-size);
           --entity-display-content-gap: var(--boxel-sp-xs);
+          --event-summary-venue-text-max-width: 300px;
         }
       }
 
