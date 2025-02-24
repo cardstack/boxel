@@ -24,7 +24,7 @@ import type {
   Tool,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { EventStatus, IRoomEvent } from 'matrix-js-sdk';
+import { EventStatus } from 'matrix-js-sdk';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
@@ -961,7 +961,7 @@ example.pdf: Unsupported file type: application/pdf. For now, only text files ar
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getTools(history, [], '@aibot:localhost');
     assert.equal(functions.length, 1);
     assert.deepEqual(functions[0], {
       type: 'function',
@@ -1031,7 +1031,7 @@ example.pdf: Unsupported file type: application/pdf. For now, only text files ar
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getTools(history, [], '@aibot:localhost');
     assert.equal(functions.length, 1);
     assert.deepEqual(functions[0], {
       type: 'function',
@@ -1143,7 +1143,7 @@ example.pdf: Unsupported file type: application/pdf. For now, only text files ar
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getTools(history, [], '@aibot:localhost');
     assert.equal(functions.length, 1);
     if (functions.length > 0) {
       assert.deepEqual(functions[0], {
@@ -1335,13 +1335,15 @@ test('if tool calls are required, ensure they are set', async () => {
 });
 
 test('Create search function calls', () => {
-  const history: IRoomEvent[] = [
+  const history: DiscreteMatrixEvent[] = [
     {
       type: 'm.room.message',
+      room_id: 'room-id-1',
       sender: '@ian:localhost',
       content: {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'set the name to dave',
+        format: 'org.matrix.custom.html',
         formatted_body: '<p>set the name to dave</p>\n',
         data: {
           context: {
@@ -1354,19 +1356,20 @@ test('Create search function calls', () => {
       origin_server_ts: 1696813813166,
       unsigned: {
         age: 115498,
+        transaction_id: 'm1722242836705.8',
       },
       event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-      age: 115498,
+      status: EventStatus.SENT,
     },
   ];
 
-  const functions = getTools(history, '@aibot:localhost');
+  const functions = getTools(history, [], '@aibot:localhost');
   assert.equal(functions.length, 1);
   assert.deepEqual(functions[0], getSearchTool());
 });
 
 test('Return host result of tool call back to open ai', async () => {
-  const history: IRoomEvent[] = [
+  const history: DiscreteMatrixEvent[] = [
     {
       type: 'm.room.message',
       room_id: 'room-id-1',
@@ -1479,9 +1482,10 @@ test('Return host result of tool call back to open ai', async () => {
       origin_server_ts: 1722242833562,
       unsigned: {
         age: 20470,
+        transaction_id: 'm1722242836705.1',
       },
       event_id: '$p_NQ4tvokzQrIkT24Wj08mdAxBBvmdLOz6ph7UQfMDw',
-      age: 20470,
+      status: EventStatus.SENT,
     },
     {
       type: 'm.room.message',
@@ -1493,13 +1497,6 @@ test('Return host result of tool call back to open ai', async () => {
         formatted_body:
           'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
         format: 'org.matrix.custom.html',
-        'm.new_content': {
-          body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
-          msgtype: 'm.text',
-          formatted_body:
-            'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
-          format: 'org.matrix.custom.html',
-        },
         isStreamingFinished: true,
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -1509,10 +1506,10 @@ test('Return host result of tool call back to open ai', async () => {
       origin_server_ts: 1722242836727,
       unsigned: {
         age: 17305,
-        transaction_id: 'm1722242836705.8',
+        transaction_id: 'm1722242836705.2',
       },
       event_id: 'message-event-id-1',
-      age: 17305,
+      status: EventStatus.SENT,
     },
     {
       type: 'm.room.message',
@@ -1626,9 +1623,10 @@ test('Return host result of tool call back to open ai', async () => {
       origin_server_ts: 1722242847418,
       unsigned: {
         age: 6614,
+        transaction_id: 'm1722242836705.3',
       },
       event_id: '$FO2XfB0xFiTpm5FmOUiWQqFh_DPQSr4zix41Vj3eqNc',
-      age: 6614,
+      status: EventStatus.SENT,
     },
     {
       type: 'm.room.message',
@@ -1667,7 +1665,7 @@ test('Return host result of tool call back to open ai', async () => {
         transaction_id: 'm1722242849075.10',
       },
       event_id: 'command-event-id-1',
-      age: 4938,
+      status: EventStatus.SENT,
     },
     {
       type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -1681,7 +1679,8 @@ test('Return host result of tool call back to open ai', async () => {
         },
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         data: {
-          card: JSON.stringify({
+          cardEventId: 'command-result-id-1',
+          card: {
             data: {
               type: 'card',
               attributes: {
@@ -1707,23 +1706,30 @@ test('Return host result of tool call back to open ai', async () => {
                   },
                 ],
               },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/search-results',
+                  name: 'SearchResults',
+                },
+              },
             },
-          }),
+          },
         },
       },
       origin_server_ts: 1722242853988,
       unsigned: {
         age: 44,
+        transaction_id: 'm1722242836705.4',
       },
       event_id: 'command-result-id-1',
-      age: 44,
+      status: EventStatus.SENT,
     },
   ];
-  const tools = getTools(history, '@ai-bot:localhost');
+  const tools = getTools(history, [], '@ai-bot:localhost');
   const result = await getModifyPrompt(history, '@ai-bot:localhost', tools);
   assert.equal(result[5].role, 'tool');
   assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-  const expected = `Command applied, with result card: "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"title\\":\\"Search Results\\",\\"description\\":\\"Here are the search results\\",\\"results\\":[{\\"data\\":{\\"type\\":\\"card\\",\\"id\\":\\"http://localhost:4201/drafts/Author/1\\",\\"attributes\\":{\\"firstName\\":\\"Alice\\",\\"lastName\\":\\"Enwunder\\",\\"photo\\":null,\\"body\\":\\"Alice is a software engineer at Google.\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../author\\",\\"name\\":\\"Author\\"}}}}]}}}".`;
+  const expected = `Command applied, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
 
   assert.equal(result[5].content!.trim(), expected.trim());
 });
@@ -1806,14 +1812,14 @@ test('Tools calls are connected to their results', async () => {
   );
 });
 
-test('Tools on enabled skills are available in prompt', () => {
+test('Tools on enabled skills are available in prompt', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/enabled-skill-with-commands.json'),
     ),
   );
 
-  const { tools } = getPromptParts(eventList, '@aibot:localhost');
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
   assert.true(tools.length > 0, 'Should have tools available');
 
   // Verify that the tools array contains the command from the skill
@@ -1826,14 +1832,14 @@ test('Tools on enabled skills are available in prompt', () => {
   );
 });
 
-test('No tools are available if skill is not enabled', () => {
+test('No tools are available if skill is not enabled', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/disabled-skill-with-commands.json'),
     ),
   );
 
-  const { tools } = getPromptParts(eventList, '@aibot:localhost');
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
   // we should not have any tools available
   assert.true(tools.length == 0, 'Should not have tools available');
 });
