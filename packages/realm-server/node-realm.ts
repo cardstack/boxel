@@ -187,67 +187,6 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  async sendServerEvent(
-    event: ServerEvents,
-    matrixClient: MatrixClient,
-  ): Promise<void> {
-    console.log('sending server event', event);
-
-    if (!matrixClient.isLoggedIn()) {
-      console.log(
-        `not logged in (${matrixClient.username} client ${matrixClient.clientIndex}), skipping server event`,
-      );
-      return;
-    }
-
-    let dmRooms;
-
-    try {
-      dmRooms =
-        (await matrixClient.getAccountData<Record<string, string>>(
-          'boxel.session-rooms',
-        )) ?? {};
-    } catch (e) {
-      // FIXME this is happening in CI, Matrix has been shut down presumably
-      console.log('error getting account data', e);
-      return;
-    }
-
-    console.log(
-      'raw dmrooms for username ' +
-        matrixClient.username +
-        ' client ' +
-        matrixClient.clientIndex,
-      JSON.stringify(dmRooms, null, 2),
-    );
-    console.log('sending to dm rooms', Object.values(dmRooms));
-
-    let translatedEvent = translateEvent(event);
-
-    if (!translatedEvent) {
-      return;
-    }
-
-    console.log('translated event', translatedEvent);
-
-    for (let userId of Object.keys(dmRooms)) {
-      let roomId = dmRooms[userId];
-      try {
-        await matrixClient.sendEvent(
-          roomId,
-          APP_BOXEL_REALM_EVENT_EVENT_TYPE,
-          translatedEvent,
-        );
-      } catch (e) {
-        console.log(
-          `Unable to send event in room ${roomId} for user ${userId}`,
-          event,
-          e,
-        );
-      }
-    }
-  }
-
   async broadcastRealmEvent(
     event: RealmEventEventContent,
     matrixClient: MatrixClient,

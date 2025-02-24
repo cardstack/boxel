@@ -94,43 +94,6 @@ export class TestRealmAdapter implements RealmAdapter {
     return this.#ready.promise;
   }
 
-  async sendServerEvent(event: ServerEvents, matrixClient: MatrixClient) {
-    console.log('sendServerEventViaMatrix', event);
-
-    if (!this.owner) {
-      console.log('owner not set, skipping');
-      return;
-    }
-
-    let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
-
-    if (!mockLoader) {
-      console.log('mockLoader not found, skipping');
-      return;
-    }
-
-    let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
-
-    let { getRoomIds, simulateRemoteMessage } = mockMatrixUtils;
-
-    let realmMatrixUsername = matrixClient.username;
-
-    console.log('room ids', getRoomIds());
-
-    for (let roomId of getRoomIds()) {
-      if (roomId.startsWith('session-room-for-')) {
-        simulateRemoteMessage(roomId, realmMatrixUsername, {
-          msgtype: 'app.boxel.sse', // FIXME extract/constant
-          format: 'app.boxel.sse-format', // FIXME does this matter?
-          body: JSON.stringify({
-            type: event.type,
-            data: event.data,
-          }),
-        });
-      }
-    }
-  }
-
   async broadcastRealmEvent(
     event: RealmEventEvent,
     matrixClient: MatrixClient,

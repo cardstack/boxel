@@ -165,11 +165,6 @@ export interface RealmAdapter {
 
   setLoader?(loader: Loader): void;
 
-  sendServerEvent(
-    event: ServerEvents,
-    matrixClient: MatrixClient,
-  ): Promise<void>;
-
   broadcastRealmEvent(
     event: RealmEventEventContent,
     matrixClient: MatrixClient,
@@ -2040,15 +2035,6 @@ export class Realm {
       indexType: 'incremental-index-initiation',
       updatedFile,
     });
-  }
-
-  private async sendServerEvent(event: ServerEvents): Promise<void> {
-    console.log('in realm sendServerEvent', event);
-    console.log(
-      `matrix client ${this.#matrixClient.username} logged in?`,
-      this.#matrixClient.isLoggedIn(),
-    );
-    this.#adapter.sendServerEvent(event, this.#matrixClient);
   }
 
   private async broadcastRealmEvent(
