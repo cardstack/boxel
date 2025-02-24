@@ -35,12 +35,14 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import CreateCardJsonCommand from '@cardstack/host/commands/create-card-json';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -375,6 +377,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   </template>
 
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
@@ -513,14 +516,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   // TODO: convert this to @action once we no longer need to await below
   private createNew = task(async () => {
-    this.newCardJSON = {
-      data: {
-        meta: {
-          adoptsFrom: this.args.codeRef,
-          realmURL: this.operatorModeStateService.realmURL.href,
-        },
-      },
-    };
+    let { commandContext } = this.commandService;
+    this.newCardJSON = await new CreateCardJsonCommand(commandContext).execute({
+      module: this.args.codeRef,
+      realm: this.operatorModeStateService.realmURL.href,
+    });
     await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
