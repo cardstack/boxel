@@ -19,6 +19,8 @@ import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type NetworkService from '../services/network';
 
+import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+
 const log = logger('resource:file');
 const utf8 = new TextDecoder();
 const encoder = new TextEncoder();
@@ -91,7 +93,7 @@ class _FileResource extends Resource<Args> {
 
   private setSubscription(
     realmURL: string,
-    callback: (ev: { type: string; data: string }) => void,
+    callback: (ev: RealmEventEventContent) => void,
   ) {
     if (this.subscription && this.subscription.url !== realmURL) {
       this.subscription.unsubscribe();
@@ -197,19 +199,18 @@ class _FileResource extends Resource<Args> {
       },
     });
 
-    this.setSubscription(realmURL, (event: { type: string; data: string }) => {
-      let eventData = JSON.parse(event.data);
+    this.setSubscription(realmURL, (event: RealmEventEventContent) => {
       if (
-        event.type !== 'index' ||
+        event.eventName !== 'index' ||
         // we wait specifically for the index complete event ("incremental") so
         // that the subsequent index read retrieves the latest contents of the file
-        eventData.type !== 'incremental' ||
-        !Array.isArray(eventData.invalidations)
+        event.indexType !== 'incremental' ||
+        !Array.isArray(event.invalidations)
       ) {
         return;
       }
 
-      let { invalidations } = eventData as { invalidations: string[] };
+      let { invalidations } = event as { invalidations: string[] };
       let normalizedURL = this.url.endsWith('.json')
         ? this.url.replace(/\.json$/, '')
         : this.url;

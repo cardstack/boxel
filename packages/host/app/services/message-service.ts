@@ -12,17 +12,24 @@ import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
 
+import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
-  @tracked listenerCallbacks: Map<string, ((ev: MessageEvent) => void)[]> =
-    new Map();
-  @service private declare network: NetworkService;
+  @tracked listenerCallbacks: Map<
+    string,
+    ((ev: RealmEventEventContent) => void)[]
+  > = new Map();
+  @service declare private network: NetworkService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
   }
 
-  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+  subscribe(
+    realmURL: string,
+    cb: (ev: RealmEventEventContent) => void,
+  ): () => void {
     console.log('subscribe', realmURL, cb);
     if (isTesting()) {
       // only use Matrix-y callbacks in testing
@@ -66,14 +73,10 @@ export default class MessageService extends Service {
     };
   }
 
-  relayMatrixSSE(realmURL: string, event: any) {
+  relayMatrixSSE(realmURL: string, event: RealmEventEventContent) {
     console.log('relaying matrix sse event', realmURL, event);
     this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
-      let eventWithStringData = {
-        type: event.type,
-        data: JSON.stringify(event.data),
-      } as MessageEvent;
-      cb(eventWithStringData);
+      cb(event);
     });
   }
 }

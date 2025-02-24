@@ -27,6 +27,7 @@ import { type CardResource, getCard } from './card-resource';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
+import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
@@ -66,13 +67,15 @@ export class Search extends Resource<Args> {
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(
           realm,
-          ({ type, data }: { type: string; data: string }) => {
+          (event: RealmEventEventContent) => {
             if (query === undefined) {
               return;
             }
-            let eventData = JSON.parse(data);
             // we are only interested in incremental index events
-            if (type !== 'index' || eventData.type !== 'incremental') {
+            if (
+              event.eventName !== 'index' ||
+              event.indexType !== 'incremental'
+            ) {
               return;
             }
             this.search.perform(query);

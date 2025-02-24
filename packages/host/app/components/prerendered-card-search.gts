@@ -26,6 +26,8 @@ import { type HTMLComponent, htmlComponent } from '../lib/html-component';
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 
+import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+
 const waiter = buildWaiter('prerendered-card-search:waiter');
 
 export interface PrerenderedCardData {
@@ -252,8 +254,11 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     }
   }
 
-  private markRealmNeedsRefreshing = (ev: MessageEvent, realm: string) => {
-    if (ev.type === 'index') {
+  private markRealmNeedsRefreshing = (
+    ev: RealmEventEventContent,
+    realm: string,
+  ) => {
+    if (ev.eventName === 'index') {
       this.realmsNeedingRefresh.add(realm);
     }
   };

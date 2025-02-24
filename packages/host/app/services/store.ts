@@ -30,6 +30,8 @@ import type RealmService from './realm';
 
 import type { CardResource } from '../resources/card-resource';
 
+import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+
 class ResettableIdentityContext implements IdentityContext {
   #cards = new Map<
     string,
@@ -227,15 +229,15 @@ export default class StoreService extends Service {
     return { url, card, error };
   }
 
-  private handleInvalidations = ({ type, data: dataStr }: MessageEvent) => {
-    if (type !== 'index') {
+  private handleInvalidations = (event: RealmEventEventContent) => {
+    if (event.eventName !== 'index') {
       return;
     }
-    let data = JSON.parse(dataStr);
-    if (data.type !== 'incremental') {
+
+    if (event.indexType !== 'incremental') {
       return;
     }
-    let invalidations = data.invalidations as string[];
+    let invalidations = event.invalidations as string[];
 
     if (invalidations.find((i) => hasExecutableExtension(i))) {
       // the invalidation included code changes too. in this case we
@@ -259,7 +261,7 @@ export default class StoreService extends Service {
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
           // save request and the arrival SSE event.
-          if (!this.cardService.clientRequestIds.has(data.clientRequestId)) {
+          if (!this.cardService.clientRequestIds.has(event.clientRequestId)) {
             this.reload.perform(liveCard);
           }
         } else if (!this.identityContext.get(invalidation)) {

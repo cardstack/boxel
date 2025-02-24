@@ -16,6 +16,8 @@ import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type NetworkService from '../services/network';
 
+import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+
 const log = logger('resource:directory');
 
 interface Args {
@@ -65,16 +67,16 @@ export class DirectoryResource extends Resource<Args> {
         url: realmURL.href,
         unsubscribe: this.messageService.subscribe(
           realmURL.href,
-          ({ type, data: dataStr }) => {
+          (event: RealmEventEventContent) => {
             if (!this.directoryURL) {
               return;
             }
-            let eventData = JSON.parse(dataStr);
-            if (type !== 'index' || !eventData.updatedFile) {
+
+            if (event.eventName !== 'index' || !event.updatedFile) {
               return;
             }
 
-            let { updatedFile } = eventData as { updatedFile: string };
+            let { updatedFile } = event as { updatedFile: string };
             let segments = updatedFile.split('/');
             segments.pop();
             let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'

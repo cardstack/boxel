@@ -41,6 +41,10 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type {
+  IndexRealmEventContent,
+  RealmEventEventContent,
+} from '@cardstack/base/matrix-event';
 
 const log = logger('service:realm');
 
@@ -151,21 +155,21 @@ class RealmResource {
     this.subscription = {
       unsubscribe: this.messageService.subscribe(
         this.realmURL,
-        ({ type, data: dataStr }: { type: string; data: string }) => {
+        (event: RealmEventEventContent) => {
           if (!this.info) {
             console.warn(
               `No realm info exists for ${this.realmURL} when trying to set indexing status`,
             );
             return;
           }
-          if (type !== 'index') {
+          if (event.eventName !== 'index') {
             return;
           }
-          let data = JSON.parse(dataStr) as IndexEventData;
-          if (data.type === 'full') {
+          let data = event as IndexRealmEventContent;
+          if (data.indexType === 'full') {
             return;
           }
-          switch (data.type) {
+          switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;

@@ -46,6 +46,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REALM_EVENT_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
@@ -1353,14 +1354,11 @@ export default class MatrixService extends Service {
     ) {
       await this.realmServer.handleEvent(event);
     } else if (
-      event.type === 'm.room.message' &&
-      event.content?.msgtype === 'app.boxel.sse' &&
+      event.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
       event.sender
     ) {
       // FIXME provenance should be checked
       console.log('received sse event', event);
-      let parsedEventContent = JSON.parse(event.content.body);
-      console.log('relayMatrixSSE', parsedEventContent);
 
       let realmInfoForSender = this.realm.realmOfMatrixUsername(event.sender);
       if (!realmInfoForSender) {
@@ -1368,7 +1366,7 @@ export default class MatrixService extends Service {
       } else {
         this.messageService.relayMatrixSSE(
           realmInfoForSender.url,
-          parsedEventContent,
+          event.content,
         );
       }
     }
