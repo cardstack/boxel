@@ -73,13 +73,7 @@ export class MatrixBackendAuthentication {
       (await this.matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
-    console.log(
-      'dmRooms client ' +
-        this.matrixClient.clientIndex +
-        ' username ' +
-        this.matrixClient.username,
-      dmRooms,
-    );
+    console.log('dmRooms username ' + this.matrixClient.username, dmRooms);
     let roomId = dmRooms[user];
 
     console.log(`dmroom for user ${user}: ${roomId}`);

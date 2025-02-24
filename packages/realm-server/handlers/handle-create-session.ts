@@ -18,9 +18,7 @@ export default function handleCreateSessionRequest({
   matrixClient,
   realmSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-  console.log(
-    `handleCreateSessionRequest client ${matrixClient.clientIndex} username ${matrixClient.username}`,
-  );
+  console.log(`handleCreateSessionRequest username ${matrixClient.username}`);
   let matrixBackendAuthentication = new MatrixBackendAuthentication(
     matrixClient,
     realmSecretSeed,
