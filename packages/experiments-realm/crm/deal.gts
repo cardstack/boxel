@@ -988,7 +988,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         grid-area: account-header-embedded;
         overflow: hidden;
       }
-      .account-header-embedded:deep(.avatar) {
+      .account-header-embedded :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1025,7 +1025,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr 1fr; /* Switch to 2 items per row */
           gap: var(--boxel-sp);
         }
-        .deal-details:deep(.progress-bar) {
+        .deal-details :deep(.progress-bar) {
           flex-grow: 1;
         }
 
@@ -1290,7 +1290,7 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: account-header-fitted;
         overflow: hidden;
       }
-      .account-header-fitted:deep(.avatar) {
+      .account-header-fitted :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1343,7 +1343,7 @@ class FittedTemplate extends Component<typeof Deal> {
         .deal-details {
           gap: var(--boxel-sp);
         }
-        .deal-details:deep(.progress-bar) {
+        .deal-details :deep(.progress-bar) {
           flex-grow: 1;
         }
         .event-details {
