@@ -95,9 +95,15 @@ export class RoomResource extends Resource<Args> {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.matrixRoom) {
-        await this.loadFromEvents(roomId);
+      if (!this.matrixRoom) {
+        return;
       }
+      let memberIds = this.matrixRoom.memberIds;
+      // If the AI bot is not in the room, don't process the events
+      if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
+        return;
+      }
+      await this.loadFromEvents(roomId);
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
     }
