@@ -756,6 +756,303 @@ class IsolatedTemplate extends Component<typeof Deal> {
   </template>
 }
 
+class EmbeddedTemplate extends Component<typeof Deal> {
+  get logoURL() {
+    return this.args.model?.thumbnailURL?.length
+      ? this.args.model.thumbnailURL
+      : this.args.model.account?.thumbnailURL;
+  }
+
+  get primaryContactName() {
+    return this.args.model.account?.primaryContact?.name;
+  }
+
+  get hasValueBreakdown() {
+    return (
+      this.args.model.valueBreakdown &&
+      this.args.model.valueBreakdown.length > 0
+    );
+  }
+
+  get hasStakeholders() {
+    return (
+      this.args.model.primaryStakeholder ||
+      (this.args.model.stakeholders?.length ?? 0) > 0
+    );
+  }
+
+  <template>
+    <article class='deal-card-embedded'>
+      <header class='deal-header'>
+        <AccountHeader
+          @logoURL={{this.logoURL}}
+          @name={{@model.name}}
+          class='account-header-embedded'
+        >
+          <:name>
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+            </h1>
+          </:name>
+          <:content>
+            <@fields.company
+              @format='atom'
+              @displayContainer={{false}}
+              class='info-atom'
+            />
+            <@fields.primaryContact
+              @format='atom'
+              @displayContainer={{false}}
+              class='info-atom'
+            />
+          </:content>
+        </AccountHeader>
+
+        <div class='deal-status'>
+          <@fields.status @format='atom' @displayContainer={{false}} />
+        </div>
+
+        <div class='account-info-grid-view'>
+          <@fields.company
+            @format='atom'
+            @displayContainer={{false}}
+            class='info-atom'
+          />
+          <@fields.primaryContact
+            @format='atom'
+            @displayContainer={{false}}
+            class='info-atom'
+          />
+        </div>
+      </header>
+
+      <div class='deal-content'>
+        <div class='deal-details'>
+          <div class='deal-field'>
+            <span class='label'>Current Value</span>
+            <@fields.computedValue class='highlight-value' @format='atom' />
+          </div>
+
+          <div class='deal-field'>
+            <span class='label'>Close Date</span>
+            <div class='highlight-value'>
+              <@fields.closeDate @format='atom' />
+            </div>
+          </div>
+
+          {{#if @model.healthScore}}
+            <div class='deal-field'>
+              <span class='label'>Health Score</span>
+              <div class='progress-container'>
+                <CrmProgressBar
+                  @value={{@model.healthScore}}
+                  @max={{100}}
+                  @color='var(--boxel-green)'
+                />
+                <div class='highlight-value'>
+                  {{@model.healthScore}}
+                </div>
+              </div>
+            </div>
+          {{/if}}
+        </div>
+
+        {{#if @model.event}}
+          <div class='event-details'>
+            <@fields.event @format='atom' @displayContainer={{false}} />
+          </div>
+        {{/if}}
+      </div>
+    </article>
+
+    <style scoped>
+      h1,
+      p {
+        margin: 0;
+      }
+      .label {
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+      .default-value {
+        color: var(--boxel-400);
+      }
+      .info-atom {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
+        width: fit-content;
+        display: inline-flex;
+      }
+      .highlight-value {
+        font-weight: 600;
+        font-size: var(--boxel-font-size);
+        white-space: nowrap;
+      }
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .account-name {
+        font: 600 var(--boxel-font-med);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        width: 100%;
+      }
+      .account-info-grid-view {
+        display: none; /* Hidden by default */
+      }
+      .account-info-grid-view:deep(.avatar) {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
+      }
+
+      /* Default card layout with container query setup */
+      .deal-card-embedded {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        grid-template-areas: 'deal-header' 'deal-content';
+        grid-template-columns: 100%;
+        grid-template-rows: max-content auto;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        container-type: inline-size; /* Enable container queries */
+      }
+      .deal-header {
+        grid-area: deal-header;
+        display: grid;
+        grid-template-areas: 'account-header-embedded deal-status';
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: var(--boxel-sp-lg);
+      }
+      .deal-content {
+        grid-area: deal-content;
+        display: grid;
+        grid-template-areas: 'deal-details event-details';
+        grid-template-columns: 1fr auto;
+        grid-template-rows: max-content;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--boxel-sp-lg);
+        margin-top: auto;
+      }
+      .deal-content:not(:has(.event-details)) {
+        grid-template-areas: 'deal-details';
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
+      }
+      .deal-content:not(:has(.deal-details)) {
+        grid-template-areas: 'event-details';
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
+      }
+      .deal-status {
+        grid-area: deal-status;
+        margin-left: auto;
+      }
+      .deal-details {
+        grid-area: deal-details;
+        display: grid;
+        grid-template-rows: auto;
+        grid-template-columns: max-content max-content max-content;
+        gap: var(--boxel-sp-xl);
+      }
+      .deal-field {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .deal-field:nth-child(1),
+      .deal-field:nth-child(2),
+      .deal-field:nth-child(3) {
+        grid-row: 1;
+      }
+      .account-header-embedded {
+        --account-header-logo-size: 40px;
+        --account-header-gap: var(--boxel-sp-xs);
+        --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        grid-area: account-header-embedded;
+        overflow: hidden;
+      }
+      .account-header-embedded:deep(.avatar) {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
+      }
+      .event-details {
+        grid-area: event-details;
+      }
+
+      /* Container query for mobile adjustments */
+      @container (max-inline-size: 600px) {
+        /* Stack deal-header into a column */
+        .deal-header {
+          grid-template-areas:
+            'account-header-embedded'
+            'deal-status';
+          grid-template-columns: 100%;
+          grid-template-rows: auto auto;
+          gap: var(--boxel-sp-sm);
+        }
+        .deal-status {
+          display: none;
+        }
+
+        /* Stack deal-content  */
+        .deal-content {
+          grid-template-areas:
+            'deal-details'
+            'event-details';
+          grid-template-columns: 100%;
+          grid-template-rows: auto auto;
+          gap: var(--boxel-sp-sm);
+          margin-top: var(--boxel-sp-lg);
+        }
+        .deal-details {
+          grid-template-columns: 1fr 1fr; /* Switch to 2 items per row */
+          gap: var(--boxel-sp);
+        }
+        .deal-details:deep(.progress-bar) {
+          flex-grow: 1;
+        }
+
+        .event-details {
+          --event-summary-icon-size: 0px;
+          --entity-display-gap: 0px;
+        }
+
+        /* Ensure that the first two fields appear in row 1 */
+        .deal-field:nth-child(1),
+        .deal-field:nth-child(2) {
+          grid-row: 1;
+        }
+
+        /* Make the health score field take full width in row 2 */
+        .deal-field:nth-child(3) {
+          grid-row: 2;
+          grid-column: 1 / -1;
+        }
+
+        .account-header-embedded {
+          --account-header-info-content-display: none;
+        }
+        .account-info-grid-view {
+          display: grid;
+          width: 100%;
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
 class FittedTemplate extends Component<typeof Deal> {
   get logoURL() {
     //We default to account thumbnail
@@ -992,8 +1289,6 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .event-details {
         grid-area: event-details;
-        --entity-display-title-line-clamp: 1;
-        --entity-display-content-line-clamp: 1;
       }
 
       /* Vertical card (aspect-ratio <= 1.0) */
@@ -1390,6 +1685,7 @@ export class Deal extends CardDef {
 
   static edit = EditTemplate;
   static isolated = IsolatedTemplate;
+  static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
 }
 

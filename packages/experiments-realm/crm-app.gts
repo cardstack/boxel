@@ -248,6 +248,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   // Only show strip and grid views for Deal tab for now
   get dealView(): ViewItem[] {
     return [
+      { id: 'card', icon: CardIcon },
       { id: 'strip', icon: StripIcon },
       { id: 'grid', icon: GridIcon },
     ];
@@ -262,9 +263,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   }
 
   get tabViews(): ViewItem[] {
-    const views =
-      this.activeTabId === 'Deal' ? this.dealView : this.commonViews;
-    return views;
+    return this.commonViews;
   }
 
   @tracked private searchKey = '';
@@ -324,7 +323,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
   //Tabs
   @action setActiveTab(id: string) {
-    this.selectedView = id === 'Deal' ? 'strip' : 'card';
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
@@ -761,6 +759,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       /* Deal tab */
       .crm-app.Deal {
         --strip-view-min-width: 1fr;
+        --embedded-card-min-height: 200px;
       }
       .crm-app.Task:deep(.content-grid) {
         padding-bottom: 0;
