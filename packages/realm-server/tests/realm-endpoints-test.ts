@@ -1,4 +1,4 @@
-import { module, moduleStart, start, test, testStart } from 'qunit';
+import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
@@ -21,7 +21,6 @@ import {
   isSingleCardDocument,
   baseRealm,
   loadCard,
-  Deferred,
   RealmPaths,
   Realm,
   RealmPermissions,
@@ -74,7 +73,6 @@ import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matr
 import type {
   MatrixEvent,
   RealmEventEvent,
-  RealmEventEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
 
@@ -104,21 +102,12 @@ let createJWT = (
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
-    testStart(async function ({ name }) {
-      console.log('testStart: ' + name);
-    });
-
-    moduleStart(async function ({ name }) {
-      console.log('moduleStart: ' + name);
-    });
-
     let testRealm: Realm;
     let testRealmPath: string;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let matrixClient: MatrixClient;
 
     function setupPermissionedRealm(
       hooks: NestedHooks,
