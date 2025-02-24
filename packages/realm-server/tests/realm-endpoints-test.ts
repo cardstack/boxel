@@ -56,7 +56,6 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
-import jwt from 'jsonwebtoken';
 import { shimExternals } from '../lib/externals';
 import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -172,7 +171,7 @@ module(basename(__filename), function () {
 
       hooks.beforeEach(async function () {
         await matrixClient.login();
-        let userId = matrixClient.getUserId();
+        let userId = matrixClient.getUserId()!;
 
         let response = await request
           .post('/_server-session')
@@ -198,11 +197,6 @@ module(basename(__filename), function () {
           .send(JSON.stringify({ user: userId, challenge: json.challenge }))
           .set('Accept', 'application/json')
           .set('Content-Type', 'application/json');
-        let token = response.headers['authorization'];
-        let decoded = jwt.verify(
-          token,
-          realmSecretSeed,
-        ) as RealmServerTokenClaim;
 
         console.log(
           'setting account data for username ' + matrixClient.username,
