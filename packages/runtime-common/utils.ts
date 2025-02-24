@@ -61,3 +61,14 @@ export function decodeWebSafeBase64(encoded: string): string {
 
   return Buffer.from(base64, 'base64').toString('utf-8');
 }
+
+// This is the djb2_xor hash function from http://www.cse.yorku.ca/~oz/hash.html
+export function simpleHash(str: string) {
+  let len = str.length;
+  let h = 5381;
+
+  for (let i = 0; i < len; i++) {
+    h = (h * 33) ^ str.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16);
+}

@@ -31,7 +31,7 @@ import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { Todo } from './todo';
-import { ColorField } from './color';
+import { ColorField } from './fields/color';
 
 export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;

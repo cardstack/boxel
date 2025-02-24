@@ -110,7 +110,7 @@ export function isAnyFilter(filter: Filter): filter is AnyFilter {
 }
 
 export function buildQueryString(query: Query): string {
-  return `?${qs.stringify(query)}`;
+  return `?${qs.stringify(query, { strictNullHandling: true })}`;
 }
 
 export function assertQuery(
@@ -431,5 +431,9 @@ export function assertKey(key: string, pointer: string[]) {
 }
 
 export const parseQuery = (queryString: string) => {
-  return qs.parse(queryString, { depth: 10, strictDepth: true });
+  return qs.parse(queryString, {
+    depth: 10,
+    strictDepth: true,
+    strictNullHandling: true,
+  });
 };
