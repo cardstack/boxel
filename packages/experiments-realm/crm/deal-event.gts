@@ -136,6 +136,7 @@ class AtomTemplate extends Component<typeof DealEvent> {
           var(--boxel-form-control-border-radius)
         );
         width: 100%;
+        overflow: hidden;
       }
     </style>
   </template>
