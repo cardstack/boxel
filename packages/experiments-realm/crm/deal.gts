@@ -914,7 +914,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
       .account-info-grid-view {
         display: none; /* Hidden by default */
       }
-      .account-info-grid-view:deep(.avatar) {
+      .account-info-grid-view :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -989,7 +989,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         grid-area: account-header-embedded;
         overflow: hidden;
       }
-      .account-header-embedded:deep(.avatar) {
+      .account-header-embedded :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1026,7 +1026,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr 1fr; /* Switch to 2 items per row */
           gap: var(--boxel-sp);
         }
-        .deal-details:deep(.progress-bar) {
+        .deal-details :deep(.progress-bar) {
           flex-grow: 1;
         }
 
@@ -1213,7 +1213,7 @@ class FittedTemplate extends Component<typeof Deal> {
       .account-info-grid-view {
         display: none;
       }
-      .account-info-grid-view:deep(.avatar) {
+      .account-info-grid-view :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1291,7 +1291,7 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: account-header-fitted;
         overflow: hidden;
       }
-      .account-header-fitted:deep(.avatar) {
+      .account-header-fitted :deep(.avatar) {
         --profile-avatar-icon-size: var(--boxel-font-size);
         --profile-avatar-icon-border: 0px;
       }
@@ -1344,7 +1344,7 @@ class FittedTemplate extends Component<typeof Deal> {
         .deal-details {
           gap: var(--boxel-sp);
         }
-        .deal-details:deep(.progress-bar) {
+        .deal-details :deep(.progress-bar) {
           flex-grow: 1;
         }
         .event-details {
@@ -1374,7 +1374,7 @@ class FittedTemplate extends Component<typeof Deal> {
             --entity-display-thumbnail-size: var(--boxel-font-size);
             --entity-display-title-font-size: var(--boxel-font-size-xs);
           }
-          .account-info-grid-view:deep(.avatar) {
+          .account-info-grid-view :deep(.avatar) {
             --profile-avatar-icon-size: var(--boxel-font-size);
             --profile-avatar-icon-border: 0px;
           }
