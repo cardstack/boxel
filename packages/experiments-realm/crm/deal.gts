@@ -821,11 +821,9 @@ class FittedTemplate extends Component<typeof Deal> {
           class='account-header-fitted'
         >
           <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Deal Name</h1>
-            {{/if}}
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+            </h1>
           </:name>
           <:content>
             <@fields.company
@@ -899,6 +897,7 @@ class FittedTemplate extends Component<typeof Deal> {
     </article>
 
     <style scoped>
+      /* Base styles */
       h1,
       p {
         margin: 0;
@@ -911,13 +910,47 @@ class FittedTemplate extends Component<typeof Deal> {
       .default-value {
         color: var(--boxel-400);
       }
+      .info-atom {
+        width: fit-content;
+        display: inline-flex;
+      }
+      .highlight-value {
+        font-weight: 600;
+        font-size: var(--boxel-font-size);
+        white-space: nowrap; /* Added globally */
+      }
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .account-name {
+        font: 600 var(--boxel-font-med);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        width: 100%;
+      }
+      .account-info-grid-view {
+        display: none;
+      }
+      .event-details .entity-content {
+        /* Replaced :deep() with standard selector */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      /* Default card layout */
       .deal-card-fitted {
         display: grid;
         width: 100%;
         height: 100%;
-        grid-template-areas:
-          'deal-header'
-          'deal-content';
+        grid-template-areas: 'deal-header' 'deal-content';
         grid-template-columns: 1fr;
         grid-template-rows: max-content auto;
         gap: var(--boxel-sp-xs);
@@ -942,36 +975,16 @@ class FittedTemplate extends Component<typeof Deal> {
         margin-top: auto;
       }
       .deal-content:not(:has(.event-details)) {
-        grid-template-rows: max-content;
         grid-template-areas: 'deal-details';
+        grid-template-columns: 1fr;
       }
       .deal-content:not(:has(.deal-details)) {
-        grid-template-rows: max-content;
         grid-template-areas: 'event-details';
+        grid-template-columns: 1fr;
       }
       .account-header-fitted {
         grid-area: account-header-fitted;
         overflow: hidden;
-      }
-      .account-name {
-        grid-area: account-name;
-        font: 600 var(--boxel-font-med);
-      }
-      .account-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        width: 100%;
-      }
-      .account-info-grid-view {
-        grid-area: account-info-grid-view;
-        display: none;
-      }
-      .info-atom {
-        width: fit-content;
-        display: inline-flex;
       }
       .deal-status {
         grid-area: deal-status;
@@ -988,38 +1001,13 @@ class FittedTemplate extends Component<typeof Deal> {
         flex-direction: column;
         gap: var(--boxel-sp-xxs);
       }
-      .highlight-value {
-        font-weight: 600;
-        font-size: var(--boxel-font-size);
-      }
-      .progress-container {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
       .event-details {
         grid-area: event-details;
       }
-      .event-details:deep(.entity-content) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-      }
 
-      /* Aspect ratio < 1.0 (Vertical card) */
-      @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
+      /* Vertical card (aspect-ratio <= 1.0) */
+      @container fitted-card (aspect-ratio <= 1.0) {
         .deal-card-fitted {
-          display: grid;
-          width: 100%;
-          height: 100%;
-          grid-template-areas:
-            'deal-header'
-            'deal-content';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp);
           padding: var(--boxel-sp-xs);
         }
         .account-header-fitted {
@@ -1028,44 +1016,19 @@ class FittedTemplate extends Component<typeof Deal> {
           --account-header-logo-border-radius: var(--boxel-border-radius-sm);
           --account-header-info-content-display: none;
         }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas:
-            'account-header-fitted'
-            'account-info-grid-view';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content max-content;
-          align-items: start;
-          gap: var(--boxel-sp-xs);
-        }
-        .account-info-grid-view {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp);
-          --entity-display-icon-size: var(--boxel-font-size);
-          --entity-display-thumbnail-size: var(--boxel-font-size);
-          --entity-display-title-font-size: var(--boxel-font-size-xs);
-        }
-        .account-info-grid-view :deep(.avatar) {
-          --profile-avatar-icon-size: var(--boxel-font-size);
-          --profile-avatar-icon-border: 0px;
+        .account-name {
+          font: 600 var(--boxel-font);
         }
         .deal-status {
           display: none;
         }
+
+        /* Base styles for deal-content and event-details */
         .deal-content {
-          grid-area: deal-content;
-          display: grid;
-          grid-template-areas:
-            'deal-details'
-            'event-details';
+          grid-template-areas: 'deal-details' 'event-details';
           grid-template-columns: 1fr;
           grid-template-rows: max-content auto;
-          align-items: end;
-          justify-content: space-between;
           gap: var(--boxel-sp);
-          margin-top: auto;
         }
         .deal-details {
           gap: var(--boxel-sp);
@@ -1078,191 +1041,72 @@ class FittedTemplate extends Component<typeof Deal> {
           --entity-display-content-gap: 0px;
         }
         .highlight-value {
-          font-weight: 600;
           font-size: var(--boxel-font-size-xs);
-          white-space: nowrap;
         }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
+
+        /* Height-specific overrides */
+        @container fitted-card (height >= 275px) {
+          .deal-header {
+            grid-template-areas: 'account-header-fitted' 'account-info-grid-view';
+            grid-template-columns: 1fr;
+            grid-template-rows: max-content max-content;
+            gap: var(--boxel-sp-sm);
+          }
+          .account-info-grid-view {
+            display: flex;
+            flex-direction: column;
+            gap: var(--boxel-sp-sm);
+            --entity-display-icon-size: var(--boxel-font-size);
+            --entity-display-thumbnail-size: var(--boxel-font-size);
+            --entity-display-title-font-size: var(--boxel-font-size-xs);
+          }
+          .account-info-grid-view:deep(.avatar) {
+            --profile-avatar-icon-size: var(--boxel-font-size);
+            --profile-avatar-icon-border: 0px;
+          }
+        }
+
+        @container fitted-card (height < 275px) and (height >= 250px) {
+          .deal-header {
+            grid-template-areas: 'account-header-fitted';
+            grid-template-columns: 1fr;
+            grid-template-rows: max-content;
+            gap: var(--boxel-sp-xs);
+          }
+          .account-info-grid-view {
+            display: none;
+          }
+        }
+
+        @container fitted-card (height < 250px) {
+          .deal-card-fitted {
+            grid-template-areas: 'deal-header';
+            grid-template-rows: 1fr;
+          }
+          .deal-content {
+            display: none;
+          }
+          .deal-header {
+            grid-template-areas: 'account-header-fitted';
+          }
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+          }
+        }
+
+        @container fitted-card (height <= 170px) {
+          .account-header-fitted {
+            --account-header-logo-size: 30px;
+          }
+          .account-info-grid-view {
+            display: none;
+          }
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (224px <= height < 226px) {
+      /* Horizontal card (aspect-ratio > 1.0) */
+      @container fitted-card (1.0 < aspect-ratio) {
         .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .deal-status {
-          display: none;
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (180px <= height < 224px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .deal-status {
-          display: none;
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 180px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .deal-status {
-          display: none;
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (148px <= height < 180px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 30px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 30px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      /* 1.0 < Aspect ratio (Horizontal card) */
-      @container fitted-card (1.0 < aspect-ratio) and (180px <= height) {
-        .deal-card-fitted {
-          display: grid;
-          width: 100%;
-          height: 100%;
-          grid-template-areas:
-            'deal-header'
-            'deal-content';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-xs);
         }
         .account-header-fitted {
@@ -1271,419 +1115,109 @@ class FittedTemplate extends Component<typeof Deal> {
           --account-header-logo-border-radius: var(--boxel-border-radius-sm);
           --account-header-info-content-display: none;
         }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted deal-status';
-          grid-template-columns: 1fr auto;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .deal-content {
-          grid-area: deal-content;
-          display: grid;
-          grid-template-areas:
-            'deal-details'
-            'event-details';
-          grid-template-columns: 1fr;
-          align-items: end;
-          justify-content: space-between;
-          gap: var(--boxel-sp-lg);
-          margin-top: auto;
-        }
-        .deal-details {
-          gap: var(--boxel-sp);
-        }
-        .event-details {
-          --event-summary-padding: var(--boxel-sp-xs);
-          --event-summary-gap: var(--boxel-sp);
-          --event-summary-icon-size: 0px;
-          --event-summary-content-font-size: var(--boxel-font-size-xs);
-          --entity-display-content-gap: 0px;
-        }
-        .highlight-value {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-xs);
-          white-space: nowrap;
-        }
         .account-name {
           font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
+        }
+
+        /* Height >= 180px */
+        @container fitted-card (180px <= height) {
+          .deal-content {
+            grid-template-areas: 'deal-details' 'event-details';
+            grid-template-columns: 1fr;
+            gap: var(--boxel-sp-lg);
+          }
+          .deal-details {
+            gap: var(--boxel-sp);
+          }
+          .event-details {
+            --event-summary-padding: var(--boxel-sp-xs);
+            --event-summary-gap: var(--boxel-sp);
+            --event-summary-icon-size: 0px;
+            --event-summary-content-font-size: var(--boxel-font-size-xs);
+            --entity-display-content-gap: 0px;
+          }
+          .highlight-value {
+            font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        /* Height < 180px */
+        @container fitted-card (height < 180px) {
+          .deal-card-fitted {
+            grid-template-areas: 'deal-header';
+            grid-template-rows: 1fr;
+          }
+          .deal-content,
+          .deal-status {
+            display: none;
+          }
+          .deal-header {
+            grid-template-areas: 'account-header-fitted';
+          }
+          .account-header-fitted {
+            --account-header-logo-size: 30px;
+          }
+        }
+
+        /* Height 115px - 150px */
+        @container fitted-card (115px <= height <= 150px) {
+          .deal-header {
+            grid-template-areas: 'account-header-fitted' 'account-info-grid-view';
+            grid-template-rows: max-content max-content;
+            gap: var(--boxel-sp-xs);
+          }
+          .account-info-grid-view {
+            display: flex;
+            flex-direction: column;
+            gap: var(--boxel-sp);
+            --entity-display-icon-size: var(--boxel-font-size);
+            --entity-display-thumbnail-size: var(--boxel-font-size);
+            --entity-display-title-font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        /* Height <= 57px */
+        @container fitted-card (height <= 57px) {
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+          }
+          .account-name {
+            -webkit-line-clamp: 1;
+          }
         }
       }
 
-      @container fitted-card (1.0 < aspect-ratio) and (151px <= height < 180px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 30px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
+      /* Custom breakpoints */
+      @container fitted-card (width < 200px) and (226px <= height) and (aspect-ratio <= 1.0) {
         .deal-header {
-          grid-area: deal-header;
-          display: grid;
           grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) and (115px <= height <= 150px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 30px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas:
-            'account-header-fitted'
-            'account-info-grid-view';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content max-content;
-          align-items: start;
-          gap: var(--boxel-sp-xs);
-        }
-        .account-info-grid-view {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp);
-          --entity-display-icon-size: var(--boxel-font-size);
-          --entity-display-thumbnail-size: var(--boxel-font-size);
-          --entity-display-title-font-size: var(--boxel-font-size-xs);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) and (78px <= height <= 114px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) and (height <= 57px) {
-        .deal-card-fitted {
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-content,
-        .deal-status {
-          display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 1;
-        }
-      }
-
-      /* Catch all because deal is too dense - custom breakpoint  */
-      @container fitted-card (aspect-ratio <= 1.0) and (height <= 170px) {
-        .deal-card-fitted {
-          display: grid;
-          width: 100%;
-          height: 100%;
-          grid-template-areas: 'deal-header';
-          grid-template-columns: 1fr;
-          grid-template-rows: 1fr;
-          grid-template-rows: max-content;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 30px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
         }
         .account-info-grid-view {
           display: none;
-        }
-        .deal-status {
-          display: none;
-        }
-        .deal-content {
-          display: none;
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 2;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (width < 200px) and (226px <= height) {
-        .deal-card-fitted {
-          display: grid;
-          width: 100%;
-          height: 100%;
-          grid-template-areas:
-            'deal-header'
-            'deal-content';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 40px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-          --account-header-info-content-display: none;
-        }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp);
-        }
-        .account-info-grid-view {
-          display: none;
-        }
-        .deal-status {
-          display: none;
-        }
-        .deal-content {
-          grid-area: deal-content;
-          display: grid;
-          grid-template-areas:
-            'deal-details'
-            'event-details';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content auto;
-          align-items: end;
-          justify-content: space-between;
-          gap: var(--boxel-sp-lg);
-          margin-top: auto;
         }
         .deal-details {
           gap: var(--boxel-sp-xs);
         }
-        .event-details {
-          --event-summary-padding: var(--boxel-sp-xs);
-          --event-summary-gap: var(--boxel-sp);
-          --event-summary-icon-size: 0px;
-          --event-summary-content-font-size: var(--boxel-font-size-xs);
-          --entity-display-content-gap: 0px;
-        }
-        .highlight-value {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-xs);
-          white-space: nowrap;
-        }
         .account-name {
-          font: 600 var(--boxel-font);
           -webkit-line-clamp: 3;
         }
       }
 
-      @container fitted-card (1.0 <= aspect-ratio) and (width < 400px) and (height <= 275px) {
-        .deal-card-fitted {
-          display: grid;
-          width: 100%;
-          height: 100%;
-          grid-template-areas:
-            'deal-header'
-            'deal-content';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content auto;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xs);
-        }
+      @container fitted-card (aspect-ratio >= 1.0) and (width < 400px) and (height <= 275px) {
         .deal-header {
-          grid-area: deal-header;
-          display: grid;
           grid-template-areas: 'account-header-fitted';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content;
-          align-items: start;
-          gap: var(--boxel-sp);
         }
-        .account-info-grid-view {
-          display: none;
-        }
+        .account-info-grid-view,
         .deal-status {
           display: none;
-        }
-        .deal-content {
-          grid-area: deal-content;
-          display: grid;
-          grid-template-areas:
-            'deal-details'
-            'event-details';
-          grid-template-columns: 1fr;
-          grid-template-rows: max-content auto;
-          align-items: end;
-          justify-content: space-between;
-          gap: var(--boxel-sp-lg);
-          margin-top: auto;
         }
         .deal-details {
           gap: var(--boxel-sp-xs);
         }
         .event-details {
-          --event-summary-padding: var(--boxel-sp-xs);
           --event-summary-gap: var(--boxel-sp-xs);
-          --event-summary-icon-size: 0px;
-          --event-summary-content-font-size: var(--boxel-font-size-xs);
-          --entity-display-content-gap: 0px;
-        }
-        .highlight-value {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-xs);
-          white-space: nowrap;
         }
         .account-name {
-          font: 600 var(--boxel-font);
           -webkit-line-clamp: 1;
         }
       }
@@ -1693,17 +1227,8 @@ class FittedTemplate extends Component<typeof Deal> {
           --account-header-info-content-display: flex;
         }
         .deal-content {
-          grid-area: deal-content;
-          display: grid;
           grid-template-areas: 'deal-details event-details';
           grid-template-columns: max-content auto;
-          align-items: end;
-          justify-content: space-between;
-          gap: var(--boxel-sp-lg);
-        }
-        .highlight-value {
-          font-weight: 600;
-          font-size: var(--boxel-font-size);
         }
         .event-details {
           --event-summary-padding: var(--boxel-sp);
@@ -1714,16 +1239,17 @@ class FittedTemplate extends Component<typeof Deal> {
         }
       }
 
-      @container fitted-card (width < 800px) and (height < 170px) {
-        .event-details {
-          display: none;
+      @container fitted-card (width < 800px) {
+        @container fitted-card (height < 170px) {
+          .event-details {
+            display: none;
+          }
         }
-      }
-
-      @container fitted-card (width < 800px) and (height <= 275px) {
-        .deal-status,
-        .deal-details {
-          display: none;
+        @container fitted-card (height <= 275px) {
+          .deal-status,
+          .deal-details {
+            display: none;
+          }
         }
       }
     </style>

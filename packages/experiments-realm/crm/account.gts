@@ -37,7 +37,7 @@ import { Deal } from './deal';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { UrgencyTag } from './urgency-tag';
 
 const taskSource = {
@@ -363,11 +363,9 @@ class IsolatedTemplate extends Component<typeof Account> {
       <:header>
         <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
           <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Account Name</h1>
-            {{/if}}
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Account Name{{/if}}
+            </h1>
           </:name>
           <:content>
             {{#if @model.primaryContact}}
@@ -903,11 +901,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
         <div class='top-bar'>
           <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
             <:name>
-              {{#if @model.name}}
-                <h1 class='account-name'>{{@model.name}}</h1>
-              {{else}}
-                <h1 class='account-name default-value'>Missing Account Name</h1>
-              {{/if}}
+              <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+                {{#if @model.title}}<@fields.title />{{else}}Missing Account
+                  Name{{/if}}
+              </h1>
             </:name>
             <:content>
               {{#if @model.primaryContact}}
@@ -1157,11 +1154,9 @@ class FittedTemplate extends Component<typeof Account> {
           @name={{@model.name}}
         >
           <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Account Name</h1>
-            {{/if}}
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Account Name{{/if}}
+            </h1>
           </:name>
         </AccountHeader>
       </:header>
@@ -1177,24 +1172,31 @@ class FittedTemplate extends Component<typeof Account> {
     </AccountPageLayout>
 
     <style scoped>
+      /* Base styles */
+      h1,
+      p {
+        margin: 0;
+      }
       .account-page-layout-fitted {
-        --account-page-layout-padding: var(--boxel-sp-sm);
         height: 100%;
       }
 
       .account-header-fitted {
-        gap: var(--boxel-sp-sm);
-        --account-header-logo-size: 40px;
+        --account-header-logo-size: 35px;
+        --account-header-gap: var(--boxel-sp-xs);
+        --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        grid-area: account-header-fitted;
+        overflow: hidden;
       }
 
       .account-name {
-        font: 600 var(--boxel-font);
-        margin: 0;
+        font: 600 var(--boxel-font-med);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
+        width: 100%;
       }
 
       .description {
@@ -1210,97 +1212,68 @@ class FittedTemplate extends Component<typeof Account> {
         gap: var(--boxel-sp-xxs);
       }
 
-      @container fitted-card ((aspect-ratio <= 1.0) and (226px <= height)) {
+      /* Vertical card (aspect-ratio <= 1.0) */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        /* Base styles for smaller vertical cards */
         .account-page-layout-fitted {
           --account-page-layout-padding: var(--boxel-sp-xs);
         }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+
+        @container (224px <= height < 226px) {
+          .account-name {
+            -webkit-line-clamp: 3;
+          }
+        }
+
+        @container (height < 180px) {
+          .account-header-fitted {
+            --account-header-logo-size: 30px;
+          }
+          .account-name {
+            font: 600 var(--boxel-font);
+            -webkit-line-clamp: 2;
+          }
+
+          .tag-container {
+            display: none;
+          }
         }
       }
 
-      /* Aspect ratio < 1.0 (Vertical card) */
-      @container fitted-card (aspect-ratio <= 1.0) and (224px <= height < 226px) {
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 3;
-        }
-      }
-
-      @container fitted-card ((aspect-ratio <= 1.0) and (height < 180px) ) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      /* 1.0 < Aspect ratio (Horizontal card) */
-      @container fitted-card ((1.0 < aspect-ratio) and (115px <= height <= 150px)) {
+      /* Horizontal card (aspect-ratio > 1.0) */
+      @container fitted-card (aspect-ratio > 1.0) {
+        /* Base styles for smaller horizontal cards */
         .account-page-layout-fitted {
           --account-page-layout-padding: var(--boxel-sp-xs);
         }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
 
-      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
-        .tag-container {
-          display: none;
+        /* Height-specific adjustments */
+        @container (115px <= height <= 150px) {
+          .tag-container {
+            display: none;
+          }
         }
-      }
 
-      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
-        .tag-container {
-          display: none;
+        @container (height <= 114px) {
+          .account-header-fitted {
+            --account-header-logo-size: 30px;
+          }
+          .account-name {
+            font: 600 var(--boxel-font);
+            -webkit-line-clamp: 2;
+          }
+          .tag-container {
+            display: none;
+          }
         }
-      }
 
-      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
-        .account-page-layout-fitted {
-          --account-page-layout-padding: var(--boxel-sp-xs);
-        }
-        .account-header-fitted {
-          --account-header-logo-size: 25px;
-          --account-header-gap: var(--boxel-sp-xs);
-          --account-header-logo-border-radius: var(--boxel-border-radius-sm);
-        }
-        .account-name {
-          font: 600 var(--boxel-font);
-          -webkit-line-clamp: 1;
-        }
-        .tag-container {
-          display: none;
+        @container (height <= 57px) {
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+          }
+          .account-name {
+            -webkit-line-clamp: 1;
+          }
         }
       }
     </style>
