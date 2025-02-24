@@ -4,7 +4,7 @@ import { isEqual } from 'lodash';
 
 import { subscribeToRealm } from '@cardstack/runtime-common';
 
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
 
 interface Signature {
   Args: {

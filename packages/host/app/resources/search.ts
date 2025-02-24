@@ -21,13 +21,14 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import { asURL } from '../services/store';
 
 import { type CardResource, getCard } from './card-resource';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 

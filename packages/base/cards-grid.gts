@@ -45,7 +45,7 @@ import Captions from '@cardstack/boxel-icons/captions';
 import CardsIcon from '@cardstack/boxel-icons/cards';
 import { registerDestructor } from '@ember/destroyable';
 
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
 
 type IconComponent = typeof Captions;
 interface SortOption {

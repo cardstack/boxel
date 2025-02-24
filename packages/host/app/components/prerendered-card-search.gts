@@ -20,13 +20,13 @@ import {
 
 import { type Format } from 'https://cardstack.com/base/card-api';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import SubscribeToRealms from '../helpers/subscribe-to-realms';
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
-
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
 

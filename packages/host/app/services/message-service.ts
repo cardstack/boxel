@@ -8,11 +8,11 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
-
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();

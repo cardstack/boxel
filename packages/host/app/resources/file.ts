@@ -15,11 +15,11 @@ import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type NetworkService from '../services/network';
-
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();

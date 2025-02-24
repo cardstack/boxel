@@ -1,6 +1,6 @@
 import { CardResource } from './card-document';
 
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
 
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {

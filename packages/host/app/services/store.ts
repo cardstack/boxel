@@ -21,6 +21,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import EnvironmentService from './environment-service';
 
 import type CardService from './card-service';
@@ -29,8 +31,6 @@ import type MessageService from './message-service';
 import type RealmService from './realm';
 
 import type { CardResource } from '../resources/card-resource';
-
-import type { RealmEventEventContent } from '@cardstack/base/matrix-event';
 
 class ResettableIdentityContext implements IdentityContext {
   #cards = new Map<
