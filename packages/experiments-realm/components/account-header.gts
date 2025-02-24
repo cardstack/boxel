@@ -26,7 +26,10 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
       <div class='account-header-info'>
         {{#if (has-block 'name')}}
           {{yield to='name'}}
+        {{else}}
+          <h1 class='account-header-name'>{{@name}}</h1>
         {{/if}}
+
         {{#if (has-block 'content')}}
           <div class='account-header-info-content'>
             {{yield to='content'}}
@@ -71,10 +74,22 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
         width: 100%;
         overflow: hidden;
       }
+      .account-header-name {
+        margin: 0;
+        font: var(--account-header-name-font, 600 var(--boxel-font-med));
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--account-header-name-line-clamp, 1);
+      }
       .account-header-info-content {
         display: var(--account-header-info-content-display, flex);
         flex-direction: var(--account-header-info-content-flex-direction, row);
         gap: var(--account-header-info-content-gap, var(--boxel-sp-xxs));
+      }
+      .default-value {
+        color: var(--boxel-400);
       }
     </style>
   </template>
