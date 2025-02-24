@@ -1,15 +1,15 @@
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  field,
+  contains,
+  containsMany,
+} from './card-api';
 import BooleanField from './boolean';
 import CodeRefField from './code-ref';
 import MarkdownField from './markdown';
 import StringField from './string';
-import {
-  CardDef,
-  Component,
-  field,
-  FieldDef,
-  contains,
-  containsMany,
-} from './card-api';
 import RobotIcon from '@cardstack/boxel-icons/robot';
 
 function djb2_xor(str: string) {
@@ -20,6 +20,13 @@ function djb2_xor(str: string) {
     h = (h * 33) ^ str.charCodeAt(i);
   }
   return (h >>> 0).toString(16);
+}
+
+function friendlyModuleName(fullModuleUrl: string) {
+  return fullModuleUrl
+    .split('/')
+    .slice(-1)[0]
+    .replace(/\.gts$/, ' ');
 }
 
 export class CommandField extends FieldDef {
@@ -47,13 +54,6 @@ export class CommandField extends FieldDef {
       return `${name}_${hashed.slice(0, 4)}`;
     },
   });
-}
-
-function friendlyModuleName(fullModuleUrl: string) {
-  return fullModuleUrl
-    .split('/')
-    .slice(-1)[0]
-    .replace(/\.gts$/, ' ');
 }
 
 export class SkillCard extends CardDef {

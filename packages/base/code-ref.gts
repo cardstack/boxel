@@ -37,9 +37,11 @@ export default class CodeRefField extends FieldDef {
     _visited?: Set<string>,
     opts?: SerializeOpts,
   ) {
+    const moduleIsUrlLike =
+      codeRef.module.startsWith('http') || codeRef.module.startsWith('.');
     return {
       ...codeRef,
-      ...(opts?.maybeRelativeURL && !opts?.useAbsoluteURL
+      ...(opts?.maybeRelativeURL && !opts?.useAbsoluteURL && moduleIsUrlLike
         ? { module: opts.maybeRelativeURL(codeRef.module) }
         : {}),
     };
@@ -70,12 +72,18 @@ function maybeSerializeCodeRef(
   stack: CardDef[] = [],
 ) {
   if (codeRef) {
-    // if a stack is passed in, use the containing card to resolve relative references
-    let moduleHref =
-      stack.length > 0
-        ? new URL(codeRef.module, stack[0][relativeTo]).href
-        : codeRef.module;
-    return `${moduleHref}/${codeRef.name}`;
+    const moduleIsUrlLike =
+      codeRef.module.startsWith('http') || codeRef.module.startsWith('.');
+    if (moduleIsUrlLike) {
+      // if a stack is passed in, use the containing card to resolve relative references
+      let moduleHref =
+        stack.length > 0
+          ? new URL(codeRef.module, stack[0][relativeTo]).href
+          : codeRef.module;
+      return `${moduleHref}/${codeRef.name}`;
+    } else {
+      return `${codeRef.module}/${codeRef.name}`;
+    }
   }
   return undefined;
 }
