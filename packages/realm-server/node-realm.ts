@@ -239,26 +239,6 @@ export class NodeAdapter implements RealmAdapter {
   }
 }
 
-function translateEvent(
-  event: ServerEvents,
-): RealmEventEvent['content'] | null {
-  let eventData = event.data;
-
-  if (event.type === 'message') {
-    return null;
-  }
-
-  if (event.type === 'index' && eventData.type) {
-    eventData.indexType = eventData.type;
-    delete eventData.type;
-  }
-
-  return {
-    eventName: event.type,
-    ...eventData,
-  };
-}
-
 export function onClose(request: Request, fn: () => void) {
   closeHandlers.get(request)!.on('close', fn);
 }
