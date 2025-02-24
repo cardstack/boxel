@@ -587,6 +587,51 @@ export class BlogPost extends CardDef {
     ]);
   });
 
+  test<TestContextWithSSE>('can create new instance', async function (assert) {
+    window.localStorage.removeItem('recent-files');
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+    let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
+    assert.deepEqual(recentFiles[0], [testRealmURL, 'blog-post.gts']);
+    await click('[data-boxel-selector-item-text="BlogPost"]');
+    await click('[data-test-accordion-item="playground"] button');
+    assert
+      .dom('[data-test-instance-chooser] [data-test-selected-item]')
+      .doesNotExist();
+
+    await click('[data-test-instance-chooser]');
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedNumberOfEvents: 2,
+      callback: async () => {
+        await click('[data-test-create-instance]');
+      },
+    });
+    recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
+    assert.strictEqual(recentFiles.length, 2, 'recent file count is correct');
+    let newCardId = `${recentFiles[0][0]}${recentFiles[0][1]}`.replace(
+      '.json',
+      '',
+    );
+    assert
+      .dom('[data-test-instance-chooser] [data-test-selected-item]')
+      .hasText('Untitled Blog Post', 'created instance is selected');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card="${newCardId}"][data-test-card-format="edit"]`,
+      )
+      .exists('new card is rendered in edit format');
+
+    await click('[data-test-instance-chooser]');
+    assert
+      .dom('[data-option-index]')
+      .exists({ count: 1 }, 'dropdown instance count is correct');
+    assert.dom('[data-option-index]').containsText('Blog Post');
+  });
+
   test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
