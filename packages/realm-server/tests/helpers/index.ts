@@ -411,8 +411,9 @@ export async function runTestRealmServer({
     dbAdapter,
   });
 
+  // FIXME is this still needed, should it always happen?
   if (loginMatrix) {
-    await testRealm.matrixClient.login();
+    await testRealm.logInToMatrix();
   }
 
   virtualNetwork.mount(testRealm.handle);

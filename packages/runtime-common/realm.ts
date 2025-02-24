@@ -459,6 +459,10 @@ export class Realm {
     });
   }
 
+  async logInToMatrix() {
+    await this.#matrixClient.login();
+  }
+
   private async readinessCheck(
     _request: Request,
     requestContext: RequestContext,

@@ -3182,7 +3182,7 @@ module(basename(__filename), function () {
           matrixURL,
         }));
 
-        await testRealm.matrixClient.login();
+        await testRealm.logInToMatrix();
       }
 
       setupDB(hooks, {
