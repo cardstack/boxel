@@ -367,10 +367,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       </:header>
 
       <:dashboard>
-        <SummaryCard class='dashboard'>
-          <:title>
-            <h2 class='summary-title'>Deal Value</h2>
-          </:title>
+        <SummaryCard class='dashboard' @title='Deal Value'>
           <:icon>
             {{#if @model.healthScore}}
               <div class='progress-container'>
@@ -488,13 +485,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
       <:summary>
         <SummaryGridContainer class='task-summary-grid'>
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='info-card-title'>Deal Info</h3>
-            </:title>
-            <:icon>
-              <World class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{World}} @title='Deal Info'>
             <:content>
               {{#if this.hasDealEventInfo}}
                 <EntityDisplayWithIcon @title={{this.eventLocation}}>
@@ -521,14 +512,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               {{/if}}
             </:content>
           </SummaryCard>
-
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='info-card-title'>Key Stakeholders</h3>
-            </:title>
-            <:icon>
-              <Users class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{Users}} @title='Key Stakeholders'>
             <:content>
               {{#if this.hasStakeholders}}
                 {{#if @model.primaryStakeholder}}
@@ -554,11 +538,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               {{/if}}
             </:content>
           </SummaryCard>
-
-          <SummaryCard class='info-card tasks-summary-card'>
-            <:title>
-              <h3 class='info-card-title'>Active Tasks</h3>
-            </:title>
+          <SummaryCard class='tasks-summary-card' @title='Active Tasks'>
             <:icon>
               <BoxelButton
                 class='sidebar-create-button'
@@ -649,7 +629,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-4xs);
       }
       .dashboard {
-        --summary-card-padding: var(--boxel-sp);
+        --summary-card-content-gap: 0;
         container-type: inline-size;
       }
       .dashboard-cards {
@@ -692,11 +672,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .info-field {
         --entity-display-title-font-weight: 400;
       }
-      .summary-title,
-      .info-card-title {
+      .summary-title {
         font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xxs);
         align-self: flex-start;
+      }
+      .summary-highlight {
+        font: 600 var(--boxel-font-lg);
       }
       .description {
         color: var(--boxel-450);
@@ -729,9 +711,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-top: 0.5rem;
       }
       /* Task Summary Grid & Card */
-      .task-summary-grid {
-        --summary-card-min-height: 170px;
-      }
       .tasks-summary-card :where(.task-card) {
         --task-card-padding: var(--boxel-sp-xxxs) 0;
       }
@@ -761,23 +740,14 @@ class IsolatedTemplate extends Component<typeof Deal> {
           align-items: flex-end;
         }
         .dashboard-cards {
-          grid-template-rows: 1fr;
+          grid-template-columns: 1fr;
         }
       }
       .info-atom {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
         width: fit-content;
         display: inline-flex;
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
-      .info-card {
-        --summary-card-gap: var(--boxel-sp-xl);
-        --summary-card-padding: var(--boxel-sp);
-        --entity-display-title-font-weight: 400;
       }
       .new-item-button {
         font-weight: 600;
@@ -911,6 +881,8 @@ class FittedTemplate extends Component<typeof Deal> {
         color: var(--boxel-400);
       }
       .info-atom {
+        --profile-avatar-icon-size: var(--boxel-font-size);
+        --profile-avatar-icon-border: 0px;
         width: fit-content;
         display: inline-flex;
       }
@@ -950,7 +922,7 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-template-columns: 100%;
         grid-template-rows: max-content auto;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xs);
       }
       .deal-header {
         grid-area: deal-header;
@@ -1008,6 +980,9 @@ class FittedTemplate extends Component<typeof Deal> {
       }
 
       .account-header-fitted {
+        --account-header-logo-size: 40px;
+        --account-header-gap: var(--boxel-sp-xs);
+        --account-header-logo-border-radius: var(--boxel-border-radius-sm);
         grid-area: account-header-fitted;
         overflow: hidden;
       }
@@ -1436,14 +1411,16 @@ class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
     </div>
 
     <style scoped>
-      .deal-page-layout {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        width: 100%;
-        padding: var(--boxel-sp-xl);
-        box-sizing: border-box;
-        background-color: var(--boxel-100);
+      @layer {
+        .deal-page-layout {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+          width: 100%;
+          padding: var(--boxel-sp-xl);
+          box-sizing: border-box;
+          background-color: var(--boxel-100);
+        }
       }
     </style>
   </template>
