@@ -318,15 +318,6 @@ export class Realm {
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
 
-    // @ts-expect-error
-    if (!globalThis.realmUrlToSecretSeed) {
-      // @ts-expect-error
-      globalThis.realmUrlToSecretSeed = new Map();
-    }
-
-    // @ts-expect-error
-    globalThis.realmUrlToSecretSeed.set(this.url, secretSeed);
-
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
