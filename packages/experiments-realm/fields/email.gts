@@ -15,7 +15,7 @@ import MailIcon from '@cardstack/boxel-icons/mail';
 import { debounce } from 'lodash';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import EntityDisplayWithIcon from './components/entity-icon-display';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 // We use simple regex here to validate common email formats
 // This is definitely NOT a full email validation
@@ -69,6 +69,11 @@ export class EmailField extends StringField {
     <template>
       {{#if @model}}
         <EntityDisplayWithIcon @title={{@model}} @underline={{false}}>
+          <:title>
+            <a href='mailto:{{@model}}' rel='noopener noreferrer'>
+              {{@model}}
+            </a>
+          </:title>
           <:icon>
             <MailIcon class='icon' />
           </:icon>
@@ -77,6 +82,10 @@ export class EmailField extends StringField {
       <style scoped>
         .icon {
           color: var(--boxel-400);
+        }
+        a:hover {
+          text-decoration: underline;
+          color: inherit;
         }
       </style>
     </template>
