@@ -1641,7 +1641,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');

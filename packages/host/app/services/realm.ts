@@ -25,7 +25,6 @@ import {
   JWTPayload,
   SupportedMimeType,
   type RealmInfo,
-  type IndexEventData,
   RealmPermissions,
   RealmPaths,
 } from '@cardstack/runtime-common';

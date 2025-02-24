@@ -72,7 +72,11 @@ export class DirectoryResource extends Resource<Args> {
               return;
             }
 
-            if (event.eventName !== 'index' || !event.updatedFile) {
+            if (event.eventName !== 'index') {
+              return;
+            }
+
+            if (!('updatedFile' in event)) {
               return;
             }
 

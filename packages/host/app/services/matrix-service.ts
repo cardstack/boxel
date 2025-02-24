@@ -74,6 +74,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
+  RealmEventEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
@@ -1355,7 +1356,8 @@ export default class MatrixService extends Service {
       await this.realmServer.handleEvent(event);
     } else if (
       event.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-      event.sender
+      event.sender &&
+      event.content
     ) {
       // FIXME provenance should be checked
       console.log('received sse event', event);
@@ -1366,7 +1368,7 @@ export default class MatrixService extends Service {
       } else {
         this.messageService.relayMatrixSSE(
           realmInfoForSender.url,
-          event.content,
+          event.content as RealmEventEventContent,
         );
       }
     }
