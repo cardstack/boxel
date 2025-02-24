@@ -7,16 +7,14 @@ import {
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-
 import {
   FieldContainer,
   Pill,
   ProgressBar,
   ProgressRadial,
 } from '@cardstack/boxel-ui/components';
-
-import Calendar from '@cardstack/boxel-icons/calendar';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
+import Calendar from '@cardstack/boxel-icons/calendar';
 
 import { CrmApp } from '../crm-app';
 import { Contact } from './contact';

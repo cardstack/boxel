@@ -1,13 +1,12 @@
-import {
-  CardDef,
-  Component,
-  contains,
-  containsMany,
-  field,
-  linksTo,
-} from 'https://cardstack.com/base/card-api';
-
 import StringField from 'https://cardstack.com/base/string';
+import {
+  Component,
+  CardDef,
+  field,
+  contains,
+  linksTo,
+  containsMany,
+} from 'https://cardstack.com/base/card-api';
 
 import { Avatar, FieldContainer } from '@cardstack/boxel-ui/components';
 import AvatarGroup from '../components/avatar-group';
@@ -18,11 +17,11 @@ import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
-import { Company } from './company';
-import { ContactPhoneNumber } from '../fields/phone-number';
 import { CrmApp } from '../crm-app';
-import { EmailField } from '../fields/email';
+import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
+import { ContactPhoneNumber } from '../fields/phone-number';
+import { EmailField } from '../fields/email';
 import { ContactLinkField } from '../fields/contact-link';
 
 export class SocialLinkField extends ContactLinkField {
