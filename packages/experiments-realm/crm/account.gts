@@ -1096,8 +1096,8 @@ class EmbeddedTemplate extends Component<typeof Account> {
         margin: 0;
       }
       .contact-display {
-        --entity-display-icon-size: var(--boxel-icon-sm);
-        --entity-display-content-gap: var(--boxel-sp-xs);
+        --profile-avatar-icon-size: var(--boxel-icon-sm);
+        --profile-avatar-icon-border: 0px;
       }
       .next-steps-display {
         --entity-display-icon-size: var(--boxel-icon-sm);
@@ -1182,7 +1182,7 @@ class FittedTemplate extends Component<typeof Account> {
       }
 
       .account-header-fitted {
-        --account-header-logo-size: 35px;
+        --account-header-logo-size: 40px;
         --account-header-gap: var(--boxel-sp-xs);
         --account-header-logo-border-radius: var(--boxel-border-radius-sm);
         grid-area: account-header-fitted;
@@ -1215,6 +1215,9 @@ class FittedTemplate extends Component<typeof Account> {
       /* Vertical card (aspect-ratio <= 1.0) */
       @container fitted-card (aspect-ratio <= 1.0) {
         /* Base styles for smaller vertical cards */
+        .account-header-fitted {
+          --account-header-logo-size: 40px;
+        }
         .account-page-layout-fitted {
           --account-page-layout-padding: var(--boxel-sp-xs);
         }
@@ -1247,7 +1250,7 @@ class FittedTemplate extends Component<typeof Account> {
           --account-page-layout-padding: var(--boxel-sp-xs);
         }
         .account-header-fitted {
-          --account-header-logo-size: 20px;
+          --account-header-logo-size: 40px;
           --account-header-logo-border-radius: var(--boxel-border-radius);
         }
 
@@ -1273,7 +1276,7 @@ class FittedTemplate extends Component<typeof Account> {
 
         @container (height <= 57px) {
           .account-header-fitted {
-            --account-header-logo-size: 25px;
+            --account-header-logo-size: 20px;
           }
           .account-name {
             -webkit-line-clamp: 1;
