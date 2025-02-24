@@ -294,10 +294,6 @@ export class Realm {
     return this.paths.url;
   }
 
-  get matrixClient(): MatrixClient {
-    return this.#matrixClient;
-  }
-
   constructor(
     {
       url,
