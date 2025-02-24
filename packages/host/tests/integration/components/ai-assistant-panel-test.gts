@@ -2747,5 +2747,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       `console.log("hello world");`,
       'monaco content is correct',
     );
+
+    await percySnapshot(assert);
   });
 });
