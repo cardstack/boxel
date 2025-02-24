@@ -96,6 +96,7 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type * as MatrixSDK from 'matrix-js-sdk';
+import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
@@ -1377,6 +1378,20 @@ export default class MatrixService extends Service {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
     }
+  }
+
+  async activateCodingSkill() {
+    if (!this.currentRoomId) {
+      return;
+    }
+
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.currentRoomId,
+      skills: await this.loadDefaultSkills('code'),
+    });
   }
 
   async setLLMForCodeMode() {

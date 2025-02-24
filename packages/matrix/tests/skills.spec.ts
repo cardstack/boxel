@@ -66,7 +66,8 @@ test.describe('Skills', () => {
     ).toHaveClass('switch checked');
   }
 
-  const defaultSkillCard = `https://cardstack.com/base/SkillCard/card-editing`;
+  const defaultSkillCardForInteractMode = `https://cardstack.com/base/SkillCard/card-editing`;
+  const defaultSkillCardForCodeMode = `https://cardstack.com/base/SkillCard/code-module-editing`;
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
@@ -111,10 +112,14 @@ test.describe('Skills', () => {
     ).toHaveText('Hide');
     await expect(page.locator('[data-test-pill-menu-item]')).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-pill-menu-item="${defaultSkillCard}"]`),
+      page.locator(
+        `[data-test-pill-menu-item="${defaultSkillCardForInteractMode}"]`,
+      ),
     ).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${defaultSkillCard}-on"]`),
+      page.locator(
+        `[data-test-card-pill-toggle="${defaultSkillCardForInteractMode}-on"]`,
+      ),
     ).toHaveCount(1);
     await expect(page.locator('[data-test-pill-menu-add-button]')).toHaveCount(
       1,
@@ -170,6 +175,25 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '3 of 4 Skills Active',
     );
+  });
+
+  test('it will attach code editing skill in code mode by default', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+    // await getRoomId(page);
+    // await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
+    // await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
+
+    await page.locator('[data-test-submode-switcher] button').click();
+    await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
+    await page.locator('[data-test-skill-menu]').hover();
+    await page.locator('[data-test-pill-menu-header-button]').click();
+    await expect(
+      page.locator(
+        `[data-test-attached-card="${defaultSkillCardForCodeMode}"]`,
+      ),
+    ).toHaveCount(1);
   });
 
   test(`room skills state does not leak when switching rooms`, async ({
@@ -255,7 +279,9 @@ test.describe('Skills', () => {
     await page.locator('[data-test-skill-menu]').hover();
     await page.locator('[data-test-pill-menu-header-button]').click();
     await page
-      .locator(`[data-test-card-pill-toggle="${defaultSkillCard}-on"]`)
+      .locator(
+        `[data-test-card-pill-toggle="${defaultSkillCardForInteractMode}-on"]`,
+      )
       .click(); // toggle off default skill card
     await page
       .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
@@ -264,7 +290,9 @@ test.describe('Skills', () => {
       .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
       .click(); // toggle off skill 2
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${defaultSkillCard}-off"]`),
+      page.locator(
+        `[data-test-card-pill-toggle="${defaultSkillCardForInteractMode}-off"]`,
+      ),
     ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
