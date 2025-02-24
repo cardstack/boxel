@@ -131,6 +131,42 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
+  async broadcastRealmEvent(
+    event: RealmEventEvent,
+    matrixClient: MatrixClient,
+  ) {
+    console.log('broadcastRealmEventViaMatrix', event);
+
+    if (!this.owner) {
+      console.log('owner not set, skipping');
+      return;
+    }
+
+    let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
+
+    if (!mockLoader) {
+      console.log('mockLoader not found, skipping');
+      return;
+    }
+
+    let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
+
+    let { getRoomIds, simulateRemoteMessage } = mockMatrixUtils;
+
+    let realmMatrixUsername = matrixClient.username;
+
+    console.log('room ids', getRoomIds());
+
+    for (let roomId of getRoomIds()) {
+      if (roomId.startsWith('session-room-for-')) {
+        simulateRemoteMessage(roomId, realmMatrixUsername, {
+          msgtype: 'app.boxel.realm-event', // FIXME import constant?
+          content: event,
+        });
+      }
+    }
+  }
+
   // We are eagerly establishing shims and preparing instances to be able to be
   // serialized as our test realm needs to be able to serve these via the HTTP
   // API (internally) in order to index itself at boot
