@@ -1184,7 +1184,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom({ sender: '@testuser:staging', name: 'test room 0' });
+      createAndJoinRoom({ sender: '@testuser:localhost', name: 'test room 0' });
       let room1Id = createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'test room 1',

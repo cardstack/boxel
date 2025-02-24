@@ -54,10 +54,6 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
-  });
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
