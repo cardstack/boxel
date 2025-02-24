@@ -466,10 +466,7 @@ export default class Room extends Component<Signature> {
     )}`;
   }
 
-  private sendReadReceipt(message?: Message) {
-    if (!message) {
-      return;
-    }
+  private sendReadReceipt(message: Message) {
     if (this.matrixService.profile.userId === message.author.userId) {
       return;
     }

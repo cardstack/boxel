@@ -71,10 +71,6 @@ export default class Room {
     );
   }
 
-  get members() {
-    return this._roomState?.members;
-  }
-
   get activeLLM() {
     let event = this._roomState?.events
       .get(APP_BOXEL_ACTIVE_LLM)
