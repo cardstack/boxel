@@ -4,7 +4,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
@@ -31,11 +30,10 @@ import {
   cardTypeIcon,
   chooseCard,
   type Query,
-  type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import CreateCardJsonCommand from '@cardstack/host/commands/create-card-json';
+import CreateCardInstanceCommand from '@cardstack/host/commands/create-card-instance';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
@@ -382,7 +380,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
-  @tracked newCardJSON: LooseSingleCardDocument | undefined;
   private playgroundSelections: Record<
     string, // moduleId
     { cardId: string; format: Format }
@@ -435,8 +432,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   private cardResource = getCard(
     this,
-    () =>
-      this.newCardJSON ?? this.playgroundSelections[this.args.moduleId]?.cardId,
+    () => this.playgroundSelections[this.args.moduleId]?.cardId,
     { isAutoSave: () => true },
   );
 
@@ -483,7 +479,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private persistSelections = (cardId: string, format = this.format) => {
-    this.newCardJSON = undefined;
     this.playgroundSelections[this.args.moduleId] = { cardId, format };
     window.localStorage.setItem(
       PlaygroundSelections,
@@ -514,17 +509,16 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
   });
 
-  // TODO: convert this to @action once we no longer need to await below
   private createNew = task(async () => {
     let { commandContext } = this.commandService;
-    this.newCardJSON = await new CreateCardJsonCommand(commandContext).execute({
+    let card = await new CreateCardInstanceCommand(commandContext).execute({
+      parent: this,
       module: this.args.codeRef,
       realm: this.operatorModeStateService.realmURL.href,
     });
-    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
-    if (this.card) {
-      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
+    if (card) {
+      this.recentFilesService.addRecentFileUrl(`${card.id}.json`);
+      this.persistSelections(card.id, 'edit'); // open new instance in playground in edit format
     }
   });
 

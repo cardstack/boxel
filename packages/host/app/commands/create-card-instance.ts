@@ -1,13 +1,17 @@
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-export default class CreateCardJsonCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CreateInstanceInput
+export default class CreateCardInstanceCommand extends HostBaseCommand<
+  typeof BaseCommandModule.CreateInstanceInput,
+  typeof CardDef | undefined
 > {
-  description = `Create a new card json document given a card ref and realm.`;
+  description = `Create a new card instance given a card ref and realm.`;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -17,8 +21,8 @@ export default class CreateCardJsonCommand extends HostBaseCommand<
 
   protected async run(
     input: BaseCommandModule.CreateInstanceInput,
-  ): Promise<LooseSingleCardDocument> {
-    if (!input.module || !input.realm) {
+  ): Promise<CardDef | undefined> {
+    if (!input.parent || !input.module || !input.realm) {
       throw new Error(
         "Create instance command can't run because it doesn't have all the fields in arguments returned by open ai",
       );
@@ -31,6 +35,10 @@ export default class CreateCardJsonCommand extends HostBaseCommand<
         },
       },
     };
-    return doc;
+    let cardResource = getCard(input.parent, () => doc, {
+      isAutoSave: () => true,
+    });
+    await cardResource.loaded; // this await should not be necessary when card-resource is refactored
+    return cardResource.card;
   }
 }
