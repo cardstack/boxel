@@ -45,7 +45,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
@@ -55,7 +55,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
     matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:staging',
+      sender: '@testuser:localhost',
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);

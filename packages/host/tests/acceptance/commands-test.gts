@@ -68,7 +68,7 @@ module('Acceptance | Commands tests', function (hooks) {
   setupOnSave(hooks);
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [baseRealm.url, testRealmURL],
     });
 
@@ -76,7 +76,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     matrixRoomId = await createAndJoinRoom({
-      sender: '@testuser:staging',
+      sender: '@testuser:localhost',
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);

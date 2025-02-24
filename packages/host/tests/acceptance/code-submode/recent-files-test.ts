@@ -185,13 +185,13 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:staging',
+      sender: '@testuser:localhost',
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);

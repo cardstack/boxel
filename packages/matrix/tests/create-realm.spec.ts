@@ -30,7 +30,7 @@ test.describe('Create Realm via Dashboard', () => {
       template: 'test',
     });
     await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
+    realmServer = await startRealmServer({ includeSeedRealm: true });
     await registerUser(synapse, 'user1', 'pass');
   });
 
@@ -58,10 +58,12 @@ test.describe('Create Realm via Dashboard', () => {
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
-    
-    const filterListElements = page.locator('[data-test-boxel-filter-list-button]');
-    const count = await filterListElements.count();
-    expect(count).toBeGreaterThan(1);
+
+    const filterListItemSelector = '[data-test-boxel-filter-list-button]';
+    await page.waitForFunction(
+      (selector) => document.querySelectorAll(selector).length > 1,
+      filterListItemSelector,
+    );
 
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(

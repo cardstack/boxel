@@ -79,7 +79,7 @@ module('Integration | card-delete', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });

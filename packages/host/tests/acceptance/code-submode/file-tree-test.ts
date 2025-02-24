@@ -192,7 +192,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
 
@@ -200,7 +200,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
     matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:staging',
+      sender: '@testuser:localhost',
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);

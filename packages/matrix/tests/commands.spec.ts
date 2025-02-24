@@ -157,36 +157,6 @@ test.describe('Commands', () => {
     expect(boxelMessageData.context.tools).toMatchObject([getSearchTool()]);
   });
 
-  // TODO: currently we need isolated realm server to get payment setup to work
-  /*   test(`it does not include patch tool in message event when top-most card is read-only`, async ({
-    page,
-  }) => {
-    // the base realm is a read-only realm
-    await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
-    let room1 = await getRoomId(page);
-    await showAllCards(page);
-    await expect(
-      page.locator(
-        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
-      ),
-    ).toHaveCount(1);
-    await page
-      .locator(
-        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
-      )
-      .click();
-    await expect(
-      page.locator(
-        '[data-test-stack-card="https://cardstack.com/base/fields/boolean-field"]',
-      ),
-    ).toHaveCount(1);
-    await sendMessage(page, room1, 'please change this card');
-    let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual(APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([]);
-  }); */
-
   test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
     page,
   }) => {

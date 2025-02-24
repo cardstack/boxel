@@ -4,9 +4,10 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
@@ -18,13 +19,19 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  Eye,
+  IconCode,
+  IconLink,
+  IconPlusThin,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
   type Query,
+  type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -33,6 +40,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -87,7 +95,7 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
-const BeforeOptions: TemplateOnlyComponent<{ Args: {} }> = <template>
+const BeforeOptions: TemplateOnlyComponent = <template>
   <div class='before-options'>
     <span class='title'>
       Recent
@@ -109,6 +117,8 @@ const BeforeOptions: TemplateOnlyComponent<{ Args: {} }> = <template>
 interface AfterOptionsSignature {
   Args: {
     chooseCard: () => void;
+    createNew: () => void;
+    createNewIsRunning?: boolean;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -116,6 +126,14 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     <span class='title'>
       Action
     </span>
+    <button class='action' {{on 'click' @createNew}} data-test-create-instance>
+      {{#if @createNewIsRunning}}
+        <LoadingIndicator class='action-running' />
+      {{else}}
+        <IconPlusThin width='16px' height='16px' />
+      {{/if}}
+      New card instance
+    </button>
     <button
       class='action'
       {{on 'click' @chooseCard}}
@@ -132,7 +150,6 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       border-top: var(--boxel-border);
       background-color: var(--boxel-light);
       padding: var(--boxel-sp-xs);
-      margin-top: var(--boxel-sp-xxs);
       gap: var(--boxel-sp-xxs);
     }
     .title {
@@ -151,6 +168,9 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     }
     .action:hover {
       background-color: var(--boxel-100);
+    }
+    .action-running {
+      --boxel-loading-indicator-size: 16px;
     }
   </style>
 </template>;
@@ -193,6 +213,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               @afterOptionsComponent={{component
                 AfterOptions
                 chooseCard=(perform this.chooseCard)
+                createNew=(perform this.createNew)
+                createNewIsRunning=this.createNew.isRunning
               }}
               data-test-instance-chooser
               as |card|
@@ -214,6 +236,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                   @cardTypeDisplayName={{cardTypeDisplayName this.card}}
                   @cardTypeIcon={{cardTypeIcon this.card}}
                   @realmInfo={{realmInfo}}
+                  @onEdit={{if this.canEdit this.setEditFormat}}
                   @isTopCard={{true}}
                   @moreOptionsMenuItems={{this.contextMenuItems}}
                 />
@@ -283,9 +306,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
       }
-      :deep(.instances-dropdown-content > .ember-power-select-options) {
-        max-height: 20rem;
-      }
       :deep(
         .boxel-select__dropdown .ember-power-select-option[aria-current='true']
       ),
@@ -354,10 +374,12 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
+  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
+  @tracked newCardJSON: LooseSingleCardDocument | undefined;
   private playgroundSelections: Record<
     string, // moduleId
     { cardId: string; format: Format }
@@ -410,7 +432,9 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   private cardResource = getCard(
     this,
-    () => this.playgroundSelections[this.args.moduleId]?.cardId,
+    () =>
+      this.newCardJSON ?? this.playgroundSelections[this.args.moduleId]?.cardId,
+    { isAutoSave: () => true },
   );
 
   private get card(): CardDef | undefined {
@@ -456,6 +480,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private persistSelections = (cardId: string, format = this.format) => {
+    this.newCardJSON = undefined;
     this.playgroundSelections[this.args.moduleId] = { cardId, format };
     window.localStorage.setItem(
       PlaygroundSelections,
@@ -475,7 +500,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     this.persistSelections(this.card.id, format);
   }
 
-  private chooseCard = restartableTask(async () => {
+  private chooseCard = task(async () => {
     let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type: this.args.codeRef },
     });
@@ -485,6 +510,39 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       this.persistSelections(chosenCard.id);
     }
   });
+
+  // TODO: convert this to @action once we no longer need to await below
+  private createNew = task(async () => {
+    this.newCardJSON = {
+      data: {
+        meta: {
+          adoptsFrom: this.args.codeRef,
+          realmURL: this.operatorModeStateService.realmURL.href,
+        },
+      },
+    };
+    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+    if (this.card) {
+      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
+    }
+  });
+
+  private get canEdit() {
+    return (
+      this.format !== 'edit' &&
+      this.card?.id &&
+      this.realm.canWrite(this.card.id)
+    );
+  }
+
+  @action
+  private setEditFormat() {
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistSelections(this.card.id, 'edit');
+  }
 }
 
 interface Signature {

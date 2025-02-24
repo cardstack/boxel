@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, waitFor, fillIn } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -13,6 +13,8 @@ import {
   setupUserSubscription,
   percySnapshot,
   type TestContextWithSSE,
+  type TestContextWithSave,
+  setupOnSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -117,15 +119,17 @@ module('Acceptance | Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupOnSave(hooks);
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL, testRealm2URL],
     });
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:staging',
+      sender: '@testuser:localhost',
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);
@@ -303,8 +307,10 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     await percySnapshot(assert);
-    assert.dom('[data-test-title]').containsText('Person');
-    assert.dom('[data-test-description]').containsText('Spec');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
+    assert
+      .dom('[data-test-description] [data-test-boxel-input]')
+      .hasValue('Spec');
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
@@ -359,11 +365,40 @@ module('Acceptance | Spec preview', function (hooks) {
         await click('[data-test-create-spec-button]');
       },
     });
-    assert.dom('[data-test-title]').hasText('NewSkill');
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('NewSkill');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
+
+  test('when adding linked examples, card chooser options are narrowed to this type', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}person-entry`,
+            format: 'edit',
+          },
+        ],
+      ],
+      submode: 'interact',
+    });
+    assert.dom('[data-test-links-to-many="linkedExamples"]').exists();
+    await click('[data-test-add-new]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Person');
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+  });
+
   test('title does not default to "default"', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -372,7 +407,24 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    assert.dom('[data-test-title]').doesNotContainText('default');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
+  });
+
+  test<TestContextWithSave>('spec auto saved', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    let readMeInput = 'This is a spec for a person';
+    this.onSave((_, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.readMe, readMeInput);
+    });
+    await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
   });
 });

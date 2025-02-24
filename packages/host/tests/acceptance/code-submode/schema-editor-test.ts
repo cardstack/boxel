@@ -232,7 +232,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupServerSentEvents(hooks);
 
   mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
@@ -240,7 +240,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:staging',
+      sender: '@testuser:localhost',
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);

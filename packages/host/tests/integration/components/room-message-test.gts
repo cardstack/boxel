@@ -6,13 +6,15 @@ import { module, test } from 'qunit';
 
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
+import { type RoomResource } from '@cardstack/host/resources/room';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
   let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [],
     autostart: true,
   });
@@ -32,7 +34,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     let testScenario = {
       roomId: await createAndJoinRoom({
-        sender: '@testuser:staging',
+        sender: '@testuser:localhost',
         name: 'Test Room',
       }),
       message,
@@ -42,7 +44,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       currentEditor: {},
       setCurrentMonacoContainer: null,
       maybeRetryAction: null,
-    };
+    } as unknown as RoomResource;
 
     return testScenario;
   }
@@ -54,7 +56,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       {{! @glint-ignore }}
       <RoomMessage
         @roomId={{testScenario.roomId}}
-        @message={{testScenario.message}}
+        @roomResource={{testScenario}}
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
         @currentEditor={{testScenario.currentEditor}}
