@@ -77,8 +77,6 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
 
-import wtfnode from 'wtfnode';
-
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');

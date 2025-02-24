@@ -27,7 +27,6 @@ import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {
   RequestContext,
-  ServerEvents,
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
